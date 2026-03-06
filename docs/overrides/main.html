@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="{{ page.title }} - {{ config.site_name }}" />
+  <meta property="og:description" content="AIを活用し、プログラムで全自動Twitch配信を行うプロジェクト" />
+  <meta property="og:image" content="{{ config.site_url }}assets/images/ogp.png" />
+  <meta property="og:url" content="{{ page.canonical_url }}" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{{ page.title }} - {{ config.site_name }}" />
+  <meta name="twitter:description" content="AIを活用し、プログラムで全自動Twitch配信を行うプロジェクト" />
+  <meta name="twitter:image" content="{{ config.site_url }}assets/images/ogp.png" />
+{% endblock %}

@@ -6,6 +6,7 @@ repo_name: akiraak/ai-twitch-cast
 theme:
   name: material
   language: ja
+  custom_dir: docs/overrides
   palette:
     - scheme: default
       primary: deep purple
