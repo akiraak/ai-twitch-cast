@@ -25,8 +25,7 @@ theme:
 
 nav:
   - ホーム: index.md
-  - 調査:
-      - OBS Studio 機能調査: obs-research.md
+  - OBS Studio 機能調査: obs-research.md
 
 markdown_extensions:
   - toc:
