@@ -1,0 +1,38 @@
+site_name: AI Twitch Cast Docs
+site_url: https://akiraak.github.io/ai-twitch-cast/
+repo_url: https://github.com/akiraak/ai-twitch-cast
+repo_name: akiraak/ai-twitch-cast
+
+theme:
+  name: material
+  language: ja
+  palette:
+    - scheme: default
+      primary: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: ダークモードに切替
+    - scheme: slate
+      primary: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: ライトモードに切替
+  features:
+    - navigation.instant
+    - navigation.top
+    - toc.integrate
+    - search.highlight
+
+nav:
+  - ホーム: index.md
+  - 調査:
+      - OBS Studio 機能調査: obs-research.md
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - tables
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
