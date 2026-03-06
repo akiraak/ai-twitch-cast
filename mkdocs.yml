@@ -25,6 +25,7 @@ theme:
 
 nav:
   - ホーム: index.md
+  - OBS自動制御でできること: obs-automation-guide.md
   - OBS Studio 機能調査: obs-research.md
 
 markdown_extensions:
