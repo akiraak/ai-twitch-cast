@@ -44,6 +44,8 @@ HELP_TEXT = """
   stream stop          配信を停止
   stream status        配信状態を表示
 
+  init                 初期化（OBS・VTS接続 → シーン構築）
+
   help                 このヘルプを表示
   quit / exit          終了
 """.strip()
@@ -235,6 +237,17 @@ class Console:
             print(f"経過時間: {status['timecode']}")
             print(f"送信バイト数: {status['bytes']}")
 
+    # --- 初期化 ---
+
+    async def cmd_init(self):
+        """OBS・VTS接続 → シーン構築を一括実行"""
+        print("初期化開始...")
+        self.cmd_obs_connect()
+        await self.cmd_vts_connect()
+        self.cmd_obs_setup()
+        self.obs.set_scene(SCENES[0]["name"])
+        print("\n初期化完了")
+
     # --- ユーティリティ ---
 
     def _require_obs(self):
@@ -263,6 +276,8 @@ class Console:
                 await self._dispatch_vts(args)
             elif cmd == "stream" and args:
                 self._dispatch_stream(args)
+            elif cmd == "init":
+                await self.cmd_init()
             elif cmd in ("quit", "exit"):
                 raise SystemExit
             else:
