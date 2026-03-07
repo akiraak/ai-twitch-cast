@@ -19,7 +19,7 @@ _AVATAR_SOURCES = {
         "window": "VTube Studio:UnityWndClass:VTube Studio.exe",
         "allow_transparency": True,
         "transform": {
-            "boundsType": "OBS_BOUNDS_STRETCH",
+            "boundsType": "OBS_BOUNDS_SCALE_INNER",
             "boundsWidth": 1920.0,
             "boundsHeight": 1080.0,
         },
@@ -30,7 +30,7 @@ _AVATAR_SOURCES = {
         "window": "VSeeFace:UnityWndClass:VSeeFace.exe",
         "allow_transparency": True,
         "transform": {
-            "boundsType": "OBS_BOUNDS_STRETCH",
+            "boundsType": "OBS_BOUNDS_SCALE_INNER",
             "boundsWidth": 1920.0,
             "boundsHeight": 1080.0,
         },
