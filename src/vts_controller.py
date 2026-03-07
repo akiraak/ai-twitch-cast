@@ -4,12 +4,14 @@ import os
 
 import pyvts
 
+from src.wsl_path import resolve_host
+
 
 class VTSController:
     """VTube Studio APIを通じてアバターを制御するクラス"""
 
     def __init__(self, host=None, port=None):
-        self.host = host or os.environ.get("VTS_HOST", "localhost")
+        self.host = resolve_host(host or os.environ.get("VTS_HOST", "localhost"))
         self.port = int(port or os.environ.get("VTS_PORT", "8001"))
         self._vts = None
 

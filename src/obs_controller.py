@@ -5,14 +5,14 @@ from pathlib import Path
 
 import obsws_python as obs
 
-from src.wsl_path import to_windows_path
+from src.wsl_path import resolve_host, to_windows_path
 
 
 class OBSController:
     """OBS WebSocketを通じてOBSを制御するクラス"""
 
     def __init__(self, host=None, port=None, password=None):
-        self.host = host or os.environ.get("OBS_WS_HOST", "localhost")
+        self.host = resolve_host(host or os.environ.get("OBS_WS_HOST", "localhost"))
         self.port = int(port or os.environ.get("OBS_WS_PORT", "4455"))
         self.password = password or os.environ.get("OBS_WS_PASSWORD", "")
         self._client = None
