@@ -151,7 +151,8 @@ class OBSController:
         print(f"ソースを削除しました: {input_name}")
 
     def setup_scenes(self, scenes_config):
-        """シーン構成を一括作成する"""
+        """シーン構成を一括作成する（既存のATC シーン・ソースは先に削除）"""
+        self.teardown_scenes(scenes_config)
         for scene in scenes_config:
             scene_name = scene["name"]
             try:
