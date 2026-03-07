@@ -111,10 +111,95 @@ class OBSController:
         )
         print(f"ゲームキャプチャを追加しました: {source_name}")
 
+    def add_text_source(self, scene_name, source_name, text, font_size=48):
+        """テキストソースを追加する"""
+        self._client.create_input(
+            scene_name=scene_name,
+            input_name=source_name,
+            input_kind="text_gdiplus",
+            input_settings={
+                "text": text,
+                "font": {"face": "Yu Gothic UI", "size": font_size},
+                "color": 0xFFFFFFFF,
+                "align": "center",
+                "valign": "center",
+            },
+            scene_item_enabled=True,
+        )
+        print(f"テキストソースを追加しました: {source_name}")
+
+    def set_source_transform(self, scene_name, source_name, transform):
+        """ソースの位置・サイズを設定する"""
+        item_id = self._client.get_scene_item_id(scene_name, source_name).scene_item_id
+        self._client.set_scene_item_transform(scene_name, item_id, transform)
+
+    def remove_scene(self, name):
+        """シーンを削除する"""
+        self._client.remove_scene(name)
+        print(f"シーンを削除しました: {name}")
+
     def remove_input(self, input_name):
         """入力ソースを削除する"""
         self._client.remove_input(input_name)
         print(f"ソースを削除しました: {input_name}")
+
+    def setup_scenes(self, scenes_config):
+        """シーン構成を一括作成する"""
+        for scene in scenes_config:
+            scene_name = scene["name"]
+            try:
+                self.create_scene(scene_name)
+            except Exception:
+                print(f"シーン '{scene_name}' は既に存在します。スキップします。")
+                continue
+
+            for source in scene["sources"]:
+                try:
+                    self._add_source(scene_name, source)
+                except Exception as e:
+                    print(f"  ソース '{source['name']}' の追加に失敗: {e}")
+
+        print(f"\nセットアップ完了 ({len(scenes_config)}シーン)")
+
+    def teardown_scenes(self, scenes_config):
+        """シーン構成を一括削除する"""
+        # ソースを先に削除（他シーンとの共有を考慮）
+        removed_inputs = set()
+        for scene in scenes_config:
+            for source in scene["sources"]:
+                if source["name"] not in removed_inputs:
+                    try:
+                        self.remove_input(source["name"])
+                        removed_inputs.add(source["name"])
+                    except Exception:
+                        pass
+
+        # シーンを削除
+        for scene in scenes_config:
+            try:
+                self.remove_scene(scene["name"])
+            except Exception:
+                pass
+
+        print(f"\nティアダウン完了")
+
+    def _add_source(self, scene_name, source):
+        """ソース定義に基づいてソースを追加する"""
+        kind = source["kind"]
+        name = source["name"]
+
+        if kind == "image":
+            self.add_image_source(scene_name, name, source["path"])
+        elif kind == "text":
+            self.add_text_source(
+                scene_name, name,
+                source["text"],
+                source.get("font_size", 48),
+            )
+        elif kind == "game_capture":
+            self.add_game_capture(scene_name, name)
+        else:
+            print(f"  不明なソース種類: {kind}")
 
     def __enter__(self):
         self.connect()

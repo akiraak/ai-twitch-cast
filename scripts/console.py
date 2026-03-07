@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 
 from src.obs_controller import OBSController
+from src.scene_config import SCENES
 from src.vts_controller import VTSController
 
 load_dotenv()
@@ -21,6 +22,13 @@ HELP_TEXT = """
   obs scenes           シーン一覧を表示
   obs scene <名前>     シーンを切り替え
   obs sources          現在のシーンのソース一覧を表示
+  obs setup            シーン・ソースを一括作成
+  obs teardown         シーン・ソースを一括削除
+  obs add scene <名前>           シーンを追加
+  obs add image <名前> <パス>     画像ソースを追加
+  obs add text <名前> <テキスト>  テキストソースを追加
+  obs add capture <名前>         ゲームキャプチャを追加
+  obs remove <名前>              ソースを削除
 
   vts connect          VTube Studioに接続
   vts disconnect       VTube Studioから切断
@@ -92,6 +100,40 @@ class Console:
         for item in items.scene_items:
             enabled = "ON" if item["sceneItemEnabled"] else "OFF"
             print(f"  [{enabled}] {item['sourceName']} ({item['inputKind'] or 'group'})")
+
+    def cmd_obs_setup(self):
+        self._require_obs()
+        self.obs.setup_scenes(SCENES)
+
+    def cmd_obs_teardown(self):
+        self._require_obs()
+        self.obs.teardown_scenes(SCENES)
+
+    def cmd_obs_add_scene(self, name):
+        self._require_obs()
+        self.obs.create_scene(name)
+
+    def cmd_obs_add_image(self, name, path):
+        self._require_obs()
+        scenes = self.obs._client.get_scene_list()
+        current = scenes.current_program_scene_name
+        self.obs.add_image_source(current, name, path)
+
+    def cmd_obs_add_text(self, name, text):
+        self._require_obs()
+        scenes = self.obs._client.get_scene_list()
+        current = scenes.current_program_scene_name
+        self.obs.add_text_source(current, name, text)
+
+    def cmd_obs_add_capture(self, name):
+        self._require_obs()
+        scenes = self.obs._client.get_scene_list()
+        current = scenes.current_program_scene_name
+        self.obs.add_game_capture(current, name)
+
+    def cmd_obs_remove(self, name):
+        self._require_obs()
+        self.obs.remove_input(name)
 
     # --- VTSコマンド ---
 
@@ -245,8 +287,29 @@ class Console:
             self.cmd_obs_scene(" ".join(args[1:]))
         elif sub == "sources":
             self.cmd_obs_sources()
+        elif sub == "setup":
+            self.cmd_obs_setup()
+        elif sub == "teardown":
+            self.cmd_obs_teardown()
+        elif sub == "add" and len(args) >= 2:
+            self._dispatch_obs_add(args[1:])
+        elif sub == "remove" and len(args) >= 2:
+            self.cmd_obs_remove(" ".join(args[1:]))
         else:
             print(f"不明なOBSコマンド: {' '.join(args)}")
+
+    def _dispatch_obs_add(self, args):
+        kind = args[0]
+        if kind == "scene" and len(args) >= 2:
+            self.cmd_obs_add_scene(" ".join(args[1:]))
+        elif kind == "image" and len(args) >= 3:
+            self.cmd_obs_add_image(args[1], args[2])
+        elif kind == "text" and len(args) >= 3:
+            self.cmd_obs_add_text(args[1], " ".join(args[2:]))
+        elif kind == "capture" and len(args) >= 2:
+            self.cmd_obs_add_capture(" ".join(args[1:]))
+        else:
+            print(f"不明なaddコマンド: {' '.join(args)}")
 
     async def _dispatch_vts(self, args):
         sub = args[0]

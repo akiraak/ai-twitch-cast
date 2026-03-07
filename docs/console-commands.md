@@ -28,6 +28,13 @@
 | `obs scenes` | シーン一覧を表示 |
 | `obs scene <名前>` | シーンを切り替え |
 | `obs sources` | 現在のシーンのソース一覧を表示 |
+| `obs setup` | `scene_config.py` に基づきシーン・ソースを一括作成 |
+| `obs teardown` | `scene_config.py` に基づきシーン・ソースを一括削除 |
+| `obs add scene <名前>` | シーンを追加 |
+| `obs add image <名前> <パス>` | 現在のシーンに画像ソースを追加（WSLパス） |
+| `obs add text <名前> <テキスト>` | 現在のシーンにテキストソースを追加 |
+| `obs add capture <名前>` | 現在のシーンにゲームキャプチャを追加 |
+| `obs remove <名前>` | ソースを削除 |
 
 ## アバター制御
 

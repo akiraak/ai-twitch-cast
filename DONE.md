@@ -17,6 +17,7 @@
 - [x] VTube Studio制御プログラムの作成（Python + pyvts）
 - [x] 対話式コンソールの作成（OBS・VTS・配信制御）
 - [x] リソース管理方針の策定（WSL一元管理、デプロイスクリプト）
+- [x] コードからシーンとソースを追加する（setup/teardown、個別add/remove）
 
 ## Phase 0: 環境構築・基盤
 
