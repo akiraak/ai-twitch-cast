@@ -2,7 +2,9 @@
 
 ## 調査タスク
 
-- [ ] OBSの機能調査（WebSocket API、シーン管理、ソース操作、フィルタ、配信制御等）
+- [ ] Twitch APIの機能調査
+- [ ] TTS エンジンの比較調査（VOICEVOX / Style-BERT-VITS2 / 外部API等）
+- [ ] 画像生成APIの比較調査（Stable Diffusion / DALL-E等）
 
 ## Phase 0: 環境構築・基盤
 
