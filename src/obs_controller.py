@@ -16,9 +16,16 @@ class OBSController:
 
     def connect(self):
         """OBS WebSocketに接続する"""
-        self._client = obs.ReqClient(
-            host=self.host, port=self.port, password=self.password, timeout=5
-        )
+        try:
+            self._client = obs.ReqClient(
+                host=self.host, port=self.port, password=self.password, timeout=5
+            )
+        except ConnectionRefusedError:
+            raise ConnectionError(
+                f"OBSに接続できません ({self.host}:{self.port})。"
+                " OBSが起動しているか、WebSocketサーバーが有効か確認してください。"
+                " WSL2から接続する場合はOBS_WS_HOSTにWindowsのIPアドレスを設定してください。"
+            )
         version = self._client.get_version()
         print(f"OBSに接続しました (OBS {version.obs_version}, WebSocket {version.obs_web_socket_version})")
 
