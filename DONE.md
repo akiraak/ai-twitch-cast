@@ -14,6 +14,7 @@
 
 - [x] OBS制御プログラムの作成（Python + obsws-python）
 - [x] VTube Studio制御プログラムの作成（Python + pyvts）
+- [x] 対話式コンソールの作成（OBS・VTS・配信制御）
 
 ## Phase 0: 環境構築・基盤
 
