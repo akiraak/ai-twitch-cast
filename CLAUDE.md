@@ -42,10 +42,13 @@ ai-twitch-cast/
 │   ├── obs-research.md       # OBS機能調査レポート
 │   └── avatar-research.md   # アバター表示・アニメーション調査
 ├── src/                      # ソースコード
-│   └── obs_controller.py     # OBS WebSocket制御
+│   ├── obs_controller.py     # OBS WebSocket制御
+│   └── vts_controller.py     # VTube Studio API制御
 ├── scripts/                  # 実行スクリプト
 │   ├── start_stream.py       # 配信開始
-│   └── stop_stream.py        # 配信停止
+│   ├── stop_stream.py        # 配信停止
+│   ├── vts_test.py           # VTube Studio接続テスト
+│   └── stream_with_avatar.py # アバター付き配信
 ├── mkdocs.yml                # MkDocs設定
 ├── requirements.txt          # Python依存パッケージ
 ├── .env.example              # 環境変数テンプレート

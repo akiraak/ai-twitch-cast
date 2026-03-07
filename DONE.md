@@ -10,6 +10,11 @@
 - [x] OBSを起動してTwitchで仮配信（画面には背景画像だけ表示）
   - Bluetoothヘッドホン使用時、OBSがマイクを掴むとHFPプロファイルに切り替わり音質劣化する問題を確認 → マイク音声を無効にして解決
 
+## 開発タスク
+
+- [x] OBS制御プログラムの作成（Python + obsws-python）
+- [x] VTube Studio制御プログラムの作成（Python + pyvts）
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成
