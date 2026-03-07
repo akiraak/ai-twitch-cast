@@ -1,8 +1,11 @@
 """OBS WebSocket制御モジュール"""
 
 import os
+from pathlib import Path
 
 import obsws_python as obs
+
+from src.wsl_path import to_windows_path
 
 
 class OBSController:
@@ -63,6 +66,55 @@ class OBSController:
             return
         self._client.stop_stream()
         print("配信を停止しました")
+
+    def get_scenes(self):
+        """シーン一覧を取得する"""
+        result = self._client.get_scene_list()
+        return {
+            "current": result.current_program_scene_name,
+            "scenes": [s["sceneName"] for s in result.scenes],
+        }
+
+    def create_scene(self, name):
+        """シーンを作成する"""
+        self._client.create_scene(name)
+        print(f"シーンを作成しました: {name}")
+
+    def set_scene(self, name):
+        """シーンを切り替える"""
+        self._client.set_current_program_scene(name)
+        print(f"シーンを切り替えました: {name}")
+
+    def add_image_source(self, scene_name, source_name, wsl_path):
+        """WSLパスの画像をソースとして追加する"""
+        win_path = to_windows_path(str(wsl_path))
+        self._client.create_input(
+            scene_name=scene_name,
+            input_name=source_name,
+            input_kind="image_source",
+            input_settings={"file": win_path},
+            scene_item_enabled=True,
+        )
+        print(f"画像ソースを追加しました: {source_name}")
+
+    def add_game_capture(self, scene_name, source_name, window_name=""):
+        """ゲームキャプチャソースを追加する"""
+        settings = {"capture_mode": "window"}
+        if window_name:
+            settings["window"] = window_name
+        self._client.create_input(
+            scene_name=scene_name,
+            input_name=source_name,
+            input_kind="game_capture",
+            input_settings=settings,
+            scene_item_enabled=True,
+        )
+        print(f"ゲームキャプチャを追加しました: {source_name}")
+
+    def remove_input(self, input_name):
+        """入力ソースを削除する"""
+        self._client.remove_input(input_name)
+        print(f"ソースを削除しました: {input_name}")
 
     def __enter__(self):
         self.connect()
