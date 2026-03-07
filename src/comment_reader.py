@@ -1,10 +1,11 @@
-"""コメント読み上げサービス（Twitchチャット → TTS → 再生）"""
+"""コメント読み上げサービス（Twitchチャット → AI応答 → TTS → 再生 → 表情連動）"""
 
 import asyncio
 import tempfile
 from collections import deque
 from pathlib import Path
 
+from src.ai_responder import generate_response, get_character
 from src.tts import synthesize
 from src.twitch_chat import TwitchChat
 
@@ -12,8 +13,9 @@ from src.twitch_chat import TwitchChat
 class CommentReader:
     """Twitchコメントを読み上げるサービス"""
 
-    def __init__(self):
+    def __init__(self, vsf=None):
         self._chat = TwitchChat()
+        self._vsf = vsf
         self._queue = deque()
         self._process_task = None
         self._running = False
@@ -60,21 +62,31 @@ class CommentReader:
             while self._running:
                 if self._queue:
                     author, message = self._queue.popleft()
-                    await self._speak(author, message)
+                    await self._respond(author, message)
                 else:
                     await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             pass
 
-    async def _speak(self, author, message):
-        """1件のコメントを読み上げる"""
-        text = f"{author}さん。{message}"
+    async def _respond(self, author, message):
+        """1件のコメントにAIで応答して読み上げる"""
         try:
+            # AI応答生成
+            print(f"[ai] 応答生成中...")
+            result = await asyncio.to_thread(generate_response, author, message)
+            response_text = result["response"]
+            emotion = result["emotion"]
+            print(f"[ai] [{emotion}] {response_text}")
+
+            # 表情を設定
+            self._apply_emotion(emotion)
+
+            # TTS生成・再生
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 wav_path = f.name
 
-            print(f"[tts] 生成中: {text}")
-            await asyncio.to_thread(synthesize, text, wav_path)
+            print(f"[tts] 生成中...")
+            await asyncio.to_thread(synthesize, response_text, wav_path)
 
             proc = await asyncio.create_subprocess_exec(
                 "ffplay", "-nodisp", "-autoexit", "-loglevel", "error", wav_path,
@@ -82,5 +94,25 @@ class CommentReader:
             await proc.wait()
 
             Path(wav_path).unlink(missing_ok=True)
+
+            # 表情をニュートラルに戻す
+            self._apply_emotion("neutral")
+
         except Exception as e:
-            print(f"[error] 読み上げ失敗: {e}")
+            print(f"[error] 応答失敗: {e}")
+
+    def _apply_emotion(self, emotion):
+        """感情に対応するBlendShapeを適用する"""
+        if not self._vsf:
+            return
+        char = get_character()
+        blendshapes = char.get("emotion_blendshapes", {}).get(emotion, {})
+        if blendshapes:
+            self._vsf.set_blendshapes(blendshapes)
+        else:
+            # ニュートラル: 表情リセット
+            all_emotions = set()
+            for bs in char.get("emotion_blendshapes", {}).values():
+                all_emotions.update(bs.keys())
+            if all_emotions:
+                self._vsf.set_blendshapes({k: 0.0 for k in all_emotions})

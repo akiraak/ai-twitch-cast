@@ -32,7 +32,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 obs = OBSController()
 vts = VTSController()
 vsf = VSFController()
-reader = CommentReader()
+reader = CommentReader(vsf=vsf)
 _obs_connected = False
 _vts_connected = False
 _vsf_connected = False

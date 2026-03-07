@@ -18,8 +18,6 @@ async def main():
 
     if not cr._chat.token or not cr._chat.channel:
         print("エラー: TWITCH_TOKEN と TWITCH_CHANNEL を .env に設定してください")
-        print("  TWITCH_TOKEN: https://twitchtokengenerator.com/ で取得")
-        print("  TWITCH_CHANNEL: 読み上げたいチャンネル名")
         sys.exit(1)
 
     print(f"チャンネル '{cr._chat.channel}' のコメント読み上げを開始します...")

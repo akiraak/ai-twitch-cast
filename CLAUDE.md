@@ -61,6 +61,7 @@ ai-twitch-cast/
 │   ├── scene_config.py       # シーン構成の定義（scenes.jsonから読み込み）
 │   ├── tts.py                # TTS音声合成（Gemini 2.5 Flash TTS）
 │   ├── twitch_chat.py        # Twitchチャット受信
+│   ├── ai_responder.py       # AI応答生成（character.jsonベース）
 │   ├── comment_reader.py     # コメント読み上げサービス
 │   └── wsl_path.py           # WSL関連ユーティリティ
 ├── scripts/                  # 実行スクリプト
@@ -80,6 +81,7 @@ ai-twitch-cast/
 │   ├── audio/
 │   └── video/
 ├── scenes.json               # シーン構成設定（シーン・ソース・アバター配置）
+├── character.json             # AIキャラクター設定（性格・ルール・表情マッピング）
 ├── mkdocs.yml                # MkDocs設定
 ├── requirements.txt          # Python依存パッケージ
 ├── .env.example              # 環境変数テンプレート

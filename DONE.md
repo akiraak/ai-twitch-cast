@@ -30,6 +30,7 @@
 - [x] Webインターフェースでアバター位置調整・scenes.jsonへの保存機能
 - [x] Web UIにSetup/配信開始・停止ボタン、.env設定表示、VSeeFace初期値の保存・復元機能を追加
 - [x] Twitchコメント読み上げ機能（Gemini 2.5 Flash TTS + twitchio）
+- [x] AIコメント応答システム（character.jsonでキャラ設定・ルール定義、表情連動）
 
 ## Phase 0: 環境構築・基盤
 
