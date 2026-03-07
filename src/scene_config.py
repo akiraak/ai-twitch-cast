@@ -1,9 +1,8 @@
-"""シーン構成の定義"""
+"""シーン構成の定義（scenes.json から読み込み）"""
 
+import json
 import os
 from pathlib import Path
-
-RESOURCES_DIR = Path(__file__).resolve().parent.parent / "resources"
 
 # システムが作成するシーン・ソースのプレフィックス
 # ユーザーが手動で作成したものと区別するために使う
@@ -12,73 +11,50 @@ PREFIX = "[ATC] "
 # アバター表示アプリ: "vts"（VTube Studio）or "vsf"（VSeeFace）
 AVATAR_APP = os.environ.get("AVATAR_APP", "vts")
 
-_AVATAR_SOURCES = {
-    "vts": {
-        "name": f"{PREFIX}アバター",
-        "kind": "game_capture",
-        "window": "VTube Studio:UnityWndClass:VTube Studio.exe",
-        "allow_transparency": True,
-        "transform": {
-            "boundsType": "OBS_BOUNDS_SCALE_INNER",
-            "boundsWidth": 1920.0,
-            "boundsHeight": 1080.0,
-        },
-    },
-    "vsf": {
-        "name": f"{PREFIX}アバター",
-        "kind": "game_capture",
-        "window": "VSeeFace:UnityWndClass:VSeeFace.exe",
-        "allow_transparency": True,
-        "transform": {
-            "boundsType": "OBS_BOUNDS_SCALE_INNER",
-            "boundsWidth": 1920.0,
-            "boundsHeight": 1080.0,
-        },
-    },
-}
+_PROJECT_DIR = Path(__file__).resolve().parent.parent
+RESOURCES_DIR = _PROJECT_DIR / "resources"
+_CONFIG_PATH = _PROJECT_DIR / "scenes.json"
 
-SCENES = [
-    {
-        "name": f"{PREFIX}メイン",
-        "sources": [
-            {
-                "name": f"{PREFIX}背景",
-                "kind": "image",
-                "path": RESOURCES_DIR / "images" / "background.png",
-            },
-            _AVATAR_SOURCES[AVATAR_APP],
-        ],
-    },
-    {
-        "name": f"{PREFIX}開始画面",
-        "sources": [
-            {
-                "name": f"{PREFIX}開始背景",
-                "kind": "image",
-                "path": RESOURCES_DIR / "images" / "background.png",
-            },
-            {
-                "name": f"{PREFIX}開始テキスト",
-                "kind": "text",
-                "text": "まもなく開始",
-                "font_size": 72,
-            },
-        ],
-    },
-    {
-        "name": f"{PREFIX}終了画面",
-        "sources": [
-            {
-                "name": f"{PREFIX}終了背景",
-                "kind": "image",
-                "path": RESOURCES_DIR / "images" / "background.png",
-            },
-            {
-                "name": f"{PREFIX}終了テキスト",
-                "kind": "text",
-                "text": "配信終了\nご視聴ありがとうございました",
-                "font_size": 72,
-            },
-        ],
-    },
-]
+
+def _load_config():
+    """scenes.json を読み込んでSCENESリストを生成する"""
+    with open(_CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+
+    # アバターソースの構築
+    avatar_cfg = config["avatar"].get(AVATAR_APP, {})
+    avatar_source = {
+        "name": f"{PREFIX}アバター",
+        "kind": "game_capture",
+        "window": avatar_cfg.get("window", ""),
+        "allow_transparency": avatar_cfg.get("allow_transparency", False),
+    }
+    if "transform" in avatar_cfg:
+        avatar_source["transform"] = avatar_cfg["transform"]
+
+    # シーン定義の構築
+    scenes = []
+    for scene in config["scenes"]:
+        sources = []
+        for src in scene["sources"]:
+            if src["kind"] == "avatar":
+                sources.append(avatar_source)
+                continue
+
+            resolved = dict(src)
+            resolved["name"] = f"{PREFIX}{src['name']}"
+
+            if src["kind"] == "image" and "path" in src:
+                resolved["path"] = RESOURCES_DIR / src["path"]
+
+            sources.append(resolved)
+
+        scenes.append({
+            "name": f"{PREFIX}{scene['name']}",
+            "sources": sources,
+        })
+
+    return scenes
+
+
+SCENES = _load_config()

@@ -58,7 +58,7 @@ ai-twitch-cast/
 │   ├── obs_controller.py     # OBS WebSocket制御
 │   ├── vts_controller.py     # VTube Studio API制御（Live2D）
 │   ├── vsf_controller.py     # VSeeFace VMC Protocol制御（VRM）
-│   ├── scene_config.py       # シーン構成の定義
+│   ├── scene_config.py       # シーン構成の定義（scenes.jsonから読み込み）
 │   └── wsl_path.py           # WSL関連ユーティリティ
 ├── scripts/                  # 実行スクリプト
 │   ├── start_stream.py       # 配信開始
@@ -75,6 +75,7 @@ ai-twitch-cast/
 │   ├── live2d/
 │   ├── audio/
 │   └── video/
+├── scenes.json               # シーン構成設定（シーン・ソース・アバター配置）
 ├── mkdocs.yml                # MkDocs設定
 ├── requirements.txt          # Python依存パッケージ
 ├── .env.example              # 環境変数テンプレート

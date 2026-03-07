@@ -23,6 +23,8 @@
 - [x] システム作成のシーン・ソースに「[ATC] 」プレフィックスを付与してユーザー作成物と区別
 - [x] VRM形式の3Dキャラ表示に対応（VSFController + VMC Protocol + scene_config切替）
 - [x] console.py相当のWebインターフェースを作成（FastAPI + HTML）
+- [x] シーンの設定をJSONで設定できるように（scenes.json）
+- [x] アバターの配置位置を設定可能に（scenes.jsonのavatar.transform）
 
 ## Phase 0: 環境構築・基盤
 

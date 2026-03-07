@@ -1,0 +1,69 @@
+{
+  "avatar": {
+    "vts": {
+      "window": "VTube Studio:UnityWndClass:VTube Studio.exe",
+      "allow_transparency": true,
+      "transform": {
+        "boundsType": "OBS_BOUNDS_SCALE_INNER",
+        "boundsWidth": 1920.0,
+        "boundsHeight": 1080.0
+      }
+    },
+    "vsf": {
+      "window": "VSeeFace:UnityWndClass:VSeeFace.exe",
+      "allow_transparency": true,
+      "transform": {
+        "boundsType": "OBS_BOUNDS_SCALE_INNER",
+        "boundsWidth": 1920.0,
+        "boundsHeight": 1080.0
+      }
+    }
+  },
+  "scenes": [
+    {
+      "name": "メイン",
+      "sources": [
+        {
+          "kind": "image",
+          "name": "背景",
+          "path": "images/background.png"
+        },
+        {
+          "kind": "avatar"
+        }
+      ]
+    },
+    {
+      "name": "開始画面",
+      "sources": [
+        {
+          "kind": "image",
+          "name": "開始背景",
+          "path": "images/background.png"
+        },
+        {
+          "kind": "text",
+          "name": "開始テキスト",
+          "text": "まもなく開始",
+          "font_size": 72
+        }
+      ]
+    },
+    {
+      "name": "終了画面",
+      "sources": [
+        {
+          "kind": "image",
+          "name": "終了背景",
+          "path": "images/background.png"
+        },
+        {
+          "kind": "text",
+          "name": "終了テキスト",
+          "text": "配信終了\nご視聴ありがとうございました",
+          "font_size": 72
+        }
+      ]
+    }
+  ]
+}
