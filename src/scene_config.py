@@ -4,31 +4,37 @@ from pathlib import Path
 
 RESOURCES_DIR = Path(__file__).resolve().parent.parent / "resources"
 
+# システムが作成するシーン・ソースのプレフィックス
+# ユーザーが手動で作成したものと区別するために使う
+PREFIX = "[ATC] "
+
 SCENES = [
     {
-        "name": "メイン",
+        "name": f"{PREFIX}メイン",
         "sources": [
             {
-                "name": "背景",
+                "name": f"{PREFIX}背景",
                 "kind": "image",
                 "path": RESOURCES_DIR / "images" / "background.png",
             },
             {
-                "name": "アバター",
+                "name": f"{PREFIX}アバター",
                 "kind": "game_capture",
+                "window": "VTube Studio:UnityWndClass:VTube Studio.exe",
+                "allow_transparency": True,
             },
         ],
     },
     {
-        "name": "開始画面",
+        "name": f"{PREFIX}開始画面",
         "sources": [
             {
-                "name": "開始背景",
+                "name": f"{PREFIX}開始背景",
                 "kind": "image",
                 "path": RESOURCES_DIR / "images" / "background.png",
             },
             {
-                "name": "開始テキスト",
+                "name": f"{PREFIX}開始テキスト",
                 "kind": "text",
                 "text": "まもなく開始",
                 "font_size": 72,
@@ -36,15 +42,15 @@ SCENES = [
         ],
     },
     {
-        "name": "終了画面",
+        "name": f"{PREFIX}終了画面",
         "sources": [
             {
-                "name": "終了背景",
+                "name": f"{PREFIX}終了背景",
                 "kind": "image",
                 "path": RESOURCES_DIR / "images" / "background.png",
             },
             {
-                "name": "終了テキスト",
+                "name": f"{PREFIX}終了テキスト",
                 "kind": "text",
                 "text": "配信終了\nご視聴ありがとうございました",
                 "font_size": 72,

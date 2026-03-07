@@ -101,11 +101,14 @@ class OBSController:
         )
         print(f"画像ソースを追加しました: {source_name}")
 
-    def add_game_capture(self, scene_name, source_name, window_name=""):
+    def add_game_capture(self, scene_name, source_name, window="", allow_transparency=False):
         """ゲームキャプチャソースを追加する"""
-        settings = {"capture_mode": "window"}
-        if window_name:
-            settings["window"] = window_name
+        settings = {
+            "capture_mode": "window" if window else "any_fullscreen",
+            "allow_transparency": allow_transparency,
+        }
+        if window:
+            settings["window"] = window
         self._client.create_input(
             sceneName=scene_name,
             inputName=source_name,
@@ -200,7 +203,11 @@ class OBSController:
                 source.get("font_size", 48),
             )
         elif kind == "game_capture":
-            self.add_game_capture(scene_name, name)
+            self.add_game_capture(
+                scene_name, name,
+                window=source.get("window", ""),
+                allow_transparency=source.get("allow_transparency", False),
+            )
         else:
             print(f"  不明なソース種類: {kind}")
 
