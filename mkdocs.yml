@@ -26,10 +26,16 @@ theme:
 
 nav:
   - ホーム: index.md
-  - OBS自動制御でできること: obs-automation-guide.md
-  - OBS Studio 機能調査: obs-research.md
-  - アバター表示・アニメーション調査: avatar-research.md
-  - アバター変更ガイド: avatar-change-guide.md
+  - OBS:
+    - OBS自動制御でできること: obs-automation-guide.md
+    - OBS Studio 機能調査: obs-research.md
+  - アバター:
+    - アバター表示・アニメーション調査: avatar-research.md
+    - 3Dモデル調査: 3d-model-research.md
+    - アバター変更ガイド: avatar-change-guide.md
+  - 運用:
+    - コンソールコマンド: console-commands.md
+    - リソース管理: resource-management.md
 
 markdown_extensions:
   - toc:

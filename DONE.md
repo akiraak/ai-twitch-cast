@@ -4,6 +4,7 @@
 
 - [x] OBSの機能調査（WebSocket API、シーン管理、ソース操作、フィルタ、配信制御等）
 - [x] アバター表示・アニメーションの調査（PNGtuber / Live2D + VTube Studio / VRM等）
+- [x] 3Dモデル調査（VRM形式、表示ソフト比較、VMC Protocol制御、モデル入手方法）
 
 ## 動作確認タスク
 

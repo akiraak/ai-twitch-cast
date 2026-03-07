@@ -51,7 +51,8 @@ ai-twitch-cast/
 │   ├── index.md              # トップページ
 │   ├── obs-automation-guide.md  # OBS自動制御ガイド
 │   ├── obs-research.md       # OBS機能調査レポート
-│   └── avatar-research.md   # アバター表示・アニメーション調査
+│   ├── avatar-research.md   # アバター表示・アニメーション調査
+│   └── 3d-model-research.md # 3Dモデル調査
 ├── src/                      # ソースコード
 │   ├── obs_controller.py     # OBS WebSocket制御
 │   ├── vts_controller.py     # VTube Studio API制御
