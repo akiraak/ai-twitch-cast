@@ -22,6 +22,11 @@ SCENES = [
                 "kind": "game_capture",
                 "window": "VTube Studio:UnityWndClass:VTube Studio.exe",
                 "allow_transparency": True,
+                "transform": {
+                    "boundsType": "OBS_BOUNDS_STRETCH",
+                    "boundsWidth": 1920.0,
+                    "boundsHeight": 1080.0,
+                },
             },
         ],
     },

@@ -162,6 +162,8 @@ class OBSController:
             for source in scene["sources"]:
                 try:
                     self._add_source(scene_name, source)
+                    if "transform" in source:
+                        self.set_source_transform(scene_name, source["name"], source["transform"])
                 except Exception as e:
                     print(f"  ソース '{source['name']}' の追加に失敗: {e}")
 
