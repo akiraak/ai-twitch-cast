@@ -59,6 +59,9 @@ ai-twitch-cast/
 │   ├── vts_controller.py     # VTube Studio API制御（Live2D）
 │   ├── vsf_controller.py     # VSeeFace VMC Protocol制御（VRM）
 │   ├── scene_config.py       # シーン構成の定義（scenes.jsonから読み込み）
+│   ├── tts.py                # TTS音声合成（Gemini 2.5 Flash TTS）
+│   ├── twitch_chat.py        # Twitchチャット受信
+│   ├── comment_reader.py     # コメント読み上げサービス
 │   └── wsl_path.py           # WSL関連ユーティリティ
 ├── scripts/                  # 実行スクリプト
 │   ├── start_stream.py       # 配信開始
@@ -67,7 +70,8 @@ ai-twitch-cast/
 │   ├── stream_with_avatar.py # アバター付き配信
 │   ├── console.py            # 対話式コンソール
 │   ├── web.py                # Webインターフェース
-│   └── deploy_model.py       # Live2Dモデルデプロイ
+│   ├── deploy_model.py       # Live2Dモデルデプロイ
+│   └── comment_reader.py     # Twitchコメント読み上げ
 ├── static/                   # Webインターフェース静的ファイル
 │   └── index.html
 ├── resources/                # リソース（画像・モデル・音声・動画）

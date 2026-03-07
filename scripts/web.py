@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from src.comment_reader import CommentReader
 from src.obs_controller import OBSController
 from src.scene_config import AVATAR_APP, CONFIG_PATH, MAIN_SCENE, PREFIX, SCENES
 from src.vsf_controller import VSFController
@@ -31,6 +32,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 obs = OBSController()
 vts = VTSController()
 vsf = VSFController()
+reader = CommentReader()
 _obs_connected = False
 _vts_connected = False
 _vsf_connected = False
@@ -47,9 +49,13 @@ ENV_KEYS = [
     ("VTS_PORT", "VTube Studio ポート"),
     ("VSF_OSC_HOST", "VSeeFace OSC ホスト"),
     ("VSF_OSC_PORT", "VSeeFace OSC ポート"),
+    ("TWITCH_TOKEN", "Twitch トークン"),
+    ("TWITCH_CHANNEL", "Twitch チャンネル"),
+    ("GEMINI_API_KEY", "Gemini API キー"),
+    ("TTS_VOICE", "TTS 音声"),
 ]
 
-MASK_KEYS = {"OBS_WS_PASSWORD"}
+MASK_KEYS = {"OBS_WS_PASSWORD", "TWITCH_TOKEN", "GEMINI_API_KEY"}
 
 
 @app.get("/api/env")
@@ -84,6 +90,10 @@ async def get_status():
         "vsf": {
             "connected": _vsf_connected,
             "idle": vsf.is_idle_running if _vsf_connected else False,
+        },
+        "reader": {
+            "running": reader.is_running,
+            "queue": reader.queue_size,
         },
     }
 
@@ -201,11 +211,13 @@ async def obs_teardown():
 @app.post("/api/stream/start")
 async def stream_start():
     obs.start_stream()
+    await reader.start()
     return {"ok": True}
 
 
 @app.post("/api/stream/stop")
 async def stream_stop():
+    await reader.stop()
     obs.stop_stream()
     return {"ok": True}
 
