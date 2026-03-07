@@ -1,4 +1,5 @@
 .claude/
 .env
 .venv/
+.vts_token
 __pycache__/

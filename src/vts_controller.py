@@ -1,8 +1,12 @@
 """VTube Studio API制御モジュール"""
 
 import os
+from pathlib import Path
+
+import json
 
 import pyvts
+import websockets
 
 from src.wsl_path import resolve_host
 
@@ -17,10 +21,12 @@ class VTSController:
 
     async def connect(self):
         """VTube Studioに接続・認証する"""
+        token_path = str(Path(__file__).resolve().parent.parent / ".vts_token")
         self._vts = pyvts.vts(
             plugin_info={
                 "plugin_name": "AI Twitch Cast",
                 "developer": "ai-twitch-cast",
+                "authentication_token_path": token_path,
             },
             vts_api_info={
                 "host": self.host,
@@ -30,7 +36,12 @@ class VTSController:
             },
         )
         try:
-            await self._vts.connect()
+            # pyvtsのデフォルト接続はpingを送らずタイムアウトするため、直接接続する
+            self._vts.websocket = await websockets.connect(
+                f"ws://{self.host}:{self.port}",
+                ping_interval=30,
+                ping_timeout=10,
+            )
         except Exception:
             raise ConnectionError(
                 f"VTube Studioに接続できません ({self.host}:{self.port})。"
@@ -41,6 +52,28 @@ class VTSController:
         await self._vts.request_authenticate()
         print("VTube Studioに接続しました")
 
+    async def reconnect(self):
+        """WebSocket接続を再確立する"""
+        self._vts.websocket = await websockets.connect(
+            f"ws://{self.host}:{self.port}",
+            ping_interval=30,
+            ping_timeout=10,
+        )
+        await self._vts.request_authenticate()
+        print("VTube Studioに再接続しました")
+
+    async def _request(self, request_msg):
+        """リクエストを送信する。接続が切れていたら自動再接続する"""
+        try:
+            await self._vts.websocket.send(json.dumps(request_msg))
+            response = await self._vts.websocket.recv()
+            return json.loads(response)
+        except websockets.exceptions.ConnectionClosed:
+            await self.reconnect()
+            await self._vts.websocket.send(json.dumps(request_msg))
+            response = await self._vts.websocket.recv()
+            return json.loads(response)
+
     async def disconnect(self):
         """VTube Studioから切断する"""
         if self._vts:
@@ -50,7 +83,7 @@ class VTSController:
 
     async def get_model_info(self):
         """現在のモデル情報を取得する"""
-        response = await self._vts.request(
+        response = await self._request(
             self._vts.vts_request.BaseRequest(
                 "CurrentModelRequest",
             )
@@ -69,18 +102,18 @@ class VTSController:
             value=value,
             weight=weight,
         )
-        await self._vts.request(request)
+        await self._request(request)
 
     async def trigger_hotkey(self, hotkey_id):
         """ホットキーを実行する（表情切替・モーション再生等）"""
         request = self._vts.vts_request.requestTriggerHotKey(
             hotkeyID=hotkey_id,
         )
-        await self._vts.request(request)
+        await self._request(request)
 
     async def get_hotkeys(self):
         """利用可能なホットキー一覧を取得する"""
-        response = await self._vts.request(
+        response = await self._request(
             self._vts.vts_request.requestHotKeyList()
         )
         hotkeys = response["data"].get("availableHotkeys", [])
@@ -95,7 +128,7 @@ class VTSController:
 
     async def get_parameters(self):
         """現在のモデルのパラメータ一覧を取得する"""
-        response = await self._vts.request(
+        response = await self._request(
             self._vts.vts_request.BaseRequest(
                 "InputParameterListRequest",
             )
