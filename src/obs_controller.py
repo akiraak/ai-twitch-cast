@@ -1,9 +1,13 @@
 """OBS WebSocket制御モジュール"""
 
+import logging
 import os
 from pathlib import Path
 
 import obsws_python as obs
+
+# obsws-pythonのlogger.exception()によるトレースバック出力を抑制
+logging.getLogger("obsws_python").setLevel(logging.CRITICAL)
 
 from src.wsl_path import resolve_host, to_windows_path
 
@@ -89,11 +93,11 @@ class OBSController:
         """WSLパスの画像をソースとして追加する"""
         win_path = to_windows_path(str(wsl_path))
         self._client.create_input(
-            scene_name=scene_name,
-            input_name=source_name,
-            input_kind="image_source",
-            input_settings={"file": win_path},
-            scene_item_enabled=True,
+            sceneName=scene_name,
+            inputName=source_name,
+            inputKind="image_source",
+            inputSettings={"file": win_path},
+            sceneItemEnabled=True,
         )
         print(f"画像ソースを追加しました: {source_name}")
 
@@ -103,28 +107,28 @@ class OBSController:
         if window_name:
             settings["window"] = window_name
         self._client.create_input(
-            scene_name=scene_name,
-            input_name=source_name,
-            input_kind="game_capture",
-            input_settings=settings,
-            scene_item_enabled=True,
+            sceneName=scene_name,
+            inputName=source_name,
+            inputKind="game_capture",
+            inputSettings=settings,
+            sceneItemEnabled=True,
         )
         print(f"ゲームキャプチャを追加しました: {source_name}")
 
     def add_text_source(self, scene_name, source_name, text, font_size=48):
         """テキストソースを追加する"""
         self._client.create_input(
-            scene_name=scene_name,
-            input_name=source_name,
-            input_kind="text_gdiplus",
-            input_settings={
+            sceneName=scene_name,
+            inputName=source_name,
+            inputKind="text_gdiplus_v3",
+            inputSettings={
                 "text": text,
                 "font": {"face": "Yu Gothic UI", "size": font_size},
                 "color": 0xFFFFFFFF,
                 "align": "center",
                 "valign": "center",
             },
-            scene_item_enabled=True,
+            sceneItemEnabled=True,
         )
         print(f"テキストソースを追加しました: {source_name}")
 
@@ -150,8 +154,7 @@ class OBSController:
             try:
                 self.create_scene(scene_name)
             except Exception:
-                print(f"シーン '{scene_name}' は既に存在します。スキップします。")
-                continue
+                print(f"シーン '{scene_name}' は既に存在します")
 
             for source in scene["sources"]:
                 try:
