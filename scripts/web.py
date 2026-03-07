@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +34,33 @@ vsf = VSFController()
 _obs_connected = False
 _vts_connected = False
 _vsf_connected = False
+
+
+# --- 環境設定 ---
+
+ENV_KEYS = [
+    ("OBS_WS_HOST", "OBS WebSocket ホスト"),
+    ("OBS_WS_PORT", "OBS WebSocket ポート"),
+    ("OBS_WS_PASSWORD", "OBS WebSocket パスワード"),
+    ("AVATAR_APP", "アバターアプリ (vts/vsf)"),
+    ("VTS_HOST", "VTube Studio ホスト"),
+    ("VTS_PORT", "VTube Studio ポート"),
+    ("VSF_OSC_HOST", "VSeeFace OSC ホスト"),
+    ("VSF_OSC_PORT", "VSeeFace OSC ポート"),
+]
+
+MASK_KEYS = {"OBS_WS_PASSWORD"}
+
+
+@app.get("/api/env")
+async def get_env():
+    result = []
+    for key, label in ENV_KEYS:
+        value = os.environ.get(key, "")
+        if key in MASK_KEYS and value:
+            value = "***"
+        result.append({"key": key, "label": label, "value": value})
+    return result
 
 
 # --- ページ ---
@@ -290,10 +318,39 @@ async def vsf_blend(body: BlendShape):
     return {"ok": True}
 
 
-# --- Init ---
+@app.get("/api/vsf/defaults")
+async def vsf_defaults_get():
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+    return config.get("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})
 
-@app.post("/api/init")
-async def init():
+
+class VSFDefaults(BaseModel):
+    idle_scale: float
+    blendshapes: dict[str, float]
+
+
+@app.post("/api/vsf/defaults/save")
+async def vsf_defaults_save(body: VSFDefaults):
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+    config["vsf_defaults"] = body.model_dump()
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    return {"ok": True}
+
+
+# --- Start / Init ---
+
+def _load_vsf_defaults():
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+    return config.get("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})
+
+
+@app.post("/api/start")
+async def start():
     global _obs_connected, _vts_connected, _vsf_connected
     obs.connect()
     _obs_connected = True
@@ -301,6 +358,11 @@ async def init():
         vsf.connect()
         _vsf_connected = True
         vsf.apply_default_pose()
+        # 保存されたデフォルト値を適用
+        defaults = _load_vsf_defaults()
+        if defaults.get("blendshapes"):
+            vsf.set_blendshapes(defaults["blendshapes"])
+        vsf.start_idle(defaults.get("idle_scale", 1.0))
     else:
         await vts.connect()
         _vts_connected = True

@@ -32,11 +32,27 @@
   .slider-row input[type=range] { flex: 1; }
   .slider-row .val { font-size: 0.8rem; min-width: 30px; text-align: right; }
   #log { background: #0f0f23; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 0.8rem; height: 180px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap; }
+  .env-card { background: #1a2332; border: 1px solid #2a3a4a; border-radius: 6px; }
+  #env-table td { padding: 3px 6px; border-bottom: 1px solid #1a2332; }
+  #env-table td:first-child { color: #78909c; }
+  #env-table td:nth-child(2) { font-family: monospace; color: #80cbc4; }
 </style>
 </head>
 <body>
 
 <h1>AI Twitch Cast</h1>
+
+<div class="btn-row" style="margin-bottom:16px;">
+  <button style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/start')">Setup</button>
+  <button style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/stream/start')">配信開始</button>
+  <button class="danger" style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/stream/stop')">配信停止</button>
+</div>
+
+<details class="env-card" style="margin-bottom:16px;">
+  <summary style="cursor:pointer; font-size:0.8rem; color:#4fc3f7; padding:8px 12px;">.env 設定</summary>
+  <table id="env-table" style="width:100%; font-size:0.75rem; border-collapse:collapse; padding:0 12px 8px;">
+  </table>
+</details>
 
 <div class="grid">
   <!-- OBS -->
@@ -51,6 +67,32 @@
       <button class="danger" onclick="api('POST','/api/obs/teardown')">Teardown</button>
     </div>
     <div id="obs-scenes"></div>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">アバター位置</h3>
+    <div class="slider-row">
+      <label>X</label>
+      <input type="range" class="avatar-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
+      <input type="number" class="avatar-num" data-key="positionX" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+    </div>
+    <div class="slider-row">
+      <label>Y</label>
+      <input type="range" class="avatar-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
+      <input type="number" class="avatar-num" data-key="positionY" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+    </div>
+    <div class="slider-row">
+      <label>幅</label>
+      <input type="range" class="avatar-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="1920">
+      <input type="number" class="avatar-num" data-key="boundsWidth" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="1920">
+    </div>
+    <div class="slider-row">
+      <label>高さ</label>
+      <input type="range" class="avatar-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="1080">
+      <input type="number" class="avatar-num" data-key="boundsHeight" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="1080">
+    </div>
+    <div class="btn-row" style="margin-top:4px;">
+      <button class="secondary" onclick="loadAvatarTransform()">取得</button>
+      <button onclick="saveAvatarToJson()">scenes.jsonに保存</button>
+    </div>
+    <div class="status" id="avatar-status"></div>
     <div class="status" id="obs-status"></div>
   </div>
 
@@ -89,6 +131,10 @@
       <input type="range" class="bs-slider" data-name="Blink" min="0" max="1" step="0.05" value="0">
       <span class="val">0</span>
     </div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button onclick="saveVsfDefaults()">初期値として保存</button>
+      <button class="secondary" onclick="loadVsfDefaults()">初期値を読込</button>
+    </div>
     <div class="status" id="vsf-status"></div>
   </div>
 
@@ -102,48 +148,6 @@
     <div class="status" id="vts-status"></div>
   </div>
 
-  <!-- Avatar Position -->
-  <div class="card" id="avatar-card">
-    <h2>アバター位置</h2>
-    <div class="slider-row">
-      <label>X</label>
-      <input type="range" class="avatar-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
-      <input type="number" class="avatar-num" data-key="positionX" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
-    </div>
-    <div class="slider-row">
-      <label>Y</label>
-      <input type="range" class="avatar-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
-      <input type="number" class="avatar-num" data-key="positionY" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
-    </div>
-    <div class="slider-row">
-      <label>幅</label>
-      <input type="range" class="avatar-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="1920">
-      <input type="number" class="avatar-num" data-key="boundsWidth" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="1920">
-    </div>
-    <div class="slider-row">
-      <label>高さ</label>
-      <input type="range" class="avatar-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="1080">
-      <input type="number" class="avatar-num" data-key="boundsHeight" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="1080">
-    </div>
-    <div class="btn-row" style="margin-top:8px;">
-      <button class="secondary" onclick="loadAvatarTransform()">取得</button>
-      <button onclick="saveAvatarToJson()">scenes.jsonに保存</button>
-    </div>
-    <div class="status" id="avatar-status"></div>
-  </div>
-
-  <!-- Stream -->
-  <div class="card">
-    <h2>配信</h2>
-    <div class="btn-row">
-      <button onclick="api('POST','/api/stream/start')">開始</button>
-      <button class="danger" onclick="api('POST','/api/stream/stop')">停止</button>
-    </div>
-    <div class="btn-row">
-      <button onclick="api('POST','/api/init')">Init (一括初期化)</button>
-    </div>
-    <div class="status" id="stream-status"></div>
-  </div>
 </div>
 
 <div id="log"></div>
@@ -228,10 +232,8 @@ async function refreshStatus() {
     if (data.obs.connected && data.obs.stream) {
       const s = data.obs.stream;
       document.getElementById('obs-status').textContent = s.active ? `配信中 ${s.timecode}` : '停止中';
-      document.getElementById('stream-status').textContent = s.active ? `配信中 ${s.timecode}` : '停止中';
     } else {
       document.getElementById('obs-status').textContent = data.obs.connected ? '接続中' : '未接続';
-      document.getElementById('stream-status').textContent = '';
     }
 
     // VTS
@@ -325,7 +327,53 @@ async function saveAvatarToJson() {
   }
 }
 
-// 定期更新
+// --- 環境設定 ---
+async function loadEnv() {
+  try {
+    const data = await (await fetch('/api/env')).json();
+    const table = document.getElementById('env-table');
+    table.innerHTML = '';
+    for (const item of data) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${item.label}</td><td>${item.value || '<span style="color:#616161">未設定</span>'}</td>`;
+      table.appendChild(tr);
+    }
+  } catch (e) {}
+}
+loadEnv();
+
+// --- VSeeFace初期値 ---
+function saveVsfDefaults() {
+  const blendshapes = {};
+  document.querySelectorAll('.bs-slider').forEach(s => {
+    const val = parseFloat(s.value);
+    if (val > 0) blendshapes[s.dataset.name] = val;
+  });
+  // 表情ボタンの状態も含める
+  const idle_scale = parseFloat(document.getElementById('idle-scale').value);
+  api('POST', '/api/vsf/defaults/save', { idle_scale, blendshapes });
+}
+
+async function loadVsfDefaults() {
+  try {
+    const data = await (await fetch('/api/vsf/defaults')).json();
+    // Idle倍率
+    document.getElementById('idle-scale').value = data.idle_scale || 1.0;
+    document.getElementById('idle-scale-val').textContent = (data.idle_scale || 1.0).toFixed(1);
+    // BlendShape
+    document.querySelectorAll('.bs-slider').forEach(s => {
+      const val = (data.blendshapes || {})[s.dataset.name] || 0;
+      s.value = val;
+      s.nextElementSibling.textContent = val.toFixed(2);
+    });
+    log('OK VSeeFace初期値を読み込みました');
+  } catch (e) {
+    log('ERROR VSeeFace初期値の読込に失敗: ' + e.message);
+  }
+}
+
+// 初期読み込み
+loadVsfDefaults();
 refreshStatus();
 setInterval(refreshStatus, 3000);
 </script>

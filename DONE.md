@@ -28,6 +28,7 @@
 - [x] セットアップ後にメインシーンへ自動切替（scenes.jsonのmain_scene設定）
 - [x] シーンごとのアバター位置オーバーライド対応
 - [x] Webインターフェースでアバター位置調整・scenes.jsonへの保存機能
+- [x] Web UIにSetup/配信開始・停止ボタン、.env設定表示、VSeeFace初期値の保存・復元機能を追加
 
 ## Phase 0: 環境構築・基盤
 

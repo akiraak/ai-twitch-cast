@@ -1,4 +1,10 @@
 {
+  "vsf_defaults": {
+    "idle_scale": 1.0,
+    "blendshapes": {
+      "A": 0.2
+    }
+  },
   "avatar": {
     "vts": {
       "window": "VTube Studio:UnityWndClass:VTube Studio.exe",
