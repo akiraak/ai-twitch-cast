@@ -45,43 +45,50 @@ cp .env.example .env
 `.env` を編集して接続情報を設定:
 
 ```
-OBS_WS_HOST=localhost
+# WSL2の場合は "wsl" でWindows側IPを自動取得
+OBS_WS_HOST=wsl
 OBS_WS_PORT=4455
 OBS_WS_PASSWORD=your_password_here
 
-VTS_HOST=localhost
+VTS_HOST=wsl
 VTS_PORT=8001
+VTS_MODELS_DIR=C:\Program Files (x86)\Steam\steamapps\common\VTube Studio\VTube Studio_Data\StreamingAssets\Live2DModels
 ```
 
 ## 使い方
 
-### 配信開始
+### 対話式コンソール（推奨）
 
 ```bash
-python scripts/start_stream.py
+python scripts/console.py
 ```
 
-### 配信停止
+OBS・VTube Studioの操作を対話的に実行できます。
+
+```
+> obs connect                  # OBSに接続
+> vts connect                  # VTube Studioに接続
+> obs setup                    # シーン・ソースを一括作成
+> obs scene メイン              # シーン切り替え
+> vts demo                     # アバターデモ動作
+> stream start                 # 配信開始
+> stream stop                  # 配信停止
+> obs teardown                 # シーン・ソースを一括削除
+> help                         # 全コマンド表示
+```
+
+コマンド一覧は [docs/console-commands.md](docs/console-commands.md) を参照。
+
+### 個別スクリプト
 
 ```bash
-python scripts/stop_stream.py
+python scripts/start_stream.py       # 配信開始
+python scripts/stop_stream.py        # 配信停止
+python scripts/vts_test.py           # VTube Studio接続テスト
+python scripts/stream_with_avatar.py # アバター付き配信デモ
+python scripts/deploy_model.py       # Live2DモデルをVTSにデプロイ
+python scripts/deploy_model.py --clean  # デプロイしたモデルを削除
 ```
-
-### VTube Studio接続テスト
-
-```bash
-python scripts/vts_test.py
-```
-
-モデル情報・パラメータ・ホットキーの一覧を表示します。
-
-### アバター付き配信（Live2D + VTube Studio + OBS）
-
-```bash
-python scripts/stream_with_avatar.py
-```
-
-VTube Studioのアバターを動かしながらOBSで配信します。
 
 ### Pythonコードから使う
 
@@ -91,9 +98,6 @@ from src.obs_controller import OBSController
 with OBSController() as obs:
     obs.start_stream()   # 配信開始
     obs.stop_stream()    # 配信停止
-
-    status = obs.get_stream_status()  # 配信状態の確認
-    print(status["active"])  # True/False
 ```
 
 ```python

@@ -55,7 +55,8 @@ ai-twitch-cast/
 ├── src/                      # ソースコード
 │   ├── obs_controller.py     # OBS WebSocket制御
 │   ├── vts_controller.py     # VTube Studio API制御
-│   └── wsl_path.py           # WSL↔Windowsパス変換
+│   ├── scene_config.py       # シーン構成の定義
+│   └── wsl_path.py           # WSL関連ユーティリティ
 ├── scripts/                  # 実行スクリプト
 │   ├── start_stream.py       # 配信開始
 │   ├── stop_stream.py        # 配信停止
