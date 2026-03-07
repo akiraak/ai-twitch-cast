@@ -125,35 +125,35 @@ class VSFController:
                 t = time.time() - t0
 
                 # --- 呼吸: 胸が前後にゆっくり動く (約4秒周期) ---
-                breath = math.sin(t * 1.6) * 2.0 * s
+                breath = math.sin(t * 1.6) * 0.8 * s
                 qx, qy, qz, qw = self._quat(1, 0, 0, breath)
                 self.set_bone("Chest", qx=qx, qy=qy, qz=qz, qw=qw)
 
                 # --- 体の揺れ: 背骨が左右にゆったり (約7秒周期) ---
-                sway = (math.sin(t * 0.9) * 2.5 + math.sin(t * 0.37) * 1.0) * s
+                sway = (math.sin(t * 0.9) * 1.0 + math.sin(t * 0.37) * 0.4) * s
                 qx, qy, qz, qw = self._quat(0, 0, 1, sway)
                 self.set_bone("Spine", qx=qx, qy=qy, qz=qz, qw=qw)
 
                 # --- 頭の動き: 複数の波を重ねて自然に ---
-                head_x = (math.sin(t * 0.7) * 3.0 + math.sin(t * 1.3) * 1.5) * s
-                head_z = (math.sin(t * 0.5) * 4.0 + math.sin(t * 1.1) * 1.5) * s
-                head_y = math.sin(t * 0.4) * 3.0 * s
+                head_x = (math.sin(t * 0.7) * 1.2 + math.sin(t * 1.3) * 0.6) * s
+                head_z = (math.sin(t * 0.5) * 1.6 + math.sin(t * 1.1) * 0.6) * s
+                head_y = math.sin(t * 0.4) * 1.2 * s
                 q = self._quat(1, 0, 0, head_x)
                 q = self._quat_multiply(q, self._quat(0, 1, 0, head_y))
                 q = self._quat_multiply(q, self._quat(0, 0, 1, head_z))
                 self.set_bone("Head", qx=q[0], qy=q[1], qz=q[2], qw=q[3])
 
                 # --- 腕の揺れ: デフォルトポーズ(-70/70度)に揺れを加算 ---
-                r_arm_sway = math.sin(t * 0.6 + 1.0) * 2.0 * s
-                l_arm_sway = math.sin(t * 0.6 + 2.5) * 2.0 * s
+                r_arm_sway = math.sin(t * 0.6 + 1.0) * 0.8 * s
+                l_arm_sway = math.sin(t * 0.6 + 2.5) * 0.8 * s
                 q_r = self._quat(0, 0, 1, -70 + r_arm_sway)
                 q_l = self._quat(0, 0, 1, 70 + l_arm_sway)
                 self.set_bone("RightUpperArm", qx=q_r[0], qy=q_r[1], qz=q_r[2], qw=q_r[3])
                 self.set_bone("LeftUpperArm", qx=q_l[0], qy=q_l[1], qz=q_l[2], qw=q_l[3])
 
                 # --- 前腕の揺れ ---
-                r_fore = 20 + math.sin(t * 0.8 + 0.5) * 1.5 * s
-                l_fore = -20 + math.sin(t * 0.8 + 2.0) * 1.5 * s
+                r_fore = 20 + math.sin(t * 0.8 + 0.5) * 0.6 * s
+                l_fore = -20 + math.sin(t * 0.8 + 2.0) * 0.6 * s
                 q_rf = self._quat(0, 1, 0, r_fore)
                 q_lf = self._quat(0, 1, 0, l_fore)
                 self.set_bone("RightLowerArm", qx=q_rf[0], qy=q_rf[1], qz=q_rf[2], qw=q_rf[3])
