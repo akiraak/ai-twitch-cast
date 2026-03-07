@@ -87,6 +87,12 @@ def _create_tables(conn):
         );
     """)
     conn.commit()
+    # Migration: add updated_at to characters
+    try:
+        conn.execute("ALTER TABLE characters ADD COLUMN updated_at TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 
 # --- channels ---
@@ -120,6 +126,39 @@ def get_or_create_character(channel_id, name, config="{}"):
         "SELECT * FROM characters WHERE channel_id = ? AND name = ?",
         (channel_id, name),
     ).fetchone())
+
+
+def get_character_by_channel(channel_id):
+    """チャンネルのキャラクター設定を取得する"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM characters WHERE channel_id = ? ORDER BY id LIMIT 1",
+        (channel_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def update_character(character_id, name=None, config=None):
+    """キャラクター設定を更新する"""
+    conn = get_connection()
+    updates = []
+    params = []
+    if name is not None:
+        updates.append("name = ?")
+        params.append(name)
+    if config is not None:
+        updates.append("config = ?")
+        params.append(config)
+    if not updates:
+        return
+    updates.append("updated_at = ?")
+    params.append(_now())
+    params.append(character_id)
+    conn.execute(
+        f"UPDATE characters SET {', '.join(updates)} WHERE id = ?",
+        params,
+    )
+    conn.commit()
 
 
 # --- shows ---

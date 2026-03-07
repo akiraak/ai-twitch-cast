@@ -8,10 +8,11 @@ from google import genai
 from google.genai import types
 
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
-CHARACTER_PATH = _PROJECT_DIR / "character.json"
+_CHARACTER_SEED_PATH = _PROJECT_DIR / "character.json"
 
 _client = None
 _character = None
+_character_id = None
 
 
 def _get_client():
@@ -24,20 +25,59 @@ def _get_client():
     return _client
 
 
-def load_character():
-    """character.json を読み込む"""
-    global _character
-    with open(CHARACTER_PATH, encoding="utf-8") as f:
-        _character = json.load(f)
+def seed_character(channel_id):
+    """character.json から初期データをDBにインポートする（未登録時のみ）"""
+    from src import db
+
+    existing = db.get_character_by_channel(channel_id)
+    if existing:
+        return existing
+
+    with open(_CHARACTER_SEED_PATH, encoding="utf-8") as f:
+        char_data = json.load(f)
+
+    config = json.dumps(char_data, ensure_ascii=False)
+    return db.get_or_create_character(channel_id, char_data["name"], config)
+
+
+def load_character(channel_id=None):
+    """DBからキャラクター設定を読み込む"""
+    global _character, _character_id
+    from src import db
+
+    if channel_id is None:
+        channel_name = os.environ.get("TWITCH_CHANNEL", "default")
+        channel = db.get_or_create_channel(channel_name)
+        channel_id = channel["id"]
+
+    db_char = db.get_character_by_channel(channel_id)
+    if db_char is None:
+        db_char = seed_character(channel_id)
+
+    _character_id = db_char["id"]
+    _character = json.loads(db_char["config"])
     return _character
 
 
 def get_character():
-    """現在のキャラクター設定を返す"""
-    global _character
+    """現在のキャラクター設定を返す（キャッシュ済み）"""
     if _character is None:
         load_character()
     return _character
+
+
+def get_character_id():
+    """現在のキャラクターIDを返す"""
+    if _character_id is None:
+        load_character()
+    return _character_id
+
+
+def invalidate_character_cache():
+    """キャラクターキャッシュを無効化する（DB更新後に呼ぶ）"""
+    global _character, _character_id
+    _character = None
+    _character_id = None
 
 
 def _build_system_prompt():

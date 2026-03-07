@@ -18,7 +18,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src import db
-from src.ai_responder import get_character, CHARACTER_PATH
+from src.ai_responder import (
+    get_character, get_character_id, invalidate_character_cache,
+    load_character, seed_character,
+)
 from src.comment_reader import CommentReader
 from src.obs_controller import OBSController
 from src.scene_config import AVATAR_APP, CONFIG_PATH, MAIN_SCENE, PREFIX, SCENES
@@ -222,12 +225,11 @@ async def stream_start():
     channel_name = os.environ.get("TWITCH_CHANNEL", "default")
     channel = db.get_or_create_channel(channel_name)
 
-    char = get_character()
-    char_config = json.dumps(char, ensure_ascii=False)
-    character = db.get_or_create_character(channel["id"], char["name"], char_config)
+    seed_character(channel["id"])
+    character_id = get_character_id()
 
     show = db.get_or_create_show(channel["id"], "デフォルト")
-    _current_episode = db.start_episode(show["id"], character["id"])
+    _current_episode = db.start_episode(show["id"], character_id)
     reader.set_episode(_current_episode["id"])
 
     await reader.start()
@@ -376,6 +378,32 @@ async def vsf_defaults_save(body: VSFDefaults):
     return {"ok": True}
 
 
+# --- Character ---
+
+@app.get("/api/character")
+async def get_character_api():
+    char = get_character()
+    char_id = get_character_id()
+    return {"id": char_id, **char}
+
+
+class CharacterUpdate(BaseModel):
+    name: str
+    system_prompt: str
+    rules: list[str]
+    emotions: dict[str, str]
+    emotion_blendshapes: dict[str, dict[str, float]]
+
+
+@app.put("/api/character")
+async def update_character_api(body: CharacterUpdate):
+    char_id = get_character_id()
+    config = json.dumps(body.model_dump(), ensure_ascii=False)
+    db.update_character(char_id, name=body.name, config=config)
+    invalidate_character_cache()
+    return {"ok": True}
+
+
 # --- Start / Init ---
 
 def _load_vsf_defaults():
@@ -403,6 +431,15 @@ async def start():
         _vts_connected = True
     obs.setup_scenes(SCENES, MAIN_SCENE)
     return {"ok": True}
+
+
+@app.on_event("startup")
+async def startup_seed():
+    """起動時にキャラクターをDBにシードする"""
+    try:
+        load_character()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

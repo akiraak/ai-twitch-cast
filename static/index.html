@@ -148,6 +148,41 @@
     <div class="status" id="vts-status"></div>
   </div>
 
+  <!-- Character -->
+  <div class="card" style="grid-column: 1 / -1;">
+    <h2>キャラクター設定</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div>
+        <label style="font-size:0.8rem; color:#9e9e9e;">名前</label>
+        <input type="text" id="char-name" style="width:100%; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:4px; padding:4px 8px; font-size:0.85rem;">
+      </div>
+      <div></div>
+      <div style="grid-column: 1 / -1;">
+        <label style="font-size:0.8rem; color:#9e9e9e;">システムプロンプト</label>
+        <textarea id="char-prompt" rows="3" style="width:100%; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:4px; padding:4px 8px; font-size:0.85rem; resize:vertical;"></textarea>
+      </div>
+      <div>
+        <label style="font-size:0.8rem; color:#9e9e9e;">ルール</label>
+        <div id="char-rules"></div>
+        <button class="secondary" style="margin-top:4px; font-size:0.75rem;" onclick="addRule()">+ ルール追加</button>
+      </div>
+      <div>
+        <label style="font-size:0.8rem; color:#9e9e9e;">感情</label>
+        <div id="char-emotions"></div>
+        <button class="secondary" style="margin-top:4px; font-size:0.75rem;" onclick="addEmotion()">+ 感情追加</button>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <label style="font-size:0.8rem; color:#9e9e9e;">感情BlendShape</label>
+        <div id="char-blendshapes"></div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button onclick="saveCharacter()">保存</button>
+      <button class="secondary" onclick="loadCharacter()">リロード</button>
+    </div>
+    <div class="status" id="char-status"></div>
+  </div>
+
 </div>
 
 <div id="log"></div>
@@ -372,7 +407,161 @@ async function loadVsfDefaults() {
   }
 }
 
+// --- キャラクター設定 ---
+let _charEmotions = {};
+let _charBlendshapes = {};
+
+async function loadCharacter() {
+  try {
+    const data = await (await fetch('/api/character')).json();
+    document.getElementById('char-name').value = data.name || '';
+    document.getElementById('char-prompt').value = data.system_prompt || '';
+    renderRules(data.rules || []);
+    _charEmotions = data.emotions || {};
+    _charBlendshapes = data.emotion_blendshapes || {};
+    renderEmotions();
+    renderBlendshapes();
+    document.getElementById('char-status').textContent = '読み込みました';
+  } catch (e) {
+    document.getElementById('char-status').textContent = 'エラー: ' + e.message;
+  }
+}
+
+function renderRules(rules) {
+  const el = document.getElementById('char-rules');
+  el.innerHTML = '';
+  rules.forEach((rule, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
+    row.innerHTML = `<input type="text" class="char-rule" value="${escHtml(rule)}" style="flex:1; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;">
+      <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
+    el.appendChild(row);
+  });
+}
+
+function addRule() {
+  const el = document.getElementById('char-rules');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
+  row.innerHTML = `<input type="text" class="char-rule" value="" style="flex:1; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;">
+    <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
+  el.appendChild(row);
+}
+
+function collectRules() {
+  return [...document.querySelectorAll('.char-rule')].map(el => el.value).filter(v => v.trim());
+}
+
+function renderEmotions() {
+  const el = document.getElementById('char-emotions');
+  el.innerHTML = '';
+  for (const [key, desc] of Object.entries(_charEmotions)) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
+    row.innerHTML = `<input type="text" class="emo-key" value="${escHtml(key)}" style="width:70px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
+      <input type="text" class="emo-desc" value="${escHtml(desc)}" style="flex:1; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
+      <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
+    el.appendChild(row);
+  }
+}
+
+function addEmotion() {
+  const el = document.getElementById('char-emotions');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
+  row.innerHTML = `<input type="text" class="emo-key" value="" style="width:70px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
+    <input type="text" class="emo-desc" value="" style="flex:1; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
+    <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
+  el.appendChild(row);
+}
+
+function collectEmotions() {
+  const result = {};
+  const keys = document.querySelectorAll('.emo-key');
+  const descs = document.querySelectorAll('.emo-desc');
+  keys.forEach((k, i) => {
+    if (k.value.trim()) result[k.value.trim()] = descs[i].value;
+  });
+  return result;
+}
+
+function renderBlendshapes() {
+  const el = document.getElementById('char-blendshapes');
+  el.innerHTML = '';
+  for (const [emotion, shapes] of Object.entries(_charBlendshapes)) {
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-bottom:8px; padding:6px; background:#0f0f23; border-radius:4px;';
+    const header = document.createElement('div');
+    header.style.cssText = 'font-size:0.8rem; color:#7c4dff; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;';
+    header.innerHTML = `<span>${escHtml(emotion)}</span>
+      <button class="secondary" style="font-size:0.7rem; padding:1px 6px;" onclick="addBlendshapeRow(this.parentElement.nextElementSibling, '${escHtml(emotion)}')">+</button>`;
+    section.appendChild(header);
+    const rows = document.createElement('div');
+    rows.className = 'bs-rows';
+    rows.dataset.emotion = emotion;
+    for (const [name, val] of Object.entries(shapes)) {
+      rows.appendChild(makeBlendshapeRow(name, val));
+    }
+    section.appendChild(rows);
+    el.appendChild(section);
+  }
+}
+
+function makeBlendshapeRow(name, val) {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:4px; margin-bottom:2px;';
+  row.innerHTML = `<input type="text" class="bs-name" value="${escHtml(name)}" style="width:80px; background:#1a1a2e; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 4px; font-size:0.75rem;">
+    <input type="number" class="bs-val" value="${val}" step="0.1" min="0" max="1" style="width:60px; background:#1a1a2e; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 4px; font-size:0.75rem;">
+    <button class="danger" style="font-size:0.65rem; padding:1px 4px;" onclick="this.parentElement.remove()">×</button>`;
+  return row;
+}
+
+function addBlendshapeRow(container) {
+  container.appendChild(makeBlendshapeRow('', 0));
+}
+
+function collectBlendshapes() {
+  const result = {};
+  document.querySelectorAll('.bs-rows').forEach(container => {
+    const emotion = container.dataset.emotion;
+    const shapes = {};
+    container.querySelectorAll('div').forEach(row => {
+      const name = row.querySelector('.bs-name')?.value?.trim();
+      const val = parseFloat(row.querySelector('.bs-val')?.value || 0);
+      if (name) shapes[name] = val;
+    });
+    result[emotion] = shapes;
+  });
+  // 感情リストに新しいキーがあれば空で追加
+  const emotions = collectEmotions();
+  for (const key of Object.keys(emotions)) {
+    if (!(key in result)) result[key] = {};
+  }
+  return result;
+}
+
+async function saveCharacter() {
+  const body = {
+    name: document.getElementById('char-name').value,
+    system_prompt: document.getElementById('char-prompt').value,
+    rules: collectRules(),
+    emotions: collectEmotions(),
+    emotion_blendshapes: collectBlendshapes(),
+  };
+  const res = await api('PUT', '/api/character', body);
+  if (res?.ok) {
+    document.getElementById('char-status').textContent = '保存しました';
+    // リロードしてBlendShapeセクションを更新
+    await loadCharacter();
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // 初期読み込み
+loadCharacter();
 loadVsfDefaults();
 refreshStatus();
 setInterval(refreshStatus, 3000);
