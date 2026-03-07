@@ -25,6 +25,9 @@
 - [x] console.py相当のWebインターフェースを作成（FastAPI + HTML）
 - [x] シーンの設定をJSONで設定できるように（scenes.json）
 - [x] アバターの配置位置を設定可能に（scenes.jsonのavatar.transform）
+- [x] セットアップ後にメインシーンへ自動切替（scenes.jsonのmain_scene設定）
+- [x] シーンごとのアバター位置オーバーライド対応
+- [x] Webインターフェースでアバター位置調整・scenes.jsonへの保存機能
 
 ## Phase 0: 環境構築・基盤
 

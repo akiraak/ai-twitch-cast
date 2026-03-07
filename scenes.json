@@ -19,6 +19,7 @@
       }
     }
   },
+  "main_scene": "メイン",
   "scenes": [
     {
       "name": "メイン",
@@ -29,7 +30,14 @@
           "path": "images/background.png"
         },
         {
-          "kind": "avatar"
+          "kind": "avatar",
+          "transform": {
+            "positionX": 957.0,
+            "positionY": 384.0,
+            "boundsType": "OBS_BOUNDS_SCALE_INNER",
+            "boundsWidth": 1313.0,
+            "boundsHeight": 915.0
+          }
         }
       ]
     },

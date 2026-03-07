@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.obs_controller import OBSController
-from src.scene_config import SCENES
+from src.scene_config import MAIN_SCENE, SCENES
 from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
 
@@ -118,7 +118,7 @@ class Console:
 
     def cmd_obs_setup(self):
         self._require_obs()
-        self.obs.setup_scenes(SCENES)
+        self.obs.setup_scenes(SCENES, MAIN_SCENE)
 
     def cmd_obs_teardown(self):
         self._require_obs()
@@ -381,7 +381,6 @@ class Console:
         else:
             await self.cmd_vts_connect()
         self.cmd_obs_setup()
-        self.obs.set_scene(SCENES[0]["name"])
         print("\n初期化完了")
 
     # --- ユーティリティ ---

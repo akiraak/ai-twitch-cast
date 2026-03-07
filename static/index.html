@@ -102,6 +102,36 @@
     <div class="status" id="vts-status"></div>
   </div>
 
+  <!-- Avatar Position -->
+  <div class="card" id="avatar-card">
+    <h2>アバター位置</h2>
+    <div class="slider-row">
+      <label>X</label>
+      <input type="range" class="avatar-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
+      <input type="number" class="avatar-num" data-key="positionX" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+    </div>
+    <div class="slider-row">
+      <label>Y</label>
+      <input type="range" class="avatar-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
+      <input type="number" class="avatar-num" data-key="positionY" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+    </div>
+    <div class="slider-row">
+      <label>幅</label>
+      <input type="range" class="avatar-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="1920">
+      <input type="number" class="avatar-num" data-key="boundsWidth" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="1920">
+    </div>
+    <div class="slider-row">
+      <label>高さ</label>
+      <input type="range" class="avatar-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="1080">
+      <input type="number" class="avatar-num" data-key="boundsHeight" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="1080">
+    </div>
+    <div class="btn-row" style="margin-top:8px;">
+      <button class="secondary" onclick="loadAvatarTransform()">取得</button>
+      <button onclick="saveAvatarToJson()">scenes.jsonに保存</button>
+    </div>
+    <div class="status" id="avatar-status"></div>
+  </div>
+
   <!-- Stream -->
   <div class="card">
     <h2>配信</h2>
@@ -135,7 +165,14 @@ async function api(method, url, body) {
       opts.body = JSON.stringify(body);
     }
     const r = await fetch(url, opts);
-    const data = await r.json();
+    const text = await r.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      log(`ERROR ${url}: ${text.slice(0, 200)}`);
+      return;
+    }
     if (!r.ok) {
       log(`ERROR ${url}: ${data.detail || JSON.stringify(data)}`);
     } else {
@@ -230,6 +267,62 @@ async function loadScenes() {
     });
     document.getElementById('obs-scenes').replaceChildren(ul);
   } catch (e) {}
+}
+
+// --- アバター位置調整 ---
+let _avatarUpdateTimer = null;
+
+function sendAvatarTransform(key, value) {
+  clearTimeout(_avatarUpdateTimer);
+  _avatarUpdateTimer = setTimeout(() => {
+    api('POST', '/api/obs/avatar/transform', { [key]: value });
+  }, 100);
+}
+
+document.querySelectorAll('.avatar-slider').forEach(slider => {
+  slider.addEventListener('input', () => {
+    const key = slider.dataset.key;
+    const val = parseFloat(slider.value);
+    const numInput = document.querySelector(`.avatar-num[data-key="${key}"]`);
+    numInput.value = val;
+    sendAvatarTransform(key, val);
+  });
+});
+
+document.querySelectorAll('.avatar-num').forEach(numInput => {
+  numInput.addEventListener('change', () => {
+    const key = numInput.dataset.key;
+    const val = parseFloat(numInput.value);
+    const slider = document.querySelector(`.avatar-slider[data-key="${key}"]`);
+    slider.value = val;
+    sendAvatarTransform(key, val);
+  });
+});
+
+async function loadAvatarTransform() {
+  try {
+    const data = await (await fetch('/api/obs/avatar/transform')).json();
+    const keys = ['positionX', 'positionY', 'boundsWidth', 'boundsHeight'];
+    for (const key of keys) {
+      const val = data[key] ?? 0;
+      const slider = document.querySelector(`.avatar-slider[data-key="${key}"]`);
+      const numInput = document.querySelector(`.avatar-num[data-key="${key}"]`);
+      if (slider) slider.value = val;
+      if (numInput) numInput.value = Math.round(val);
+    }
+    document.getElementById('avatar-status').textContent = '取得しました';
+  } catch (e) {
+    document.getElementById('avatar-status').textContent = 'エラー: ' + e.message;
+  }
+}
+
+async function saveAvatarToJson() {
+  try {
+    await api('POST', '/api/obs/avatar/save');
+    document.getElementById('avatar-status').textContent = 'scenes.jsonに保存しました';
+  } catch (e) {
+    document.getElementById('avatar-status').textContent = 'エラー: ' + e.message;
+  }
 }
 
 // 定期更新

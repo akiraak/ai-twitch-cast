@@ -1,6 +1,7 @@
 """Web インターフェース（console.py相当）"""
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.obs_controller import OBSController
-from src.scene_config import AVATAR_APP, SCENES
+from src.scene_config import AVATAR_APP, CONFIG_PATH, MAIN_SCENE, PREFIX, SCENES
 from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
 
@@ -98,7 +99,66 @@ async def obs_scene(body: SceneSwitch):
 
 @app.post("/api/obs/setup")
 async def obs_setup():
-    obs.setup_scenes(SCENES)
+    obs.setup_scenes(SCENES, MAIN_SCENE)
+    return {"ok": True}
+
+
+AVATAR_SOURCE_NAME = f"{PREFIX}アバター"
+
+
+@app.get("/api/obs/avatar/transform")
+async def obs_avatar_transform_get():
+    scene = obs.get_scenes()["current"]
+    transform = obs.get_source_transform(scene, AVATAR_SOURCE_NAME)
+    return transform
+
+
+class AvatarTransform(BaseModel):
+    positionX: float | None = None
+    positionY: float | None = None
+    boundsWidth: float | None = None
+    boundsHeight: float | None = None
+
+
+@app.post("/api/obs/avatar/transform")
+async def obs_avatar_transform_set(body: AvatarTransform):
+    scene = obs.get_scenes()["current"]
+    update = {k: v for k, v in body.model_dump().items() if v is not None}
+    obs.set_source_transform(scene, AVATAR_SOURCE_NAME, update)
+    return {"ok": True}
+
+
+@app.post("/api/obs/avatar/save")
+async def obs_avatar_save():
+    """現在のアバター位置をscenes.jsonの現在シーンに保存する"""
+    scene = obs.get_scenes()["current"]
+    current_base = scene.removeprefix(PREFIX)
+
+    # OBSから現在のtransformを取得
+    obs_transform = obs.get_source_transform(scene, AVATAR_SOURCE_NAME)
+    save_keys = ["positionX", "positionY", "boundsType", "boundsWidth", "boundsHeight"]
+    transform = {k: obs_transform[k] for k in save_keys if k in obs_transform}
+
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+
+    found = False
+    for scene in config["scenes"]:
+        if scene["name"] == current_base:
+            for src in scene["sources"]:
+                if src["kind"] == "avatar":
+                    src["transform"] = transform
+                    found = True
+                    break
+            break
+
+    if not found:
+        return {"ok": False, "error": f"シーン '{current_base}' にアバターが見つかりません"}
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
     return {"ok": True}
 
 
@@ -244,8 +304,7 @@ async def init():
     else:
         await vts.connect()
         _vts_connected = True
-    obs.setup_scenes(SCENES)
-    obs.set_scene(SCENES[0]["name"])
+    obs.setup_scenes(SCENES, MAIN_SCENE)
     return {"ok": True}
 
 

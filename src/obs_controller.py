@@ -135,6 +135,15 @@ class OBSController:
         )
         print(f"テキストソースを追加しました: {source_name}")
 
+    def get_source_transform(self, scene_name, source_name):
+        """ソースの位置・サイズを取得する"""
+        item_id = self._client.get_scene_item_id(scene_name, source_name).scene_item_id
+        response = self._client.send("GetSceneItemTransform", {
+            "sceneName": scene_name,
+            "sceneItemId": item_id,
+        }, raw=True)
+        return response["sceneItemTransform"]
+
     def set_source_transform(self, scene_name, source_name, transform):
         """ソースの位置・サイズを設定する"""
         item_id = self._client.get_scene_item_id(scene_name, source_name).scene_item_id
@@ -150,7 +159,7 @@ class OBSController:
         self._client.remove_input(input_name)
         print(f"ソースを削除しました: {input_name}")
 
-    def setup_scenes(self, scenes_config):
+    def setup_scenes(self, scenes_config, main_scene=None):
         """シーン構成を一括作成する（既存のATC シーン・ソースは先に削除）"""
         self.teardown_scenes(scenes_config)
         for scene in scenes_config:
@@ -167,6 +176,12 @@ class OBSController:
                         self.set_source_transform(scene_name, source["name"], source["transform"])
                 except Exception as e:
                     print(f"  ソース '{source['name']}' の追加に失敗: {e}")
+
+        # メインシーンにフォーカス
+        if main_scene:
+            self.set_scene(main_scene)
+        elif scenes_config:
+            self.set_scene(scenes_config[0]["name"])
 
         print(f"\nセットアップ完了 ({len(scenes_config)}シーン)")
 
