@@ -22,6 +22,7 @@
 - [x] ゲームキャプチャでVTube Studioのアバターを透過表示
 - [x] システム作成のシーン・ソースに「[ATC] 」プレフィックスを付与してユーザー作成物と区別
 - [x] VRM形式の3Dキャラ表示に対応（VSFController + VMC Protocol + scene_config切替）
+- [x] console.py相当のWebインターフェースを作成（FastAPI + HTML）
 
 ## Phase 0: 環境構築・基盤
 

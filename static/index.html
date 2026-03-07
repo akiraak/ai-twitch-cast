@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Twitch Cast</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 16px; }
+  h1 { font-size: 1.3rem; margin-bottom: 16px; color: #b388ff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .card { background: #16213e; border-radius: 8px; padding: 16px; }
+  .card h2 { font-size: 1rem; margin-bottom: 12px; color: #7c4dff; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.on { background: #69f0ae; }
+  .dot.off { background: #616161; }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  button { background: #7c4dff; color: #fff; border: none; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-size: 0.85rem; }
+  button:hover { background: #651fff; }
+  button:active { background: #6200ea; }
+  button.danger { background: #e53935; }
+  button.danger:hover { background: #c62828; }
+  button.secondary { background: #455a64; }
+  button.secondary:hover { background: #37474f; }
+  .status { font-size: 0.8rem; color: #9e9e9e; margin-top: 8px; min-height: 1.2em; }
+  .scene-list { list-style: none; margin-top: 8px; }
+  .scene-list li { padding: 4px 10px; cursor: pointer; border-radius: 4px; font-size: 0.85rem; }
+  .scene-list li:hover { background: #1a237e; }
+  .scene-list li.active { background: #311b92; color: #b388ff; font-weight: bold; }
+  .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .slider-row label { font-size: 0.8rem; min-width: 50px; }
+  .slider-row input[type=range] { flex: 1; }
+  .slider-row .val { font-size: 0.8rem; min-width: 30px; text-align: right; }
+  #log { background: #0f0f23; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 0.8rem; height: 180px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<h1>AI Twitch Cast</h1>
+
+<div class="grid">
+  <!-- OBS -->
+  <div class="card">
+    <h2><span class="dot" id="obs-dot"></span> OBS</h2>
+    <div class="btn-row">
+      <button onclick="api('POST','/api/obs/connect')">接続</button>
+      <button class="secondary" onclick="api('POST','/api/obs/disconnect')">切断</button>
+    </div>
+    <div class="btn-row">
+      <button onclick="api('POST','/api/obs/setup')">Setup</button>
+      <button class="danger" onclick="api('POST','/api/obs/teardown')">Teardown</button>
+    </div>
+    <div id="obs-scenes"></div>
+    <div class="status" id="obs-status"></div>
+  </div>
+
+  <!-- VSF -->
+  <div class="card" id="vsf-card">
+    <h2><span class="dot" id="vsf-dot"></span> VSeeFace (VRM)</h2>
+    <div class="btn-row">
+      <button onclick="api('POST','/api/vsf/connect')">接続</button>
+      <button class="secondary" onclick="api('POST','/api/vsf/disconnect')">切断</button>
+    </div>
+    <div class="btn-row">
+      <button onclick="api('POST','/api/vsf/pose')">Pose</button>
+      <button onclick="startIdle()">Idle</button>
+      <button class="secondary" onclick="api('POST','/api/vsf/stop')">Stop</button>
+    </div>
+    <div class="slider-row">
+      <label>Idle倍率</label>
+      <input type="range" id="idle-scale" min="0.1" max="5.0" step="0.1" value="1.0">
+      <span class="val" id="idle-scale-val">1.0</span>
+    </div>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">BlendShape</h3>
+    <div class="btn-row">
+      <button class="secondary" onclick="blend('Joy',1)">Joy</button>
+      <button class="secondary" onclick="blend('Angry',1)">Angry</button>
+      <button class="secondary" onclick="blend('Sorrow',1)">Sorrow</button>
+      <button class="secondary" onclick="blend('Fun',1)">Fun</button>
+      <button class="secondary" onclick="resetBlend()">Reset</button>
+    </div>
+    <div class="slider-row">
+      <label>A (口)</label>
+      <input type="range" class="bs-slider" data-name="A" min="0" max="1" step="0.05" value="0">
+      <span class="val">0</span>
+    </div>
+    <div class="slider-row">
+      <label>Blink</label>
+      <input type="range" class="bs-slider" data-name="Blink" min="0" max="1" step="0.05" value="0">
+      <span class="val">0</span>
+    </div>
+    <div class="status" id="vsf-status"></div>
+  </div>
+
+  <!-- VTS -->
+  <div class="card" id="vts-card">
+    <h2><span class="dot" id="vts-dot"></span> VTube Studio (Live2D)</h2>
+    <div class="btn-row">
+      <button onclick="api('POST','/api/vts/connect')">接続</button>
+      <button class="secondary" onclick="api('POST','/api/vts/disconnect')">切断</button>
+    </div>
+    <div class="status" id="vts-status"></div>
+  </div>
+
+  <!-- Stream -->
+  <div class="card">
+    <h2>配信</h2>
+    <div class="btn-row">
+      <button onclick="api('POST','/api/stream/start')">開始</button>
+      <button class="danger" onclick="api('POST','/api/stream/stop')">停止</button>
+    </div>
+    <div class="btn-row">
+      <button onclick="api('POST','/api/init')">Init (一括初期化)</button>
+    </div>
+    <div class="status" id="stream-status"></div>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+const logEl = document.getElementById('log');
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  logEl.textContent += `[${t}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function api(method, url, body) {
+  try {
+    const opts = { method };
+    if (body) {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(url, opts);
+    const data = await r.json();
+    if (!r.ok) {
+      log(`ERROR ${url}: ${data.detail || JSON.stringify(data)}`);
+    } else {
+      log(`OK ${url}`);
+    }
+    refreshStatus();
+    return data;
+  } catch (e) {
+    log(`ERROR ${url}: ${e.message}`);
+  }
+}
+
+function startIdle() {
+  const scale = parseFloat(document.getElementById('idle-scale').value);
+  api('POST', '/api/vsf/idle', { scale });
+}
+
+function blend(name, value) {
+  api('POST', '/api/vsf/blend', { name, value });
+}
+
+function resetBlend() {
+  for (const name of ['Joy', 'Angry', 'Sorrow', 'Fun', 'A', 'Blink']) {
+    api('POST', '/api/vsf/blend', { name, value: 0 });
+  }
+  document.querySelectorAll('.bs-slider').forEach(s => {
+    s.value = 0;
+    s.nextElementSibling.textContent = '0';
+  });
+}
+
+// BlendShapeスライダー
+document.querySelectorAll('.bs-slider').forEach(slider => {
+  slider.addEventListener('input', () => {
+    const name = slider.dataset.name;
+    const val = parseFloat(slider.value);
+    slider.nextElementSibling.textContent = val.toFixed(2);
+    api('POST', '/api/vsf/blend', { name, value: val });
+  });
+});
+
+// Idleスライダー表示
+document.getElementById('idle-scale').addEventListener('input', function() {
+  document.getElementById('idle-scale-val').textContent = parseFloat(this.value).toFixed(1);
+});
+
+async function refreshStatus() {
+  try {
+    const data = await (await fetch('/api/status')).json();
+
+    // OBS
+    document.getElementById('obs-dot').className = 'dot ' + (data.obs.connected ? 'on' : 'off');
+    if (data.obs.connected && data.obs.stream) {
+      const s = data.obs.stream;
+      document.getElementById('obs-status').textContent = s.active ? `配信中 ${s.timecode}` : '停止中';
+      document.getElementById('stream-status').textContent = s.active ? `配信中 ${s.timecode}` : '停止中';
+    } else {
+      document.getElementById('obs-status').textContent = data.obs.connected ? '接続中' : '未接続';
+      document.getElementById('stream-status').textContent = '';
+    }
+
+    // VTS
+    document.getElementById('vts-dot').className = 'dot ' + (data.vts.connected ? 'on' : 'off');
+    document.getElementById('vts-status').textContent = data.vts.connected ? '接続中' : '未接続';
+
+    // VSF
+    document.getElementById('vsf-dot').className = 'dot ' + (data.vsf.connected ? 'on' : 'off');
+    let vsfText = data.vsf.connected ? '接続中' : '未接続';
+    if (data.vsf.idle) vsfText += ' / Idle実行中';
+    document.getElementById('vsf-status').textContent = vsfText;
+
+    // シーン一覧
+    if (data.obs.connected) {
+      loadScenes();
+    } else {
+      document.getElementById('obs-scenes').innerHTML = '';
+    }
+  } catch (e) {}
+}
+
+async function loadScenes() {
+  try {
+    const data = await (await fetch('/api/obs/scenes')).json();
+    const ul = document.createElement('ul');
+    ul.className = 'scene-list';
+    data.scenes.reverse().forEach(name => {
+      const li = document.createElement('li');
+      li.textContent = name;
+      if (name === data.current) li.className = 'active';
+      li.onclick = () => api('POST', '/api/obs/scene', { name });
+      ul.appendChild(li);
+    });
+    document.getElementById('obs-scenes').replaceChildren(ul);
+  } catch (e) {}
+}
+
+// 定期更新
+refreshStatus();
+setInterval(refreshStatus, 3000);
+</script>
+
+</body>
+</html>
