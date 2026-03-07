@@ -45,6 +45,8 @@ HELP_TEXT = """
   vsf disconnect       VSeeFaceから切断
   vsf status           VSF接続状態を表示
   vsf pose             デフォルトポーズを適用（腕を下ろす）
+  vsf idle [倍率]      待機モーション開始（倍率省略時1.0）
+  vsf stop             待機モーション停止
   vsf blend <名前> <値> BlendShapeを設定（例: vsf blend Joy 1.0）
   vsf bone <名前> <qx> <qy> <qz> <qw>  ボーン回転を設定
   vsf demo             デモ動作（リップシンク・表情・体の動き）
@@ -250,6 +252,17 @@ class Console:
         self._require_vsf()
         self.vsf.apply_default_pose()
         print("デフォルトポーズを適用しました")
+
+    def cmd_vsf_idle(self, scale=1.0):
+        self._require_vsf()
+        self.vsf.start_idle(scale)
+        print(f"待機モーション開始 (scale={scale}, vsf stop で停止)")
+
+    def cmd_vsf_stop(self):
+        self._require_vsf()
+        self.vsf.stop_idle()
+        self.vsf.apply_default_pose()
+        print("待機モーション停止")
 
     def cmd_vsf_blend(self, name, value):
         self._require_vsf()
@@ -515,6 +528,11 @@ class Console:
             self.cmd_vsf_status()
         elif sub == "pose":
             self.cmd_vsf_pose()
+        elif sub == "idle":
+            scale = float(args[1]) if len(args) >= 2 else 1.0
+            self.cmd_vsf_idle(scale)
+        elif sub == "stop":
+            self.cmd_vsf_stop()
         elif sub == "blend":
             if len(args) >= 3:
                 self.cmd_vsf_blend(args[1], args[2])
@@ -544,6 +562,7 @@ class Console:
     async def cleanup(self):
         """終了時のクリーンアップ"""
         if self._vsf_connected:
+            self.vsf.stop_idle()
             self.vsf.disconnect()
         if self._vts_connected:
             await self.vts.disconnect()
@@ -576,10 +595,13 @@ async def main():
 
     print()
 
+    loop = asyncio.get_event_loop()
     try:
         while True:
             try:
-                line = input("> ")
+                # input()をスレッドで実行し、イベントループをブロックしない
+                # これによりバックグラウンドタスク（idle等）が動き続ける
+                line = await loop.run_in_executor(None, input, "> ")
             except EOFError:
                 break
             await console.dispatch(line)

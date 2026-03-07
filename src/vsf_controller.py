@@ -1,7 +1,10 @@
 """VSeeFace VMC Protocol (OSC) 制御モジュール"""
 
+import asyncio
 import math
 import os
+import random
+import time
 
 from pythonosc import udp_client
 
@@ -15,6 +18,7 @@ class VSFController:
         self.host = resolve_host(host or os.environ.get("VSF_OSC_HOST", "127.0.0.1"))
         self.port = int(port or os.environ.get("VSF_OSC_PORT", "39539"))
         self._client = None
+        self._idle_task = None
 
     def connect(self):
         """OSCクライアントを作成する"""
@@ -93,3 +97,95 @@ class VSFController:
         self.set_bone("RightLowerArm", qx=qx, qy=qy, qz=qz, qw=qw)
         qx, qy, qz, qw = self._quat(0, 1, 0, -20)
         self.set_bone("LeftLowerArm", qx=qx, qy=qy, qz=qz, qw=qw)
+
+    @staticmethod
+    def _quat_multiply(a, b):
+        """2つのクォータニオン (qx,qy,qz,qw) を合成する"""
+        ax, ay, az, aw = a
+        bx, by, bz, bw = b
+        return (
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+            aw * bw - ax * bx - ay * by - az * bz,
+        )
+
+    async def _idle_loop(self, scale):
+        """待機モーションのメインループ
+
+        Args:
+            scale: 動きの大きさの倍率 (1.0が標準)
+        """
+        s = scale
+        t0 = time.time()
+        next_blink = t0 + random.uniform(2.0, 5.0)
+
+        try:
+            while True:
+                t = time.time() - t0
+
+                # --- 呼吸: 胸が前後にゆっくり動く (約4秒周期) ---
+                breath = math.sin(t * 1.6) * 2.0 * s
+                qx, qy, qz, qw = self._quat(1, 0, 0, breath)
+                self.set_bone("Chest", qx=qx, qy=qy, qz=qz, qw=qw)
+
+                # --- 体の揺れ: 背骨が左右にゆったり (約7秒周期) ---
+                sway = (math.sin(t * 0.9) * 2.5 + math.sin(t * 0.37) * 1.0) * s
+                qx, qy, qz, qw = self._quat(0, 0, 1, sway)
+                self.set_bone("Spine", qx=qx, qy=qy, qz=qz, qw=qw)
+
+                # --- 頭の動き: 複数の波を重ねて自然に ---
+                head_x = (math.sin(t * 0.7) * 3.0 + math.sin(t * 1.3) * 1.5) * s
+                head_z = (math.sin(t * 0.5) * 4.0 + math.sin(t * 1.1) * 1.5) * s
+                head_y = math.sin(t * 0.4) * 3.0 * s
+                q = self._quat(1, 0, 0, head_x)
+                q = self._quat_multiply(q, self._quat(0, 1, 0, head_y))
+                q = self._quat_multiply(q, self._quat(0, 0, 1, head_z))
+                self.set_bone("Head", qx=q[0], qy=q[1], qz=q[2], qw=q[3])
+
+                # --- 腕の揺れ: デフォルトポーズ(-70/70度)に揺れを加算 ---
+                r_arm_sway = math.sin(t * 0.6 + 1.0) * 2.0 * s
+                l_arm_sway = math.sin(t * 0.6 + 2.5) * 2.0 * s
+                q_r = self._quat(0, 0, 1, -70 + r_arm_sway)
+                q_l = self._quat(0, 0, 1, 70 + l_arm_sway)
+                self.set_bone("RightUpperArm", qx=q_r[0], qy=q_r[1], qz=q_r[2], qw=q_r[3])
+                self.set_bone("LeftUpperArm", qx=q_l[0], qy=q_l[1], qz=q_l[2], qw=q_l[3])
+
+                # --- 前腕の揺れ ---
+                r_fore = 20 + math.sin(t * 0.8 + 0.5) * 1.5 * s
+                l_fore = -20 + math.sin(t * 0.8 + 2.0) * 1.5 * s
+                q_rf = self._quat(0, 1, 0, r_fore)
+                q_lf = self._quat(0, 1, 0, l_fore)
+                self.set_bone("RightLowerArm", qx=q_rf[0], qy=q_rf[1], qz=q_rf[2], qw=q_rf[3])
+                self.set_bone("LeftLowerArm", qx=q_lf[0], qy=q_lf[1], qz=q_lf[2], qw=q_lf[3])
+
+                # --- まばたき: ランダム間隔 ---
+                now = time.time()
+                if now >= next_blink:
+                    self.set_blendshape("Blink", 1.0)
+                    await asyncio.sleep(0.08)
+                    self.set_blendshape("Blink", 0.0)
+                    next_blink = now + random.uniform(2.0, 6.0)
+
+                await asyncio.sleep(1 / 30)  # 30fps
+        except asyncio.CancelledError:
+            pass
+
+    def start_idle(self, scale=1.0):
+        """待機モーションを開始する
+
+        Args:
+            scale: 動きの大きさの倍率 (1.0が標準、2.0で2倍、0.5で半分)
+        """
+        self.stop_idle()
+        self._idle_task = asyncio.ensure_future(self._idle_loop(scale))
+
+    def stop_idle(self):
+        """待機モーションを停止する"""
+        if self._idle_task and not self._idle_task.done():
+            self._idle_task.cancel()
+            self._idle_task = None
+
+    @property
+    def is_idle_running(self):
+        return self._idle_task is not None and not self._idle_task.done()
