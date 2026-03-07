@@ -3,6 +3,7 @@
 ## 調査タスク
 
 - [x] OBSの機能調査（WebSocket API、シーン管理、ソース操作、フィルタ、配信制御等）
+- [x] アバター表示・アニメーションの調査（PNGtuber / Live2D + VTube Studio / VRM等）
 
 ## 動作確認タスク
 

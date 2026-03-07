@@ -5,6 +5,7 @@
 - [ ] Twitch APIの機能調査
 - [ ] TTS エンジンの比較調査（VOICEVOX / Style-BERT-VITS2 / 外部API等）
 - [ ] 画像生成APIの比較調査（Stable Diffusion / DALL-E等）
+- [x] アバター表示・アニメーションの調査（VTuber系ツール / Live2D / ブラウザソース等）
 
 ## 開発タスク
 
