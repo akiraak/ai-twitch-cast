@@ -1,10 +1,11 @@
-"""コメント読み上げサービス（Twitchチャット → AI応答 → TTS → 再生 → 表情連動）"""
+"""コメント読み上げサービス（Twitchチャット → AI応答 → TTS → 再生 → 表情連動 → DB保存）"""
 
 import asyncio
 import tempfile
 from collections import deque
 from pathlib import Path
 
+from src import db
 from src.ai_responder import generate_response, get_character
 from src.tts import synthesize
 from src.twitch_chat import TwitchChat
@@ -19,6 +20,11 @@ class CommentReader:
         self._queue = deque()
         self._process_task = None
         self._running = False
+        self._episode_id = None
+
+    def set_episode(self, episode_id):
+        """現在のエピソードIDを設定する"""
+        self._episode_id = episode_id
 
     async def start(self):
         """読み上げを開始する"""
@@ -41,6 +47,7 @@ class CommentReader:
                 pass
             self._process_task = None
         self._queue.clear()
+        self._episode_id = None
         print("コメント読み上げを停止しました")
 
     @property
@@ -71,12 +78,26 @@ class CommentReader:
     async def _respond(self, author, message):
         """1件のコメントにAIで応答して読み上げる"""
         try:
+            # ユーザー取得・コメント数
+            user = await asyncio.to_thread(db.get_or_create_user, author)
+            comment_count = user["comment_count"]
+
             # AI応答生成
             print(f"[ai] 応答生成中...")
-            result = await asyncio.to_thread(generate_response, author, message)
+            result = await asyncio.to_thread(
+                generate_response, author, message, comment_count
+            )
             response_text = result["response"]
             emotion = result["emotion"]
             print(f"[ai] [{emotion}] {response_text}")
+
+            # DB保存
+            if self._episode_id:
+                await asyncio.to_thread(
+                    db.save_comment,
+                    self._episode_id, user["id"], message, response_text, emotion,
+                )
+                await asyncio.to_thread(db.increment_comment_count, user["id"])
 
             # 表情を設定
             self._apply_emotion(emotion)

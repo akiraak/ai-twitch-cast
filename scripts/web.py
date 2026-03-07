@@ -17,6 +17,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from src import db
+from src.ai_responder import get_character, CHARACTER_PATH
 from src.comment_reader import CommentReader
 from src.obs_controller import OBSController
 from src.scene_config import AVATAR_APP, CONFIG_PATH, MAIN_SCENE, PREFIX, SCENES
@@ -208,16 +210,37 @@ async def obs_teardown():
 
 # --- Stream ---
 
+_current_episode = None
+
+
 @app.post("/api/stream/start")
 async def stream_start():
+    global _current_episode
     obs.start_stream()
+
+    # DB: チャンネル・キャラクター・番組・エピソード作成
+    channel_name = os.environ.get("TWITCH_CHANNEL", "default")
+    channel = db.get_or_create_channel(channel_name)
+
+    char = get_character()
+    char_config = json.dumps(char, ensure_ascii=False)
+    character = db.get_or_create_character(channel["id"], char["name"], char_config)
+
+    show = db.get_or_create_show(channel["id"], "デフォルト")
+    _current_episode = db.start_episode(show["id"], character["id"])
+    reader.set_episode(_current_episode["id"])
+
     await reader.start()
     return {"ok": True}
 
 
 @app.post("/api/stream/stop")
 async def stream_stop():
+    global _current_episode
     await reader.stop()
+    if _current_episode:
+        db.end_episode(_current_episode["id"])
+        _current_episode = None
     obs.stop_stream()
     return {"ok": True}
 

@@ -65,12 +65,13 @@ def _build_system_prompt():
     return "\n".join(parts)
 
 
-def generate_response(author, message):
+def generate_response(author, message, comment_count=0):
     """コメントに対するAI応答を生成する
 
     Args:
         author: コメント投稿者名
         message: コメント内容
+        comment_count: このユーザーの過去コメント数
 
     Returns:
         dict: {"response": str, "emotion": str}
@@ -78,7 +79,12 @@ def generate_response(author, message):
     client = _get_client()
     system_prompt = _build_system_prompt()
 
-    user_prompt = f"{author}さんのコメント: {message}"
+    if comment_count == 0:
+        context = f"（初見のユーザーです）"
+    else:
+        context = f"（過去{comment_count}回コメントしている常連です）"
+
+    user_prompt = f"{author}さんのコメント{context}: {message}"
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
