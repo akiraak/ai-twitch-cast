@@ -33,6 +33,7 @@ nav:
     - アバター表示・アニメーション調査: avatar-research.md
     - 3Dモデル調査: 3d-model-research.md
     - アバター変更ガイド: avatar-change-guide.md
+    - VRM表示 実装プラン: vrm-implementation-plan.md
   - 運用:
     - コンソールコマンド: console-commands.md
     - リソース管理: resource-management.md

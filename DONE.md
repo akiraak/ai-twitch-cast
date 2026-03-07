@@ -21,6 +21,7 @@
 - [x] コードからシーンとソースを追加する（setup/teardown、個別add/remove）
 - [x] ゲームキャプチャでVTube Studioのアバターを透過表示
 - [x] システム作成のシーン・ソースに「[ATC] 」プレフィックスを付与してユーザー作成物と区別
+- [x] VRM形式の3Dキャラ表示に対応（VSFController + VMC Protocol + scene_config切替）
 
 ## Phase 0: 環境構築・基盤
 

@@ -8,11 +8,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 
+load_dotenv()
+
 from src.obs_controller import OBSController
 from src.scene_config import SCENES
+from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
-
-load_dotenv()
 
 HELP_TEXT = """
 コマンド一覧:
@@ -40,6 +41,14 @@ HELP_TEXT = """
   vts hotkey <ID>      ホットキーを実行
   vts demo             デモ動作（口パク・まばたき・体の動き）
 
+  vsf connect          VSeeFace (VMC Protocol) に接続
+  vsf disconnect       VSeeFaceから切断
+  vsf status           VSF接続状態を表示
+  vsf pose             デフォルトポーズを適用（腕を下ろす）
+  vsf blend <名前> <値> BlendShapeを設定（例: vsf blend Joy 1.0）
+  vsf bone <名前> <qx> <qy> <qz> <qw>  ボーン回転を設定
+  vsf demo             デモ動作（リップシンク・表情・体の動き）
+
   stream start         配信を開始
   stream stop          配信を停止
   stream status        配信状態を表示
@@ -55,8 +64,10 @@ class Console:
     def __init__(self):
         self.obs = OBSController()
         self.vts = VTSController()
+        self.vsf = VSFController()
         self._obs_connected = False
         self._vts_connected = False
+        self._vsf_connected = False
 
     # --- OBSコマンド ---
 
@@ -157,38 +168,38 @@ class Console:
         print(f"  ロード済み: {model['model_loaded']}")
 
     async def cmd_vts_model(self):
-        self._require_vts()
+        await self._require_vts()
         model = await self.vts.get_model_info()
         print(f"モデル名: {model['model_name']}")
         print(f"モデルID: {model['model_id']}")
         print(f"ロード済み: {model['model_loaded']}")
 
     async def cmd_vts_params(self):
-        self._require_vts()
+        await self._require_vts()
         params = await self.vts.get_parameters()
         print(f"パラメータ ({len(params)}件):")
         for p in params:
             print(f"  {p['name']}: {p['value']} ({p['min']}〜{p['max']})")
 
     async def cmd_vts_param(self, name, value):
-        self._require_vts()
+        await self._require_vts()
         await self.vts.set_parameter(name, float(value))
         print(f"{name} = {value}")
 
     async def cmd_vts_hotkeys(self):
-        self._require_vts()
+        await self._require_vts()
         hotkeys = await self.vts.get_hotkeys()
         print(f"ホットキー ({len(hotkeys)}件):")
         for hk in hotkeys:
             print(f"  {hk['name']} (ID: {hk['id']}, Type: {hk['type']})")
 
     async def cmd_vts_hotkey(self, hotkey_id):
-        self._require_vts()
+        await self._require_vts()
         await self.vts.trigger_hotkey(hotkey_id)
         print(f"ホットキーを実行しました: {hotkey_id}")
 
     async def cmd_vts_demo(self):
-        self._require_vts()
+        await self._require_vts()
         print("デモ開始...")
 
         print("  口パク...")
@@ -218,6 +229,114 @@ class Console:
 
         print("デモ完了")
 
+    # --- VSFコマンド ---
+
+    def cmd_vsf_connect(self):
+        self.vsf.connect()
+        self._vsf_connected = True
+        self.vsf.apply_default_pose()
+
+    def cmd_vsf_disconnect(self):
+        self.vsf.disconnect()
+        self._vsf_connected = False
+
+    def cmd_vsf_status(self):
+        if not self._vsf_connected:
+            print("VSeeFace: 未接続")
+        else:
+            print(f"VSeeFace: 接続中 ({self.vsf.host}:{self.vsf.port})")
+
+    def cmd_vsf_pose(self):
+        self._require_vsf()
+        self.vsf.apply_default_pose()
+        print("デフォルトポーズを適用しました")
+
+    def cmd_vsf_blend(self, name, value):
+        self._require_vsf()
+        self.vsf.set_blendshape(name, float(value))
+        print(f"BlendShape {name} = {value}")
+
+    def cmd_vsf_bone(self, bone, qx, qy, qz, qw):
+        self._require_vsf()
+        self.vsf.set_bone(bone, qx=float(qx), qy=float(qy), qz=float(qz), qw=float(qw))
+        print(f"Bone {bone} = ({qx}, {qy}, {qz}, {qw})")
+
+    async def cmd_vsf_demo(self):
+        self._require_vsf()
+        import math
+
+        def quat_from_axis_angle(ax, ay, az, angle_deg):
+            """軸と角度（度）からクォータニオンを生成"""
+            rad = math.radians(angle_deg) / 2
+            s = math.sin(rad)
+            c = math.cos(rad)
+            return (ax * s, ay * s, az * s, c)
+
+        print("デモ開始...")
+
+        print("  リップシンク...")
+        for vowel in ["A", "I", "U", "E", "O"]:
+            self.vsf.set_blendshape(vowel, 0.8)
+            await asyncio.sleep(0.3)
+            self.vsf.set_blendshape(vowel, 0.0)
+            await asyncio.sleep(0.1)
+
+        await asyncio.sleep(0.3)
+
+        print("  表情（Joy）...")
+        self.vsf.set_blendshape("Joy", 1.0)
+        await asyncio.sleep(1.0)
+        self.vsf.set_blendshape("Joy", 0.0)
+
+        await asyncio.sleep(0.3)
+
+        print("  まばたき...")
+        self.vsf.set_blendshape("Blink", 1.0)
+        await asyncio.sleep(0.2)
+        self.vsf.set_blendshape("Blink", 0.0)
+
+        await asyncio.sleep(0.3)
+
+        print("  頷き...")
+        for i in range(20):
+            angle = math.sin(i * 0.6) * 15  # 上下15度
+            qx, qy, qz, qw = quat_from_axis_angle(1, 0, 0, angle)
+            self.vsf.set_bone("Head", qx=qx, qy=qy, qz=qz, qw=qw)
+            await asyncio.sleep(0.05)
+        self.vsf.set_bone("Head")
+
+        await asyncio.sleep(0.3)
+
+        print("  首かしげ...")
+        for i in range(20):
+            angle = math.sin(i * 0.5) * 20  # 左右20度
+            qx, qy, qz, qw = quat_from_axis_angle(0, 0, 1, angle)
+            self.vsf.set_bone("Head", qx=qx, qy=qy, qz=qz, qw=qw)
+            await asyncio.sleep(0.05)
+        self.vsf.set_bone("Head")
+
+        await asyncio.sleep(0.3)
+
+        print("  体の揺れ...")
+        for i in range(30):
+            angle = math.sin(i * 0.4) * 10  # 左右10度
+            qx, qy, qz, qw = quat_from_axis_angle(0, 0, 1, angle)
+            self.vsf.set_bone("Spine", qx=qx, qy=qy, qz=qz, qw=qw)
+            await asyncio.sleep(0.05)
+        self.vsf.set_bone("Spine")
+
+        await asyncio.sleep(0.3)
+
+        print("  手を振る...")
+        for i in range(20):
+            angle = -30 + math.sin(i * 1.0) * 30  # -60〜0度
+            qx, qy, qz, qw = quat_from_axis_angle(0, 0, 1, angle)
+            self.vsf.set_bone("RightUpperArm", qx=qx, qy=qy, qz=qz, qw=qw)
+            await asyncio.sleep(0.05)
+        self.vsf.set_bone("RightUpperArm")
+
+        print("デモ完了")
+
     # --- 配信コマンド ---
 
     def cmd_stream_start(self):
@@ -240,10 +359,14 @@ class Console:
     # --- 初期化 ---
 
     async def cmd_init(self):
-        """OBS・VTS接続 → シーン構築を一括実行"""
+        """OBS・アバターアプリ接続 → シーン構築を一括実行"""
+        from src.scene_config import AVATAR_APP
         print("初期化開始...")
         self.cmd_obs_connect()
-        await self.cmd_vts_connect()
+        if AVATAR_APP == "vsf":
+            self.cmd_vsf_connect()
+        else:
+            await self.cmd_vts_connect()
         self.cmd_obs_setup()
         self.obs.set_scene(SCENES[0]["name"])
         print("\n初期化完了")
@@ -252,11 +375,15 @@ class Console:
 
     def _require_obs(self):
         if not self._obs_connected:
-            raise RuntimeError("OBSに接続されていません。先に 'obs connect' を実行してください。")
+            self.cmd_obs_connect()
 
-    def _require_vts(self):
+    async def _require_vts(self):
         if not self._vts_connected:
-            raise RuntimeError("VTube Studioに接続されていません。先に 'vts connect' を実行してください。")
+            await self.cmd_vts_connect()
+
+    def _require_vsf(self):
+        if not self._vsf_connected:
+            self.cmd_vsf_connect()
 
     async def dispatch(self, line):
         """コマンドをパースして実行する"""
@@ -274,6 +401,8 @@ class Console:
                 await self._dispatch_obs(args)
             elif cmd == "vts" and args:
                 await self._dispatch_vts(args)
+            elif cmd == "vsf" and args:
+                await self._dispatch_vsf(args)
             elif cmd == "stream" and args:
                 self._dispatch_stream(args)
             elif cmd == "init":
@@ -298,31 +427,52 @@ class Console:
             self.cmd_obs_status()
         elif sub == "scenes":
             self.cmd_obs_scenes()
-        elif sub == "scene" and len(args) >= 2:
-            self.cmd_obs_scene(" ".join(args[1:]))
+        elif sub == "scene":
+            if len(args) >= 2:
+                self.cmd_obs_scene(" ".join(args[1:]))
+            else:
+                print("使い方: obs scene <名前>")
         elif sub == "sources":
             self.cmd_obs_sources()
         elif sub == "setup":
             self.cmd_obs_setup()
         elif sub == "teardown":
             self.cmd_obs_teardown()
-        elif sub == "add" and len(args) >= 2:
-            self._dispatch_obs_add(args[1:])
-        elif sub == "remove" and len(args) >= 2:
-            self.cmd_obs_remove(" ".join(args[1:]))
+        elif sub == "add":
+            if len(args) >= 2:
+                self._dispatch_obs_add(args[1:])
+            else:
+                print("使い方: obs add scene|image|text|capture <名前> [引数...]")
+        elif sub == "remove":
+            if len(args) >= 2:
+                self.cmd_obs_remove(" ".join(args[1:]))
+            else:
+                print("使い方: obs remove <名前>")
         else:
             print(f"不明なOBSコマンド: {' '.join(args)}")
 
     def _dispatch_obs_add(self, args):
         kind = args[0]
-        if kind == "scene" and len(args) >= 2:
-            self.cmd_obs_add_scene(" ".join(args[1:]))
-        elif kind == "image" and len(args) >= 3:
-            self.cmd_obs_add_image(args[1], args[2])
-        elif kind == "text" and len(args) >= 3:
-            self.cmd_obs_add_text(args[1], " ".join(args[2:]))
-        elif kind == "capture" and len(args) >= 2:
-            self.cmd_obs_add_capture(" ".join(args[1:]))
+        if kind == "scene":
+            if len(args) >= 2:
+                self.cmd_obs_add_scene(" ".join(args[1:]))
+            else:
+                print("使い方: obs add scene <名前>")
+        elif kind == "image":
+            if len(args) >= 3:
+                self.cmd_obs_add_image(args[1], args[2])
+            else:
+                print("使い方: obs add image <名前> <パス>")
+        elif kind == "text":
+            if len(args) >= 3:
+                self.cmd_obs_add_text(args[1], " ".join(args[2:]))
+            else:
+                print("使い方: obs add text <名前> <テキスト>")
+        elif kind == "capture":
+            if len(args) >= 2:
+                self.cmd_obs_add_capture(" ".join(args[1:]))
+            else:
+                print("使い方: obs add capture <名前>")
         else:
             print(f"不明なaddコマンド: {' '.join(args)}")
 
@@ -338,16 +488,47 @@ class Console:
             await self.cmd_vts_model()
         elif sub == "params":
             await self.cmd_vts_params()
-        elif sub == "param" and len(args) >= 3:
-            await self.cmd_vts_param(args[1], args[2])
+        elif sub == "param":
+            if len(args) >= 3:
+                await self.cmd_vts_param(args[1], args[2])
+            else:
+                print("使い方: vts param <名前> <値>  (例: vts param MouthOpen 1.0)")
         elif sub == "hotkeys":
             await self.cmd_vts_hotkeys()
-        elif sub == "hotkey" and len(args) >= 2:
-            await self.cmd_vts_hotkey(args[1])
+        elif sub == "hotkey":
+            if len(args) >= 2:
+                await self.cmd_vts_hotkey(args[1])
+            else:
+                print("使い方: vts hotkey <ID>")
         elif sub == "demo":
             await self.cmd_vts_demo()
         else:
             print(f"不明なVTSコマンド: {' '.join(args)}")
+
+    async def _dispatch_vsf(self, args):
+        sub = args[0]
+        if sub == "connect":
+            self.cmd_vsf_connect()
+        elif sub == "disconnect":
+            self.cmd_vsf_disconnect()
+        elif sub == "status":
+            self.cmd_vsf_status()
+        elif sub == "pose":
+            self.cmd_vsf_pose()
+        elif sub == "blend":
+            if len(args) >= 3:
+                self.cmd_vsf_blend(args[1], args[2])
+            else:
+                print("使い方: vsf blend <名前> <値>  (例: vsf blend Joy 1.0)")
+        elif sub == "bone":
+            if len(args) >= 6:
+                self.cmd_vsf_bone(args[1], args[2], args[3], args[4], args[5])
+            else:
+                print("使い方: vsf bone <名前> <qx> <qy> <qz> <qw>  (例: vsf bone Head 0.1 0 0 1)")
+        elif sub == "demo":
+            await self.cmd_vsf_demo()
+        else:
+            print(f"不明なVSFコマンド: {' '.join(args)}")
 
     def _dispatch_stream(self, args):
         sub = args[0]
@@ -362,6 +543,8 @@ class Console:
 
     async def cleanup(self):
         """終了時のクリーンアップ"""
+        if self._vsf_connected:
+            self.vsf.disconnect()
         if self._vts_connected:
             await self.vts.disconnect()
         if self._obs_connected:
@@ -370,7 +553,28 @@ class Console:
 
 async def main():
     console = Console()
-    print("AI Twitch Cast コンソール (helpでコマンド一覧)")
+    print("AI Twitch Cast コンソール (helpでコマンド一覧)\n")
+
+    # 起動時に自動接続を試行
+    from src.scene_config import AVATAR_APP
+
+    try:
+        console.cmd_obs_connect()
+    except Exception as e:
+        print(f"OBS: 接続失敗 ({e})")
+
+    if AVATAR_APP == "vsf":
+        try:
+            console.cmd_vsf_connect()
+        except Exception as e:
+            print(f"VSF: 接続失敗 ({e})")
+    else:
+        try:
+            await console.cmd_vts_connect()
+        except Exception as e:
+            print(f"VTS: 接続失敗 ({e})")
+
+    print()
 
     try:
         while True:

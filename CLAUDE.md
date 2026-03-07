@@ -55,7 +55,8 @@ ai-twitch-cast/
 │   └── 3d-model-research.md # 3Dモデル調査
 ├── src/                      # ソースコード
 │   ├── obs_controller.py     # OBS WebSocket制御
-│   ├── vts_controller.py     # VTube Studio API制御
+│   ├── vts_controller.py     # VTube Studio API制御（Live2D）
+│   ├── vsf_controller.py     # VSeeFace VMC Protocol制御（VRM）
 │   ├── scene_config.py       # シーン構成の定義
 │   └── wsl_path.py           # WSL関連ユーティリティ
 ├── scripts/                  # 実行スクリプト
