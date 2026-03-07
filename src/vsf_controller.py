@@ -30,6 +30,12 @@ class VSFController:
         self._client = None
         print("VSeeFaceから切断しました")
 
+    def _send_blend_apply(self, shapes):
+        """BlendShapeのVal/Applyペアを1回送信する"""
+        for name, value in shapes.items():
+            self._client.send_message("/VMC/Ext/Blend/Val", [name, float(value)])
+        self._client.send_message("/VMC/Ext/Blend/Apply", [])
+
     def set_blendshape(self, name, value):
         """BlendShapeの値を設定して適用する
 
@@ -37,18 +43,18 @@ class VSFController:
             name: BlendShape名 (例: "Joy", "A", "Blink")
             value: 0.0〜1.0
         """
-        self._client.send_message("/VMC/Ext/Blend/Val", [name, float(value)])
-        self._client.send_message("/VMC/Ext/Blend/Apply", [])
+        self.set_blendshapes({name: value})
 
     def set_blendshapes(self, shapes):
         """複数のBlendShapeを一括設定して適用する
 
+        VSeeFaceがUDP受信を確実に反映するよう複数フレーム送信する。
+
         Args:
             shapes: {名前: 値} の辞書 (例: {"A": 0.8, "Joy": 1.0})
         """
-        for name, value in shapes.items():
-            self._client.send_message("/VMC/Ext/Blend/Val", [name, float(value)])
-        self._client.send_message("/VMC/Ext/Blend/Apply", [])
+        for _ in range(3):
+            self._send_blend_apply(shapes)
 
     def set_bone(self, bone, px=0.0, py=0.0, pz=0.0, qx=0.0, qy=0.0, qz=0.0, qw=1.0):
         """ボーンの位置・回転を設定する
