@@ -244,21 +244,8 @@ _current_episode = None
 
 @app.post("/api/stream/start")
 async def stream_start():
-    global _current_episode
     obs.start_stream()
-
-    # DB: チャンネル・キャラクター・番組・エピソード作成
-    channel_name = os.environ.get("TWITCH_CHANNEL", "default")
-    channel = db.get_or_create_channel(channel_name)
-
-    seed_character(channel["id"])
-    character_id = get_character_id()
-
-    show = db.get_or_create_show(channel["id"], "デフォルト")
-    _current_episode = db.start_episode(show["id"], character_id)
-    reader.set_episode(_current_episode["id"])
-
-    await reader.start()
+    await _ensure_reader()
     return {"ok": True}
 
 
@@ -473,6 +460,22 @@ def _load_vsf_defaults():
     return config.get("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})
 
 
+async def _ensure_reader():
+    """Readerが停止していれば起動する"""
+    global _current_episode
+    if reader.is_running:
+        return
+    channel_name = os.environ.get("TWITCH_CHANNEL", "default")
+    channel = db.get_or_create_channel(channel_name)
+    seed_character(channel["id"])
+    character_id = get_character_id()
+    show = db.get_or_create_show(channel["id"], "デフォルト")
+    if not _current_episode:
+        _current_episode = db.start_episode(show["id"], character_id)
+    reader.set_episode(_current_episode["id"])
+    await reader.start()
+
+
 @app.post("/api/start")
 async def start():
     global _obs_connected, _vts_connected, _vsf_connected
@@ -491,6 +494,7 @@ async def start():
         await vts.connect()
         _vts_connected = True
     obs.setup_scenes(SCENES, MAIN_SCENE)
+    await _ensure_reader()
     return {"ok": True}
 
 

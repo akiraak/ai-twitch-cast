@@ -12,37 +12,44 @@
     bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 12px;
-    padding: 16px 28px;
+    background: linear-gradient(135deg, rgba(20, 20, 40, 0.85), rgba(30, 20, 50, 0.85));
+    border: 1px solid rgba(124, 77, 255, 0.3);
+    border-radius: 16px;
+    padding: 20px 32px;
     max-width: 1200px;
     min-width: 400px;
     text-align: center;
     opacity: 0;
     transition: opacity 0.4s ease;
     pointer-events: none;
+    backdrop-filter: blur(8px);
   }
   #subtitle.visible { opacity: 1; }
   #subtitle.fading { opacity: 0; transition: opacity 1.5s ease; }
 
   #subtitle .comment {
-    font-size: 22px;
-    color: #b0bec5;
-    margin-bottom: 8px;
+    font-size: 20px;
+    color: #90a4ae;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
   #subtitle .comment .author {
     color: #4fc3f7;
     font-weight: bold;
+    margin-right: 4px;
   }
   #subtitle .response {
-    font-size: 28px;
+    font-size: 30px;
     color: #ffffff;
     font-weight: bold;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    line-height: 1.4;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   }
   #subtitle .english {
-    font-size: 18px;
-    color: #90a4ae;
+    font-size: 17px;
+    color: #80cbc4;
     font-style: italic;
   }
 
@@ -59,16 +66,19 @@
   }
 
   .history-item {
-    background: rgba(0, 0, 0, 0.55);
-    border-radius: 8px;
-    padding: 10px 14px;
+    background: linear-gradient(135deg, rgba(20, 20, 40, 0.75), rgba(30, 20, 50, 0.75));
+    border-radius: 10px;
+    padding: 12px 16px;
     border-left: 3px solid #7c4dff;
     animation: slideIn 0.3s ease;
+    backdrop-filter: blur(4px);
   }
   .history-item .comment {
-    font-size: 14px;
+    font-size: 13px;
     color: #90a4ae;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
   .history-item .comment .author {
     color: #4fc3f7;
@@ -78,17 +88,19 @@
     font-size: 16px;
     color: #e0e0e0;
     font-weight: bold;
-    margin-bottom: 3px;
+    margin-bottom: 4px;
+    line-height: 1.4;
   }
   .history-item .english {
-    font-size: 13px;
-    color: #78909c;
+    font-size: 12px;
+    color: #80cbc4;
     font-style: italic;
   }
 
   /* 古いアイテムは薄く */
-  .history-item:nth-child(4) { opacity: 0.7; }
-  .history-item:nth-child(5) { opacity: 0.5; }
+  .history-item:nth-child(3) { opacity: 0.85; }
+  .history-item:nth-child(4) { opacity: 0.65; }
+  .history-item:nth-child(5) { opacity: 0.45; }
 
   @keyframes slideIn {
     from { opacity: 0; transform: translateX(20px); }
