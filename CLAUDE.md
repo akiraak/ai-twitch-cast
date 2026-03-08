@@ -53,7 +53,8 @@ ai-twitch-cast/
 │   ├── obs-automation-guide.md  # OBS自動制御ガイド
 │   ├── obs-research.md       # OBS機能調査レポート
 │   ├── avatar-research.md   # アバター表示・アニメーション調査
-│   └── 3d-model-research.md # 3Dモデル調査
+│   ├── 3d-model-research.md # 3Dモデル調査
+│   └── vrm-conversion-log.md # VRM変換作業ログ
 ├── src/                      # ソースコード
 │   ├── obs_controller.py     # OBS WebSocket制御
 │   ├── vts_controller.py     # VTube Studio API制御（Live2D）
@@ -71,12 +72,15 @@ ai-twitch-cast/
 │   ├── console.py            # 対話式コンソール
 │   ├── web.py                # Webインターフェース
 │   ├── deploy_model.py       # Live2Dモデルデプロイ
+│   ├── convert_to_vrm.py     # FBX→VRM変換（Blenderスクリプト）
+│   ├── fix_vrm_mtoon.py      # VRM MToonシェーダ修正
 │   └── comment_reader.py     # Twitchコメント読み上げ
 ├── static/                   # Webインターフェース静的ファイル
 │   └── index.html
 ├── resources/                # リソース（画像・モデル・音声・動画）
 │   ├── images/
 │   ├── live2d/
+│   ├── vrm/                  # VRMモデル
 │   ├── audio/
 │   └── video/
 ├── scenes.json               # シーン構成設定（シーン・ソース・アバター配置）
