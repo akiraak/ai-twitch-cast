@@ -84,8 +84,6 @@ OBS・VTube Studioの操作を対話的に実行できます。
 ```bash
 python scripts/start_stream.py       # 配信開始
 python scripts/stop_stream.py        # 配信停止
-python scripts/vts_test.py           # VTube Studio接続テスト
-python scripts/stream_with_avatar.py # アバター付き配信デモ
 python scripts/deploy_model.py       # Live2DモデルをVTSにデプロイ
 python scripts/deploy_model.py --clean  # デプロイしたモデルを削除
 ```
@@ -110,6 +108,26 @@ async def main():
         await vts.trigger_hotkey("hotkey_id")       # 表情切替
 
 asyncio.run(main())
+```
+
+### Web UI
+
+```bash
+uvicorn scripts.web:app --reload
+```
+
+ブラウザで http://127.0.0.1:8000 にアクセス。OBS・アバター操作やキャラクター設定をGUIで行えます。
+
+### ドキュメントサーバ（ローカル）
+
+```bash
+mkdocs serve
+```
+
+http://127.0.0.1:8000 でドキュメントをプレビューできます。Web UIと同時に使う場合はポートを変更してください:
+
+```bash
+mkdocs serve -a 127.0.0.1:8001
 ```
 
 ## ドキュメント

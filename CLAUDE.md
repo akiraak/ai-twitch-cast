@@ -68,8 +68,6 @@ ai-twitch-cast/
 ├── scripts/                  # 実行スクリプト
 │   ├── start_stream.py       # 配信開始
 │   ├── stop_stream.py        # 配信停止
-│   ├── vts_test.py           # VTube Studio接続テスト
-│   ├── stream_with_avatar.py # アバター付き配信
 │   ├── console.py            # 対話式コンソール
 │   ├── web.py                # Webインターフェース
 │   ├── deploy_model.py       # Live2Dモデルデプロイ
