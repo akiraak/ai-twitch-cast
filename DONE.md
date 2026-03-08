@@ -34,6 +34,9 @@
 - [x] コメント・配信データのDB化（SQLite: チャンネル/キャラクター/番組/エピソード/ユーザー/コメント/アクション）
 - [x] AIがどのようにコメントに対応するかをルール付けする方法を構築（character.json + ai_responder）
 - [x] キャラクター設定をDBに移行し、Web UIから編集可能に（character.jsonはシード用として残存）
+- [x] web.pyルート分割リファクタリング（514行→118行、5つのルートモジュール+共有state）
+- [x] OBSController._clientカプセル化修正（get_scene_items追加、外部からの_client直接アクセス排除）
+- [x] Geminiモデル名を.env設定可能に（GEMINI_CHAT_MODEL / GEMINI_TTS_MODEL）
 - [x] VRMにモデル変換（FBX→VRM 0.x変換パイプライン構築、MToonシェーダ修正、サムネイル埋め込み）
 
 ## Phase 0: 環境構築・基盤

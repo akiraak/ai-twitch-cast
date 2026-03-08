@@ -94,27 +94,24 @@ class Console:
 
     def cmd_obs_scenes(self):
         self._require_obs()
-        scenes = self.obs._client.get_scene_list()
-        current = scenes.current_program_scene_name
+        data = self.obs.get_scenes()
         print("シーン一覧:")
-        for s in scenes.scenes:
-            marker = " *" if s["sceneName"] == current else ""
-            print(f"  {s['sceneName']}{marker}")
+        for name in data["scenes"]:
+            marker = " *" if name == data["current"] else ""
+            print(f"  {name}{marker}")
 
     def cmd_obs_scene(self, name):
         self._require_obs()
-        self.obs._client.set_current_program_scene(name)
-        print(f"シーンを切り替えました: {name}")
+        self.obs.set_scene(name)
 
     def cmd_obs_sources(self):
         self._require_obs()
-        scenes = self.obs._client.get_scene_list()
-        current = scenes.current_program_scene_name
-        items = self.obs._client.get_scene_item_list(current)
+        current = self.obs.get_scenes()["current"]
+        items = self.obs.get_scene_items(current)
         print(f"ソース一覧 ({current}):")
-        for item in items.scene_items:
-            enabled = "ON" if item["sceneItemEnabled"] else "OFF"
-            print(f"  [{enabled}] {item['sourceName']} ({item['inputKind'] or 'group'})")
+        for item in items:
+            enabled = "ON" if item["enabled"] else "OFF"
+            print(f"  [{enabled}] {item['name']} ({item['kind']})")
 
     def cmd_obs_setup(self):
         self._require_obs()
@@ -130,20 +127,17 @@ class Console:
 
     def cmd_obs_add_image(self, name, path):
         self._require_obs()
-        scenes = self.obs._client.get_scene_list()
-        current = scenes.current_program_scene_name
+        current = self.obs.get_scenes()["current"]
         self.obs.add_image_source(current, name, path)
 
     def cmd_obs_add_text(self, name, text):
         self._require_obs()
-        scenes = self.obs._client.get_scene_list()
-        current = scenes.current_program_scene_name
+        current = self.obs.get_scenes()["current"]
         self.obs.add_text_source(current, name, text)
 
     def cmd_obs_add_capture(self, name):
         self._require_obs()
-        scenes = self.obs._client.get_scene_list()
-        current = scenes.current_program_scene_name
+        current = self.obs.get_scenes()["current"]
         self.obs.add_game_capture(current, name)
 
     def cmd_obs_remove(self, name):

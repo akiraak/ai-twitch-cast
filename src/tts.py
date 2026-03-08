@@ -37,7 +37,7 @@ def synthesize(text, output_path, voice=None):
     voice = voice or os.environ.get("TTS_VOICE", DEFAULT_VOICE)
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash-preview-tts",
+        model=os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts"),
         contents=f"次のテキストをそのまま読み上げてください: {text}",
         config=types.GenerateContentConfig(
             response_modalities=["AUDIO"],

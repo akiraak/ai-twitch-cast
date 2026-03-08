@@ -128,7 +128,7 @@ def generate_response(author, message, comment_count=0):
     user_prompt = f"{author}さんのコメント{context}: {message}"
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.5-flash"),
         contents=user_prompt,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,

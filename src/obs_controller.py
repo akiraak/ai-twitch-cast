@@ -79,6 +79,18 @@ class OBSController:
             "scenes": [s["sceneName"] for s in result.scenes],
         }
 
+    def get_scene_items(self, scene_name):
+        """シーンのソース一覧を取得する"""
+        result = self._client.get_scene_item_list(scene_name)
+        return [
+            {
+                "name": item["sourceName"],
+                "kind": item["inputKind"] or "group",
+                "enabled": item["sceneItemEnabled"],
+            }
+            for item in result.scene_items
+        ]
+
     def create_scene(self, name):
         """シーンを作成する"""
         self._client.create_scene(name)
