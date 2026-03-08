@@ -27,6 +27,7 @@ from scripts.routes.character import router as character_router
 from scripts.routes.obs import router as obs_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream import router as stream_router
+from scripts.routes.twitch import router as twitch_router
 from src.ai_responder import load_character
 from src.scene_config import AVATAR_APP, MAIN_SCENE, SCENES
 
@@ -41,6 +42,7 @@ app.include_router(stream_router)
 app.include_router(avatar_router)
 app.include_router(character_router)
 app.include_router(overlay_router)
+app.include_router(twitch_router)
 
 
 # --- 環境設定 ---
@@ -55,6 +57,7 @@ ENV_KEYS = [
     ("VSF_OSC_HOST", "VSeeFace OSC ホスト"),
     ("VSF_OSC_PORT", "VSeeFace OSC ポート"),
     ("TWITCH_TOKEN", "Twitch トークン"),
+    ("TWITCH_CLIENT_ID", "Twitch Client ID"),
     ("TWITCH_CHANNEL", "Twitch チャンネル"),
     ("GEMINI_API_KEY", "Gemini API キー"),
     ("TTS_VOICE", "TTS 音声"),

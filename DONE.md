@@ -43,6 +43,7 @@
 - [x] comment_reader._respond()分割（AI応答・DB保存・オーバーレイ・TTS再生を個別メソッドに）
 - [x] vts_controller WS接続コード重複解消（_establish_websocket抽出）
 - [x] TODO.mdを配信画面中央にオーバーレイ表示（Web UIからトグル）
+- [x] Twitch配信情報管理（タイトル・カテゴリ・タグの取得・更新をWeb UIから操作）
 - [x] VRMにモデル変換（FBX→VRM 0.x変換パイプライン構築、MToonシェーダ修正、サムネイル埋め込み）
 
 ## Phase 0: 環境構築・基盤

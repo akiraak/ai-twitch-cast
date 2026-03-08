@@ -12,6 +12,7 @@
     bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
+    z-index: 20;
     background: linear-gradient(135deg, rgba(20, 20, 40, 0.85), rgba(30, 20, 50, 0.85));
     border: 1px solid rgba(124, 77, 255, 0.3);
     border-radius: 16px;
@@ -28,29 +29,22 @@
   #subtitle.fading { opacity: 0; transition: opacity 1.5s ease; }
 
   #subtitle .comment {
-    font-size: 20px;
-    color: #90a4ae;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  #subtitle .comment .author {
-    color: #4fc3f7;
-    font-weight: bold;
-    margin-right: 4px;
+    display: none;
   }
   #subtitle .response {
-    font-size: 30px;
+    font-size: 36px;
     color: #ffffff;
     font-weight: bold;
-    margin-bottom: 8px;
-    line-height: 1.4;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    margin-bottom: 10px;
+    line-height: 1.5;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7), 0 0 20px rgba(124, 77, 255, 0.2);
+    letter-spacing: 0.5px;
   }
   #subtitle .english {
-    font-size: 17px;
-    color: #80cbc4;
+    font-size: 20px;
+    color: #b2dfdb;
     font-style: italic;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   }
 
   /* 履歴パネル（右上） */
@@ -58,6 +52,7 @@
     position: absolute;
     top: 30px;
     right: 30px;
+    z-index: 20;
     width: 420px;
     display: flex;
     flex-direction: column;
@@ -110,15 +105,18 @@
   /* TODOパネル（中央） */
   #todo-panel {
     position: absolute;
-    top: 50%;
+    top: 30px;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
+    z-index: 10;
     background: linear-gradient(135deg, rgba(15, 15, 35, 0.92), rgba(25, 15, 45, 0.92));
     border: 1px solid rgba(124, 77, 255, 0.4);
     border-radius: 20px;
     padding: 32px 40px;
     min-width: 500px;
     max-width: 800px;
+    max-height: 780px;
+    overflow: hidden;
     backdrop-filter: blur(12px);
     opacity: 0;
     pointer-events: none;
@@ -232,7 +230,7 @@ function showSubtitle(data) {
   clearTimeout(fadeTimer);
   subtitleEl.classList.remove('fading');
 
-  subtitleEl.querySelector('.author').textContent = data.author + ': ';
+  subtitleEl.querySelector('.author').textContent = '';
   subtitleEl.querySelector('.message').textContent = data.message;
   subtitleEl.querySelector('.response').textContent = data.response;
   subtitleEl.querySelector('.english').textContent = data.english || '';

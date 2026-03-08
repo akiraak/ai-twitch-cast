@@ -10,6 +10,7 @@ from src.ai_responder import get_character_id, seed_character
 from src.comment_reader import CommentReader
 from src.obs_controller import OBSController
 from src.scene_config import CONFIG_PATH
+from src.twitch_api import TwitchAPI
 from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
 
@@ -17,6 +18,7 @@ from src.vts_controller import VTSController
 obs = OBSController()
 vts = VTSController()
 vsf = VSFController()
+twitch_api = TwitchAPI()
 
 # 接続状態
 obs_connected = False
