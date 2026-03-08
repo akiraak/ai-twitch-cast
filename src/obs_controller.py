@@ -132,6 +132,20 @@ class OBSController:
         )
         logger.info("ゲームキャプチャを追加しました: %s", source_name)
 
+    def add_window_capture(self, scene_name, source_name, window="", cursor=True):
+        """ウィンドウキャプチャソースを追加する"""
+        settings = {"cursor": cursor}
+        if window:
+            settings["window"] = window
+        self._client.create_input(
+            sceneName=scene_name,
+            inputName=source_name,
+            inputKind="window_capture",
+            inputSettings=settings,
+            sceneItemEnabled=True,
+        )
+        logger.info("ウィンドウキャプチャを追加しました: %s", source_name)
+
     def add_browser_source(self, scene_name, source_name, url, width=1920, height=1080):
         """ブラウザソースを追加する"""
         self._client.create_input(
@@ -255,6 +269,12 @@ class OBSController:
                 scene_name, name,
                 window=source.get("window", ""),
                 allow_transparency=source.get("allow_transparency", False),
+            )
+        elif kind == "window_capture":
+            self.add_window_capture(
+                scene_name, name,
+                window=source.get("window", ""),
+                cursor=source.get("cursor", True),
             )
         elif kind == "browser":
             self.add_browser_source(

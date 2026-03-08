@@ -59,6 +59,19 @@
           }
         },
         {
+          "kind": "window_capture",
+          "name": "ターミナル",
+          "window": "",
+          "cursor": true,
+          "transform": {
+            "positionX": 0.0,
+            "positionY": 0.0,
+            "boundsType": "OBS_BOUNDS_SCALE_INNER",
+            "boundsWidth": 960.0,
+            "boundsHeight": 540.0
+          }
+        },
+        {
           "kind": "browser",
           "name": "オーバーレイ",
           "url": "http://localhost:8000/overlay",
