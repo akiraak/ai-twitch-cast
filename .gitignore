@@ -6,3 +6,7 @@ __pycache__/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+resources/images/
+resources/vrm/
+tmp/
+*.zip
