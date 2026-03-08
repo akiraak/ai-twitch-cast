@@ -1,9 +1,12 @@
 """コメント読み上げサービス（Twitchチャット → AI応答 → TTS → 再生 → 表情連動 → DB保存）"""
 
 import asyncio
+import logging
 import tempfile
 from collections import deque
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from src import db
 from src.ai_responder import generate_response, get_character
@@ -34,7 +37,7 @@ class CommentReader:
         self._running = True
         await self._chat.start(self._on_message)
         self._process_task = asyncio.create_task(self._process_loop())
-        print("コメント読み上げを開始しました")
+        logger.info("コメント読み上げを開始しました")
 
     async def stop(self):
         """読み上げを停止する"""
@@ -49,7 +52,7 @@ class CommentReader:
             self._process_task = None
         self._queue.clear()
         self._episode_id = None
-        print("コメント読み上げを停止しました")
+        logger.info("コメント読み上げを停止しました")
 
     @property
     def is_running(self):
@@ -61,7 +64,7 @@ class CommentReader:
 
     async def _on_message(self, author, message):
         """チャットメッセージ受信時"""
-        print(f"[chat] {author}: {message}")
+        logger.info("[chat] %s: %s", author, message)
         self._queue.append((author, message))
 
     async def _process_loop(self):
@@ -79,64 +82,65 @@ class CommentReader:
     async def _respond(self, author, message):
         """1件のコメントにAIで応答して読み上げる"""
         try:
-            # ユーザー取得・コメント数
             user = await asyncio.to_thread(db.get_or_create_user, author)
-            comment_count = user["comment_count"]
-
-            # AI応答生成
-            print(f"[ai] 応答生成中...")
-            result = await asyncio.to_thread(
-                generate_response, author, message, comment_count
-            )
-            response_text = result["response"]
-            emotion = result["emotion"]
-            print(f"[ai] [{emotion}] {response_text}")
-
-            # DB保存
-            if self._episode_id:
-                await asyncio.to_thread(
-                    db.save_comment,
-                    self._episode_id, user["id"], message, response_text, emotion,
-                )
-                await asyncio.to_thread(db.increment_comment_count, user["id"])
-
-            # オーバーレイに送信
-            if self._on_overlay:
-                await self._on_overlay({
-                    "type": "comment",
-                    "author": author,
-                    "message": message,
-                    "response": response_text,
-                    "english": result.get("english", ""),
-                    "emotion": emotion,
-                })
-
-            # 表情を設定
-            self._apply_emotion(emotion)
-
-            # TTS生成・再生
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                wav_path = f.name
-
-            print(f"[tts] 生成中...")
-            await asyncio.to_thread(synthesize, response_text, wav_path)
-
-            proc = await asyncio.create_subprocess_exec(
-                "ffplay", "-nodisp", "-autoexit", "-loglevel", "error", wav_path,
-            )
-            await proc.wait()
-
-            Path(wav_path).unlink(missing_ok=True)
-
-            # 表情をニュートラルに戻す
+            result = await self._generate_ai_response(author, message, user["comment_count"])
+            await self._save_to_db(user, message, result)
+            await self._notify_overlay(author, message, result)
+            self._apply_emotion(result["emotion"])
+            await self._speak(result["response"])
             self._apply_emotion("neutral")
-
-            # オーバーレイに発話終了を通知
-            if self._on_overlay:
-                await self._on_overlay({"type": "speaking_end"})
-
+            await self._notify_overlay_end()
         except Exception as e:
-            print(f"[error] 応答失敗: {e}")
+            logger.error("応答失敗: %s", e)
+
+    async def _generate_ai_response(self, author, message, comment_count):
+        """AI応答を生成する"""
+        logger.info("[ai] 応答生成中...")
+        result = await asyncio.to_thread(
+            generate_response, author, message, comment_count
+        )
+        logger.info("[ai] [%s] %s", result["emotion"], result["response"])
+        return result
+
+    async def _save_to_db(self, user, message, result):
+        """コメントと応答をDBに保存する"""
+        if not self._episode_id:
+            return
+        await asyncio.to_thread(
+            db.save_comment,
+            self._episode_id, user["id"], message, result["response"], result["emotion"],
+        )
+        await asyncio.to_thread(db.increment_comment_count, user["id"])
+
+    async def _notify_overlay(self, author, message, result):
+        """オーバーレイにコメント情報を送信する"""
+        if not self._on_overlay:
+            return
+        await self._on_overlay({
+            "type": "comment",
+            "author": author,
+            "message": message,
+            "response": result["response"],
+            "english": result.get("english", ""),
+            "emotion": result["emotion"],
+        })
+
+    async def _notify_overlay_end(self):
+        """オーバーレイに発話終了を通知する"""
+        if self._on_overlay:
+            await self._on_overlay({"type": "speaking_end"})
+
+    async def _speak(self, text):
+        """TTS生成・再生する"""
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            wav_path = f.name
+        logger.info("[tts] 生成中...")
+        await asyncio.to_thread(synthesize, text, wav_path)
+        proc = await asyncio.create_subprocess_exec(
+            "ffplay", "-nodisp", "-autoexit", "-loglevel", "error", wav_path,
+        )
+        await proc.wait()
+        Path(wav_path).unlink(missing_ok=True)
 
     def _apply_emotion(self, emotion):
         """感情に対応するBlendShapeを適用する"""

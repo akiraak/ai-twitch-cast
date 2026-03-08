@@ -1,6 +1,7 @@
 """VSeeFace VMC Protocol (OSC) 制御モジュール"""
 
 import asyncio
+import logging
 import math
 import os
 import random
@@ -9,6 +10,8 @@ import time
 from pythonosc import udp_client
 
 from src.wsl_path import resolve_host
+
+logger = logging.getLogger(__name__)
 
 
 class VSFController:
@@ -23,12 +26,12 @@ class VSFController:
     def connect(self):
         """OSCクライアントを作成する"""
         self._client = udp_client.SimpleUDPClient(self.host, self.port)
-        print(f"VSeeFaceに接続しました ({self.host}:{self.port})")
+        logger.info("VSeeFaceに接続しました (%s:%s)", self.host, self.port)
 
     def disconnect(self):
         """OSCクライアントを破棄する"""
         self._client = None
-        print("VSeeFaceから切断しました")
+        logger.info("VSeeFaceから切断しました")
 
     def _send_blend_apply(self, shapes):
         """BlendShapeのVal/Applyペアを1回送信する"""
@@ -184,7 +187,7 @@ class VSFController:
             scale: 動きの大きさの倍率 (1.0が標準、2.0で2倍、0.5で半分)
         """
         self.stop_idle()
-        self._idle_task = asyncio.ensure_future(self._idle_loop(scale))
+        self._idle_task = asyncio.create_task(self._idle_loop(scale))
 
     def stop_idle(self):
         """待機モーションを停止する"""

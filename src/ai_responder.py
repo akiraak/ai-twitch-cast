@@ -4,25 +4,15 @@ import json
 import os
 from pathlib import Path
 
-from google import genai
 from google.genai import types
+
+from src.gemini_client import get_client
 
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
 _CHARACTER_SEED_PATH = _PROJECT_DIR / "character.json"
 
-_client = None
 _character = None
 _character_id = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY が設定されていません")
-        _client = genai.Client(api_key=api_key)
-    return _client
 
 
 def seed_character(channel_id):
@@ -117,7 +107,7 @@ def generate_response(author, message, comment_count=0):
     Returns:
         dict: {"response": str, "emotion": str}
     """
-    client = _get_client()
+    client = get_client()
     system_prompt = _build_system_prompt()
 
     if comment_count == 0:

@@ -1,5 +1,6 @@
 """Web インターフェース（console.py相当）"""
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -9,6 +10,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse

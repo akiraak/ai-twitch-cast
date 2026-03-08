@@ -1,14 +1,16 @@
 """VTube Studio API制御モジュール"""
 
+import json
+import logging
 import os
 from pathlib import Path
-
-import json
 
 import pyvts
 import websockets
 
 from src.wsl_path import resolve_host
+
+logger = logging.getLogger(__name__)
 
 
 class VTSController:
@@ -18,6 +20,14 @@ class VTSController:
         self.host = resolve_host(host or os.environ.get("VTS_HOST", "localhost"))
         self.port = int(port or os.environ.get("VTS_PORT", "8001"))
         self._vts = None
+
+    async def _establish_websocket(self):
+        """WebSocket接続を確立する"""
+        self._vts.websocket = await websockets.connect(
+            f"ws://{self.host}:{self.port}",
+            ping_interval=30,
+            ping_timeout=10,
+        )
 
     async def connect(self):
         """VTube Studioに接続・認証する"""
@@ -36,12 +46,7 @@ class VTSController:
             },
         )
         try:
-            # pyvtsのデフォルト接続はpingを送らずタイムアウトするため、直接接続する
-            self._vts.websocket = await websockets.connect(
-                f"ws://{self.host}:{self.port}",
-                ping_interval=30,
-                ping_timeout=10,
-            )
+            await self._establish_websocket()
         except Exception:
             raise ConnectionError(
                 f"VTube Studioに接続できません ({self.host}:{self.port})。"
@@ -50,17 +55,13 @@ class VTSController:
             )
         await self._vts.request_authenticate_token()
         await self._vts.request_authenticate()
-        print("VTube Studioに接続しました")
+        logger.info("VTube Studioに接続しました")
 
     async def reconnect(self):
         """WebSocket接続を再確立する"""
-        self._vts.websocket = await websockets.connect(
-            f"ws://{self.host}:{self.port}",
-            ping_interval=30,
-            ping_timeout=10,
-        )
+        await self._establish_websocket()
         await self._vts.request_authenticate()
-        print("VTube Studioに再接続しました")
+        logger.info("VTube Studioに再接続しました")
 
     async def _request(self, request_msg):
         """リクエストを送信する。接続が切れていたら自動再接続する"""
@@ -79,7 +80,7 @@ class VTSController:
         if self._vts:
             await self._vts.close()
             self._vts = None
-            print("VTube Studioから切断しました")
+            logger.info("VTube Studioから切断しました")
 
     async def get_model_info(self):
         """現在のモデル情報を取得する"""

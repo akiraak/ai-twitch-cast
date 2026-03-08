@@ -141,21 +141,20 @@ def get_character_by_channel(channel_id):
 def update_character(character_id, name=None, config=None):
     """キャラクター設定を更新する"""
     conn = get_connection()
-    updates = []
-    params = []
+    fields = {}
     if name is not None:
-        updates.append("name = ?")
-        params.append(name)
+        fields["name"] = name
     if config is not None:
-        updates.append("config = ?")
-        params.append(config)
-    if not updates:
+        fields["config"] = config
+    if not fields:
         return
-    updates.append("updated_at = ?")
-    params.append(_now())
+    fields["updated_at"] = _now()
+    allowed = {"name", "config", "updated_at"}
+    set_clause = ", ".join(f"{k} = ?" for k in fields if k in allowed)
+    params = [v for k, v in fields.items() if k in allowed]
     params.append(character_id)
     conn.execute(
-        f"UPDATE characters SET {', '.join(updates)} WHERE id = ?",
+        f"UPDATE characters SET {set_clause} WHERE id = ?",
         params,
     )
     conn.commit()

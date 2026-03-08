@@ -1,28 +1,15 @@
 """TTS（音声合成）モジュール - Gemini 2.5 Flash TTS"""
 
-import io
 import os
 import wave
 
-from google import genai
 from google.genai import types
 
+from src.gemini_client import get_client
 
 # Gemini TTS で利用可能な音声
 # Aoede, Charon, Fenrir, Kore, Puck, Leda, Orus, Zephyr
 DEFAULT_VOICE = "Kore"
-
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY が設定されていません")
-        _client = genai.Client(api_key=api_key)
-    return _client
 
 
 def synthesize(text, output_path, voice=None):
@@ -33,7 +20,7 @@ def synthesize(text, output_path, voice=None):
         output_path: 出力ファイルパス (.wav)
         voice: 音声名 (デフォルト: Kore)
     """
-    client = _get_client()
+    client = get_client()
     voice = voice or os.environ.get("TTS_VOICE", DEFAULT_VOICE)
 
     response = client.models.generate_content(

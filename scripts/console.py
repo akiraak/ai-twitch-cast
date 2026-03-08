@@ -1,6 +1,7 @@
 """OBS・VTube Studio対話式コンソール"""
 
 import asyncio
+import logging
 import sys
 from pathlib import Path
 
@@ -9,6 +10,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 from src.obs_controller import OBSController
 from src.scene_config import MAIN_SCENE, SCENES

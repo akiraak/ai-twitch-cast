@@ -1,9 +1,12 @@
 """Twitch チャット受信モジュール (twitchio v2)"""
 
 import asyncio
+import logging
 import os
 
 from twitchio import Client
+
+logger = logging.getLogger(__name__)
 
 
 class TwitchChat:
@@ -50,7 +53,7 @@ class _ChatClient(Client):
         self._on_message = on_message
 
     async def event_ready(self):
-        print(f"Twitchに接続しました (ユーザー: {self.nick})")
+        logger.info("Twitchに接続しました (ユーザー: %s)", self.nick)
 
     async def event_message(self, message):
         if message.echo:

@@ -37,6 +37,11 @@
 - [x] web.pyルート分割リファクタリング（514行→118行、5つのルートモジュール+共有state）
 - [x] OBSController._clientカプセル化修正（get_scene_items追加、外部からの_client直接アクセス排除）
 - [x] Geminiモデル名を.env設定可能に（GEMINI_CHAT_MODEL / GEMINI_TTS_MODEL）
+- [x] print()→logging置換（src/全ファイル、エントリポイントにbasicConfig追加）
+- [x] Geminiクライアント共通化（ai_responder/tts重複→src/gemini_client.py抽出）
+- [x] db.py update_character SQLホワイトリスト化
+- [x] comment_reader._respond()分割（AI応答・DB保存・オーバーレイ・TTS再生を個別メソッドに）
+- [x] vts_controller WS接続コード重複解消（_establish_websocket抽出）
 - [x] VRMにモデル変換（FBX→VRM 0.x変換パイプライン構築、MToonシェーダ修正、サムネイル埋め込み）
 
 ## Phase 0: 環境構築・基盤

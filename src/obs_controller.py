@@ -11,6 +11,8 @@ logging.getLogger("obsws_python").setLevel(logging.CRITICAL)
 
 from src.wsl_path import resolve_host, to_windows_path
 
+logger = logging.getLogger(__name__)
+
 
 class OBSController:
     """OBS WebSocketを通じてOBSを制御するクラス"""
@@ -34,14 +36,14 @@ class OBSController:
                 " WSL2から接続する場合はOBS_WS_HOSTにWindowsのIPアドレスを設定してください。"
             )
         version = self._client.get_version()
-        print(f"OBSに接続しました (OBS {version.obs_version}, WebSocket {version.obs_web_socket_version})")
+        logger.info("OBSに接続しました (OBS %s, WebSocket %s)", version.obs_version, version.obs_web_socket_version)
 
     def disconnect(self):
         """OBS WebSocketから切断する"""
         if self._client:
             self._client.base_client.ws.close()
             self._client = None
-            print("OBSから切断しました")
+            logger.info("OBSから切断しました")
 
     def get_stream_status(self):
         """配信状態を取得する"""
@@ -57,19 +59,19 @@ class OBSController:
         """配信を開始する"""
         status = self.get_stream_status()
         if status["active"]:
-            print("既に配信中です")
+            logger.warning("既に配信中です")
             return
         self._client.start_stream()
-        print("配信を開始しました")
+        logger.info("配信を開始しました")
 
     def stop_stream(self):
         """配信を停止する"""
         status = self.get_stream_status()
         if not status["active"]:
-            print("配信していません")
+            logger.warning("配信していません")
             return
         self._client.stop_stream()
-        print("配信を停止しました")
+        logger.info("配信を停止しました")
 
     def get_scenes(self):
         """シーン一覧を取得する"""
@@ -94,12 +96,12 @@ class OBSController:
     def create_scene(self, name):
         """シーンを作成する"""
         self._client.create_scene(name)
-        print(f"シーンを作成しました: {name}")
+        logger.info("シーンを作成しました: %s", name)
 
     def set_scene(self, name):
         """シーンを切り替える"""
         self._client.set_current_program_scene(name)
-        print(f"シーンを切り替えました: {name}")
+        logger.info("シーンを切り替えました: %s", name)
 
     def add_image_source(self, scene_name, source_name, wsl_path):
         """WSLパスの画像をソースとして追加する"""
@@ -111,7 +113,7 @@ class OBSController:
             inputSettings={"file": win_path},
             sceneItemEnabled=True,
         )
-        print(f"画像ソースを追加しました: {source_name}")
+        logger.info("画像ソースを追加しました: %s", source_name)
 
     def add_game_capture(self, scene_name, source_name, window="", allow_transparency=False):
         """ゲームキャプチャソースを追加する"""
@@ -128,7 +130,7 @@ class OBSController:
             inputSettings=settings,
             sceneItemEnabled=True,
         )
-        print(f"ゲームキャプチャを追加しました: {source_name}")
+        logger.info("ゲームキャプチャを追加しました: %s", source_name)
 
     def add_browser_source(self, scene_name, source_name, url, width=1920, height=1080):
         """ブラウザソースを追加する"""
@@ -144,7 +146,7 @@ class OBSController:
             },
             sceneItemEnabled=True,
         )
-        print(f"ブラウザソースを追加しました: {source_name}")
+        logger.info("ブラウザソースを追加しました: %s", source_name)
 
     def add_text_source(self, scene_name, source_name, text, font_size=48):
         """テキストソースを追加する"""
@@ -161,7 +163,7 @@ class OBSController:
             },
             sceneItemEnabled=True,
         )
-        print(f"テキストソースを追加しました: {source_name}")
+        logger.info("テキストソースを追加しました: %s", source_name)
 
     def get_source_transform(self, scene_name, source_name):
         """ソースの位置・サイズを取得する"""
@@ -180,12 +182,12 @@ class OBSController:
     def remove_scene(self, name):
         """シーンを削除する"""
         self._client.remove_scene(name)
-        print(f"シーンを削除しました: {name}")
+        logger.info("シーンを削除しました: %s", name)
 
     def remove_input(self, input_name):
         """入力ソースを削除する"""
         self._client.remove_input(input_name)
-        print(f"ソースを削除しました: {input_name}")
+        logger.info("ソースを削除しました: %s", input_name)
 
     def setup_scenes(self, scenes_config, main_scene=None):
         """シーン構成を一括作成する（既存のATC シーン・ソースは先に削除）"""
@@ -195,7 +197,7 @@ class OBSController:
             try:
                 self.create_scene(scene_name)
             except Exception:
-                print(f"シーン '{scene_name}' は既に存在します")
+                logger.debug("シーン '%s' は既に存在します", scene_name)
 
             for source in scene["sources"]:
                 try:
@@ -203,7 +205,7 @@ class OBSController:
                     if "transform" in source:
                         self.set_source_transform(scene_name, source["name"], source["transform"])
                 except Exception as e:
-                    print(f"  ソース '{source['name']}' の追加に失敗: {e}")
+                    logger.warning("ソース '%s' の追加に失敗: %s", source['name'], e)
 
         # メインシーンにフォーカス
         if main_scene:
@@ -211,7 +213,7 @@ class OBSController:
         elif scenes_config:
             self.set_scene(scenes_config[0]["name"])
 
-        print(f"\nセットアップ完了 ({len(scenes_config)}シーン)")
+        logger.info("セットアップ完了 (%dシーン)", len(scenes_config))
 
     def teardown_scenes(self, scenes_config):
         """シーン構成を一括削除する"""
@@ -233,7 +235,7 @@ class OBSController:
             except Exception:
                 pass
 
-        print(f"\nティアダウン完了")
+        logger.info("ティアダウン完了")
 
     def _add_source(self, scene_name, source):
         """ソース定義に基づいてソースを追加する"""
@@ -262,7 +264,7 @@ class OBSController:
                 height=source.get("height", 1080),
             )
         else:
-            print(f"  不明なソース種類: {kind}")
+            logger.warning("不明なソース種類: %s", kind)
 
     def __enter__(self):
         self.connect()
