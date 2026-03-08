@@ -12,7 +12,9 @@ from src.scene_config import CONFIG_PATH
 
 router = APIRouter()
 
-STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
+PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
+STATIC_DIR = PROJECT_DIR / "static"
+TODO_PATH = PROJECT_DIR / "TODO.md"
 
 
 @router.websocket("/ws/overlay")
@@ -39,6 +41,21 @@ async def get_overlay_settings():
         "subtitle": {"bottom": 80, "fontSize": 28, "fadeDuration": 3},
         "history": {"top": 30, "right": 30, "fontSize": 18, "maxItems": 5},
     })
+
+
+@router.get("/api/todo")
+async def get_todo():
+    """TODO.mdの内容を返す"""
+    if TODO_PATH.exists():
+        return {"content": TODO_PATH.read_text(encoding="utf-8")}
+    return {"content": ""}
+
+
+@router.post("/api/overlay/todo/toggle")
+async def toggle_todo():
+    """オーバーレイのTODO表示をトグルする"""
+    await state.broadcast_overlay({"type": "todo_toggle"})
+    return {"ok": True}
 
 
 class OverlaySettings(BaseModel):
