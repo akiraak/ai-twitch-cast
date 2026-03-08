@@ -58,5 +58,5 @@ class _ChatClient(Client):
     async def event_message(self, message):
         if message.echo:
             return
-        author = message.author.name if message.author else "unknown"
+        author = (message.author.display_name or message.author.name) if message.author else "unknown"
         await self._on_message(author, message.content)
