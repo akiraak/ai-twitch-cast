@@ -148,6 +148,54 @@
     <div class="status" id="vts-status"></div>
   </div>
 
+  <!-- Overlay -->
+  <div class="card">
+    <h2>オーバーレイ設定</h2>
+    <h3 style="font-size:0.85rem; margin: 0 0 6px; color:#9e9e9e;">字幕（リアルタイム）</h3>
+    <div class="slider-row">
+      <label>下余白</label>
+      <input type="range" id="ov-sub-bottom" min="0" max="500" step="5" value="80">
+      <input type="number" id="ov-sub-bottom-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="80">
+    </div>
+    <div class="slider-row">
+      <label>文字</label>
+      <input type="range" id="ov-sub-font" min="14" max="64" step="1" value="28">
+      <input type="number" id="ov-sub-font-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="28">
+    </div>
+    <div class="slider-row">
+      <label>フェード</label>
+      <input type="range" id="ov-sub-fade" min="1" max="15" step="0.5" value="3">
+      <input type="number" id="ov-sub-fade-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="3" step="0.5">
+    </div>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">履歴パネル</h3>
+    <div class="slider-row">
+      <label>上余白</label>
+      <input type="range" id="ov-hist-top" min="0" max="500" step="5" value="30">
+      <input type="number" id="ov-hist-top-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="30">
+    </div>
+    <div class="slider-row">
+      <label>右余白</label>
+      <input type="range" id="ov-hist-right" min="0" max="500" step="5" value="30">
+      <input type="number" id="ov-hist-right-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="30">
+    </div>
+    <div class="slider-row">
+      <label>文字</label>
+      <input type="range" id="ov-hist-font" min="10" max="32" step="1" value="18">
+      <input type="number" id="ov-hist-font-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="18">
+    </div>
+    <div class="slider-row">
+      <label>件数</label>
+      <input type="range" id="ov-hist-max" min="1" max="10" step="1" value="5">
+      <input type="number" id="ov-hist-max-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="5">
+    </div>
+    <div class="btn-row" style="margin-top:8px;">
+      <button onclick="saveOverlaySettings()">保存</button>
+      <button class="secondary" onclick="loadOverlaySettings()">読込</button>
+      <button class="secondary" onclick="window.open('/overlay','_blank')">プレビュー</button>
+    </div>
+    <div class="status" id="ov-status"></div>
+  </div>
+
   <!-- Character -->
   <div class="card" style="grid-column: 1 / -1;">
     <h2>キャラクター設定</h2>
@@ -560,9 +608,81 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// --- オーバーレイ設定 ---
+const ovSliders = [
+  ['ov-sub-bottom', 'ov-sub-bottom-num'],
+  ['ov-sub-font', 'ov-sub-font-num'],
+  ['ov-sub-fade', 'ov-sub-fade-num'],
+  ['ov-hist-top', 'ov-hist-top-num'],
+  ['ov-hist-right', 'ov-hist-right-num'],
+  ['ov-hist-font', 'ov-hist-font-num'],
+  ['ov-hist-max', 'ov-hist-max-num'],
+];
+ovSliders.forEach(([sid, nid]) => {
+  const s = document.getElementById(sid);
+  const n = document.getElementById(nid);
+  s.addEventListener('input', () => { n.value = s.value; });
+  n.addEventListener('change', () => { s.value = n.value; });
+});
+
+function getOverlayValues() {
+  return {
+    subtitle: {
+      bottom: parseFloat(document.getElementById('ov-sub-bottom').value),
+      fontSize: parseInt(document.getElementById('ov-sub-font').value),
+      fadeDuration: parseFloat(document.getElementById('ov-sub-fade').value),
+    },
+    history: {
+      top: parseFloat(document.getElementById('ov-hist-top').value),
+      right: parseFloat(document.getElementById('ov-hist-right').value),
+      fontSize: parseInt(document.getElementById('ov-hist-font').value),
+      maxItems: parseInt(document.getElementById('ov-hist-max').value),
+    },
+  };
+}
+
+function setOverlayValues(s) {
+  if (s.subtitle) {
+    document.getElementById('ov-sub-bottom').value = s.subtitle.bottom ?? 80;
+    document.getElementById('ov-sub-bottom-num').value = s.subtitle.bottom ?? 80;
+    document.getElementById('ov-sub-font').value = s.subtitle.fontSize ?? 28;
+    document.getElementById('ov-sub-font-num').value = s.subtitle.fontSize ?? 28;
+    document.getElementById('ov-sub-fade').value = s.subtitle.fadeDuration ?? 3;
+    document.getElementById('ov-sub-fade-num').value = s.subtitle.fadeDuration ?? 3;
+  }
+  if (s.history) {
+    document.getElementById('ov-hist-top').value = s.history.top ?? 30;
+    document.getElementById('ov-hist-top-num').value = s.history.top ?? 30;
+    document.getElementById('ov-hist-right').value = s.history.right ?? 30;
+    document.getElementById('ov-hist-right-num').value = s.history.right ?? 30;
+    document.getElementById('ov-hist-font').value = s.history.fontSize ?? 18;
+    document.getElementById('ov-hist-font-num').value = s.history.fontSize ?? 18;
+    document.getElementById('ov-hist-max').value = s.history.maxItems ?? 5;
+    document.getElementById('ov-hist-max-num').value = s.history.maxItems ?? 5;
+  }
+}
+
+async function loadOverlaySettings() {
+  try {
+    const data = await (await fetch('/api/overlay/settings')).json();
+    setOverlayValues(data);
+    document.getElementById('ov-status').textContent = '読み込みました';
+  } catch (e) {
+    document.getElementById('ov-status').textContent = 'エラー: ' + e.message;
+  }
+}
+
+async function saveOverlaySettings() {
+  const res = await api('POST', '/api/overlay/settings', getOverlayValues());
+  if (res?.ok) {
+    document.getElementById('ov-status').textContent = '保存しました';
+  }
+}
+
 // 初期読み込み
 loadCharacter();
 loadVsfDefaults();
+loadOverlaySettings();
 refreshStatus();
 setInterval(refreshStatus, 3000);
 </script>

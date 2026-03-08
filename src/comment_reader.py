@@ -14,9 +14,10 @@ from src.twitch_chat import TwitchChat
 class CommentReader:
     """Twitchコメントを読み上げるサービス"""
 
-    def __init__(self, vsf=None):
+    def __init__(self, vsf=None, on_overlay=None):
         self._chat = TwitchChat()
         self._vsf = vsf
+        self._on_overlay = on_overlay
         self._queue = deque()
         self._process_task = None
         self._running = False
@@ -99,6 +100,17 @@ class CommentReader:
                 )
                 await asyncio.to_thread(db.increment_comment_count, user["id"])
 
+            # オーバーレイに送信
+            if self._on_overlay:
+                await self._on_overlay({
+                    "type": "comment",
+                    "author": author,
+                    "message": message,
+                    "response": response_text,
+                    "english": result.get("english", ""),
+                    "emotion": emotion,
+                })
+
             # 表情を設定
             self._apply_emotion(emotion)
 
@@ -118,6 +130,10 @@ class CommentReader:
 
             # 表情をニュートラルに戻す
             self._apply_emotion("neutral")
+
+            # オーバーレイに発話終了を通知
+            if self._on_overlay:
+                await self._on_overlay({"type": "speaking_end"})
 
         except Exception as e:
             print(f"[error] 応答失敗: {e}")

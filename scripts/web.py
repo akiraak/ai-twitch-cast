@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -33,11 +33,37 @@ app = FastAPI()
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# --- WebSocket オーバーレイ ---
+_overlay_clients: set[WebSocket] = set()
+
+
+async def broadcast_overlay(event: dict):
+    """全接続中のオーバーレイクライアントにイベントを送信する"""
+    dead = set()
+    for ws in _overlay_clients:
+        try:
+            await ws.send_json(event)
+        except Exception:
+            dead.add(ws)
+    _overlay_clients.difference_update(dead)
+
+
+@app.websocket("/ws/overlay")
+async def overlay_ws(websocket: WebSocket):
+    await websocket.accept()
+    _overlay_clients.add(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        _overlay_clients.discard(websocket)
+
+
 # コントローラー（グローバルで共有）
 obs = OBSController()
 vts = VTSController()
 vsf = VSFController()
-reader = CommentReader(vsf=vsf)
+reader = CommentReader(vsf=vsf, on_overlay=broadcast_overlay)
 _obs_connected = False
 _vts_connected = False
 _vsf_connected = False
@@ -401,6 +427,41 @@ async def update_character_api(body: CharacterUpdate):
     config = json.dumps(body.model_dump(), ensure_ascii=False)
     db.update_character(char_id, name=body.name, config=config)
     invalidate_character_cache()
+    return {"ok": True}
+
+
+# --- オーバーレイ ---
+
+@app.get("/overlay", response_class=HTMLResponse)
+async def overlay_page():
+    return (STATIC_DIR / "overlay.html").read_text(encoding="utf-8")
+
+
+@app.get("/api/overlay/settings")
+async def get_overlay_settings():
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+    return config.get("overlay", {
+        "subtitle": {"bottom": 80, "fontSize": 28, "fadeDuration": 3},
+        "history": {"top": 30, "right": 30, "fontSize": 18, "maxItems": 5},
+    })
+
+
+class OverlaySettings(BaseModel):
+    subtitle: dict
+    history: dict
+
+
+@app.post("/api/overlay/settings")
+async def save_overlay_settings(body: OverlaySettings):
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+    config["overlay"] = body.model_dump()
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    # 接続中のオーバーレイに設定更新を通知
+    await broadcast_overlay({"type": "settings_update", **body.model_dump()})
     return {"ok": True}
 
 

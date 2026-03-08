@@ -98,8 +98,9 @@ def _build_system_prompt():
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        '{"response": "返答テキスト", "emotion": "感情"}',
+        '{"response": "返答テキスト", "emotion": "感情", "english": "responseの英語訳"}',
         f"emotionは次のいずれか: {emotion_list}",
+        "englishにはresponseの自然な英語訳を含めてください。",
     ])
 
     return "\n".join(parts)
@@ -138,7 +139,9 @@ def generate_response(author, message, comment_count=0):
     try:
         result = json.loads(response.text)
     except (json.JSONDecodeError, AttributeError):
-        result = {"response": message, "emotion": "neutral"}
+        result = {"response": message, "emotion": "neutral", "english": ""}
+
+    result.setdefault("english", "")
 
     # emotionが定義外の場合はneutralにフォールバック
     char = get_character()

@@ -55,6 +55,8 @@ def _load_config():
 
             if src["kind"] == "image" and "path" in src:
                 resolved["path"] = RESOURCES_DIR / src["path"]
+            elif src["kind"] == "browser" and "url" in src:
+                resolved["url"] = src["url"]
 
             sources.append(resolved)
 

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: transparent; width: 1920px; height: 1080px; position: relative; overflow: hidden; font-family: "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif; }
+
+  /* リアルタイム字幕（下中央） */
+  #subtitle {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+    padding: 16px 28px;
+    max-width: 1200px;
+    min-width: 400px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  #subtitle.visible { opacity: 1; }
+  #subtitle.fading { opacity: 0; transition: opacity 1.5s ease; }
+
+  #subtitle .comment {
+    font-size: 22px;
+    color: #b0bec5;
+    margin-bottom: 8px;
+  }
+  #subtitle .comment .author {
+    color: #4fc3f7;
+    font-weight: bold;
+  }
+  #subtitle .response {
+    font-size: 28px;
+    color: #ffffff;
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+  #subtitle .english {
+    font-size: 18px;
+    color: #90a4ae;
+    font-style: italic;
+  }
+
+  /* 履歴パネル（右上） */
+  #history {
+    position: absolute;
+    top: 30px;
+    right: 30px;
+    width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .history-item {
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 8px;
+    padding: 10px 14px;
+    border-left: 3px solid #7c4dff;
+    animation: slideIn 0.3s ease;
+  }
+  .history-item .comment {
+    font-size: 14px;
+    color: #90a4ae;
+    margin-bottom: 4px;
+  }
+  .history-item .comment .author {
+    color: #4fc3f7;
+    font-weight: bold;
+  }
+  .history-item .response {
+    font-size: 16px;
+    color: #e0e0e0;
+    font-weight: bold;
+    margin-bottom: 3px;
+  }
+  .history-item .english {
+    font-size: 13px;
+    color: #78909c;
+    font-style: italic;
+  }
+
+  /* 古いアイテムは薄く */
+  .history-item:nth-child(4) { opacity: 0.7; }
+  .history-item:nth-child(5) { opacity: 0.5; }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+</style>
+</head>
+<body>
+
+<div id="subtitle">
+  <div class="comment"><span class="author"></span><span class="message"></span></div>
+  <div class="response"></div>
+  <div class="english"></div>
+</div>
+
+<div id="history"></div>
+
+<script>
+const subtitleEl = document.getElementById('subtitle');
+const historyEl = document.getElementById('history');
+let fadeTimer = null;
+let maxItems = 5;
+
+// 設定を読み込み
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/overlay/settings');
+    const s = await res.json();
+    applySettings(s);
+  } catch (e) {
+    console.log('設定読み込みスキップ:', e.message);
+  }
+}
+
+function applySettings(s) {
+  if (s.subtitle) {
+    if (s.subtitle.bottom != null) subtitleEl.style.bottom = s.subtitle.bottom + 'px';
+    if (s.subtitle.fontSize != null) subtitleEl.querySelector('.response').style.fontSize = s.subtitle.fontSize + 'px';
+    if (s.subtitle.fadeDuration != null) subtitleEl.dataset.fadeDuration = s.subtitle.fadeDuration;
+  }
+  if (s.history) {
+    if (s.history.top != null) historyEl.style.top = s.history.top + 'px';
+    if (s.history.right != null) historyEl.style.right = s.history.right + 'px';
+    if (s.history.fontSize != null) {
+      historyEl.style.setProperty('--history-font-size', s.history.fontSize + 'px');
+    }
+    if (s.history.maxItems != null) maxItems = s.history.maxItems;
+  }
+}
+
+function showSubtitle(data) {
+  clearTimeout(fadeTimer);
+  subtitleEl.classList.remove('fading');
+
+  subtitleEl.querySelector('.author').textContent = data.author + ': ';
+  subtitleEl.querySelector('.message').textContent = data.message;
+  subtitleEl.querySelector('.response').textContent = data.response;
+  subtitleEl.querySelector('.english').textContent = data.english || '';
+
+  subtitleEl.classList.add('visible');
+}
+
+function fadeSubtitle() {
+  const duration = parseFloat(subtitleEl.dataset.fadeDuration || 3) * 1000;
+  fadeTimer = setTimeout(() => {
+    subtitleEl.classList.add('fading');
+    subtitleEl.classList.remove('visible');
+  }, duration);
+}
+
+function addHistory(data) {
+  const item = document.createElement('div');
+  item.className = 'history-item';
+  item.innerHTML = `
+    <div class="comment"><span class="author">${esc(data.author)}: </span>${esc(data.message)}</div>
+    <div class="response">${esc(data.response)}</div>
+    <div class="english">${esc(data.english || '')}</div>
+  `;
+
+  // 先頭に追加
+  historyEl.insertBefore(item, historyEl.firstChild);
+
+  // 最大件数を超えたら削除
+  while (historyEl.children.length > maxItems) {
+    historyEl.removeChild(historyEl.lastChild);
+  }
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// WebSocket接続
+function connectWS() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${location.host}/ws/overlay`);
+
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+
+    if (data.type === 'comment') {
+      showSubtitle(data);
+      addHistory(data);
+    } else if (data.type === 'speaking_end') {
+      fadeSubtitle();
+    } else if (data.type === 'settings_update') {
+      applySettings(data);
+    }
+  };
+
+  ws.onclose = () => {
+    // 再接続
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+}
+
+loadSettings();
+connectWS();
+</script>
+
+</body>
+</html>

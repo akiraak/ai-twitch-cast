@@ -118,6 +118,22 @@ class OBSController:
         )
         print(f"ゲームキャプチャを追加しました: {source_name}")
 
+    def add_browser_source(self, scene_name, source_name, url, width=1920, height=1080):
+        """ブラウザソースを追加する"""
+        self._client.create_input(
+            sceneName=scene_name,
+            inputName=source_name,
+            inputKind="browser_source",
+            inputSettings={
+                "url": url,
+                "width": width,
+                "height": height,
+                "css": "",
+            },
+            sceneItemEnabled=True,
+        )
+        print(f"ブラウザソースを追加しました: {source_name}")
+
     def add_text_source(self, scene_name, source_name, text, font_size=48):
         """テキストソースを追加する"""
         self._client.create_input(
@@ -225,6 +241,13 @@ class OBSController:
                 scene_name, name,
                 window=source.get("window", ""),
                 allow_transparency=source.get("allow_transparency", False),
+            )
+        elif kind == "browser":
+            self.add_browser_source(
+                scene_name, name,
+                url=source.get("url", ""),
+                width=source.get("width", 1920),
+                height=source.get("height", 1080),
             )
         else:
             print(f"  不明なソース種類: {kind}")
