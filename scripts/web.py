@@ -127,6 +127,11 @@ async def start():
         state.vts_connected = True
     scene_config.reload()
     state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
+    # ブラウザソースのキャッシュを確実にクリア
+    try:
+        state.obs.refresh_browser_source(f"{scene_config.PREFIX}オーバーレイ")
+    except Exception:
+        pass
     await state.ensure_reader()
     return {"ok": True}
 

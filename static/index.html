@@ -242,6 +242,37 @@
       <input type="range" id="ov-hist-max" min="1" max="10" step="1" value="5">
       <input type="number" id="ov-hist-max-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="5">
     </div>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">TODOパネル</h3>
+    <div class="slider-row">
+      <label>X</label>
+      <input type="range" id="ov-todo-x" min="0" max="1920" step="10" value="960">
+      <input type="number" id="ov-todo-x-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="960">
+    </div>
+    <div class="slider-row">
+      <label>Y</label>
+      <input type="range" id="ov-todo-y" min="0" max="1080" step="10" value="540">
+      <input type="number" id="ov-todo-y-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="540">
+    </div>
+    <div class="slider-row">
+      <label>幅</label>
+      <input type="range" id="ov-todo-width" min="200" max="1920" step="10" value="460">
+      <input type="number" id="ov-todo-width-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="460">
+    </div>
+    <div class="slider-row">
+      <label>高さ</label>
+      <input type="range" id="ov-todo-height" min="0" max="1080" step="10" value="0">
+      <input type="number" id="ov-todo-height-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+    </div>
+    <div class="slider-row">
+      <label>文字</label>
+      <input type="range" id="ov-todo-font" min="10" max="40" step="1" value="15">
+      <input type="number" id="ov-todo-font-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="15">
+    </div>
+    <div class="slider-row">
+      <label>タイトル</label>
+      <input type="range" id="ov-todo-title-font" min="12" max="48" step="1" value="18">
+      <input type="number" id="ov-todo-title-font-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="18">
+    </div>
     <div class="btn-row" style="margin-top:8px;">
       <button onclick="saveOverlaySettings()">保存</button>
       <button class="secondary" onclick="loadOverlaySettings()">読込</button>
@@ -721,6 +752,12 @@ const ovSliders = [
   ['ov-hist-right', 'ov-hist-right-num'],
   ['ov-hist-font', 'ov-hist-font-num'],
   ['ov-hist-max', 'ov-hist-max-num'],
+  ['ov-todo-x', 'ov-todo-x-num'],
+  ['ov-todo-y', 'ov-todo-y-num'],
+  ['ov-todo-width', 'ov-todo-width-num'],
+  ['ov-todo-height', 'ov-todo-height-num'],
+  ['ov-todo-font', 'ov-todo-font-num'],
+  ['ov-todo-title-font', 'ov-todo-title-font-num'],
 ];
 ovSliders.forEach(([sid, nid]) => {
   const s = document.getElementById(sid);
@@ -741,6 +778,14 @@ function getOverlayValues() {
       right: parseFloat(document.getElementById('ov-hist-right').value),
       fontSize: parseInt(document.getElementById('ov-hist-font').value),
       maxItems: parseInt(document.getElementById('ov-hist-max').value),
+    },
+    todo: {
+      positionX: parseInt(document.getElementById('ov-todo-x').value),
+      positionY: parseInt(document.getElementById('ov-todo-y').value),
+      width: parseInt(document.getElementById('ov-todo-width').value),
+      height: parseInt(document.getElementById('ov-todo-height').value),
+      fontSize: parseInt(document.getElementById('ov-todo-font').value),
+      titleFontSize: parseInt(document.getElementById('ov-todo-title-font').value),
     },
   };
 }
@@ -763,6 +808,20 @@ function setOverlayValues(s) {
     document.getElementById('ov-hist-font-num').value = s.history.fontSize ?? 18;
     document.getElementById('ov-hist-max').value = s.history.maxItems ?? 5;
     document.getElementById('ov-hist-max-num').value = s.history.maxItems ?? 5;
+  }
+  if (s.todo) {
+    document.getElementById('ov-todo-x').value = s.todo.positionX ?? 960;
+    document.getElementById('ov-todo-x-num').value = s.todo.positionX ?? 960;
+    document.getElementById('ov-todo-y').value = s.todo.positionY ?? 540;
+    document.getElementById('ov-todo-y-num').value = s.todo.positionY ?? 540;
+    document.getElementById('ov-todo-width').value = s.todo.width ?? 460;
+    document.getElementById('ov-todo-width-num').value = s.todo.width ?? 460;
+    document.getElementById('ov-todo-height').value = s.todo.height ?? 0;
+    document.getElementById('ov-todo-height-num').value = s.todo.height ?? 0;
+    document.getElementById('ov-todo-font').value = s.todo.fontSize ?? 15;
+    document.getElementById('ov-todo-font-num').value = s.todo.fontSize ?? 15;
+    document.getElementById('ov-todo-title-font').value = s.todo.titleFontSize ?? 18;
+    document.getElementById('ov-todo-title-font-num').value = s.todo.titleFontSize ?? 18;
   }
 }
 

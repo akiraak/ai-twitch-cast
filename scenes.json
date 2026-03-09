@@ -16,6 +16,14 @@
       "right": 30,
       "fontSize": 18,
       "maxItems": 5
+    },
+    "todo": {
+      "positionX": 960,
+      "positionY": 370,
+      "width": 990,
+      "height": 860,
+      "fontSize": 24,
+      "titleFontSize": 29
     }
   },
   "avatar": {

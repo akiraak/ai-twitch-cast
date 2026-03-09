@@ -1,12 +1,12 @@
-"""オーバーレイルート（WebSocket + 設定）"""
+"""オーバーレイルート（WebSocket + 設定 + TODO表示）"""
 
 import json
 import logging
+import re
 from pathlib import Path
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
 
 from scripts import state
 from src.scene_config import CONFIG_PATH
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
+TODO_PATH = PROJECT_DIR / "TODO.md"
 
 
 @router.websocket("/ws/overlay")
@@ -41,21 +42,32 @@ async def get_overlay_settings():
     return config.get("overlay", {
         "subtitle": {"bottom": 80, "fontSize": 28, "fadeDuration": 3},
         "history": {"top": 30, "right": 30, "fontSize": 18, "maxItems": 5},
+        "todo": {"width": 460, "fontSize": 15, "titleFontSize": 18},
     })
 
 
-class OverlaySettings(BaseModel):
-    subtitle: dict
-    history: dict
+@router.get("/api/todo")
+async def get_todo():
+    """TODO.mdから未完了タスクを返す"""
+    if not TODO_PATH.exists():
+        return {"items": []}
+    text = TODO_PATH.read_text(encoding="utf-8")
+    items = []
+    for line in text.splitlines():
+        m = re.match(r"\s*-\s*\[\s*\]\s*(.*)", line)
+        if m:
+            items.append(m.group(1).strip())
+    return {"items": items}
 
 
 @router.post("/api/overlay/settings")
-async def save_overlay_settings(body: OverlaySettings):
+async def save_overlay_settings(request: Request):
+    body = await request.json()
     with open(CONFIG_PATH, encoding="utf-8") as f:
         config = json.load(f)
-    config["overlay"] = body.model_dump()
+    config["overlay"] = body
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
         f.write("\n")
-    await state.broadcast_overlay({"type": "settings_update", **body.model_dump()})
+    await state.broadcast_overlay({"type": "settings_update", **body})
     return {"ok": True}

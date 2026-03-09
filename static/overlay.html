@@ -102,6 +102,45 @@
     to { opacity: 1; transform: translateX(0); }
   }
 
+  /* TODOパネル（中央） */
+  #todo-panel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    width: 460px;
+    background: linear-gradient(135deg, rgba(5, 5, 15, 0.95), rgba(10, 5, 20, 0.95));
+    border: 1px solid rgba(124, 77, 255, 0.3);
+    border-radius: 12px;
+    padding: 16px 20px;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+  #todo-panel .todo-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #7c4dff;
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+    text-shadow: 0 0 10px rgba(124, 77, 255, 0.4);
+  }
+  #todo-panel .todo-item {
+    font-size: 15px;
+    color: #e0e0e0;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    line-height: 1.5;
+  }
+  #todo-panel .todo-item:last-child {
+    border-bottom: none;
+  }
+  #todo-panel .todo-item::before {
+    content: "\2610 ";
+    color: #7c4dff;
+    font-size: 14px;
+  }
+
 </style>
 </head>
 <body>
@@ -112,24 +151,23 @@
   <div class="english"></div>
 </div>
 
+<div id="todo-panel">
+  <div class="todo-title">TODO</div>
+  <div id="todo-list"></div>
+</div>
+
 <div id="history"></div>
 
 <script>
 const subtitleEl = document.getElementById('subtitle');
 const historyEl = document.getElementById('history');
+const todoPanelEl = document.getElementById('todo-panel');
+const todoListEl = document.getElementById('todo-list');
 let fadeTimer = null;
 let maxItems = 5;
 
-// 設定を読み込み
-async function loadSettings() {
-  try {
-    const res = await fetch('/api/overlay/settings');
-    const s = await res.json();
-    applySettings(s);
-  } catch (e) {
-    console.log('設定読み込みスキップ:', e.message);
-  }
-}
+// TODO設定を保持
+let todoSettings = {};
 
 function applySettings(s) {
   if (s.subtitle) {
@@ -144,6 +182,30 @@ function applySettings(s) {
       historyEl.style.setProperty('--history-font-size', s.history.fontSize + 'px');
     }
     if (s.history.maxItems != null) maxItems = s.history.maxItems;
+  }
+  if (s.todo) {
+    todoSettings = s.todo;
+    if (s.todo.width != null) todoPanelEl.style.width = s.todo.width + 'px';
+    if (s.todo.height) {
+      todoPanelEl.style.height = s.todo.height + 'px';
+      todoPanelEl.style.overflowY = 'auto';
+    } else {
+      todoPanelEl.style.height = '';
+      todoPanelEl.style.overflowY = '';
+    }
+    if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'px';
+    if (s.todo.positionX != null || s.todo.positionY != null) {
+      const x = s.todo.positionX ?? 960;
+      const y = s.todo.positionY ?? 540;
+      todoPanelEl.style.left = x + 'px';
+      todoPanelEl.style.top = y + 'px';
+    }
+    // 既存のTODOアイテムにもフォントサイズを適用
+    if (s.todo.fontSize != null) {
+      todoPanelEl.querySelectorAll('.todo-item').forEach(el => el.style.fontSize = s.todo.fontSize + 'px');
+    }
+    // TODOを再読み込みして確実に反映
+    loadTodo();
   }
 }
 
@@ -176,10 +238,8 @@ function addHistory(data) {
     <div class="english">${esc(data.english || '')}</div>
   `;
 
-  // 先頭に追加
   historyEl.insertBefore(item, historyEl.firstChild);
 
-  // 最大件数を超えたら削除
   while (historyEl.children.length > maxItems) {
     historyEl.removeChild(historyEl.lastChild);
   }
@@ -191,6 +251,24 @@ function esc(s) {
   return d.innerHTML;
 }
 
+// TODO読み込み
+async function loadTodo() {
+  try {
+    const res = await fetch('/api/todo');
+    const data = await res.json();
+    todoListEl.innerHTML = '';
+    const fs = todoSettings.fontSize;
+    for (const item of data.items) {
+      const div = document.createElement('div');
+      div.className = 'todo-item';
+      div.textContent = item;
+      if (fs) div.style.fontSize = fs + 'px';
+      todoListEl.appendChild(div);
+    }
+  } catch (e) {
+    console.log('TODO読み込みエラー:', e.message);
+  }
+}
 
 // WebSocket接続
 function connectWS() {
@@ -207,10 +285,10 @@ function connectWS() {
       fadeSubtitle();
     } else if (data.type === 'settings_update') {
       applySettings(data);
+    }
   };
 
   ws.onclose = () => {
-    // 再接続
     setTimeout(connectWS, 3000);
   };
 
@@ -219,8 +297,21 @@ function connectWS() {
   };
 }
 
-loadSettings();
-connectWS();
+// 初期化: 設定を読み込んでからTODOを読み込む
+async function init() {
+  try {
+    const res = await fetch('/api/overlay/settings');
+    const s = await res.json();
+    applySettings(s);
+  } catch (e) {
+    console.log('設定読み込みスキップ:', e.message);
+  }
+  await loadTodo();
+  setInterval(loadTodo, 30000);
+  connectWS();
+}
+
+init();
 </script>
 
 </body>

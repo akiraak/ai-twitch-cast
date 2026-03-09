@@ -197,6 +197,14 @@ class OBSController:
         )
         logger.info("ブラウザソースを追加しました: %s", source_name)
 
+    def refresh_browser_source(self, source_name):
+        """ブラウザソースのキャッシュを無視してリフレッシュする"""
+        self._client.send("PressInputPropertiesButton", {
+            "inputName": source_name,
+            "propertyName": "refreshnocache",
+        }, raw=True)
+        logger.info("ブラウザソースをリフレッシュしました: %s", source_name)
+
     def add_text_source(self, scene_name, source_name, text, font_size=48):
         """テキストソースを追加する"""
         self._client.create_input(

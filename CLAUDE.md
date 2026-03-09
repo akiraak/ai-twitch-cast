@@ -97,3 +97,9 @@ ai-twitch-cast/
 ```
 
 ※ プロジェクト進行に応じて更新する
+
+## Webサーバー運用注意
+
+- Webサーバーは `uvicorn scripts.web:app --reload --host 0.0.0.0 --port 8000` で起動
+- **Pydanticモデルやルートの変更後は `--reload` では反映されないことがある。その場合はuvicornプロセスを手動で再起動すること**
+- OBSのブラウザソースはHTMLをキャッシュするため、overlay.html等を変更した場合はSetupボタン押下またはOBS側でブラウザソースの「キャッシュを無視してページをリフレッシュ」が必要

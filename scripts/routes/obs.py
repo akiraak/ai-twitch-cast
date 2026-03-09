@@ -168,6 +168,16 @@ async def obs_terminal_save():
     return {"ok": True}
 
 
+OVERLAY_SOURCE_NAME = f"{PREFIX}オーバーレイ"
+
+
+@router.post("/api/obs/overlay/refresh")
+async def obs_overlay_refresh():
+    """ブラウザソース（オーバーレイ）をリフレッシュする"""
+    state.obs.refresh_browser_source(OVERLAY_SOURCE_NAME)
+    return {"ok": True}
+
+
 @router.post("/api/obs/teardown")
 async def obs_teardown():
     state.obs.teardown_scenes(scene_config.SCENES)
