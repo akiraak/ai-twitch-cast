@@ -76,10 +76,6 @@
           }
         },
         {
-          "kind": "media",
-          "name": "BGM"
-        },
-        {
           "kind": "browser",
           "name": "オーバーレイ",
           "url": "http://localhost:8000/overlay",

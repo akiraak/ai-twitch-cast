@@ -191,7 +191,7 @@ class OBSController:
                 "url": cache_bust_url,
                 "width": width,
                 "height": height,
-                "reroute_audio": False,
+                "reroute_audio": True,
             },
             sceneItemEnabled=True,
         )
@@ -290,52 +290,6 @@ class OBSController:
         """入力ソースを削除する"""
         self._client.remove_input(input_name)
         logger.info("ソースを削除しました: %s", input_name)
-
-    def add_media_source(self, scene_name, source_name):
-        """メディアソースを追加する（初期状態は無音）"""
-        self._client.create_input(
-            sceneName=scene_name,
-            inputName=source_name,
-            inputKind="ffmpeg_source",
-            inputSettings={
-                "local_file": "",
-                "looping": True,
-            },
-            sceneItemEnabled=False,
-        )
-        self._client.set_input_audio_monitor_type(
-            source_name, "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"
-        )
-        logger.info("メディアソースを追加しました: %s", source_name)
-
-    def play_media(self, source_name, file_path):
-        """メディアソースのファイルを設定して再生する"""
-        win_path = to_windows_path(str(file_path))
-        self._client.set_input_settings(
-            source_name,
-            {"local_file": win_path, "looping": True},
-            overlay=True,
-        )
-        self._enable_input(source_name, True)
-        # 再生をトリガー
-        self._client.trigger_media_input_action(
-            source_name, "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART"
-        )
-        logger.info("メディア再生: %s → %s", source_name, file_path)
-
-    def stop_media(self, source_name):
-        """メディアソースを停止する"""
-        self._client.set_input_settings(
-            source_name,
-            {"local_file": ""},
-            overlay=True,
-        )
-        self._enable_input(source_name, False)
-        logger.info("メディア停止: %s", source_name)
-
-    def set_media_volume(self, source_name, volume_db):
-        """メディアソースの音量を設定する（dB）"""
-        self._client.set_input_volume(source_name, vol_db=volume_db)
 
     def _enable_input(self, input_name, enabled):
         """全シーンで指定入力の表示を切り替える"""
@@ -446,8 +400,6 @@ class OBSController:
             )
         elif kind == "todo":
             self.add_todo_source(scene_name, name, source.get("text", ""))
-        elif kind == "media":
-            self.add_media_source(scene_name, name)
         else:
             logger.warning("不明なソース種類: %s", kind)
 

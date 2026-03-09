@@ -1,8 +1,7 @@
-"""オーバーレイルート（WebSocket + 設定）"""
+"""オーバーレイルート（WebSocket + 設定 + BGM）"""
 
 import json
 import logging
-import math
 from pathlib import Path
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -10,7 +9,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from scripts import state
-from src.scene_config import CONFIG_PATH, PREFIX
+from src.scene_config import CONFIG_PATH
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -18,7 +17,6 @@ logger = logging.getLogger(__name__)
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
 TODO_PATH = PROJECT_DIR / "TODO.md"
-BGM_SOURCE_NAME = f"{PREFIX}BGM"
 
 
 @router.websocket("/ws/overlay")
@@ -77,13 +75,6 @@ async def toggle_todo():
 BGM_DIR = PROJECT_DIR / "resources" / "audio" / "bgm"
 
 
-def _linear_to_db(volume: float) -> float:
-    """0.0〜1.0のリニア音量をdBに変換する"""
-    if volume <= 0:
-        return -100.0
-    return 20 * math.log10(volume)
-
-
 @router.get("/api/bgm/list")
 async def bgm_list():
     """BGMファイル一覧を返す"""
@@ -99,24 +90,27 @@ class BGMControl(BaseModel):
 
 @router.post("/api/bgm")
 async def bgm_control(body: BGMControl):
-    """BGM再生制御（OBSメディアソース経由）"""
-    if not state.obs_connected:
-        return {"ok": False, "error": "OBS未接続"}
-
+    """BGM再生制御（オーバーレイブラウザソース経由）"""
     try:
         if body.action == "play" and body.track:
             file_path = BGM_DIR / f"{body.track}.mp3"
             if not file_path.exists():
                 return {"ok": False, "error": "ファイルが見つかりません"}
-            if body.volume is not None:
-                state.obs.set_media_volume(BGM_SOURCE_NAME, _linear_to_db(body.volume))
-            state.obs.play_media(BGM_SOURCE_NAME, file_path)
-            logger.info("BGM再生: %s", body.track)
+            vol = body.volume if body.volume is not None else 0.5
+            await state.broadcast_overlay({
+                "type": "bgm_play",
+                "url": f"/bgm/{body.track}.mp3",
+                "volume": vol,
+            })
+            logger.info("BGM再生: %s (volume=%.2f)", body.track, vol)
         elif body.action == "stop":
-            state.obs.stop_media(BGM_SOURCE_NAME)
+            await state.broadcast_overlay({"type": "bgm_stop"})
             logger.info("BGM停止")
         elif body.action == "volume" and body.volume is not None:
-            state.obs.set_media_volume(BGM_SOURCE_NAME, _linear_to_db(body.volume))
+            await state.broadcast_overlay({
+                "type": "bgm_volume",
+                "volume": body.volume,
+            })
         return {"ok": True}
     except Exception as e:
         logger.warning("BGM制御エラー: %s", e)

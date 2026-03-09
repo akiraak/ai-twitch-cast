@@ -114,6 +114,7 @@
 
 <div id="history"></div>
 
+<audio id="bgm" loop></audio>
 
 <script>
 const subtitleEl = document.getElementById('subtitle');
@@ -208,6 +209,17 @@ function connectWS() {
       fadeSubtitle();
     } else if (data.type === 'settings_update') {
       applySettings(data);
+    } else if (data.type === 'bgm_play') {
+      const bgm = document.getElementById('bgm');
+      bgm.src = data.url;
+      bgm.volume = data.volume != null ? data.volume : 0.5;
+      bgm.play();
+    } else if (data.type === 'bgm_stop') {
+      const bgm = document.getElementById('bgm');
+      bgm.pause();
+      bgm.src = '';
+    } else if (data.type === 'bgm_volume') {
+      document.getElementById('bgm').volume = data.volume;
     }
   };
 
