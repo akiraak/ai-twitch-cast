@@ -132,8 +132,13 @@ class OBSController:
         )
         logger.info("ゲームキャプチャを追加しました: %s", source_name)
 
-    def add_window_capture(self, scene_name, source_name, window="", cursor=True):
-        """ウィンドウキャプチャソースを追加する"""
+    def add_window_capture(self, scene_name, source_name, window="", cursor=True,
+                           window_match=None):
+        """ウィンドウキャプチャソースを追加する
+
+        Args:
+            window_match: ウィンドウタイトルに含まれるべきキーワードのリスト（すべて一致で選択）
+        """
         settings = {"cursor": cursor}
         if window:
             settings["window"] = window
@@ -144,7 +149,34 @@ class OBSController:
             inputSettings=settings,
             sceneItemEnabled=True,
         )
+        # window_matchが指定されていてwindowが未指定の場合、利用可能なウィンドウから検索
+        if window_match and not window:
+            matched = self._find_matching_window(source_name, window_match)
+            if matched:
+                self._client.set_input_settings(source_name, {"window": matched}, overlay=True)
+                logger.info("ウィンドウを自動選択しました: %s → %s", source_name, matched)
+            else:
+                logger.warning("一致するウィンドウが見つかりません: %s (キーワード: %s)",
+                               source_name, window_match)
+                return
         logger.info("ウィンドウキャプチャを追加しました: %s", source_name)
+
+    def _find_matching_window(self, input_name, keywords):
+        """入力ソースの利用可能なウィンドウ一覧からキーワードに一致するものを探す"""
+        try:
+            response = self._client.send("GetInputPropertiesListPropertyItems", {
+                "inputName": input_name,
+                "propertyName": "window",
+            }, raw=True)
+            items = response.get("propertyItems", [])
+            for item in items:
+                value = item.get("itemValue", "")
+                title_lower = value.lower()
+                if all(kw.lower() in title_lower for kw in keywords):
+                    return value
+        except Exception as e:
+            logger.warning("ウィンドウ一覧の取得に失敗: %s", e)
+        return None
 
     def add_browser_source(self, scene_name, source_name, url, width=1920, height=1080):
         """ブラウザソースを追加する"""
@@ -275,6 +307,7 @@ class OBSController:
                 scene_name, name,
                 window=source.get("window", ""),
                 cursor=source.get("cursor", True),
+                window_match=source.get("window_match"),
             )
         elif kind == "browser":
             self.add_browser_source(

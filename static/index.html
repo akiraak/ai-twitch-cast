@@ -46,7 +46,6 @@
   <button style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/start')">Setup</button>
   <button style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/stream/start')">配信開始</button>
   <button class="danger" style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/stream/stop')">配信停止</button>
-  <button class="secondary" style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/overlay/todo/toggle')">TODO表示</button>
 </div>
 
 <details class="env-card" style="margin-bottom:16px;">
@@ -122,6 +121,32 @@
       <button onclick="saveAvatarToJson()">scenes.jsonに保存</button>
     </div>
     <div class="status" id="avatar-status"></div>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">ターミナル位置</h3>
+    <div class="slider-row">
+      <label>X</label>
+      <input type="range" class="term-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
+      <input type="number" class="term-num" data-key="positionX" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+    </div>
+    <div class="slider-row">
+      <label>Y</label>
+      <input type="range" class="term-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
+      <input type="number" class="term-num" data-key="positionY" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+    </div>
+    <div class="slider-row">
+      <label>幅</label>
+      <input type="range" class="term-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="960">
+      <input type="number" class="term-num" data-key="boundsWidth" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="960">
+    </div>
+    <div class="slider-row">
+      <label>高さ</label>
+      <input type="range" class="term-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="540">
+      <input type="number" class="term-num" data-key="boundsHeight" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="540">
+    </div>
+    <div class="btn-row" style="margin-top:4px;">
+      <button class="secondary" onclick="loadTerminalTransform()">取得</button>
+      <button onclick="saveTerminalToJson()">scenes.jsonに保存</button>
+    </div>
+    <div class="status" id="term-status"></div>
     <div class="status" id="obs-status"></div>
   </div>
 
@@ -431,12 +456,62 @@ async function loadAvatarTransform() {
 }
 
 async function saveAvatarToJson() {
+  const res = await api('POST', '/api/obs/avatar/save');
+  document.getElementById('avatar-status').textContent =
+    res?.ok ? 'scenes.jsonに保存しました' : 'エラー: ' + (res?.error || '保存に失敗');
+}
+
+// --- ターミナル位置調整 ---
+let _termUpdateTimer = null;
+
+function sendTerminalTransform(key, value) {
+  clearTimeout(_termUpdateTimer);
+  _termUpdateTimer = setTimeout(() => {
+    api('POST', '/api/obs/terminal/transform', { [key]: value });
+  }, 100);
+}
+
+document.querySelectorAll('.term-slider').forEach(slider => {
+  slider.addEventListener('input', () => {
+    const key = slider.dataset.key;
+    const val = parseFloat(slider.value);
+    const numInput = document.querySelector(`.term-num[data-key="${key}"]`);
+    numInput.value = val;
+    sendTerminalTransform(key, val);
+  });
+});
+
+document.querySelectorAll('.term-num').forEach(numInput => {
+  numInput.addEventListener('change', () => {
+    const key = numInput.dataset.key;
+    const val = parseFloat(numInput.value);
+    const slider = document.querySelector(`.term-slider[data-key="${key}"]`);
+    slider.value = val;
+    sendTerminalTransform(key, val);
+  });
+});
+
+async function loadTerminalTransform() {
   try {
-    await api('POST', '/api/obs/avatar/save');
-    document.getElementById('avatar-status').textContent = 'scenes.jsonに保存しました';
+    const data = await (await fetch('/api/obs/terminal/transform')).json();
+    const keys = ['positionX', 'positionY', 'boundsWidth', 'boundsHeight'];
+    for (const key of keys) {
+      const val = data[key] ?? 0;
+      const slider = document.querySelector(`.term-slider[data-key="${key}"]`);
+      const numInput = document.querySelector(`.term-num[data-key="${key}"]`);
+      if (slider) slider.value = val;
+      if (numInput) numInput.value = Math.round(val);
+    }
+    document.getElementById('term-status').textContent = '取得しました';
   } catch (e) {
-    document.getElementById('avatar-status').textContent = 'エラー: ' + e.message;
+    document.getElementById('term-status').textContent = 'エラー: ' + e.message;
   }
+}
+
+async function saveTerminalToJson() {
+  const res = await api('POST', '/api/obs/terminal/save');
+  document.getElementById('term-status').textContent =
+    res?.ok ? 'scenes.jsonに保存しました' : 'エラー: ' + (res?.error || '保存に失敗');
 }
 
 // --- 環境設定 ---

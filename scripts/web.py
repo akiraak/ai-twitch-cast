@@ -29,7 +29,8 @@ from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream import router as stream_router
 from scripts.routes.twitch import router as twitch_router
 from src.ai_responder import load_character
-from src.scene_config import AVATAR_APP, MAIN_SCENE, SCENES
+from src import scene_config
+from src.scene_config import AVATAR_APP
 
 app = FastAPI()
 
@@ -123,7 +124,8 @@ async def start():
     else:
         await state.vts.connect()
         state.vts_connected = True
-    state.obs.setup_scenes(SCENES, MAIN_SCENE)
+    scene_config.reload()
+    state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
     await state.ensure_reader()
     return {"ok": True}
 

@@ -73,3 +73,9 @@ def _load_config():
 
 
 SCENES, MAIN_SCENE = _load_config()
+
+
+def reload():
+    """scenes.json を再読み込みしてSCENES, MAIN_SCENEを更新する"""
+    global SCENES, MAIN_SCENE
+    SCENES, MAIN_SCENE = _load_config()

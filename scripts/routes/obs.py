@@ -1,13 +1,16 @@
 """OBS制御ルート"""
 
 import json
+import logging
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from scripts import state
-from src.scene_config import CONFIG_PATH, MAIN_SCENE, PREFIX, SCENES
+from src import scene_config
+from src.scene_config import CONFIG_PATH, PREFIX
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -42,7 +45,13 @@ async def obs_scene(body: SceneSwitch):
 
 @router.post("/api/obs/setup")
 async def obs_setup():
-    state.obs.setup_scenes(SCENES, MAIN_SCENE)
+    scene_config.reload()
+    # ターミナルのtransformをログ出力して確認
+    for sc in scene_config.SCENES:
+        for src in sc["sources"]:
+            if src.get("name") == TERMINAL_SOURCE_NAME:
+                logger.info("Setup: ターミナルtransform=%s", src.get("transform"))
+    state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
     return {"ok": True}
 
 
@@ -104,7 +113,62 @@ async def obs_avatar_save():
     return {"ok": True}
 
 
+TERMINAL_SOURCE_NAME = f"{PREFIX}ターミナル"
+
+
+@router.get("/api/obs/terminal/transform")
+async def obs_terminal_transform_get():
+    scene = state.obs.get_scenes()["current"]
+    transform = state.obs.get_source_transform(scene, TERMINAL_SOURCE_NAME)
+    return transform
+
+
+@router.post("/api/obs/terminal/transform")
+async def obs_terminal_transform_set(body: AvatarTransform):
+    scene = state.obs.get_scenes()["current"]
+    update = {k: v for k, v in body.model_dump().items() if v is not None}
+    state.obs.set_source_transform(scene, TERMINAL_SOURCE_NAME, update)
+    return {"ok": True}
+
+
+@router.post("/api/obs/terminal/save")
+async def obs_terminal_save():
+    """現在のターミナル位置をscenes.jsonの現在シーンに保存する"""
+    scene = state.obs.get_scenes()["current"]
+    current_base = scene.removeprefix(PREFIX)
+    logger.info("ターミナル保存: シーン='%s', base='%s'", scene, current_base)
+
+    obs_transform = state.obs.get_source_transform(scene, TERMINAL_SOURCE_NAME)
+    save_keys = ["positionX", "positionY", "boundsType", "boundsWidth", "boundsHeight"]
+    transform = {k: obs_transform[k] for k in save_keys if k in obs_transform}
+    logger.info("ターミナル保存: transform=%s", transform)
+
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+
+    found = False
+    for sc in config["scenes"]:
+        if sc["name"] == current_base:
+            for src in sc["sources"]:
+                if src.get("kind") == "window_capture" and src.get("name") == "ターミナル":
+                    src["transform"] = transform
+                    found = True
+                    break
+            break
+
+    if not found:
+        logger.warning("ターミナル保存: シーン '%s' にターミナルが見つかりません", current_base)
+        return {"ok": False, "error": f"シーン '{current_base}' にターミナルが見つかりません"}
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+    logger.info("ターミナル保存: scenes.jsonに書き込み完了")
+    return {"ok": True}
+
+
 @router.post("/api/obs/teardown")
 async def obs_teardown():
-    state.obs.teardown_scenes(SCENES)
+    state.obs.teardown_scenes(scene_config.SCENES)
     return {"ok": True}

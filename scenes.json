@@ -62,13 +62,17 @@
           "kind": "window_capture",
           "name": "ターミナル",
           "window": "",
+          "window_match": [
+            "claude",
+            "ai-twitch-cast"
+          ],
           "cursor": true,
           "transform": {
-            "positionX": 0.0,
-            "positionY": 0.0,
+            "positionX": -199.0,
+            "positionY": 195.0,
             "boundsType": "OBS_BOUNDS_SCALE_INNER",
-            "boundsWidth": 960.0,
-            "boundsHeight": 540.0
+            "boundsWidth": 1539.0,
+            "boundsHeight": 843.0
           }
         },
         {
