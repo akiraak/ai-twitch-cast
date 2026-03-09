@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
-TODO_PATH = PROJECT_DIR / "TODO.md"
 
 
 @router.websocket("/ws/overlay")
@@ -35,18 +34,6 @@ async def overlay_page():
     return (STATIC_DIR / "overlay.html").read_text(encoding="utf-8")
 
 
-@router.get("/todo", response_class=HTMLResponse)
-async def todo_page():
-    html = (STATIC_DIR / "todo.html").read_text(encoding="utf-8")
-    todo_content = ""
-    if TODO_PATH.exists():
-        todo_content = TODO_PATH.read_text(encoding="utf-8")
-    escaped = json.dumps(todo_content, ensure_ascii=False)
-    inject = f"<script>var __TODO_INITIAL__ = {escaped};</script>"
-    html = html.replace("</head>", inject + "\n</head>")
-    return html
-
-
 @router.get("/api/overlay/settings")
 async def get_overlay_settings():
     with open(CONFIG_PATH, encoding="utf-8") as f:
@@ -55,22 +42,6 @@ async def get_overlay_settings():
         "subtitle": {"bottom": 80, "fontSize": 28, "fadeDuration": 3},
         "history": {"top": 30, "right": 30, "fontSize": 18, "maxItems": 5},
     })
-
-
-@router.get("/api/todo")
-async def get_todo():
-    """TODO.mdの内容を返す"""
-    if TODO_PATH.exists():
-        return {"content": TODO_PATH.read_text(encoding="utf-8")}
-    return {"content": ""}
-
-
-@router.post("/api/overlay/todo/toggle")
-async def toggle_todo():
-    """オーバーレイのTODO表示をトグルする"""
-    await state.broadcast_overlay({"type": "todo_toggle"})
-    return {"ok": True}
-
 
 
 class OverlaySettings(BaseModel):

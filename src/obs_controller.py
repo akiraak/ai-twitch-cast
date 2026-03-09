@@ -197,36 +197,6 @@ class OBSController:
         )
         logger.info("ブラウザソースを追加しました: %s", source_name)
 
-    def add_todo_source(self, scene_name, source_name, todo_text):
-        """TODOテキストソースを追加する"""
-        self._client.create_input(
-            sceneName=scene_name,
-            inputName=source_name,
-            inputKind="text_gdiplus_v3",
-            inputSettings={
-                "text": todo_text,
-                "font": {"face": "Yu Gothic UI", "size": 40, "style": "Bold"},
-                "color": 0xFFE8E8E8,  # 明るいグレー (ABGR)
-                "bk_color": 0x000000,  # 黒
-                "bk_opacity": 100,
-                "outline": False,
-                "align": "left",
-                "valign": "top",
-                "extents": True,
-                "extents_cx": 620,
-                "extents_cy": 780,
-                "extents_wrap": True,
-            },
-            sceneItemEnabled=True,
-        )
-        logger.info("TODOソースを追加しました: %s", source_name)
-
-    def update_todo_source(self, source_name, todo_text):
-        """TODOテキストソースのテキストを更新する"""
-        self._client.set_input_settings(
-            source_name, {"text": todo_text}, overlay=True
-        )
-
     def add_text_source(self, scene_name, source_name, text, font_size=48):
         """テキストソースを追加する"""
         self._client.create_input(
@@ -375,8 +345,6 @@ class OBSController:
                 width=source.get("width", 1920),
                 height=source.get("height", 1080),
             )
-        elif kind == "todo":
-            self.add_todo_source(scene_name, name, source.get("text", ""))
         else:
             logger.warning("不明なソース種類: %s", kind)
 
