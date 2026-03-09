@@ -51,6 +51,7 @@
 - [x] ターミナル位置をWeb UIから調整・scenes.jsonに保存可能に
 - [x] scenes.jsonのSetup時リロード対応（保存した設定が次回Setupで反映）
 - [x] TODOパネルをオーバーレイ起動時に自動表示
+- [x] BGM再生機能（OBSメディアソース経由、Web UIから選曲・音量調整・試聴対応）
 
 ## Phase 0: 環境構築・基盤
 

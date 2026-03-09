@@ -250,6 +250,25 @@
     <div class="status" id="ov-status"></div>
   </div>
 
+  <!-- BGM -->
+  <div class="card">
+    <h2>BGM</h2>
+    <div id="bgm-tracks" style="margin-bottom:8px;"></div>
+    <div class="slider-row">
+      <label>音量</label>
+      <input type="range" id="bgm-volume" min="0" max="1" step="0.05" value="0.3">
+      <span class="val" id="bgm-volume-val">0.30</span>
+    </div>
+    <div class="btn-row" style="margin-top:8px;">
+      <button class="danger" onclick="bgmStop()">停止</button>
+      <button class="secondary" onclick="bgmPreview()">試聴</button>
+      <button class="secondary" onclick="bgmPreviewStop()">試聴停止</button>
+    </div>
+    <audio id="bgm-preview" loop></audio>
+    <div style="font-size:0.7rem; color:#616161; margin-top:8px;">BGM: zukisuzuki BGM (フリー素材)</div>
+    <div class="status" id="bgm-status"></div>
+  </div>
+
   <!-- Character -->
   <div class="card" style="grid-column: 1 / -1;">
     <h2>キャラクター設定</h2>
@@ -847,10 +866,88 @@ async function searchCategories() {
   }
 }
 
+// --- BGM ---
+let _bgmCurrentTrack = null;
+
+async function loadBgmTracks() {
+  try {
+    const data = await (await fetch('/api/bgm/list')).json();
+    const container = document.getElementById('bgm-tracks');
+    container.innerHTML = '';
+    for (const track of data.tracks) {
+      const btn = document.createElement('button');
+      btn.className = 'secondary';
+      btn.id = 'bgm-' + track;
+      btn.style.cssText = 'margin:2px 4px 2px 0; font-size:0.8rem; padding:5px 12px;';
+      btn.textContent = track;
+      btn.onclick = () => bgmPlay(track);
+      container.appendChild(btn);
+    }
+  } catch (e) {}
+}
+
+async function bgmPlay(track) {
+  const vol = parseFloat(document.getElementById('bgm-volume').value);
+  bgmPreviewStop();
+  const res = await api('POST', '/api/bgm', { action: 'play', track, volume: vol });
+  if (res && !res.ok) {
+    document.getElementById('bgm-status').textContent = 'エラー: ' + (res.error || '再生失敗');
+    return;
+  }
+  // ハイライト更新
+  document.querySelectorAll('#bgm-tracks button').forEach(b => { b.style.background = ''; b.style.color = ''; });
+  const active = document.getElementById('bgm-' + track);
+  if (active) { active.style.background = '#7c4dff'; active.style.color = '#fff'; }
+  _bgmCurrentTrack = track;
+  document.getElementById('bgm-status').textContent = '再生中: ' + track;
+}
+
+function bgmStop() {
+  api('POST', '/api/bgm', { action: 'stop' });
+  bgmPreviewStop();
+  document.querySelectorAll('#bgm-tracks button').forEach(b => { b.className = 'secondary'; b.style.background = ''; b.style.color = ''; });
+  _bgmCurrentTrack = null;
+  document.getElementById('bgm-status').textContent = '停止';
+}
+
+function bgmPreview() {
+  // 選択中の曲がなければボタンからトラック名を取得
+  let track = _bgmCurrentTrack;
+  if (!track) {
+    const active = document.querySelector('#bgm-tracks button[style*="7c4dff"]');
+    if (active) track = active.textContent;
+  }
+  if (!track) {
+    document.getElementById('bgm-status').textContent = '曲を選んでください';
+    return;
+  }
+  const audio = document.getElementById('bgm-preview');
+  audio.src = '/bgm/' + encodeURIComponent(track) + '.mp3';
+  audio.volume = parseFloat(document.getElementById('bgm-volume').value);
+  audio.play();
+  document.getElementById('bgm-status').textContent = '試聴中（ローカル）: ' + track;
+}
+
+function bgmPreviewStop() {
+  const audio = document.getElementById('bgm-preview');
+  audio.pause();
+  audio.currentTime = 0;
+}
+
+document.getElementById('bgm-volume').addEventListener('input', function() {
+  const vol = parseFloat(this.value);
+  document.getElementById('bgm-volume-val').textContent = vol.toFixed(2);
+  // ローカル試聴の音量も更新
+  document.getElementById('bgm-preview').volume = vol;
+  // OBS側の音量も更新
+  api('POST', '/api/bgm', { action: 'volume', volume: vol });
+});
+
 // 初期読み込み
 loadCharacter();
 loadVsfDefaults();
 loadOverlaySettings();
+loadBgmTracks();
 refreshStatus();
 setInterval(refreshStatus, 3000);
 </script>

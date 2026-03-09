@@ -7,6 +7,7 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 resources/images/
+resources/audio/
 resources/vrm/
 tmp/
 *.zip

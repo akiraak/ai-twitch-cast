@@ -34,8 +34,12 @@ from src.scene_config import AVATAR_APP
 
 app = FastAPI()
 
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = PROJECT_DIR / "static"
+BGM_DIR = PROJECT_DIR / "resources" / "audio" / "bgm"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+if BGM_DIR.exists():
+    app.mount("/bgm", StaticFiles(directory=str(BGM_DIR)), name="bgm")
 
 # ルーターを登録
 app.include_router(obs_router)

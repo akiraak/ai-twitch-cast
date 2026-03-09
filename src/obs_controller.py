@@ -180,17 +180,24 @@ class OBSController:
 
     def add_browser_source(self, scene_name, source_name, url, width=1920, height=1080):
         """ブラウザソースを追加する"""
+        import time
+        sep = "&" if "?" in url else "?"
+        cache_bust_url = f"{url}{sep}_v={int(time.time())}"
         self._client.create_input(
             sceneName=scene_name,
             inputName=source_name,
             inputKind="browser_source",
             inputSettings={
-                "url": url,
+                "url": cache_bust_url,
                 "width": width,
                 "height": height,
                 "css": "",
             },
             sceneItemEnabled=True,
+        )
+        # 作成後に明示的に音声ルーティングを無効化
+        self._client.set_input_settings(
+            source_name, {"reroute_audio": False}, overlay=True
         )
         logger.info("ブラウザソースを追加しました: %s", source_name)
 
@@ -235,9 +242,92 @@ class OBSController:
         self._client.remove_input(input_name)
         logger.info("ソースを削除しました: %s", input_name)
 
+    def add_media_source(self, scene_name, source_name):
+        """メディアソースを追加する（初期状態は無音）"""
+        self._client.create_input(
+            sceneName=scene_name,
+            inputName=source_name,
+            inputKind="ffmpeg_source",
+            inputSettings={
+                "local_file": "",
+                "looping": True,
+            },
+            sceneItemEnabled=False,
+        )
+        self._client.set_input_audio_monitor_type(
+            source_name, "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"
+        )
+        logger.info("メディアソースを追加しました: %s", source_name)
+
+    def play_media(self, source_name, file_path):
+        """メディアソースのファイルを設定して再生する"""
+        win_path = to_windows_path(str(file_path))
+        self._client.set_input_settings(
+            source_name,
+            {"local_file": win_path, "looping": True},
+            overlay=True,
+        )
+        self._enable_input(source_name, True)
+        # 再生をトリガー
+        self._client.trigger_media_input_action(
+            source_name, "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART"
+        )
+        logger.info("メディア再生: %s → %s", source_name, file_path)
+
+    def stop_media(self, source_name):
+        """メディアソースを停止する"""
+        self._client.set_input_settings(
+            source_name,
+            {"local_file": ""},
+            overlay=True,
+        )
+        self._enable_input(source_name, False)
+        logger.info("メディア停止: %s", source_name)
+
+    def set_media_volume(self, source_name, volume_db):
+        """メディアソースの音量を設定する（dB）"""
+        self._client.set_input_volume(source_name, vol_db=volume_db)
+
+    def _enable_input(self, input_name, enabled):
+        """全シーンで指定入力の表示を切り替える"""
+        scenes = self.get_scenes()["scenes"]
+        for scene_name in scenes:
+            try:
+                item_id = self._client.get_scene_item_id(scene_name, input_name).scene_item_id
+                self._client.set_scene_item_enabled(scene_name, item_id, enabled)
+            except Exception:
+                pass
+
+    def mute_all_audio(self):
+        """全音声入力をミュートする（デスクトップ音声・マイク・ブラウザソース等）"""
+        try:
+            response = self._client.get_input_list()
+            for inp in response.inputs:
+                kind = inp.get("inputKind", "")
+                name = inp.get("inputName", "")
+                # デスクトップ音声・マイク等をミュート
+                if "audio" in kind or "monitor" in kind or "wasapi" in kind or "pulse" in kind:
+                    try:
+                        self._client.set_input_mute(name, True)
+                        logger.info("音声をミュートしました: %s", name)
+                    except Exception:
+                        pass
+                # ブラウザソースの音声ルーティングを無効化
+                if kind == "browser_source":
+                    try:
+                        self._client.set_input_settings(
+                            name, {"reroute_audio": False}, overlay=True
+                        )
+                        logger.info("ブラウザ音声ルーティングを無効化: %s", name)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning("音声ミュート処理に失敗: %s", e)
+
     def setup_scenes(self, scenes_config, main_scene=None):
         """シーン構成を一括作成する（既存のATC シーン・ソースは先に削除）"""
         self.teardown_scenes(scenes_config)
+        self.mute_all_audio()
         for scene in scenes_config:
             scene_name = scene["name"]
             try:
@@ -316,6 +406,8 @@ class OBSController:
                 width=source.get("width", 1920),
                 height=source.get("height", 1080),
             )
+        elif kind == "media":
+            self.add_media_source(scene_name, name)
         else:
             logger.warning("不明なソース種類: %s", kind)
 

@@ -171,4 +171,5 @@ async def obs_terminal_save():
 @router.post("/api/obs/teardown")
 async def obs_teardown():
     state.obs.teardown_scenes(scene_config.SCENES)
+    state.obs.mute_all_audio()
     return {"ok": True}

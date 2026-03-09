@@ -51,10 +51,10 @@
         {
           "kind": "avatar",
           "transform": {
-            "positionX": 957.0,
-            "positionY": 384.0,
+            "positionX": 1014.0,
+            "positionY": 345.0,
             "boundsType": "OBS_BOUNDS_SCALE_INNER",
-            "boundsWidth": 1313.0,
+            "boundsWidth": 1307.0,
             "boundsHeight": 915.0
           }
         },
@@ -74,6 +74,10 @@
             "boundsWidth": 1539.0,
             "boundsHeight": 843.0
           }
+        },
+        {
+          "kind": "media",
+          "name": "BGM"
         },
         {
           "kind": "browser",
