@@ -356,6 +356,7 @@ function connectWS() {
 
 loadSettings();
 loadTodo().then(() => todoPanel.classList.add('visible'));
+setInterval(loadTodo, 5000);
 connectWS();
 </script>
 
