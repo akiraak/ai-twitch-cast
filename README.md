@@ -113,6 +113,12 @@ python scripts/deploy_model.py       # Live2DモデルをVTSにデプロイ
 
 GitHub Pagesで公開: https://akiraak.github.io/ai-twitch-cast/
 
+ローカルで表示:
+
+```bash
+mkdocs serve -a localhost:8001
+```
+
 - [OBS自動制御でできること](https://akiraak.github.io/ai-twitch-cast/obs-automation-guide/)
 - [OBS Studio 機能調査](https://akiraak.github.io/ai-twitch-cast/obs-research/)
 - [アバター表示・アニメーション調査](https://akiraak.github.io/ai-twitch-cast/avatar-research/)
