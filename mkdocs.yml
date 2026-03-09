@@ -36,6 +36,8 @@ nav:
     - アバター変更ガイド: avatar-change-guide.md
     - VRM表示 実装プラン: vrm-implementation-plan.md
     - VRM変換 作業ログ: vrm-conversion-log.md
+  - 音声:
+    - ボイスサンプル比較: voice-samples.md
   - 運用:
     - コンソールコマンド: console-commands.md
     - リソース管理: resource-management.md
