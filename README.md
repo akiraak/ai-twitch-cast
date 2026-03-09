@@ -72,10 +72,10 @@ TTS_VOICE=Aoede
 ### Web UI（推奨）
 
 ```bash
-uvicorn scripts.web:app --reload --host 0.0.0.0 --port 8080
+./run.sh
 ```
 
-ブラウザで http://127.0.0.1:8080 にアクセス。ポートは環境変数 `WEB_PORT` で変更可能（デフォルト: 8080）。
+ブラウザで http://127.0.0.1:8080 にアクセス。ポートは `.env` の `WEB_PORT` で変更可能（デフォルト: 8080）。
 
 - **Setup** - OBS接続・シーン構築・アバター接続・コメント読み上げ開始・Git監視開始
 - **配信開始/停止** - Twitchへの配信制御

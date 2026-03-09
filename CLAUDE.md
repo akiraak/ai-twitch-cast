@@ -85,6 +85,7 @@ ai-twitch-cast/
 │   ├── vrm/                  # VRMモデル
 │   ├── audio/
 │   └── video/
+├── run.sh                    # サーバー起動スクリプト（.envのWEB_PORT自動読み込み）
 ├── scenes.json               # シーン構成設定（シーン・ソース・アバター配置）
 ├── character.json             # AIキャラクター設定（性格・ルール・表情マッピング）
 ├── mkdocs.yml                # MkDocs設定
@@ -112,7 +113,7 @@ ai-twitch-cast/
 
 ## Webサーバー運用注意
 
-- Webサーバーは `uvicorn scripts.web:app --reload --host 0.0.0.0 --port $WEB_PORT` で起動（デフォルト8080）
+- Webサーバーは `./run.sh` で起動（`.env` の `WEB_PORT` を自動読み込み、デフォルト8080）
 - **Pydanticモデルやルートの変更後は `--reload` では反映されないことがある。その場合はuvicornプロセスを手動で再起動すること**
 - OBSのブラウザソースはHTMLをキャッシュするため、overlay.html等を変更した場合はSetupボタン押下またはOBS側でブラウザソースの「キャッシュを無視してページをリフレッシュ」が必要
 
