@@ -206,6 +206,13 @@
     <div class="status" id="vts-status"></div>
   </div>
 
+  <!-- TODO -->
+  <div class="card">
+    <h2>TODO</h2>
+    <div id="todo-list-ui"></div>
+    <div class="status" id="todo-status"></div>
+  </div>
+
   <!-- Overlay -->
   <div class="card">
     <h2>オーバーレイ設定</h2>
@@ -916,7 +923,53 @@ async function searchCategories() {
   }
 }
 
+// --- TODO ---
+async function loadTodoUI() {
+  try {
+    const data = await (await fetch('/api/todo')).json();
+    const el = document.getElementById('todo-list-ui');
+    el.innerHTML = '';
+    for (const item of data.items) {
+      const text = typeof item === 'string' ? item : item.text;
+      const status = typeof item === 'string' ? 'todo' : item.status;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #2a3a4a;';
+      const label = document.createElement('span');
+      label.style.cssText = 'flex:1; font-size:0.85rem;';
+      label.textContent = text;
+      if (status === 'in_progress') {
+        label.style.color = '#b388ff';
+        label.style.fontWeight = 'bold';
+      }
+      row.appendChild(label);
+      if (status === 'todo') {
+        const btn = document.createElement('button');
+        btn.textContent = '開始';
+        btn.style.cssText = 'font-size:0.75rem; padding:3px 10px;';
+        btn.onclick = () => startTodo(text);
+        row.appendChild(btn);
+      } else {
+        const badge = document.createElement('span');
+        badge.textContent = '作業中';
+        badge.style.cssText = 'font-size:0.7rem; color:#b388ff; background:#311b92; padding:2px 8px; border-radius:3px;';
+        row.appendChild(badge);
+      }
+      el.appendChild(row);
+    }
+  } catch (e) {}
+}
+
+async function startTodo(text) {
+  const res = await api('POST', '/api/todo/start', { text });
+  if (res?.ok) {
+    showToast(`作業開始: ${text}`, 'success');
+    loadTodoUI();
+  }
+}
+
 // 初期読み込み
+loadTodoUI();
+setInterval(loadTodoUI, 30000);
 loadCharacter();
 loadVsfDefaults();
 loadOverlaySettings();

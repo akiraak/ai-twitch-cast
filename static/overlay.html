@@ -90,6 +90,14 @@
     border-radius: 3px;
     margin-top: 0;
   }
+  #todo-panel .todo-item.in-progress .todo-checkbox {
+    background: #7c4dff;
+    border-color: #7c4dff;
+  }
+  #todo-panel .todo-item.in-progress {
+    color: #b388ff;
+    font-weight: bold;
+  }
 
   /* ステータスパネル（左上・常時表示） */
   #status-panel {
@@ -231,11 +239,14 @@ async function loadTodo() {
     const fs = todoSettings.fontSize;
     for (const item of data.items) {
       const div = document.createElement('div');
-      div.className = 'todo-item';
+      // item can be string (legacy) or {text, status}
+      const text_val = typeof item === 'string' ? item : item.text;
+      const status = typeof item === 'string' ? 'todo' : item.status;
+      div.className = 'todo-item' + (status === 'in_progress' ? ' in-progress' : '');
       const cb = document.createElement('span');
       cb.className = 'todo-checkbox';
       const text = document.createElement('span');
-      text.textContent = item;
+      text.textContent = text_val;
       if (fs) text.style.fontSize = fs + 'px';
       div.appendChild(cb);
       div.appendChild(text);

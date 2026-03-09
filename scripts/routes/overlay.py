@@ -47,16 +47,68 @@ async def get_overlay_settings():
 
 @router.get("/api/todo")
 async def get_todo():
-    """TODO.mdから未完了タスクを返す"""
+    """TODO.mdから未完了タスクを返す（作業中マーク対応）"""
     if not TODO_PATH.exists():
         return {"items": []}
     text = TODO_PATH.read_text(encoding="utf-8")
     items = []
     for line in text.splitlines():
+        # 未着手: - [ ] タスク
         m = re.match(r"\s*-\s*\[\s*\]\s*(.*)", line)
         if m:
-            items.append(m.group(1).strip())
+            items.append({"text": m.group(1).strip(), "status": "todo"})
+            continue
+        # 作業中: - [>] タスク
+        m = re.match(r"\s*-\s*\[>\]\s*(.*)", line)
+        if m:
+            items.append({"text": m.group(1).strip(), "status": "in_progress"})
     return {"items": items}
+
+
+@router.post("/api/todo/start")
+async def start_todo(request: Request):
+    """TODOを作業中にマークし、アバターに読み上げさせる"""
+    import asyncio
+    body = await request.json()
+    task_text = body.get("text", "").strip()
+    if not task_text or not TODO_PATH.exists():
+        return {"ok": False, "error": "タスクが見つかりません"}
+
+    # TODO.mdの該当行を [ ] → [>] に変更（他の作業中は [ ] に戻す）
+    text = TODO_PATH.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    found = False
+    new_lines = []
+    for line in lines:
+        # 既存の作業中マークを未着手に戻す
+        m_prog = re.match(r"(\s*-\s*)\[>\](\s*.*)", line)
+        if m_prog:
+            new_lines.append(f"{m_prog.group(1)}[ ]{m_prog.group(2)}")
+            continue
+        # 対象タスクを作業中にする
+        m_todo = re.match(r"(\s*-\s*)\[\s*\](\s*)(.*)", line)
+        if m_todo and m_todo.group(3).strip() == task_text:
+            new_lines.append(f"{m_todo.group(1)}[>]{m_todo.group(2)}{m_todo.group(3)}")
+            found = True
+            continue
+        new_lines.append(line)
+
+    if not found:
+        return {"ok": False, "error": "タスクが見つかりません"}
+
+    TODO_PATH.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+    # オーバーレイに現在の作業を通知
+    await state.broadcast_overlay({
+        "type": "current_task",
+        "task": task_text,
+    })
+
+    # アバターに読み上げさせる
+    if state.reader:
+        asyncio.ensure_future(state.reader.speak_event("作業開始", task_text))
+
+    return {"ok": True}
 
 
 @router.post("/api/overlay/preview")
