@@ -191,34 +191,11 @@ class OBSController:
                 "url": cache_bust_url,
                 "width": width,
                 "height": height,
-                "reroute_audio": True,
-            },
-            sceneItemEnabled=True,
-        )
-        logger.info("ブラウザソースを追加しました: %s", source_name)
-
-    def add_local_browser_source(self, scene_name, source_name, local_file, width=800, height=600):
-        """ローカルHTMLファイルをブラウザソースとして追加する"""
-        win_path = to_windows_path(str(local_file))
-        self._client.create_input(
-            sceneName=scene_name,
-            inputName=source_name,
-            inputKind="browser_source",
-            inputSettings={
-                "is_local_file": True,
-                "local_file": win_path,
-                "width": width,
-                "height": height,
                 "reroute_audio": False,
             },
             sceneItemEnabled=True,
         )
-        logger.info("ローカルブラウザソースを追加しました: %s → %s", source_name, win_path)
-
-    def refresh_browser_source(self, source_name):
-        """ブラウザソースをリフレッシュする"""
-        self._client.press_input_properties_button(source_name, "refreshnocache")
-        logger.info("ブラウザソースをリフレッシュしました: %s", source_name)
+        logger.info("ブラウザソースを追加しました: %s", source_name)
 
     def add_todo_source(self, scene_name, source_name, todo_text):
         """TODOテキストソースを追加する"""

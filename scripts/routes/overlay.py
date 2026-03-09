@@ -1,4 +1,4 @@
-"""オーバーレイルート（WebSocket + 設定 + BGM）"""
+"""オーバーレイルート（WebSocket + 設定）"""
 
 import json
 import logging
@@ -71,50 +71,6 @@ async def toggle_todo():
     await state.broadcast_overlay({"type": "todo_toggle"})
     return {"ok": True}
 
-
-BGM_DIR = PROJECT_DIR / "resources" / "audio" / "bgm"
-
-
-@router.get("/api/bgm/list")
-async def bgm_list():
-    """BGMファイル一覧を返す"""
-    files = sorted(p.stem for p in BGM_DIR.glob("*.mp3")) if BGM_DIR.exists() else []
-    return {"tracks": files}
-
-
-class BGMControl(BaseModel):
-    action: str  # play, stop, volume
-    track: str | None = None
-    volume: float | None = None
-
-
-@router.post("/api/bgm")
-async def bgm_control(body: BGMControl):
-    """BGM再生制御（オーバーレイブラウザソース経由）"""
-    try:
-        if body.action == "play" and body.track:
-            file_path = BGM_DIR / f"{body.track}.mp3"
-            if not file_path.exists():
-                return {"ok": False, "error": "ファイルが見つかりません"}
-            vol = body.volume if body.volume is not None else 0.5
-            await state.broadcast_overlay({
-                "type": "bgm_play",
-                "url": f"/bgm/{body.track}.mp3",
-                "volume": vol,
-            })
-            logger.info("BGM再生: %s (volume=%.2f)", body.track, vol)
-        elif body.action == "stop":
-            await state.broadcast_overlay({"type": "bgm_stop"})
-            logger.info("BGM停止")
-        elif body.action == "volume" and body.volume is not None:
-            await state.broadcast_overlay({
-                "type": "bgm_volume",
-                "volume": body.volume,
-            })
-        return {"ok": True}
-    except Exception as e:
-        logger.warning("BGM制御エラー: %s", e)
-        return {"ok": False, "error": str(e)}
 
 
 class OverlaySettings(BaseModel):
