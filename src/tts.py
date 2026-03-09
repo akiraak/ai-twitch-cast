@@ -7,9 +7,13 @@ from google.genai import types
 
 from src.gemini_client import get_client
 
-# Gemini TTS で利用可能な音声
-# Aoede, Charon, Fenrir, Kore, Puck, Leda, Orus, Zephyr
-DEFAULT_VOICE = "Leda"
+# Gemini TTS で利用可能な音声（全30種）
+# Zephyr, Puck, Charon, Kore, Fenrir, Leda, Orus, Aoede, Callirrhoe, Autonoe,
+# Enceladus, Iapetus, Umbriel, Algieba, Despina, Erinome, Algenib, Rasalgethi,
+# Laomedeia, Achernar, Alnilam, Schedar, Gacrux, Pulcherrima, Achird,
+# Zubenelgenubi, Vindemiatrix, Sadachbia, Sadaltager, Sulafat
+DEFAULT_VOICE = "Despina"
+DEFAULT_STYLE = "終始にこにこしているような、柔らかく楽しげなトーンで読み上げてください"
 
 
 def synthesize(text, output_path, voice=None):
@@ -18,14 +22,27 @@ def synthesize(text, output_path, voice=None):
     Args:
         text: 読み上げるテキスト
         output_path: 出力ファイルパス (.wav)
-        voice: 音声名 (デフォルト: Kore)
+        voice: 音声名 (デフォルト: Despina)
+    """
+    style = os.environ.get("TTS_STYLE", DEFAULT_STYLE)
+    prompt = f"{style}: {text}"
+    return synthesize_with_prompt(prompt, output_path, voice=voice)
+
+
+def synthesize_with_prompt(prompt, output_path, voice=None):
+    """プロンプトでスタイルを指定して音声を生成する
+
+    Args:
+        prompt: スタイル指示を含むプロンプト
+        output_path: 出力ファイルパス (.wav)
+        voice: 音声名 (デフォルト: Leda)
     """
     client = get_client()
     voice = voice or os.environ.get("TTS_VOICE", DEFAULT_VOICE)
 
     response = client.models.generate_content(
         model=os.environ.get("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts"),
-        contents=f"次のテキストをそのまま読み上げてください: {text}",
+        contents=prompt,
         config=types.GenerateContentConfig(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
