@@ -86,11 +86,16 @@ def _build_system_prompt():
 
     parts.extend([
         "",
+        "## 言語ルール",
+        "- コメントが日本語の場合: 日本語で返答し、englishに英語訳を入れる",
+        "- コメントが英語の場合: 英語で返答し、englishに日本語訳を入れる",
+        "- コメントがその他の言語の場合: その言語で返答し、englishに英語訳を入れる",
+        "- 相手の言語に合わせて自然に返答することが最優先",
+        "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        '{"response": "返答テキスト", "emotion": "感情", "english": "responseの英語訳"}',
+        '{"response": "返答テキスト", "emotion": "感情", "english": "翻訳（上記言語ルール参照）"}',
         f"emotionは次のいずれか: {emotion_list}",
-        "englishにはresponseの自然な英語訳を含めてください。",
     ])
 
     return "\n".join(parts)

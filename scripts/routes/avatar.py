@@ -19,7 +19,12 @@ class SpeakRequest(BaseModel):
 
 @router.post("/api/avatar/speak")
 async def avatar_speak(body: SpeakRequest):
-    """アバターにイベント発話させる"""
+    """アバターにイベント発話させる＆現在の作業として表示"""
+    # オーバーレイに現在の作業を通知
+    await state.broadcast_overlay({
+        "type": "current_task",
+        "task": body.detail,
+    })
     asyncio.ensure_future(state.reader.speak_event(body.event_type, body.detail))
     return {"ok": True}
 
