@@ -46,6 +46,11 @@
 - [x] Twitch配信情報管理（タイトル・カテゴリ・タグの取得・更新をWeb UIから操作）
 - [x] ターミナルウィンドウキャプチャ対応（window_captureソース追加、メインシーンに配置）
 - [x] VRMにモデル変換（FBX→VRM 0.x変換パイプライン構築、MToonシェーダ修正、サムネイル埋め込み）
+- [x] Twitchコメント応答でユーザー表示名を使用（display_name優先）
+- [x] ターミナルウィンドウ自動選択（window_matchキーワードマッチング）
+- [x] ターミナル位置をWeb UIから調整・scenes.jsonに保存可能に
+- [x] scenes.jsonのSetup時リロード対応（保存した設定が次回Setupで反映）
+- [x] TODOパネルをオーバーレイ起動時に自動表示
 
 ## Phase 0: 環境構築・基盤
 
