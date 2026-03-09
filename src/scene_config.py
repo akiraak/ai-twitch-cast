@@ -2,7 +2,10 @@
 
 import json
 import os
+import re
 from pathlib import Path
+
+from src.wsl_path import get_wsl_ip, is_wsl
 
 # システムが作成するシーン・ソースのプレフィックス
 # ユーザーが手動で作成したものと区別するために使う
@@ -13,7 +16,35 @@ AVATAR_APP = os.environ.get("AVATAR_APP", "vts")
 
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
 RESOURCES_DIR = _PROJECT_DIR / "resources"
+TODO_PATH = _PROJECT_DIR / "TODO.md"
 CONFIG_PATH = _PROJECT_DIR / "scenes.json"
+
+
+def _format_todo_text():
+    """TODO.mdをOBSテキストソース用にフォーマットする"""
+    if not TODO_PATH.exists():
+        return ""
+    lines = TODO_PATH.read_text(encoding="utf-8").splitlines()
+    # パディング用の先頭空行 + タイトル
+    result = ["", "   TODO", ""]
+    for line in lines:
+        if line.startswith("# "):
+            continue
+        if not line.strip():
+            continue
+        m = re.match(r'^- \[([ x])\] (.+)', line)
+        if m:
+            if m.group(1) == "x":
+                result.append(f"   \u2611 {m.group(2)}")
+            else:
+                result.append(f"   \u2610 {m.group(2)}")
+            continue
+        m2 = re.match(r'^\s{2,}(.+)', line)
+        if m2:
+            result.append(f"      {m2.group(1)}")
+    # 末尾パディング
+    result.append("")
+    return "\n".join(result)
 
 
 def _load_config():
@@ -56,7 +87,14 @@ def _load_config():
             if src["kind"] == "image" and "path" in src:
                 resolved["path"] = RESOURCES_DIR / src["path"]
             elif src["kind"] == "browser" and "url" in src:
-                resolved["url"] = src["url"]
+                url = src["url"]
+                # WSL2環境ではlocalhostをWSL2のIPに置換（OBSはWindows上で動作）
+                if is_wsl() and "localhost" in url:
+                    url = url.replace("localhost", get_wsl_ip())
+                resolved["url"] = url
+
+            if src["kind"] == "todo":
+                resolved["text"] = _format_todo_text()
 
             sources.append(resolved)
 

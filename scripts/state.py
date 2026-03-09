@@ -8,6 +8,7 @@ from fastapi import WebSocket
 from src import db
 from src.ai_responder import get_character_id, seed_character
 from src.comment_reader import CommentReader
+from src.git_watcher import GitWatcher
 from src.obs_controller import OBSController
 from src.scene_config import CONFIG_PATH
 from src.twitch_api import TwitchAPI
@@ -45,6 +46,15 @@ async def broadcast_overlay(event: dict):
 
 # Reader（broadcast_overlay定義後に作成）
 reader = CommentReader(vsf=vsf, on_overlay=broadcast_overlay)
+
+
+async def _on_git_commit(commit_hash, message):
+    """Gitコミット検知時のコールバック"""
+    await reader.speak_event("コミット", f"{commit_hash}: {message}")
+
+
+# Git監視
+git_watcher = GitWatcher(on_commit=_on_git_commit)
 
 
 async def ensure_reader():

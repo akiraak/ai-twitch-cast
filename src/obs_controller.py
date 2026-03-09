@@ -191,15 +191,64 @@ class OBSController:
                 "url": cache_bust_url,
                 "width": width,
                 "height": height,
-                "css": "",
+                "reroute_audio": False,
             },
             sceneItemEnabled=True,
         )
-        # 作成後に明示的に音声ルーティングを無効化
-        self._client.set_input_settings(
-            source_name, {"reroute_audio": False}, overlay=True
-        )
         logger.info("ブラウザソースを追加しました: %s", source_name)
+
+    def add_local_browser_source(self, scene_name, source_name, local_file, width=800, height=600):
+        """ローカルHTMLファイルをブラウザソースとして追加する"""
+        win_path = to_windows_path(str(local_file))
+        self._client.create_input(
+            sceneName=scene_name,
+            inputName=source_name,
+            inputKind="browser_source",
+            inputSettings={
+                "is_local_file": True,
+                "local_file": win_path,
+                "width": width,
+                "height": height,
+                "reroute_audio": False,
+            },
+            sceneItemEnabled=True,
+        )
+        logger.info("ローカルブラウザソースを追加しました: %s → %s", source_name, win_path)
+
+    def refresh_browser_source(self, source_name):
+        """ブラウザソースをリフレッシュする"""
+        self._client.press_input_properties_button(source_name, "refreshnocache")
+        logger.info("ブラウザソースをリフレッシュしました: %s", source_name)
+
+    def add_todo_source(self, scene_name, source_name, todo_text):
+        """TODOテキストソースを追加する"""
+        self._client.create_input(
+            sceneName=scene_name,
+            inputName=source_name,
+            inputKind="text_gdiplus_v3",
+            inputSettings={
+                "text": todo_text,
+                "font": {"face": "Yu Gothic UI", "size": 40, "style": "Bold"},
+                "color": 0xFFE8E8E8,  # 明るいグレー (ABGR)
+                "bk_color": 0x000000,  # 黒
+                "bk_opacity": 100,
+                "outline": False,
+                "align": "left",
+                "valign": "top",
+                "extents": True,
+                "extents_cx": 620,
+                "extents_cy": 780,
+                "extents_wrap": True,
+            },
+            sceneItemEnabled=True,
+        )
+        logger.info("TODOソースを追加しました: %s", source_name)
+
+    def update_todo_source(self, source_name, todo_text):
+        """TODOテキストソースのテキストを更新する"""
+        self._client.set_input_settings(
+            source_name, {"text": todo_text}, overlay=True
+        )
 
     def add_text_source(self, scene_name, source_name, text, font_size=48):
         """テキストソースを追加する"""
@@ -299,26 +348,16 @@ class OBSController:
                 pass
 
     def mute_all_audio(self):
-        """全音声入力をミュートする（デスクトップ音声・マイク・ブラウザソース等）"""
+        """全音声入力をミュートする（デスクトップ音声・マイク等）"""
         try:
             response = self._client.get_input_list()
             for inp in response.inputs:
                 kind = inp.get("inputKind", "")
                 name = inp.get("inputName", "")
-                # デスクトップ音声・マイク等をミュート
                 if "audio" in kind or "monitor" in kind or "wasapi" in kind or "pulse" in kind:
                     try:
                         self._client.set_input_mute(name, True)
                         logger.info("音声をミュートしました: %s", name)
-                    except Exception:
-                        pass
-                # ブラウザソースの音声ルーティングを無効化
-                if kind == "browser_source":
-                    try:
-                        self._client.set_input_settings(
-                            name, {"reroute_audio": False}, overlay=True
-                        )
-                        logger.info("ブラウザ音声ルーティングを無効化: %s", name)
                     except Exception:
                         pass
         except Exception as e:
@@ -327,7 +366,6 @@ class OBSController:
     def setup_scenes(self, scenes_config, main_scene=None):
         """シーン構成を一括作成する（既存のATC シーン・ソースは先に削除）"""
         self.teardown_scenes(scenes_config)
-        self.mute_all_audio()
         for scene in scenes_config:
             scene_name = scene["name"]
             try:
@@ -406,6 +444,8 @@ class OBSController:
                 width=source.get("width", 1920),
                 height=source.get("height", 1080),
             )
+        elif kind == "todo":
+            self.add_todo_source(scene_name, name, source.get("text", ""))
         elif kind == "media":
             self.add_media_source(scene_name, name)
         else:

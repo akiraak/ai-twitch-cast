@@ -9,7 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from src import db
-from src.ai_responder import generate_response, get_character
+from src.ai_responder import generate_event_response, generate_response, get_character
 from src.tts import synthesize
 from src.twitch_chat import TwitchChat
 
@@ -141,6 +141,20 @@ class CommentReader:
         )
         await proc.wait()
         Path(wav_path).unlink(missing_ok=True)
+
+    async def speak_event(self, event_type, detail):
+        """イベントに対してアバターが発話する（コミット・作業開始等）"""
+        try:
+            logger.info("[event] %s: %s", event_type, detail)
+            result = await asyncio.to_thread(generate_event_response, event_type, detail)
+            logger.info("[event] [%s] %s", result["emotion"], result["response"])
+            await self._notify_overlay("システム", f"[{event_type}] {detail}", result)
+            self._apply_emotion(result["emotion"])
+            await self._speak(result["response"])
+            self._apply_emotion("neutral")
+            await self._notify_overlay_end()
+        except Exception as e:
+            logger.error("イベント発話失敗: %s", e)
 
     def _apply_emotion(self, emotion):
         """感情に対応するBlendShapeを適用する"""

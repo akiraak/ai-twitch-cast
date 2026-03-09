@@ -139,3 +139,55 @@ def generate_response(author, message, comment_count=0):
         result["emotion"] = "neutral"
 
     return result
+
+
+def generate_event_response(event_type, detail):
+    """イベント（コミット・作業開始等）に対するAI応答を生成する
+
+    Args:
+        event_type: イベント種別 ("commit", "stream_start" など)
+        detail: イベントの詳細情報
+
+    Returns:
+        dict: {"response": str, "emotion": str, "english": str}
+    """
+    client = get_client()
+    char = get_character()
+    emotions = char.get("emotions", {})
+    emotion_list = ", ".join(emotions.keys())
+
+    system_prompt = "\n".join([
+        char["system_prompt"],
+        "",
+        "## ルール",
+        "- 配信中のイベント（コミット、作業開始など）について短くコメントしてください",
+        "- 視聴者に向かって話すように、自然で楽しいコメントをしてください",
+        "- 1〜2文で簡潔に",
+        "",
+        "## 出力形式",
+        "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
+        '{"response": "返答テキスト", "emotion": "感情", "english": "responseの英語訳"}',
+        f"emotionは次のいずれか: {emotion_list}",
+    ])
+
+    user_prompt = f"【{event_type}イベント】{detail}"
+
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.5-flash"),
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+        ),
+    )
+
+    try:
+        result = json.loads(response.text)
+    except (json.JSONDecodeError, AttributeError):
+        result = {"response": detail, "emotion": "neutral", "english": ""}
+
+    result.setdefault("english", "")
+    if result.get("emotion") not in emotions:
+        result["emotion"] = "neutral"
+
+    return result

@@ -1,5 +1,6 @@
-"""アバター制御ルート（VTS + VSF）"""
+"""アバター制御ルート（VTS + VSF + 発話）"""
 
+import asyncio
 import json
 
 from fastapi import APIRouter
@@ -9,6 +10,18 @@ from scripts import state
 from src.scene_config import CONFIG_PATH
 
 router = APIRouter()
+
+
+class SpeakRequest(BaseModel):
+    event_type: str = "手動"
+    detail: str
+
+
+@router.post("/api/avatar/speak")
+async def avatar_speak(body: SpeakRequest):
+    """アバターにイベント発話させる"""
+    asyncio.ensure_future(state.reader.speak_event(body.event_type, body.detail))
+    return {"ok": True}
 
 
 # --- VTS ---

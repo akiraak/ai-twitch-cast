@@ -64,6 +64,7 @@ ai-twitch-cast/
 │   ├── twitch_chat.py        # Twitchチャット受信
 │   ├── ai_responder.py       # AI応答生成（character.jsonベース）
 │   ├── comment_reader.py     # コメント読み上げサービス
+│   ├── git_watcher.py        # Gitコミット監視
 │   ├── db.py                 # データベース管理（SQLite）
 │   └── wsl_path.py           # WSL関連ユーティリティ
 ├── scripts/                  # 実行スクリプト

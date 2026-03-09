@@ -31,6 +31,19 @@ def resolve_host(host: str) -> str:
     return host
 
 
+def get_wsl_ip() -> str:
+    """WSL2自身のIPアドレスを取得する"""
+    try:
+        result = subprocess.run(
+            ["hostname", "-I"],
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip().split()[0]
+    except (IndexError, FileNotFoundError):
+        return "localhost"
+
+
 def to_windows_path(wsl_path: str) -> str:
     """WSLのパスをWindowsパス（UNC形式）に変換する"""
     result = subprocess.run(

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #000000;
+    font-family: "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+  }
+
+  #todo-panel {
+    background: linear-gradient(135deg, rgb(15, 15, 35), rgb(25, 15, 45));
+    border: 1px solid rgba(124, 77, 255, 0.6);
+    border-radius: 20px;
+    padding: 32px 40px;
+  }
+
+  .todo-title {
+    font-size: 28px;
+    font-weight: bold;
+    color: #b388ff;
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid rgba(124, 77, 255, 0.3);
+    text-shadow: 0 0 12px rgba(124, 77, 255, 0.4);
+  }
+
+  .todo-item {
+    font-size: 20px;
+    color: #e0e0e0;
+    padding: 8px 0;
+    padding-left: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    line-height: 1.5;
+  }
+  .todo-item:last-child { border-bottom: none; }
+
+  .todo-checkbox {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #7c4dff;
+    border-radius: 4px;
+    margin-right: 10px;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+  }
+  .todo-item.done .todo-checkbox {
+    background: #7c4dff;
+  }
+  .todo-item.done .todo-checkbox::after {
+    content: '\2713';
+    color: #fff;
+    font-size: 13px;
+    position: absolute;
+    top: -2px;
+    left: 2px;
+  }
+  .todo-item.done .todo-text {
+    text-decoration: line-through;
+    color: #666;
+  }
+  .todo-sub {
+    font-size: 16px;
+    color: #9e9e9e;
+    padding: 4px 0 4px 36px;
+  }
+</style>
+</head>
+<body>
+
+<div id="todo-panel">
+  <div class="todo-title">TODO</div>
+  <div class="todo-list"></div>
+</div>
+
+<script>
+const todoList = document.querySelector('.todo-list');
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function renderTodo(markdown) {
+  todoList.innerHTML = '';
+  const lines = markdown.split('\n');
+  for (const line of lines) {
+    if (/^#\s/.test(line)) continue;
+    if (!line.trim()) continue;
+    const taskMatch = line.match(/^- \[([ x])\] (.+)/);
+    if (taskMatch) {
+      const done = taskMatch[1] === 'x';
+      const text = taskMatch[2];
+      const el = document.createElement('div');
+      el.className = 'todo-item' + (done ? ' done' : '');
+      el.innerHTML = '<span class="todo-checkbox"></span><span class="todo-text">' + esc(text) + '</span>';
+      todoList.appendChild(el);
+      continue;
+    }
+    const subMatch = line.match(/^\s{2,}(.+)/);
+    if (subMatch) {
+      const el = document.createElement('div');
+      el.className = 'todo-sub';
+      el.textContent = subMatch[1];
+      todoList.appendChild(el);
+    }
+  }
+}
+
+// 埋め込みデータで表示
+if (typeof __TODO_INITIAL__ === 'string' && __TODO_INITIAL__) {
+  renderTodo(__TODO_INITIAL__);
+}
+
+// ローカルファイルの場合はリロードで更新（5秒ごと）
+setInterval(function() { location.reload(); }, 5000);
+</script>
+
+</body>
+</html>

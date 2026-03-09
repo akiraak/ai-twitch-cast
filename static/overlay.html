@@ -102,80 +102,6 @@
     to { opacity: 1; transform: translateX(0); }
   }
 
-  /* TODOパネル（中央） */
-  #todo-panel {
-    position: absolute;
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 10;
-    background: linear-gradient(135deg, rgba(15, 15, 35, 0.92), rgba(25, 15, 45, 0.92));
-    border: 1px solid rgba(124, 77, 255, 0.4);
-    border-radius: 20px;
-    padding: 32px 40px;
-    min-width: 500px;
-    max-width: 800px;
-    max-height: 780px;
-    overflow: hidden;
-    backdrop-filter: blur(12px);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.5s ease;
-  }
-  #todo-panel.visible { opacity: 1; }
-
-  #todo-panel .todo-title {
-    font-size: 28px;
-    font-weight: bold;
-    color: #b388ff;
-    text-align: center;
-    margin-bottom: 20px;
-    padding-bottom: 12px;
-    border-bottom: 2px solid rgba(124, 77, 255, 0.3);
-    text-shadow: 0 0 12px rgba(124, 77, 255, 0.4);
-  }
-
-  #todo-panel .todo-item {
-    font-size: 20px;
-    color: #e0e0e0;
-    padding: 8px 0;
-    padding-left: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    line-height: 1.5;
-  }
-  #todo-panel .todo-item:last-child { border-bottom: none; }
-
-  #todo-panel .todo-checkbox {
-    display: inline-block;
-    width: 18px;
-    height: 18px;
-    border: 2px solid #7c4dff;
-    border-radius: 4px;
-    margin-right: 10px;
-    vertical-align: middle;
-    position: relative;
-    top: -1px;
-  }
-  #todo-panel .todo-item.done .todo-checkbox {
-    background: #7c4dff;
-  }
-  #todo-panel .todo-item.done .todo-checkbox::after {
-    content: '✓';
-    color: #fff;
-    font-size: 13px;
-    position: absolute;
-    top: -2px;
-    left: 2px;
-  }
-  #todo-panel .todo-item.done .todo-text {
-    text-decoration: line-through;
-    color: #666;
-  }
-  #todo-panel .todo-sub {
-    font-size: 16px;
-    color: #9e9e9e;
-    padding: 4px 0 4px 36px;
-  }
 </style>
 </head>
 <body>
@@ -188,10 +114,6 @@
 
 <div id="history"></div>
 
-<div id="todo-panel">
-  <div class="todo-title">📋 TODO</div>
-  <div class="todo-list"></div>
-</div>
 
 <script>
 const subtitleEl = document.getElementById('subtitle');
@@ -270,59 +192,6 @@ function esc(s) {
   return d.innerHTML;
 }
 
-// TODOパネル
-const todoPanel = document.getElementById('todo-panel');
-const todoList = todoPanel.querySelector('.todo-list');
-
-async function loadTodo() {
-  try {
-    const res = await fetch('/api/todo');
-    const data = await res.json();
-    renderTodo(data.content);
-  } catch (e) {
-    console.log('TODO読み込みスキップ:', e.message);
-  }
-}
-
-function renderTodo(markdown) {
-  todoList.innerHTML = '';
-  const lines = markdown.split('\n');
-  for (const line of lines) {
-    // "# TODO" タイトル行はスキップ
-    if (/^#\s/.test(line)) continue;
-    // 空行スキップ
-    if (!line.trim()) continue;
-
-    // メインタスク: "- [ ] テキスト" or "- [x] テキスト"
-    const taskMatch = line.match(/^- \[([ x])\] (.+)/);
-    if (taskMatch) {
-      const done = taskMatch[1] === 'x';
-      const text = taskMatch[2];
-      const el = document.createElement('div');
-      el.className = 'todo-item' + (done ? ' done' : '');
-      el.innerHTML = `<span class="todo-checkbox"></span><span class="todo-text">${esc(text)}</span>`;
-      todoList.appendChild(el);
-      continue;
-    }
-
-    // サブタスク: インデント付きテキスト
-    const subMatch = line.match(/^\s{2,}(.+)/);
-    if (subMatch) {
-      const el = document.createElement('div');
-      el.className = 'todo-sub';
-      el.textContent = subMatch[1];
-      todoList.appendChild(el);
-    }
-  }
-}
-
-function toggleTodo() {
-  if (todoPanel.classList.contains('visible')) {
-    todoPanel.classList.remove('visible');
-  } else {
-    loadTodo().then(() => todoPanel.classList.add('visible'));
-  }
-}
 
 // WebSocket接続
 function connectWS() {
@@ -339,8 +208,6 @@ function connectWS() {
       fadeSubtitle();
     } else if (data.type === 'settings_update') {
       applySettings(data);
-    } else if (data.type === 'todo_toggle') {
-      toggleTodo();
     }
   };
 
@@ -355,8 +222,6 @@ function connectWS() {
 }
 
 loadSettings();
-loadTodo().then(() => todoPanel.classList.add('visible'));
-setInterval(loadTodo, 5000);
 connectWS();
 </script>
 

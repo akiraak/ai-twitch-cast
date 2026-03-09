@@ -37,6 +37,18 @@ async def overlay_page():
     return (STATIC_DIR / "overlay.html").read_text(encoding="utf-8")
 
 
+@router.get("/todo", response_class=HTMLResponse)
+async def todo_page():
+    html = (STATIC_DIR / "todo.html").read_text(encoding="utf-8")
+    todo_content = ""
+    if TODO_PATH.exists():
+        todo_content = TODO_PATH.read_text(encoding="utf-8")
+    escaped = json.dumps(todo_content, ensure_ascii=False)
+    inject = f"<script>var __TODO_INITIAL__ = {escaped};</script>"
+    html = html.replace("</head>", inject + "\n</head>")
+    return html
+
+
 @router.get("/api/overlay/settings")
 async def get_overlay_settings():
     with open(CONFIG_PATH, encoding="utf-8") as f:

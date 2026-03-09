@@ -85,6 +85,14 @@
           "url": "http://localhost:8000/overlay",
           "width": 1920,
           "height": 1080
+        },
+        {
+          "kind": "todo",
+          "name": "TODO",
+          "transform": {
+            "positionX": 30.0,
+            "positionY": 165.0
+          }
         }
       ]
     },
