@@ -85,6 +85,7 @@ class CommentReader:
             user = await asyncio.to_thread(db.get_or_create_user, author)
             result = await self._generate_ai_response(author, message, user["comment_count"])
             await self._save_to_db(user, message, result)
+            await self._post_to_chat(result)
             await self._notify_overlay(author, message, result)
             self._apply_emotion(result["emotion"])
             await self._speak(result["response"])
@@ -111,6 +112,17 @@ class CommentReader:
             self._episode_id, user["id"], message, result["response"], result["emotion"],
         )
         await asyncio.to_thread(db.increment_comment_count, user["id"])
+
+    async def _post_to_chat(self, result):
+        """AI応答をTwitchチャットに投稿する"""
+        try:
+            text = result["response"]
+            english = result.get("english", "")
+            if english:
+                text = f"{text} ({english})"
+            await self._chat.send_message(text)
+        except Exception as e:
+            logger.error("チャット投稿失敗: %s", e)
 
     async def _notify_overlay(self, author, message, result):
         """オーバーレイにコメント情報を送信する"""

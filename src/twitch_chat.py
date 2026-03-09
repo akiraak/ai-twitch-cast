@@ -40,6 +40,20 @@ class TwitchChat:
                 pass
             self._task = None
 
+    async def send_message(self, text):
+        """チャットにメッセージを送信する"""
+        if not self._client:
+            logger.warning("チャット未接続のためメッセージ送信をスキップ")
+            return
+        try:
+            channel = self._client.get_channel(self.channel)
+            if channel:
+                await channel.send(text)
+            else:
+                logger.warning("チャンネル '%s' が見つかりません", self.channel)
+        except Exception as e:
+            logger.error("チャット送信失敗: %s", e)
+
     @property
     def is_running(self):
         return self._task is not None and not self._task.done()

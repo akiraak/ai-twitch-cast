@@ -128,10 +128,13 @@ class VSFController:
         s = scale
         t0 = time.time()
         next_blink = t0 + random.uniform(2.0, 5.0)
+        next_ear_twitch = t0 + random.uniform(3.0, 8.0)
+        ear_twitch_end = 0.0
 
         try:
             while True:
                 t = time.time() - t0
+                now = time.time()
 
                 # --- 呼吸: 胸が前後にゆっくり動く (約4秒周期) ---
                 breath = math.sin(t * 1.6) * 0.8 * s
@@ -168,8 +171,22 @@ class VSFController:
                 self.set_bone("RightLowerArm", qx=q_rf[0], qy=q_rf[1], qz=q_rf[2], qw=q_rf[3])
                 self.set_bone("LeftLowerArm", qx=q_lf[0], qy=q_lf[1], qz=q_lf[2], qw=q_lf[3])
 
+                # --- 耳ぴくぴく: ランダム間隔でBlendShapeで耳を動かす ---
+                if now >= next_ear_twitch and now >= ear_twitch_end:
+                    twitch_duration = random.uniform(0.15, 0.3)
+                    ear_twitch_end = now + twitch_duration
+                    self._ear_twitch_start = now
+                    self._ear_twitch_duration = twitch_duration
+                    next_ear_twitch = now + random.uniform(3.0, 10.0)
+
+                if now < ear_twitch_end:
+                    progress = (now - self._ear_twitch_start) / self._ear_twitch_duration
+                    ear_val = math.sin(progress * math.pi)
+                    self._send_blend_apply({"ear_stand": ear_val})
+                else:
+                    self._send_blend_apply({"ear_stand": 0.0})
+
                 # --- まばたき: ランダム間隔 ---
-                now = time.time()
                 if now >= next_blink:
                     self.set_blendshape("Blink", 1.0)
                     await asyncio.sleep(0.08)

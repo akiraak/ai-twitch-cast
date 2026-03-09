@@ -41,7 +41,6 @@ async def get_overlay_settings():
         config = json.load(f)
     return config.get("overlay", {
         "subtitle": {"bottom": 80, "fontSize": 28, "fadeDuration": 3},
-        "history": {"top": 30, "right": 30, "fontSize": 18, "maxItems": 5},
         "todo": {"width": 460, "fontSize": 15, "titleFontSize": 18},
     })
 
@@ -58,6 +57,14 @@ async def get_todo():
         if m:
             items.append(m.group(1).strip())
     return {"items": items}
+
+
+@router.post("/api/overlay/preview")
+async def preview_overlay_settings(request: Request):
+    """設定をファイルに保存せずオーバーレイにリアルタイム反映する"""
+    body = await request.json()
+    await state.broadcast_overlay({"type": "settings_update", **body})
+    return {"ok": True}
 
 
 @router.post("/api/overlay/settings")
