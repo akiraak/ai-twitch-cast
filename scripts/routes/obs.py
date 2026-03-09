@@ -210,6 +210,8 @@ async def obs_diag():
     import httpx
     from src.scene_config import _get_server_base_url
 
+    _ensure_obs()
+
     result = {
         "server_base_url": _get_server_base_url(),
         "obs_connected": state.obs_connected,
@@ -218,10 +220,6 @@ async def obs_diag():
         "all_sources": [],
         "errors": [],
     }
-
-    if not state.obs_connected:
-        result["errors"].append("OBS未接続")
-        return result
 
     try:
         scene = state.obs.get_scenes()["current"]
@@ -243,6 +241,12 @@ async def obs_diag():
             "height": settings.input_settings.get("height"),
             "reroute_audio": settings.input_settings.get("reroute_audio"),
         }
+        # モニタリングタイプを取得
+        try:
+            mon = state.obs._client.get_input_audio_monitor_type(OVERLAY_SOURCE_NAME)
+            result["overlay_source"]["monitor_type"] = mon.monitor_type
+        except Exception:
+            pass
     except Exception as e:
         result["errors"].append(f"オーバーレイソース取得失敗: {e}")
 

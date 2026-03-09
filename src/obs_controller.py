@@ -335,15 +335,35 @@ class OBSController:
                 src_name = source.get("name", "?")
                 try:
                     self._add_source(scene_name, source)
-                    if "transform" in source:
-                        self.set_source_transform(scene_name, source["name"], source["transform"])
-                    if source.get("kind") == "browser":
-                        browser_sources.append(source["name"])
                     created_sources.append(src_name)
                 except Exception as e:
-                    msg = f"{src_name}: {e}"
-                    errors.append(msg)
-                    logger.warning("ソース '%s' の追加に失敗: %s", src_name, e)
+                    if "already exists" in str(e):
+                        # ゴースト入力をリネームして退避→新規作成
+                        try:
+                            import time
+                            ghost_name = f"{source['name']}_old_{int(time.time())}"
+                            self._client.set_input_name(source["name"], ghost_name)
+                            logger.info("ゴースト入力をリネーム: %s → %s", source["name"], ghost_name)
+                            self._add_source(scene_name, source)
+                            logger.info("入力を新規作成: %s", src_name)
+                            created_sources.append(src_name)
+                        except Exception as e2:
+                            msg = f"{src_name}: {e2}"
+                            errors.append(msg)
+                            logger.warning("入力のリネーム+再作成に失敗: %s: %s", src_name, e2)
+                    else:
+                        msg = f"{src_name}: {e}"
+                        errors.append(msg)
+                        logger.warning("ソース '%s' の追加に失敗: %s", src_name, e)
+                # transform設定（追加成功時も既存追加時も適用）
+                if src_name in created_sources:
+                    if "transform" in source:
+                        try:
+                            self.set_source_transform(scene_name, source["name"], source["transform"])
+                        except Exception as e:
+                            logger.warning("transform設定失敗 '%s': %s", src_name, e)
+                    if source.get("kind") == "browser":
+                        browser_sources.append(source["name"])
 
         # ブラウザソースの音声モニタリングを自動設定
         for src_name in browser_sources:
@@ -376,21 +396,21 @@ class OBSController:
         self._ensure_connected()
         from src.scene_config import PREFIX
 
-        # 全入力を取得して[ATC]プレフィックスのものを削除
+        # 現在のシーンがATCシーンなら、非ATCシーンに切り替えてから削除
         try:
-            response = self._client.get_input_list()
-            for inp in response.inputs:
-                name = inp.get("inputName", "")
-                if name.startswith(PREFIX):
-                    try:
-                        self._client.remove_input(name)
-                        logger.info("入力を強制削除: %s", name)
-                    except Exception:
-                        pass
+            current = self.get_scenes()["current"]
+            if current.startswith(PREFIX):
+                result = self._client.get_scene_list()
+                for scene in result.scenes:
+                    name = scene.get("sceneName", "")
+                    if not name.startswith(PREFIX):
+                        self.set_scene(name)
+                        logger.info("teardown: 非ATCシーン '%s' に切り替え", name)
+                        break
         except Exception as e:
-            logger.warning("入力一覧の取得に失敗: %s", e)
+            logger.warning("teardown: シーン切り替え失敗: %s", e)
 
-        # 全シーンを取得して[ATC]プレフィックスのものを削除
+        # 全シーンを取得して[ATC]プレフィックスのものを削除（入力より先にシーンを削除）
         try:
             result = self._client.get_scene_list()
             for scene in result.scenes:
@@ -399,10 +419,32 @@ class OBSController:
                     try:
                         self._client.remove_scene(name)
                         logger.info("シーンを強制削除: %s", name)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("シーン削除失敗 '%s': %s", name, e)
         except Exception as e:
             logger.warning("シーン一覧の取得に失敗: %s", e)
+
+        # 全入力を取得して[ATC]プレフィックスのものを削除（シーン削除後）
+        # ブラウザソースはOBSが内部的に保持するため、複数回削除を試行する
+        import time
+        for attempt in range(3):
+            try:
+                response = self._client.get_input_list()
+                atc_inputs = [inp for inp in response.inputs if inp.get("inputName", "").startswith(PREFIX)]
+                if not atc_inputs:
+                    break
+                for inp in atc_inputs:
+                    name = inp["inputName"]
+                    try:
+                        self._client.remove_input(name)
+                        logger.info("入力を強制削除: %s (attempt %d)", name, attempt + 1)
+                    except Exception as e:
+                        logger.warning("入力削除失敗 '%s': %s", name, e)
+                if attempt < 2:
+                    time.sleep(0.5)
+            except Exception as e:
+                logger.warning("入力一覧の取得に失敗: %s", e)
+                break
 
         logger.info("強制クリーンアップ完了")
 
