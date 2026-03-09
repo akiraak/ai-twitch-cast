@@ -65,25 +65,30 @@
   #todo-panel .todo-title {
     font-size: 18px;
     font-weight: bold;
-    color: #7c4dff;
+    color: #ffffff;
     margin-bottom: 12px;
     letter-spacing: 1px;
-    text-shadow: 0 0 10px rgba(124, 77, 255, 0.4);
   }
   #todo-panel .todo-item {
     font-size: 15px;
-    color: #e0e0e0;
-    padding: 5px 0;
+    color: #ffffff;
+    padding: 6px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     line-height: 1.5;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   #todo-panel .todo-item:last-child {
     border-bottom: none;
   }
-  #todo-panel .todo-item::before {
-    content: "\2610 ";
-    color: #7c4dff;
-    font-size: 14px;
+  #todo-panel .todo-checkbox {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+    margin-top: 0;
   }
 
   /* ステータスパネル（左上・常時表示） */
@@ -227,8 +232,13 @@ async function loadTodo() {
     for (const item of data.items) {
       const div = document.createElement('div');
       div.className = 'todo-item';
-      div.textContent = item;
-      if (fs) div.style.fontSize = fs + 'px';
+      const cb = document.createElement('span');
+      cb.className = 'todo-checkbox';
+      const text = document.createElement('span');
+      text.textContent = item;
+      if (fs) text.style.fontSize = fs + 'px';
+      div.appendChild(cb);
+      div.appendChild(text);
       todoListEl.appendChild(div);
     }
   } catch (e) {
