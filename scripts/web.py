@@ -133,6 +133,7 @@ async def start():
     except Exception:
         pass
     await state.ensure_reader()
+    await state.git_watcher.start()
     return {"ok": True}
 
 
