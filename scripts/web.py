@@ -1,5 +1,6 @@
 """Web インターフェース（console.py相当）"""
 
+import asyncio
 import logging
 import os
 import sys
@@ -126,15 +127,26 @@ async def start():
         await state.vts.connect()
         state.vts_connected = True
     scene_config.reload()
-    state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
-    # ブラウザソースのキャッシュを確実にクリア
+    setup_result = state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
+    # ブラウザソースの音声をOBSミキサーに出力 & モニタリング有効化 & キャッシュクリア
+    overlay_name = f"{scene_config.PREFIX}オーバーレイ"
     try:
-        state.obs.refresh_browser_source(f"{scene_config.PREFIX}オーバーレイ")
-    except Exception:
-        pass
+        state.obs.set_input_settings(overlay_name, {"reroute_audio": True})
+        state.obs._client.set_input_audio_monitor_type(overlay_name, "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT")
+        state.obs.refresh_browser_source(overlay_name)
+    except Exception as e:
+        setup_result.setdefault("errors", []).append(f"オーバーレイ音声設定: {e}")
     await state.ensure_reader()
     await state.git_watcher.start()
-    return {"ok": True}
+
+    # Setup完了後に音声テスト（ブラウザソース接続待ち）
+    async def _startup_speak():
+        import asyncio
+        await asyncio.sleep(3)
+        await state.reader.speak_event("セットアップ", "セットアップ完了！配信準備OKです！")
+
+    asyncio.ensure_future(_startup_speak())
+    return {"ok": True, **setup_result}
 
 
 @app.on_event("startup")

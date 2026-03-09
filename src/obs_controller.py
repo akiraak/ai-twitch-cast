@@ -38,6 +38,18 @@ class OBSController:
         version = self._client.get_version()
         logger.info("OBSに接続しました (OBS %s, WebSocket %s)", version.obs_version, version.obs_web_socket_version)
 
+    def _ensure_connected(self):
+        """接続を確保する（切断されていたら自動再接続）"""
+        if self._client is None:
+            self.connect()
+            return
+        try:
+            self._client.get_version()
+        except Exception:
+            logger.info("OBS接続が切れていたため再接続します")
+            self._client = None
+            self.connect()
+
     def disconnect(self):
         """OBS WebSocketから切断する"""
         if self._client:
@@ -47,6 +59,7 @@ class OBSController:
 
     def get_stream_status(self):
         """配信状態を取得する"""
+        self._ensure_connected()
         status = self._client.get_stream_status()
         return {
             "active": status.output_active,
@@ -57,6 +70,7 @@ class OBSController:
 
     def start_stream(self):
         """配信を開始する"""
+        self._ensure_connected()
         status = self.get_stream_status()
         if status["active"]:
             logger.warning("既に配信中です")
@@ -66,6 +80,7 @@ class OBSController:
 
     def stop_stream(self):
         """配信を停止する"""
+        self._ensure_connected()
         status = self.get_stream_status()
         if not status["active"]:
             logger.warning("配信していません")
@@ -75,6 +90,7 @@ class OBSController:
 
     def get_scenes(self):
         """シーン一覧を取得する"""
+        self._ensure_connected()
         result = self._client.get_scene_list()
         return {
             "current": result.current_program_scene_name,
@@ -83,6 +99,7 @@ class OBSController:
 
     def get_scene_items(self, scene_name):
         """シーンのソース一覧を取得する"""
+        self._ensure_connected()
         result = self._client.get_scene_item_list(scene_name)
         return [
             {
@@ -95,16 +112,19 @@ class OBSController:
 
     def create_scene(self, name):
         """シーンを作成する"""
+        self._ensure_connected()
         self._client.create_scene(name)
         logger.info("シーンを作成しました: %s", name)
 
     def set_scene(self, name):
         """シーンを切り替える"""
+        self._ensure_connected()
         self._client.set_current_program_scene(name)
         logger.info("シーンを切り替えました: %s", name)
 
     def add_image_source(self, scene_name, source_name, wsl_path):
         """WSLパスの画像をソースとして追加する"""
+        self._ensure_connected()
         win_path = to_windows_path(str(wsl_path))
         self._client.create_input(
             sceneName=scene_name,
@@ -117,6 +137,7 @@ class OBSController:
 
     def add_game_capture(self, scene_name, source_name, window="", allow_transparency=False):
         """ゲームキャプチャソースを追加する"""
+        self._ensure_connected()
         settings = {
             "capture_mode": "window" if window else "any_fullscreen",
             "allow_transparency": allow_transparency,
@@ -139,6 +160,7 @@ class OBSController:
         Args:
             window_match: ウィンドウタイトルに含まれるべきキーワードのリスト（すべて一致で選択）
         """
+        self._ensure_connected()
         settings = {"cursor": cursor}
         if window:
             settings["window"] = window
@@ -180,6 +202,7 @@ class OBSController:
 
     def add_browser_source(self, scene_name, source_name, url, width=1920, height=1080):
         """ブラウザソースを追加する"""
+        self._ensure_connected()
         import time
         sep = "&" if "?" in url else "?"
         cache_bust_url = f"{url}{sep}_v={int(time.time())}"
@@ -191,14 +214,20 @@ class OBSController:
                 "url": cache_bust_url,
                 "width": width,
                 "height": height,
-                "reroute_audio": False,
+                "reroute_audio": True,
             },
             sceneItemEnabled=True,
         )
         logger.info("ブラウザソースを追加しました: %s", source_name)
 
+    def set_input_settings(self, source_name, settings):
+        """ソースの設定を更新する"""
+        self._ensure_connected()
+        self._client.set_input_settings(source_name, settings, overlay=True)
+
     def refresh_browser_source(self, source_name):
         """ブラウザソースのキャッシュを無視してリフレッシュする"""
+        self._ensure_connected()
         self._client.send("PressInputPropertiesButton", {
             "inputName": source_name,
             "propertyName": "refreshnocache",
@@ -207,6 +236,7 @@ class OBSController:
 
     def add_text_source(self, scene_name, source_name, text, font_size=48):
         """テキストソースを追加する"""
+        self._ensure_connected()
         self._client.create_input(
             sceneName=scene_name,
             inputName=source_name,
@@ -224,6 +254,7 @@ class OBSController:
 
     def get_source_transform(self, scene_name, source_name):
         """ソースの位置・サイズを取得する"""
+        self._ensure_connected()
         item_id = self._client.get_scene_item_id(scene_name, source_name).scene_item_id
         response = self._client.send("GetSceneItemTransform", {
             "sceneName": scene_name,
@@ -233,21 +264,25 @@ class OBSController:
 
     def set_source_transform(self, scene_name, source_name, transform):
         """ソースの位置・サイズを設定する"""
+        self._ensure_connected()
         item_id = self._client.get_scene_item_id(scene_name, source_name).scene_item_id
         self._client.set_scene_item_transform(scene_name, item_id, transform)
 
     def remove_scene(self, name):
         """シーンを削除する"""
+        self._ensure_connected()
         self._client.remove_scene(name)
         logger.info("シーンを削除しました: %s", name)
 
     def remove_input(self, input_name):
         """入力ソースを削除する"""
+        self._ensure_connected()
         self._client.remove_input(input_name)
         logger.info("ソースを削除しました: %s", input_name)
 
     def _enable_input(self, input_name, enabled):
         """全シーンで指定入力の表示を切り替える"""
+        self._ensure_connected()
         scenes = self.get_scenes()["scenes"]
         for scene_name in scenes:
             try:
@@ -258,6 +293,7 @@ class OBSController:
 
     def mute_all_audio(self):
         """全音声入力をミュートする（デスクトップ音声・マイク等）"""
+        self._ensure_connected()
         try:
             response = self._client.get_input_list()
             for inp in response.inputs:
@@ -273,22 +309,52 @@ class OBSController:
             logger.warning("音声ミュート処理に失敗: %s", e)
 
     def setup_scenes(self, scenes_config, main_scene=None):
-        """シーン構成を一括作成する（既存のATC シーン・ソースは先に削除）"""
-        self.teardown_scenes(scenes_config)
+        """シーン構成を一括作成する（既存のATC リソースは全て強制削除してから再構築）
+
+        Returns:
+            dict: セットアップ結果（created_scenes, created_sources, errors）
+        """
+        self._ensure_connected()
+        self.teardown_all()
+
+        browser_sources = []
+        created_scenes = []
+        created_sources = []
+        errors = []
+
         for scene in scenes_config:
             scene_name = scene["name"]
             try:
                 self.create_scene(scene_name)
-            except Exception:
+                created_scenes.append(scene_name)
+            except Exception as e:
                 logger.debug("シーン '%s' は既に存在します", scene_name)
+                created_scenes.append(scene_name)
 
             for source in scene["sources"]:
+                src_name = source.get("name", "?")
                 try:
                     self._add_source(scene_name, source)
                     if "transform" in source:
                         self.set_source_transform(scene_name, source["name"], source["transform"])
+                    if source.get("kind") == "browser":
+                        browser_sources.append(source["name"])
+                    created_sources.append(src_name)
                 except Exception as e:
-                    logger.warning("ソース '%s' の追加に失敗: %s", source['name'], e)
+                    msg = f"{src_name}: {e}"
+                    errors.append(msg)
+                    logger.warning("ソース '%s' の追加に失敗: %s", src_name, e)
+
+        # ブラウザソースの音声モニタリングを自動設定
+        for src_name in browser_sources:
+            try:
+                self._client.set_input_audio_monitor_type(
+                    src_name, "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"
+                )
+                logger.info("音声モニタリング設定: %s", src_name)
+            except Exception as e:
+                errors.append(f"音声モニタリング {src_name}: {e}")
+                logger.warning("音声モニタリング設定失敗 '%s': %s", src_name, e)
 
         # メインシーンにフォーカス
         if main_scene:
@@ -296,35 +362,58 @@ class OBSController:
         elif scenes_config:
             self.set_scene(scenes_config[0]["name"])
 
-        logger.info("セットアップ完了 (%dシーン)", len(scenes_config))
+        logger.info("セットアップ完了 (%dシーン, %dソース, %dエラー)",
+                     len(created_scenes), len(created_sources), len(errors))
 
-    def teardown_scenes(self, scenes_config):
-        """シーン構成を一括削除する"""
-        # ソースを先に削除（他シーンとの共有を考慮）
-        removed_inputs = set()
-        for scene in scenes_config:
-            for source in scene["sources"]:
-                if source["name"] not in removed_inputs:
+        return {
+            "created_scenes": created_scenes,
+            "created_sources": created_sources,
+            "errors": errors,
+        }
+
+    def teardown_all(self):
+        """OBSから[ATC]プレフィックス付きの全入力・全シーンを強制削除する"""
+        self._ensure_connected()
+        from src.scene_config import PREFIX
+
+        # 全入力を取得して[ATC]プレフィックスのものを削除
+        try:
+            response = self._client.get_input_list()
+            for inp in response.inputs:
+                name = inp.get("inputName", "")
+                if name.startswith(PREFIX):
                     try:
-                        self.remove_input(source["name"])
-                        removed_inputs.add(source["name"])
+                        self._client.remove_input(name)
+                        logger.info("入力を強制削除: %s", name)
                     except Exception:
                         pass
+        except Exception as e:
+            logger.warning("入力一覧の取得に失敗: %s", e)
 
-        # シーンを削除
-        for scene in scenes_config:
-            try:
-                self.remove_scene(scene["name"])
-            except Exception:
-                pass
+        # 全シーンを取得して[ATC]プレフィックスのものを削除
+        try:
+            result = self._client.get_scene_list()
+            for scene in result.scenes:
+                name = scene.get("sceneName", "")
+                if name.startswith(PREFIX):
+                    try:
+                        self._client.remove_scene(name)
+                        logger.info("シーンを強制削除: %s", name)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning("シーン一覧の取得に失敗: %s", e)
 
-        logger.info("ティアダウン完了")
+        logger.info("強制クリーンアップ完了")
 
     def _add_source(self, scene_name, source):
         """ソース定義に基づいてソースを追加する"""
         kind = source["kind"]
         name = source["name"]
+        self._create_source(scene_name, kind, name, source)
 
+    def _create_source(self, scene_name, kind, name, source):
+        """ソース種類に応じて新規作成する"""
         if kind == "image":
             self.add_image_source(scene_name, name, source["path"])
         elif kind == "text":

@@ -46,13 +46,8 @@ async def obs_scene(body: SceneSwitch):
 @router.post("/api/obs/setup")
 async def obs_setup():
     scene_config.reload()
-    # ターミナルのtransformをログ出力して確認
-    for sc in scene_config.SCENES:
-        for src in sc["sources"]:
-            if src.get("name") == TERMINAL_SOURCE_NAME:
-                logger.info("Setup: ターミナルtransform=%s", src.get("transform"))
-    state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
-    return {"ok": True}
+    result = state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
+    return {"ok": True, **result}
 
 
 AVATAR_SOURCE_NAME = f"{PREFIX}アバター"
@@ -178,8 +173,80 @@ async def obs_overlay_refresh():
     return {"ok": True}
 
 
+@router.post("/api/obs/overlay/enable-audio")
+async def obs_overlay_enable_audio():
+    """ブラウザソースの音声をOBSミキサーに出力し、モニタリングを有効にする"""
+    state.obs.set_input_settings(OVERLAY_SOURCE_NAME, {"reroute_audio": True})
+    # 音声モニタリングを「モニターと出力」に設定
+    try:
+        state.obs._client.set_input_audio_monitor_type(OVERLAY_SOURCE_NAME, "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT")
+    except Exception as e:
+        logger.warning("モニタリング設定失敗: %s", e)
+    return {"ok": True}
+
+
+@router.get("/api/obs/diag")
+async def obs_diag():
+    """OBSソースの診断情報を返す"""
+    import httpx
+    from src.scene_config import _get_server_base_url
+
+    result = {
+        "server_base_url": _get_server_base_url(),
+        "obs_connected": state.obs_connected,
+        "overlay_source": None,
+        "overlay_url_reachable": None,
+        "all_sources": [],
+        "errors": [],
+    }
+
+    if not state.obs_connected:
+        result["errors"].append("OBS未接続")
+        return result
+
+    try:
+        scene = state.obs.get_scenes()["current"]
+        items = state.obs.get_scene_items(scene)
+        result["current_scene"] = scene
+        result["all_sources"] = items
+    except Exception as e:
+        result["errors"].append(f"シーン取得失敗: {e}")
+        return result
+
+    # オーバーレイソースの詳細
+    try:
+        settings = state.obs._client.get_input_settings(OVERLAY_SOURCE_NAME)
+        overlay_url = settings.input_settings.get("url", "")
+        result["overlay_source"] = {
+            "name": OVERLAY_SOURCE_NAME,
+            "url": overlay_url,
+            "width": settings.input_settings.get("width"),
+            "height": settings.input_settings.get("height"),
+            "reroute_audio": settings.input_settings.get("reroute_audio"),
+        }
+    except Exception as e:
+        result["errors"].append(f"オーバーレイソース取得失敗: {e}")
+
+    # URLにアクセスできるか確認（WSL側から）
+    if result["overlay_source"] and result["overlay_source"]["url"]:
+        test_url = result["overlay_source"]["url"].split("?")[0]  # cache bust除去
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(test_url)
+                result["overlay_url_reachable"] = {
+                    "url": test_url,
+                    "status": resp.status_code,
+                    "content_length": len(resp.text),
+                    "has_todo_panel": "todo-panel" in resp.text,
+                }
+        except Exception as e:
+            result["overlay_url_reachable"] = {"url": test_url, "error": str(e)}
+
+    return result
+
+
 @router.post("/api/obs/teardown")
 async def obs_teardown():
-    state.obs.teardown_scenes(scene_config.SCENES)
+    state.obs.teardown_all()
     state.obs.mute_all_audio()
     return {"ok": True}

@@ -142,19 +142,34 @@ class CommentReader:
         if self._on_overlay:
             await self._on_overlay({"type": "speaking_end"})
 
-    async def _speak(self, text):
-        """TTS生成・再生する"""
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            wav_path = f.name
+    async def _speak(self, text, voice=None):
+        """TTS生成・ブラウザソース経由で再生する"""
+        wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
         logger.info("[tts] 生成中...")
-        await asyncio.to_thread(synthesize, text, wav_path)
-        proc = await asyncio.create_subprocess_exec(
-            "ffplay", "-nodisp", "-autoexit", "-loglevel", "error", wav_path,
-        )
-        await proc.wait()
-        Path(wav_path).unlink(missing_ok=True)
+        await asyncio.to_thread(synthesize, text, str(wav_path), voice=voice)
 
-    async def speak_event(self, event_type, detail):
+        # 音声ファイルパスを保持（APIで配信用）
+        self._current_audio = wav_path
+
+        # オーバーレイに音声再生を指示
+        if self._on_overlay:
+            import time
+            audio_url = f"/api/tts/audio?t={int(time.time() * 1000)}"
+            await self._on_overlay({
+                "type": "play_audio",
+                "url": audio_url,
+            })
+            # 音声の長さ分だけ待機
+            import wave
+            with wave.open(str(wav_path), "rb") as wf:
+                duration = wf.getnframes() / wf.getframerate()
+            await asyncio.sleep(duration + 0.5)
+
+        # 再生後にクリーンアップ
+        wav_path.unlink(missing_ok=True)
+        wav_path.parent.rmdir()
+
+    async def speak_event(self, event_type, detail, voice=None):
         """イベントに対してアバターが発話する（コミット・作業開始等）"""
         try:
             logger.info("[event] %s: %s", event_type, detail)
@@ -162,7 +177,7 @@ class CommentReader:
             logger.info("[event] [%s] %s", result["emotion"], result["response"])
             await self._notify_overlay("システム", f"[{event_type}] {detail}", result)
             self._apply_emotion(result["emotion"])
-            await self._speak(result["response"])
+            await self._speak(result["response"], voice=voice)
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
         except Exception as e:

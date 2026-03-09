@@ -32,6 +32,10 @@
   .slider-row input[type=range] { flex: 1; }
   .slider-row .val { font-size: 0.8rem; min-width: 30px; text-align: right; }
   #log { background: #0f0f23; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 0.8rem; height: 180px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap; }
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 12px 24px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; max-width: 80vw; text-align: center; animation: fadeIn 0.3s; }
+  .toast.success { background: #1b5e20; color: #a5d6a7; border: 1px solid #4caf50; }
+  .toast.error { background: #b71c1c; color: #ffcdd2; border: 1px solid #e53935; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
   .env-card { background: #1a2332; border: 1px solid #2a3a4a; border-radius: 6px; }
   #env-table td { padding: 3px 6px; border-bottom: 1px solid #1a2332; }
   #env-table td:first-child { color: #78909c; }
@@ -43,7 +47,7 @@
 <h1>AI Twitch Cast</h1>
 
 <div class="btn-row" style="margin-bottom:16px;">
-  <button style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/start')">Setup</button>
+  <button style="padding:10px 28px; font-size:1rem;" onclick="runSetup('/api/start')">Setup</button>
   <button style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/stream/start')">配信開始</button>
   <button class="danger" style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/stream/stop')">配信停止</button>
 </div>
@@ -91,7 +95,7 @@
       <button class="secondary" onclick="api('POST','/api/obs/disconnect')">切断</button>
     </div>
     <div class="btn-row">
-      <button onclick="api('POST','/api/obs/setup')">Setup</button>
+      <button onclick="runSetup('/api/obs/setup')">Setup</button>
       <button class="danger" onclick="api('POST','/api/obs/teardown')">Teardown</button>
     </div>
     <div id="obs-scenes"></div>
@@ -308,6 +312,14 @@ function log(msg) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+function showToast(msg, type = 'success', duration = 5000) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+
 async function api(method, url, body) {
   try {
     const opts = { method };
@@ -333,6 +345,37 @@ async function api(method, url, body) {
     return data;
   } catch (e) {
     log(`ERROR ${url}: ${e.message}`);
+  }
+}
+
+async function runSetup(url) {
+  try {
+    const r = await fetch(url, { method: 'POST' });
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch { log(`ERROR ${url}: ${text.slice(0, 200)}`); showToast('Setup失敗: レスポンス解析エラー', 'error'); return; }
+    if (!r.ok) {
+      const msg = data.detail || JSON.stringify(data);
+      log(`ERROR ${url}: ${msg}`);
+      showToast(`Setup失敗: ${msg}`, 'error', 8000);
+      return;
+    }
+    // 結果をログに出力
+    const scenes = data.created_scenes || [];
+    const sources = data.created_sources || [];
+    const errors = data.errors || [];
+    log(`Setup完了: ${scenes.length}シーン, ${sources.length}ソース`);
+    if (sources.length) log(`  ソース: ${sources.join(', ')}`);
+    if (errors.length) {
+      for (const e of errors) log(`  エラー: ${e}`);
+      showToast(`Setup: ${errors.length}件のエラー\n${errors[0]}`, 'error', 8000);
+    } else {
+      showToast(`Setup完了: ${scenes.length}シーン, ${sources.length}ソース`, 'success');
+    }
+    refreshStatus();
+  } catch (e) {
+    log(`ERROR ${url}: ${e.message}`);
+    showToast(`Setup失敗: ${e.message}`, 'error', 8000);
   }
 }
 

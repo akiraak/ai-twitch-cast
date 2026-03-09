@@ -6,6 +6,9 @@ from pathlib import Path
 
 from src.wsl_path import get_wsl_ip, is_wsl
 
+# Webサーバーのポート
+WEB_PORT = int(os.environ.get("WEB_PORT", "8080"))
+
 # システムが作成するシーン・ソースのプレフィックス
 # ユーザーが手動で作成したものと区別するために使う
 PREFIX = "[ATC] "
@@ -16,6 +19,24 @@ AVATAR_APP = os.environ.get("AVATAR_APP", "vts")
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
 RESOURCES_DIR = _PROJECT_DIR / "resources"
 CONFIG_PATH = _PROJECT_DIR / "scenes.json"
+
+
+def _get_server_base_url() -> str:
+    """OBSからアクセス可能なWebサーバーのベースURLを返す"""
+    host = get_wsl_ip() if is_wsl() else "localhost"
+    return f"http://{host}:{WEB_PORT}"
+
+
+def _resolve_browser_url(url: str) -> str:
+    """ブラウザソースのURLを解決する。相対パスならサーバーURLを付与する"""
+    if url.startswith("http://") or url.startswith("https://"):
+        # フルURLの場合もlocalhostを置換
+        if is_wsl() and "localhost" in url:
+            url = url.replace("localhost", get_wsl_ip())
+        return url
+    # 相対パス（例: "overlay"）→ フルURLに変換
+    path = url if url.startswith("/") else f"/{url}"
+    return f"{_get_server_base_url()}{path}"
 
 
 def _load_config():
@@ -58,11 +79,7 @@ def _load_config():
             if src["kind"] == "image" and "path" in src:
                 resolved["path"] = RESOURCES_DIR / src["path"]
             elif src["kind"] == "browser" and "url" in src:
-                url = src["url"]
-                # WSL2環境ではlocalhostをWSL2のIPに置換（OBSはWindows上で動作）
-                if is_wsl() and "localhost" in url:
-                    url = url.replace("localhost", get_wsl_ip())
-                resolved["url"] = url
+                resolved["url"] = _resolve_browser_url(src["url"])
 
             sources.append(resolved)
 

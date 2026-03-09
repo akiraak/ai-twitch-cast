@@ -9,7 +9,7 @@ from src.gemini_client import get_client
 
 # Gemini TTS で利用可能な音声
 # Aoede, Charon, Fenrir, Kore, Puck, Leda, Orus, Zephyr
-DEFAULT_VOICE = "Kore"
+DEFAULT_VOICE = "Leda"
 
 
 def synthesize(text, output_path, voice=None):

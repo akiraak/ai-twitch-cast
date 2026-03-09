@@ -236,6 +236,16 @@ async function loadTodo() {
   }
 }
 
+// 音声再生
+const audioEl = document.createElement('audio');
+document.body.appendChild(audioEl);
+
+function playAudio(url) {
+  audioEl.src = url;
+  audioEl.load();
+  audioEl.play().catch(e => console.log('音声再生エラー:', e));
+}
+
 // WebSocket接続
 function connectWS() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -250,6 +260,8 @@ function connectWS() {
       fadeSubtitle();
     } else if (data.type === 'current_task') {
       showStatus(data.task);
+    } else if (data.type === 'play_audio') {
+      playAudio(data.url);
     } else if (data.type === 'settings_update') {
       applySettings(data);
     }

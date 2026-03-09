@@ -80,7 +80,7 @@
         {
           "kind": "browser",
           "name": "オーバーレイ",
-          "url": "http://localhost:8000/overlay",
+          "url": "overlay",
           "width": 1920,
           "height": 1080
         }
