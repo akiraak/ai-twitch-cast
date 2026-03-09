@@ -86,36 +86,36 @@
     font-size: 14px;
   }
 
-  /* 現在の作業パネル（下部） */
-  #current-task {
+  /* ステータスパネル（左上・常時表示） */
+  #status-panel {
     position: absolute;
-    bottom: 20px;
-    left: 30px;
+    top: 20px;
+    left: 20px;
     z-index: 20;
-    max-width: 900px;
-    background: linear-gradient(135deg, rgba(5, 5, 15, 0.92), rgba(15, 10, 30, 0.92));
-    border: 1px solid rgba(77, 208, 255, 0.3);
+    max-width: 600px;
+    background: linear-gradient(135deg, rgba(5, 5, 15, 0.88), rgba(15, 10, 30, 0.88));
+    border: 1px solid rgba(77, 208, 255, 0.25);
     border-left: 3px solid #4dd0e1;
-    border-radius: 10px;
-    padding: 12px 18px;
+    border-radius: 8px;
+    padding: 10px 16px;
     backdrop-filter: blur(6px);
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.4s ease;
   }
-  #current-task.visible { opacity: 1; }
-  #current-task .task-label {
-    font-size: 12px;
+  #status-panel.visible { opacity: 1; }
+  #status-panel .status-label {
+    font-size: 11px;
     color: #4dd0e1;
     font-weight: bold;
-    letter-spacing: 1px;
-    margin-bottom: 6px;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
     text-shadow: 0 0 8px rgba(77, 208, 255, 0.4);
   }
-  #current-task .task-text {
-    font-size: 18px;
+  #status-panel .status-text {
+    font-size: 16px;
     color: #e0e0e0;
-    line-height: 1.5;
+    line-height: 1.4;
     word-break: break-word;
   }
 
@@ -134,9 +134,9 @@
   <div id="todo-list"></div>
 </div>
 
-<div id="current-task">
-  <div class="task-label">CURRENT TASK</div>
-  <div class="task-text"></div>
+<div id="status-panel">
+  <div class="status-label">NOW WORKING</div>
+  <div class="status-text"></div>
 </div>
 
 
@@ -208,13 +208,13 @@ function esc(s) {
   return d.innerHTML;
 }
 
-// 現在の作業表示
-const currentTaskEl = document.getElementById('current-task');
-const taskTextEl = currentTaskEl.querySelector('.task-text');
+// ステータス表示（左上・常時表示）
+const statusEl = document.getElementById('status-panel');
+const statusTextEl = statusEl.querySelector('.status-text');
 
-function showCurrentTask(task) {
-  taskTextEl.textContent = task;
-  currentTaskEl.classList.add('visible');
+function showStatus(task) {
+  statusTextEl.textContent = task;
+  statusEl.classList.add('visible');
 }
 
 // TODO読み込み
@@ -249,7 +249,7 @@ function connectWS() {
     } else if (data.type === 'speaking_end') {
       fadeSubtitle();
     } else if (data.type === 'current_task') {
-      showCurrentTask(data.task);
+      showStatus(data.task);
     } else if (data.type === 'settings_update') {
       applySettings(data);
     }

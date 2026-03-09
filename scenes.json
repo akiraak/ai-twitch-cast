@@ -11,17 +11,11 @@
       "fontSize": 28,
       "fadeDuration": 3
     },
-    "history": {
-      "top": 30,
-      "right": 30,
-      "fontSize": 18,
-      "maxItems": 5
-    },
     "todo": {
-      "positionX": 960,
-      "positionY": 370,
+      "positionX": 470,
+      "positionY": 40,
       "width": 990,
-      "height": 860,
+      "height": 600,
       "fontSize": 24,
       "titleFontSize": 29
     }
