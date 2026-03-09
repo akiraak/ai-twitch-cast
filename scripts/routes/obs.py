@@ -3,7 +3,7 @@
 import json
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from scripts import state
@@ -12,6 +12,14 @@ from src.scene_config import CONFIG_PATH, PREFIX
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _ensure_obs():
+    """OBS未接続なら自動接続する"""
+    if not state.obs_connected:
+        logger.info("OBS未接続のため自動接続します")
+        state.obs.connect()
+        state.obs_connected = True
 
 
 @router.post("/api/obs/connect")
@@ -30,6 +38,7 @@ async def obs_disconnect():
 
 @router.get("/api/obs/scenes")
 async def obs_scenes():
+    _ensure_obs()
     return state.obs.get_scenes()
 
 
@@ -39,12 +48,14 @@ class SceneSwitch(BaseModel):
 
 @router.post("/api/obs/scene")
 async def obs_scene(body: SceneSwitch):
+    _ensure_obs()
     state.obs.set_scene(body.name)
     return {"ok": True}
 
 
 @router.post("/api/obs/setup")
 async def obs_setup():
+    _ensure_obs()
     scene_config.reload()
     result = state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
     return {"ok": True, **result}
@@ -55,6 +66,7 @@ AVATAR_SOURCE_NAME = f"{PREFIX}アバター"
 
 @router.get("/api/obs/avatar/transform")
 async def obs_avatar_transform_get():
+    _ensure_obs()
     scene = state.obs.get_scenes()["current"]
     transform = state.obs.get_source_transform(scene, AVATAR_SOURCE_NAME)
     return transform
@@ -69,6 +81,7 @@ class AvatarTransform(BaseModel):
 
 @router.post("/api/obs/avatar/transform")
 async def obs_avatar_transform_set(body: AvatarTransform):
+    _ensure_obs()
     scene = state.obs.get_scenes()["current"]
     update = {k: v for k, v in body.model_dump().items() if v is not None}
     state.obs.set_source_transform(scene, AVATAR_SOURCE_NAME, update)
@@ -78,6 +91,7 @@ async def obs_avatar_transform_set(body: AvatarTransform):
 @router.post("/api/obs/avatar/save")
 async def obs_avatar_save():
     """現在のアバター位置をscenes.jsonの現在シーンに保存する"""
+    _ensure_obs()
     scene = state.obs.get_scenes()["current"]
     current_base = scene.removeprefix(PREFIX)
 
@@ -113,6 +127,7 @@ TERMINAL_SOURCE_NAME = f"{PREFIX}ターミナル"
 
 @router.get("/api/obs/terminal/transform")
 async def obs_terminal_transform_get():
+    _ensure_obs()
     scene = state.obs.get_scenes()["current"]
     transform = state.obs.get_source_transform(scene, TERMINAL_SOURCE_NAME)
     return transform
@@ -120,6 +135,7 @@ async def obs_terminal_transform_get():
 
 @router.post("/api/obs/terminal/transform")
 async def obs_terminal_transform_set(body: AvatarTransform):
+    _ensure_obs()
     scene = state.obs.get_scenes()["current"]
     update = {k: v for k, v in body.model_dump().items() if v is not None}
     state.obs.set_source_transform(scene, TERMINAL_SOURCE_NAME, update)
@@ -129,6 +145,7 @@ async def obs_terminal_transform_set(body: AvatarTransform):
 @router.post("/api/obs/terminal/save")
 async def obs_terminal_save():
     """現在のターミナル位置をscenes.jsonの現在シーンに保存する"""
+    _ensure_obs()
     scene = state.obs.get_scenes()["current"]
     current_base = scene.removeprefix(PREFIX)
     logger.info("ターミナル保存: シーン='%s', base='%s'", scene, current_base)
@@ -169,6 +186,7 @@ OVERLAY_SOURCE_NAME = f"{PREFIX}オーバーレイ"
 @router.post("/api/obs/overlay/refresh")
 async def obs_overlay_refresh():
     """ブラウザソース（オーバーレイ）をリフレッシュする"""
+    _ensure_obs()
     state.obs.refresh_browser_source(OVERLAY_SOURCE_NAME)
     return {"ok": True}
 
@@ -176,6 +194,7 @@ async def obs_overlay_refresh():
 @router.post("/api/obs/overlay/enable-audio")
 async def obs_overlay_enable_audio():
     """ブラウザソースの音声をOBSミキサーに出力し、モニタリングを有効にする"""
+    _ensure_obs()
     state.obs.set_input_settings(OVERLAY_SOURCE_NAME, {"reroute_audio": True})
     # 音声モニタリングを「モニターと出力」に設定
     try:
@@ -247,6 +266,7 @@ async def obs_diag():
 
 @router.post("/api/obs/teardown")
 async def obs_teardown():
+    _ensure_obs()
     state.obs.teardown_all()
     state.obs.mute_all_audio()
     return {"ok": True}
