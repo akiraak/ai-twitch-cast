@@ -161,4 +161,5 @@ async def startup_seed():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    from src.scene_config import WEB_PORT
+    uvicorn.run(app, host="0.0.0.0", port=WEB_PORT)

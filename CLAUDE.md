@@ -108,11 +108,11 @@ ai-twitch-cast/
 - **コード内で `localhost` を定数として使わないこと**。WSL2環境では `get_wsl_ip()` / `resolve_host()` を使って動的に解決する
 - **WSL2のIPアドレスは再起動のたびに変わる可能性がある**。OBS再起動後にブラウザソースが表示されない場合は、Setupを再実行してURLを更新すること
 - OBS WebSocketもWindows上のOBSに接続するため、`OBS_WS_HOST` にWindowsのIPを設定する（`wsl_path.py` の `resolve_host()` で解決）
-- uvicornは必ず `--port 8080` を指定して起動すること。ポートなしで起動するとデフォルト8000になり、OBSのブラウザソースからアクセスできなくなる
+- Webサーバーのポートは環境変数 `WEB_PORT` で設定（デフォルト: 8080）。`scene_config.py` と `web.py` が同じ値を参照する
 
 ## Webサーバー運用注意
 
-- Webサーバーは `uvicorn scripts.web:app --reload --host 0.0.0.0 --port 8080` で起動
+- Webサーバーは `uvicorn scripts.web:app --reload --host 0.0.0.0 --port $WEB_PORT` で起動（デフォルト8080）
 - **Pydanticモデルやルートの変更後は `--reload` では反映されないことがある。その場合はuvicornプロセスを手動で再起動すること**
 - OBSのブラウザソースはHTMLをキャッシュするため、overlay.html等を変更した場合はSetupボタン押下またはOBS側でブラウザソースの「キャッシュを無視してページをリフレッシュ」が必要
 
@@ -122,21 +122,21 @@ ai-twitch-cast/
 
 ### 1. サーバー起動確認
 ```bash
-curl -s http://localhost:8080/api/status  # サーバーが応答するか
-curl -s http://localhost:8080/api/todo    # TODOが返るか
-curl -s http://localhost:8080/overlay | grep todo-panel  # overlay HTMLが正常か
+curl -s http://localhost:$WEB_PORT/api/status  # サーバーが応答するか
+curl -s http://localhost:$WEB_PORT/api/todo    # TODOが返るか
+curl -s http://localhost:$WEB_PORT/overlay | grep todo-panel  # overlay HTMLが正常か
 ```
 
 ### 2. scene_config確認（特にURL周り）
 ```bash
 python -c "from src.scene_config import SCENES; import json; print(json.dumps(SCENES, indent=2, default=str))"
 ```
-- ブラウザソースのURLが `http://<WSL2 IP>:8080/overlay` になっているか（`localhost` は不可）
+- ブラウザソースのURLが `http://<WSL2 IP>:<WEB_PORT>/overlay` になっているか（`localhost` は不可）
 - `[ATC]` プレフィックスが全ソースに付いているか
 
 ### 3. OBS Setup後の確認（OBS接続時）
 ```bash
-curl -s http://localhost:8080/api/obs/diag | python -m json.tool
+curl -s http://localhost:$WEB_PORT/api/obs/diag | python -m json.tool
 ```
 - `overlay_source.url` がWSL2のIPを使っているか
 - `overlay_url_reachable.status` が200か
@@ -147,7 +147,7 @@ curl -s http://localhost:8080/api/obs/diag | python -m json.tool
 - **overlay.html**: CSS/JSの変更でTODOパネルの表示が消えることがある
 - **scenes.json**: URLに `localhost` を書かないこと（`_resolve_browser_url` が自動解決する）
 - **scene_config.py**: ソース解決ロジックの変更でブラウザソースが生成されなくなることがある
-- **uvicorn再起動**: `--port 8080` を忘れるとブラウザソースからアクセス不能になる
+- **uvicorn再起動**: `--port` を `WEB_PORT` と一致させること（不一致だとブラウザソースからアクセス不能）
 - **OBSブラウザソースのキャッシュ**: overlay.htmlを変更したらSetup再実行またはOBSでキャッシュクリア必須
 
 ### チェック対象の全機能一覧
