@@ -54,82 +54,166 @@
     left: 50%;
     transform: translate(-50%, -50%);
     z-index: 20;
-    width: 460px;
-    background: linear-gradient(135deg, rgba(5, 5, 15, 0.95), rgba(10, 5, 20, 0.95));
+    width: 540px;
+    max-height: 70vh;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(5, 0, 10, 0.95));
     border: 1px solid rgba(124, 77, 255, 0.3);
     border-radius: 12px;
-    padding: 16px 20px;
+    padding: 20px 24px;
     backdrop-filter: blur(6px);
     pointer-events: none;
   }
   #todo-panel .todo-title {
-    font-size: 18px;
+    font-size: 28px;
     font-weight: bold;
     color: #ffffff;
     margin-bottom: 12px;
     letter-spacing: 1px;
   }
+  #todo-panel .todo-section {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin-top: 10px;
+    margin-bottom: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  #todo-panel .todo-section:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
   #todo-panel .todo-item {
-    font-size: 15px;
-    color: #ffffff;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 24px;
     padding: 6px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     line-height: 1.5;
     display: flex;
     align-items: center;
     gap: 8px;
-  }
-  #todo-panel .todo-item:last-child {
-    border-bottom: none;
+    transition: all 0.3s ease;
   }
   #todo-panel .todo-checkbox {
     flex-shrink: 0;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     border: 2px solid rgba(255, 255, 255, 0.5);
     border-radius: 3px;
-    margin-top: 0;
-  }
-  #todo-panel .todo-item.in-progress .todo-checkbox {
-    background: #7c4dff;
-    border-color: #7c4dff;
-  }
-  #todo-panel .todo-item.in-progress {
-    color: #b388ff;
-    font-weight: bold;
   }
 
-  /* ステータスパネル（左上・常時表示） */
-  #status-panel {
+  /* 作業中アイテム - 強調表示 */
+  #todo-panel .todo-item.in-progress {
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 26px;
+    padding: 10px 12px;
+    margin: 4px -10px;
+    background: linear-gradient(90deg, rgba(124, 77, 255, 0.2), rgba(124, 77, 255, 0.05));
+    border-radius: 8px;
+    border-left: 3px solid #b388ff;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  #todo-panel .todo-item.in-progress .todo-checkbox {
+    width: 20px;
+    height: 20px;
+    background: #7c4dff;
+    border-color: #b388ff;
+    border-radius: 4px;
+    box-shadow: 0 0 8px rgba(124, 77, 255, 0.5);
+  }
+  #todo-panel .todo-item.in-progress .todo-arrow {
+    color: #b388ff;
+    font-size: 18px;
+    animation: arrow-bounce 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0px rgba(124, 77, 255, 0); }
+    50% { box-shadow: 0 0 12px rgba(124, 77, 255, 0.15); }
+  }
+  @keyframes arrow-bounce {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(3px); }
+  }
+
+  /* 情報パネル（左上） */
+  #info-panel {
     position: absolute;
     top: 20px;
     left: 20px;
     z-index: 20;
     max-width: 600px;
-    background: linear-gradient(135deg, rgba(5, 5, 15, 0.88), rgba(15, 10, 30, 0.88));
+    min-width: 280px;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(5, 0, 10, 0.95));
     border: 1px solid rgba(77, 208, 255, 0.25);
-    border-left: 3px solid #4dd0e1;
-    border-radius: 8px;
-    padding: 10px 16px;
+    border-radius: 10px;
+    padding: 0;
     backdrop-filter: blur(6px);
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.4s ease;
+    overflow: hidden;
   }
-  #status-panel.visible { opacity: 1; }
-  #status-panel .status-label {
-    font-size: 11px;
+  #info-panel.visible { opacity: 1; }
+  #info-panel .info-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: linear-gradient(90deg, rgba(77, 208, 225, 0.15), transparent);
+    border-bottom: 1px solid rgba(77, 208, 255, 0.1);
+  }
+  #info-panel .info-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4dd0e1;
+    box-shadow: 0 0 6px rgba(77, 208, 255, 0.6);
+    animation: dot-pulse 2s ease-in-out infinite;
+  }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  #info-panel .info-label {
+    font-size: 15px;
     color: #4dd0e1;
     font-weight: bold;
     letter-spacing: 2px;
-    margin-bottom: 4px;
-    text-shadow: 0 0 8px rgba(77, 208, 255, 0.4);
+    text-shadow: 0 0 8px rgba(77, 208, 255, 0.3);
   }
-  #status-panel .status-text {
-    font-size: 16px;
-    color: #e0e0e0;
-    line-height: 1.4;
+  #info-panel .info-body {
+    padding: 10px 14px;
+  }
+  #info-panel .info-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+  }
+  #info-panel .info-row:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  #info-panel .info-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  #info-panel .info-text {
+    font-size: 22px;
+    color: #f0f0f0;
+    line-height: 1.5;
     word-break: break-word;
+  }
+  #info-panel .info-time {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.45);
+    margin-left: auto;
+    flex-shrink: 0;
+    margin-top: 3px;
   }
 
 </style>
@@ -147,9 +231,12 @@
   <div id="todo-list"></div>
 </div>
 
-<div id="status-panel">
-  <div class="status-label">NOW WORKING</div>
-  <div class="status-text"></div>
+<div id="info-panel">
+  <div class="info-header">
+    <span class="info-dot"></span>
+    <span class="info-label">ACTIVITY</span>
+  </div>
+  <div class="info-body" id="info-body"></div>
 </div>
 
 
@@ -173,7 +260,7 @@ function applySettings(s) {
     if (s.todo.width != null) todoPanelEl.style.width = s.todo.width + 'px';
     if (s.todo.height) {
       todoPanelEl.style.height = s.todo.height + 'px';
-      todoPanelEl.style.overflowY = 'auto';
+      todoPanelEl.style.overflowY = 'hidden';
     } else {
       todoPanelEl.style.height = '';
       todoPanelEl.style.overflowY = '';
@@ -221,13 +308,52 @@ function esc(s) {
   return d.innerHTML;
 }
 
-// ステータス表示（左上・常時表示）
-const statusEl = document.getElementById('status-panel');
-const statusTextEl = statusEl.querySelector('.status-text');
+// 情報パネル（左上）
+const infoPanelEl = document.getElementById('info-panel');
+const infoBodyEl = document.getElementById('info-body');
+const MAX_INFO_ROWS = 5;
+let infoRows = [];
 
-function showStatus(task) {
-  statusTextEl.textContent = task;
-  statusEl.classList.add('visible');
+function addInfoRow(icon, text, label) {
+  const now = new Date();
+  const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+  infoRows.push({ icon, text, time: timeStr, label: label || '' });
+  if (infoRows.length > MAX_INFO_ROWS) {
+    infoRows.shift();
+  }
+  renderInfoPanel();
+  infoPanelEl.classList.add('visible');
+}
+
+function setInfoLabel(label) {
+  const labelEl = infoPanelEl.querySelector('.info-label');
+  if (labelEl) labelEl.textContent = label;
+}
+
+function renderInfoPanel() {
+  infoBodyEl.innerHTML = '';
+  for (const row of infoRows) {
+    const div = document.createElement('div');
+    div.className = 'info-row';
+
+    const icon = document.createElement('span');
+    icon.className = 'info-icon';
+    icon.textContent = row.icon;
+    div.appendChild(icon);
+
+    const text = document.createElement('span');
+    text.className = 'info-text';
+    text.textContent = row.text;
+    div.appendChild(text);
+
+    const time = document.createElement('span');
+    time.className = 'info-time';
+    time.textContent = row.time;
+    div.appendChild(time);
+
+    infoBodyEl.appendChild(div);
+  }
 }
 
 // TODO読み込み
@@ -237,12 +363,31 @@ async function loadTodo() {
     const data = await res.json();
     todoListEl.innerHTML = '';
     const fs = todoSettings.fontSize;
+    let lastSection = null;
     for (const item of data.items) {
-      const div = document.createElement('div');
-      // item can be string (legacy) or {text, status}
       const text_val = typeof item === 'string' ? item : item.text;
       const status = typeof item === 'string' ? 'todo' : item.status;
+      const section = item.section || '';
+
+      // セクション見出し
+      if (section && section !== lastSection) {
+        const sectionEl = document.createElement('div');
+        sectionEl.className = 'todo-section';
+        sectionEl.textContent = section;
+        todoListEl.appendChild(sectionEl);
+        lastSection = section;
+      }
+
+      const div = document.createElement('div');
       div.className = 'todo-item' + (status === 'in_progress' ? ' in-progress' : '');
+
+      if (status === 'in_progress') {
+        const arrow = document.createElement('span');
+        arrow.className = 'todo-arrow';
+        arrow.textContent = '▶';
+        div.appendChild(arrow);
+      }
+
       const cb = document.createElement('span');
       cb.className = 'todo-checkbox';
       const text = document.createElement('span');
@@ -280,7 +425,9 @@ function connectWS() {
     } else if (data.type === 'speaking_end') {
       fadeSubtitle();
     } else if (data.type === 'current_task') {
-      showStatus(data.task);
+      addInfoRow('🔧', data.task);
+    } else if (data.type === 'info') {
+      addInfoRow(data.icon || '📋', data.text, data.label);
     } else if (data.type === 'play_audio') {
       playAudio(data.url);
     } else if (data.type === 'settings_update') {

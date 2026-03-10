@@ -52,21 +52,27 @@ async def get_overlay_settings():
 
 @router.get("/api/todo")
 async def get_todo():
-    """TODO.mdから未完了タスクを返す（作業中マーク対応）"""
+    """TODO.mdから未完了タスクを返す（セクション・作業中マーク対応）"""
     if not TODO_PATH.exists():
         return {"items": []}
     text = TODO_PATH.read_text(encoding="utf-8")
     items = []
+    current_section = ""
     for line in text.splitlines():
+        # セクション見出し: ## セクション名
+        m_section = re.match(r"\s*##\s+(.*)", line)
+        if m_section:
+            current_section = m_section.group(1).strip()
+            continue
         # 未着手: - [ ] タスク
         m = re.match(r"\s*-\s*\[\s*\]\s*(.*)", line)
         if m:
-            items.append({"text": m.group(1).strip(), "status": "todo"})
+            items.append({"text": m.group(1).strip(), "status": "todo", "section": current_section})
             continue
         # 作業中: - [>] タスク
         m = re.match(r"\s*-\s*\[>\]\s*(.*)", line)
         if m:
-            items.append({"text": m.group(1).strip(), "status": "in_progress"})
+            items.append({"text": m.group(1).strip(), "status": "in_progress", "section": current_section})
     return {"items": items}
 
 
@@ -134,4 +140,17 @@ async def save_overlay_settings(request: Request):
         json.dump(config, f, ensure_ascii=False, indent=2)
         f.write("\n")
     await state.broadcast_overlay({"type": "settings_update", **body})
+    return {"ok": True}
+
+
+@router.post("/api/overlay/info")
+async def overlay_info(request: Request):
+    """情報パネルにメッセージを追加する（汎用）"""
+    body = await request.json()
+    await state.broadcast_overlay({
+        "type": "info",
+        "icon": body.get("icon", "📋"),
+        "text": body.get("text", ""),
+        "label": body.get("label", ""),
+    })
     return {"ok": True}
