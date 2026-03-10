@@ -665,11 +665,14 @@ topics      1──N  topic_scripts (topic_id)</div>
 const logEl = document.getElementById('log');
 
 // --- タブ切替 ---
+const TAB_NAMES = ['obs', 'avatar', 'overlay', 'character', 'bgm', 'topic', 'db'];
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
+  if (!el) el = document.querySelectorAll('.tab')[TAB_NAMES.indexOf(name)];
   el.classList.add('active');
+  location.hash = name;
   if (name === 'db') loadDbTables();
   if (name === 'character') loadLanguageModes();
 }
@@ -1502,6 +1505,10 @@ async function ytDownload() {
     setStatus('yt-status', 'エラー: ' + e.message, 'err');
   }
 }
+
+// ハッシュからタブ復元
+const initTab = location.hash.slice(1);
+if (TAB_NAMES.includes(initTab)) switchTab(initTab);
 
 // 初期読み込み
 loadTodoUI();
