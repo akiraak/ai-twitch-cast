@@ -23,22 +23,6 @@ TODO_PATH = PROJECT_DIR / "TODO.md"
 async def overlay_ws(websocket: WebSocket):
     await websocket.accept()
     state.overlay_clients.add(websocket)
-
-    # 保存済みBGMがあれば自動再生
-    try:
-        from scripts.routes.bgm import load_bgm_settings, _effective_volume
-        bgm = load_bgm_settings()
-        track = bgm.get("track", "")
-        if track:
-            master = bgm.get("volume", 0.3)
-            await websocket.send_json({
-                "type": "bgm_play",
-                "url": f"/bgm/{track}",
-                "volume": _effective_volume(master, track),
-            })
-    except Exception:
-        pass
-
     try:
         while True:
             await websocket.receive_text()
@@ -46,9 +30,53 @@ async def overlay_ws(websocket: WebSocket):
         state.overlay_clients.discard(websocket)
 
 
+@router.websocket("/ws/tts")
+async def tts_ws(websocket: WebSocket):
+    await websocket.accept()
+    state.tts_clients.add(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        state.tts_clients.discard(websocket)
+
+
+@router.websocket("/ws/bgm")
+async def bgm_ws(websocket: WebSocket):
+    await websocket.accept()
+    state.bgm_clients.add(websocket)
+    # 保存済みBGMがあれば自動再生
+    try:
+        from scripts.routes.bgm import load_bgm_settings
+        bgm = load_bgm_settings()
+        track = bgm.get("track", "")
+        if track:
+            await websocket.send_json({
+                "type": "bgm_play",
+                "url": f"/bgm/{track}",
+            })
+    except Exception:
+        pass
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        state.bgm_clients.discard(websocket)
+
+
 @router.get("/overlay", response_class=HTMLResponse)
 async def overlay_page():
     return (STATIC_DIR / "overlay.html").read_text(encoding="utf-8")
+
+
+@router.get("/audio/tts", response_class=HTMLResponse)
+async def audio_tts_page():
+    return (STATIC_DIR / "audio-tts.html").read_text(encoding="utf-8")
+
+
+@router.get("/audio/bgm", response_class=HTMLResponse)
+async def audio_bgm_page():
+    return (STATIC_DIR / "audio-bgm.html").read_text(encoding="utf-8")
 
 
 @router.get("/design-proposal", response_class=HTMLResponse)
@@ -151,11 +179,18 @@ async def save_overlay_settings(request: Request):
     body = await request.json()
     with open(CONFIG_PATH, encoding="utf-8") as f:
         config = json.load(f)
-    config["overlay"] = body
+    # 既存設定にマージ（部分更新対応）
+    existing = config.get("overlay", {})
+    for key, val in body.items():
+        if isinstance(val, dict) and isinstance(existing.get(key), dict):
+            existing[key].update(val)
+        else:
+            existing[key] = val
+    config["overlay"] = existing
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
         f.write("\n")
-    await state.broadcast_overlay({"type": "settings_update", **body})
+    await state.broadcast_overlay({"type": "settings_update", **existing})
     return {"ok": True}
 
 

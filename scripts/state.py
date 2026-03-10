@@ -29,23 +29,50 @@ vsf_connected = False
 # エピソード
 current_episode = None
 
-# WebSocket オーバーレイクライアント
+# WebSocket クライアント
 overlay_clients: set[WebSocket] = set()
+tts_clients: set[WebSocket] = set()
+bgm_clients: set[WebSocket] = set()
 
 
-async def broadcast_overlay(event: dict):
-    """全接続中のオーバーレイクライアントにイベントを送信する"""
+async def _broadcast(clients: set, event: dict):
     dead = set()
-    for ws in overlay_clients:
+    for ws in clients:
         try:
             await ws.send_json(event)
         except Exception:
             dead.add(ws)
-    overlay_clients.difference_update(dead)
+    clients.difference_update(dead)
 
 
-# Reader（broadcast_overlay定義後に作成）
-reader = CommentReader(vsf=vsf, on_overlay=broadcast_overlay)
+async def broadcast_overlay(event: dict):
+    """オーバーレイ（画面表示）にイベントを送信する"""
+    await _broadcast(overlay_clients, event)
+
+
+async def broadcast_tts(event: dict):
+    """TTS音声ソースにイベントを送信する"""
+    await _broadcast(tts_clients, event)
+
+
+async def broadcast_bgm(event: dict):
+    """BGM音声ソースにイベントを送信する"""
+    await _broadcast(bgm_clients, event)
+
+
+async def _dispatch_event(event: dict):
+    """イベントタイプに応じて適切なクライアントに振り分ける"""
+    event_type = event.get("type", "")
+    if event_type == "play_audio":
+        await broadcast_tts(event)
+    elif event_type in ("bgm_play", "bgm_stop", "bgm_volume"):
+        await broadcast_bgm(event)
+    else:
+        await broadcast_overlay(event)
+
+
+# Reader（_dispatch_event定義後に作成）
+reader = CommentReader(vsf=vsf, on_overlay=_dispatch_event)
 
 
 async def _on_git_commit(commit_hash, message):

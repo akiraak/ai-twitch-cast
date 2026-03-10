@@ -150,6 +150,10 @@
 
   /* 入力ラベル */
   .field-label { font-size: 0.8rem; color: #6a5590; display: block; margin-bottom: 4px; }
+  .vol-row { display: flex; gap: 12px; align-items: center; }
+  .vol-label { min-width: 56px; font-size: 0.8rem; color: #6a5590; white-space: nowrap; }
+  .vol-slider { flex: 1; }
+  .vol-pct { min-width: 40px; text-align: right; font-size: 0.85rem; }
 </style>
 </head>
 <body>
@@ -195,7 +199,7 @@
   <div class="tab" onclick="switchTab('avatar', this)">アバター</div>
   <div class="tab" onclick="switchTab('overlay', this)">オーバーレイ</div>
   <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
-  <div class="tab" onclick="switchTab('bgm', this)">BGM</div>
+  <div class="tab" onclick="switchTab('bgm', this)">サウンド</div>
 </div>
 
 <div class="main">
@@ -440,14 +444,6 @@
         </div>
       </div>
     </div>
-    <div class="card">
-      <h2>読み上げ音量</h2>
-      <div style="display:flex; gap:12px; align-items:center;">
-        <input type="range" id="ov-tts-volume" min="0" max="100" step="1" value="30" style="flex:1;"
-          oninput="document.getElementById('ov-tts-volume-label').textContent=this.value+'%'">
-        <span id="ov-tts-volume-label">30%</span>
-      </div>
-    </div>
     <div class="btn-row" style="margin-top:12px;">
       <button onclick="saveOverlaySettings()">保存</button>
       <button class="secondary" onclick="loadOverlaySettings()">読込</button>
@@ -493,14 +489,39 @@
     </div>
   </div>
 
-  <!-- ===== BGM ===== -->
+  <!-- ===== サウンド ===== -->
   <div class="tab-content" id="tab-bgm">
+    <div class="card" style="background:linear-gradient(135deg, #ede7f6, #f3e5f5); border:2px solid #ce93d8;">
+      <h2 style="font-size:1.1rem;">マスター音量</h2>
+      <div class="vol-row">
+        <span class="vol-label">マスター</span>
+        <input type="range" id="vol-master" min="0" max="200" step="1" value="100" class="vol-slider"
+          oninput="document.getElementById('vol-master-label').textContent=this.value+'%'"
+          onchange="setVolume('master', this.value)">
+        <span id="vol-master-label" class="vol-pct">100%</span>
+      </div>
+    </div>
     <div class="card">
-      <h2>BGM再生</h2>
-      <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
-        <label class="field-label" style="margin:0; white-space:nowrap;">マスター音量</label>
-        <input type="range" id="bgm-volume" min="0" max="100" value="30" style="flex:1;">
-        <span id="bgm-volume-label">30%</span>
+      <h2>読み上げ</h2>
+      <div class="vol-row">
+        <span class="vol-label">音量</span>
+        <input type="range" id="vol-tts" min="0" max="200" step="1" value="30" class="vol-slider"
+          oninput="document.getElementById('vol-tts-label').textContent=this.value+'%'"
+          onchange="setVolume('tts', this.value)">
+        <span id="vol-tts-label" class="vol-pct">30%</span>
+      </div>
+      <div style="margin-top:8px;">
+        <button onclick="ttsTest()" style="font-size:0.75rem;">テスト再生</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>BGM</h2>
+      <div class="vol-row" style="margin-bottom:12px;">
+        <span class="vol-label">音量</span>
+        <input type="range" id="vol-bgm" min="0" max="200" step="1" value="50" class="vol-slider"
+          oninput="document.getElementById('vol-bgm-label').textContent=this.value+'%'"
+          onchange="setVolume('bgm', this.value)">
+        <span id="vol-bgm-label" class="vol-pct">50%</span>
       </div>
       <div id="bgm-tracks"></div>
       <div class="status" id="bgm-status"></div>
@@ -1040,9 +1061,6 @@ function getOverlayValues() {
       fontSize: parseInt(document.getElementById('ov-todo-font').value),
       titleFontSize: parseInt(document.getElementById('ov-todo-title-font').value),
     },
-    tts: {
-      volume: parseInt(document.getElementById('ov-tts-volume').value) / 100,
-    },
   };
 }
 
@@ -1068,11 +1086,6 @@ function setOverlayValues(s) {
     document.getElementById('ov-todo-font-num').value = s.todo.fontSize ?? 15;
     document.getElementById('ov-todo-title-font').value = s.todo.titleFontSize ?? 18;
     document.getElementById('ov-todo-title-font-num').value = s.todo.titleFontSize ?? 18;
-  }
-  if (s.tts) {
-    const pct = Math.round((s.tts.volume ?? 0.3) * 100);
-    document.getElementById('ov-tts-volume').value = pct;
-    document.getElementById('ov-tts-volume-label').textContent = pct + '%';
   }
 }
 
@@ -1207,52 +1220,68 @@ function setStatus(id, msg, type) {
   el.style.color = type === 'err' ? '#c62828' : type === 'ok' ? '#2e7d32' : '#6a5590';
 }
 
-// --- BGM ---
-const bgmVolumeEl = document.getElementById('bgm-volume');
-const bgmVolumeLabelEl = document.getElementById('bgm-volume-label');
-const bgmTracksEl = document.getElementById('bgm-tracks');
+// --- サウンド ---
 
-bgmVolumeEl.addEventListener('input', () => {
-  bgmVolumeLabelEl.textContent = bgmVolumeEl.value + '%';
-});
-bgmVolumeEl.addEventListener('change', async () => {
-  const vol = parseInt(bgmVolumeEl.value) / 100;
-  await api('POST', '/api/bgm', { action: 'master_volume', volume: vol });
-});
+async function setVolume(source, pct) {
+  await api('POST', '/api/obs/volume', { source, volume: parseInt(pct) / 100 });
+}
+
+async function loadVolumes() {
+  try {
+    const data = await (await fetch('/api/obs/volume')).json();
+    for (const key of ['master', 'tts', 'bgm']) {
+      if (data[key] != null) {
+        const pct = Math.round(data[key] * 100);
+        document.getElementById('vol-' + key).value = pct;
+        document.getElementById('vol-' + key + '-label').textContent = pct + '%';
+      }
+    }
+  } catch (e) {}
+}
+
+async function ttsTest() {
+  await api('POST', '/api/avatar/speak', { event_type: 'テスト', detail: '音量テストです' });
+}
+
+const bgmTracksEl = document.getElementById('bgm-tracks');
 
 async function loadBgmTracks() {
   const res = await fetch('/api/bgm/list');
   const data = await res.json();
-  // マスターボリューム復元
-  const masterPct = Math.round((data.master_volume ?? 0.3) * 100);
-  bgmVolumeEl.value = masterPct;
-  bgmVolumeLabelEl.textContent = masterPct + '%';
   const currentTrack = data.track || '';
   bgmTracksEl.innerHTML = '';
   for (const t of data.tracks) {
-    const volPct = Math.round((t.volume ?? 1) * 100);
     const isPlaying = t.file === currentTrack;
+    const volPct = Math.round((t.volume ?? 1) * 100);
     const row = document.createElement('div');
     row.dataset.file = t.file;
-    row.style.cssText = 'display:flex; gap:8px; align-items:center; padding:8px 6px; border-bottom:1px solid var(--border);'
+    row.style.cssText = 'padding:8px 6px; border-bottom:1px solid var(--border);'
       + (isPlaying ? ' background:var(--accent-light, rgba(99,102,241,0.12)); border-radius:6px;' : '');
     row.innerHTML = `
-      ${isPlaying ? '<span style="font-size:0.8rem; margin-right:2px;">▶</span>' : ''}
-      <span style="flex:1; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${isPlaying ? ' font-weight:600; color:var(--accent, #6366f1);' : ''}">${esc(t.name)}</span>
-      <input type="range" min="0" max="100" value="${volPct}" style="width:100px;"
-        data-file="${esc(t.file)}"
-        oninput="this.nextElementSibling.textContent=this.value+'%'"
-        onchange="bgmTrackVol(this.dataset.file, this.value)">
-      <span style="font-size:0.75rem; min-width:36px; text-align:right;">${volPct}%</span>
-      ${isPlaying
-        ? `<button class="secondary" onclick="bgmStop()" style="font-size:0.75rem;">停止</button>`
-        : `<button onclick="bgmPlay('${esc(t.file)}')" style="font-size:0.75rem;">再生</button>`}
+      <div style="display:flex; gap:8px; align-items:center;">
+        ${isPlaying ? '<span style="font-size:0.8rem; margin-right:2px;">▶</span>' : ''}
+        <span style="flex:1; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${isPlaying ? ' font-weight:600; color:var(--accent, #6366f1);' : ''}">${esc(t.name)}</span>
+        ${isPlaying
+          ? `<button class="secondary" onclick="bgmStop()" style="font-size:0.75rem;">停止</button>`
+          : `<button onclick="bgmPlay('${esc(t.file)}')" style="font-size:0.75rem;">再生</button>`}
+      </div>
+      <div class="vol-row" style="margin-top:4px;">
+        <span class="vol-label">曲音量</span>
+        <input type="range" min="0" max="200" step="1" value="${volPct}" class="vol-slider"
+          oninput="this.nextElementSibling.textContent=this.value+'%'"
+          onchange="setTrackVolume('${esc(t.file)}', this.value)">
+        <span class="vol-pct">${volPct}%</span>
+      </div>
     `;
     bgmTracksEl.appendChild(row);
   }
   if (data.tracks.length === 0) {
     bgmTracksEl.innerHTML = '<div style="color:var(--text-muted); font-size:0.85rem;">BGMファイルがありません</div>';
   }
+}
+
+async function setTrackVolume(file, pct) {
+  await api('POST', '/api/bgm/track-volume', { file, volume: parseInt(pct) / 100 });
 }
 
 function esc(s) {
@@ -1262,13 +1291,8 @@ function esc(s) {
 }
 
 async function bgmPlay(file) {
-  const master = parseInt(bgmVolumeEl.value) / 100;
-  const res = await api('POST', '/api/bgm', { action: 'play', track: file, volume: master });
+  const res = await api('POST', '/api/bgm', { action: 'play', track: file });
   if (res && res.ok) loadBgmTracks();
-}
-
-async function bgmTrackVol(file, pct) {
-  await api('POST', '/api/bgm/track-volume', { filename: file, volume: parseInt(pct) / 100 });
 }
 
 async function bgmStop() {
@@ -1307,6 +1331,7 @@ loadCharacter();
 loadVsfDefaults();
 loadOverlaySettings();
 loadBgmTracks();
+loadVolumes();
 refreshStatus();
 setInterval(refreshStatus, 3000);
 </script>

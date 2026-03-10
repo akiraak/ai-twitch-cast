@@ -200,7 +200,7 @@ class OBSController:
             logger.warning("ウィンドウ一覧の取得に失敗: %s", e)
         return None
 
-    def add_browser_source(self, scene_name, source_name, url, width=1920, height=1080):
+    def add_browser_source(self, scene_name, source_name, url, width=1920, height=1080, reroute_audio=True):
         """ブラウザソースを追加する"""
         self._ensure_connected()
         import time
@@ -214,11 +214,23 @@ class OBSController:
                 "url": cache_bust_url,
                 "width": width,
                 "height": height,
-                "reroute_audio": True,
+                "reroute_audio": reroute_audio,
             },
             sceneItemEnabled=True,
         )
-        logger.info("ブラウザソースを追加しました: %s", source_name)
+        logger.info("ブラウザソースを追加しました: %s (reroute_audio=%s)", source_name, reroute_audio)
+
+    def set_input_volume(self, input_name, volume):
+        """入力ソースの音量を設定する (0.0-1.0)"""
+        self._ensure_connected()
+        self._client.set_input_volume(input_name, vol_mul=volume)
+        logger.info("音量設定: %s = %.0f%%", input_name, volume * 100)
+
+    def get_input_volume(self, input_name):
+        """入力ソースの音量を取得する"""
+        self._ensure_connected()
+        result = self._client.get_input_volume(input_name)
+        return result.input_volume_mul
 
     def set_input_settings(self, source_name, settings):
         """ソースの設定を更新する"""
@@ -483,6 +495,7 @@ class OBSController:
                 url=source.get("url", ""),
                 width=source.get("width", 1920),
                 height=source.get("height", 1080),
+                reroute_audio=source.get("reroute_audio", True),
             )
         else:
             logger.warning("不明なソース種類: %s", kind)

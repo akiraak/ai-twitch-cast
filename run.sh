@@ -12,6 +12,22 @@ WEB_PORT="${WEB_PORT:-8080}"
 
 PID_FILE=".server.pid"
 
+# 既存プロセスが動いていたら停止する（二重起動防止）
+if [ -f "$PID_FILE" ]; then
+    OLD_PID=$(cat "$PID_FILE")
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+        echo "既存サーバーを停止します (PID: $OLD_PID)..."
+        # whileループの親プロセスも停止
+        PARENT_PID=$(ps -o ppid= -p "$OLD_PID" 2>/dev/null | tr -d ' ')
+        if [ -n "$PARENT_PID" ] && [ "$PARENT_PID" != "1" ] && [ "$PARENT_PID" != "$$" ]; then
+            kill -9 "$PARENT_PID" 2>/dev/null
+        fi
+        kill -9 "$OLD_PID" 2>/dev/null
+        sleep 1
+    fi
+    rm -f "$PID_FILE"
+fi
+
 cleanup() {
     echo "サーバーを停止します..."
     if [ -f "$PID_FILE" ]; then
@@ -22,6 +38,14 @@ cleanup() {
 }
 
 trap cleanup SIGINT SIGTERM
+
+# ポートを使用中のプロセスも停止（PIDファイルがない場合の保険）
+PORT_PID=$(lsof -ti :"$WEB_PORT" 2>/dev/null)
+if [ -n "$PORT_PID" ]; then
+    echo "ポート $WEB_PORT を使用中のプロセスを停止します (PID: $PORT_PID)..."
+    kill -9 $PORT_PID 2>/dev/null
+    sleep 1
+fi
 
 echo "Starting server on port $WEB_PORT..."
 

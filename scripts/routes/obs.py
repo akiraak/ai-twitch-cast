@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from scripts import state
-from src import scene_config
+from src import db, scene_config
 from src.scene_config import CONFIG_PATH, PREFIX
 
 logger = logging.getLogger(__name__)
@@ -191,16 +191,92 @@ async def obs_overlay_refresh():
     return {"ok": True}
 
 
-@router.post("/api/obs/overlay/enable-audio")
-async def obs_overlay_enable_audio():
-    """ブラウザソースの音声をOBSミキサーに出力する（配信のみ、モニターなし）"""
-    _ensure_obs()
-    state.obs.set_input_settings(OVERLAY_SOURCE_NAME, {"reroute_audio": True})
-    # 音声モニタリングをオフ（配信出力のみ）
+TTS_SOURCE_NAME = f"{PREFIX}TTS音声"
+BGM_SOURCE_NAME = f"{PREFIX}BGM"
+
+AUDIO_SOURCES = {"tts": TTS_SOURCE_NAME, "bgm": BGM_SOURCE_NAME}
+
+
+def _load_audio_volumes():
+    """scenes.jsonからaudio_volumesを読み込む"""
     try:
-        state.obs._client.set_input_audio_monitor_type(OVERLAY_SOURCE_NAME, "OBS_MONITORING_TYPE_NONE")
-    except Exception as e:
-        logger.warning("モニタリング設定失敗: %s", e)
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            config = json.load(f)
+        return config.get("audio_volumes", {})
+    except Exception:
+        return {}
+
+
+def _save_audio_volumes(volumes):
+    """audio_volumesをscenes.jsonに保存する"""
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+    config["audio_volumes"] = volumes
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
+def _get_current_track_volume():
+    """再生中の曲の曲別音量を取得する"""
+    from scripts.routes.bgm import load_bgm_settings
+    settings = load_bgm_settings()
+    track = settings.get("track", "")
+    if not track:
+        return 1.0
+    return db.get_bgm_track_volume(track) or 1.0
+
+
+def _apply_effective_volume(source_key):
+    """実効音量をOBSに適用する（master × 個別 × 曲音量）"""
+    volumes = _load_audio_volumes()
+    master = volumes.get("master", 1.0)
+    individual = volumes.get(source_key, 1.0)
+    effective = master * individual
+    # BGMの場合は曲別音量も掛ける
+    if source_key == "bgm":
+        effective *= _get_current_track_volume()
+    effective = min(effective, 2.0)
+    src_name = AUDIO_SOURCES.get(source_key)
+    if src_name:
+        state.obs.set_input_volume(src_name, effective)
+        logger.info("音量適用: %s = %.2f (master=%.2f × %s=%.2f%s)",
+                     src_name, effective, master, source_key, individual,
+                     f" × track={_get_current_track_volume():.2f}" if source_key == "bgm" else "")
+
+
+@router.get("/api/obs/volume")
+async def obs_get_volumes():
+    """マスター・TTS・BGMの音量を取得する"""
+    _ensure_obs()
+    volumes = _load_audio_volumes()
+    return {
+        "master": volumes.get("master", 1.0),
+        "tts": volumes.get("tts", 1.0),
+        "bgm": volumes.get("bgm", 1.0),
+    }
+
+
+class VolumeRequest(BaseModel):
+    source: str  # "master", "tts", or "bgm"
+    volume: float  # 0.0 - 1.0
+
+
+@router.post("/api/obs/volume")
+async def obs_set_volume(body: VolumeRequest):
+    """音量を設定してscenes.jsonに保存し、OBSに反映する"""
+    _ensure_obs()
+    if body.source not in ("master", "tts", "bgm"):
+        return {"ok": False, "error": f"不明なソース: {body.source}"}
+    volumes = _load_audio_volumes()
+    volumes[body.source] = body.volume
+    _save_audio_volumes(volumes)
+    # OBSに実効音量を適用
+    if body.source == "master":
+        for key in AUDIO_SOURCES:
+            _apply_effective_volume(key)
+    else:
+        _apply_effective_volume(body.source)
     return {"ok": True}
 
 

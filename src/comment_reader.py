@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import tempfile
+import wave
 from collections import deque
 from pathlib import Path
 
@@ -160,7 +161,6 @@ class CommentReader:
                 "url": audio_url,
             })
             # 音声の長さ分だけ待機
-            import wave
             with wave.open(str(wav_path), "rb") as wf:
                 duration = wf.getnframes() / wf.getframerate()
             await asyncio.sleep(duration + 0.5)

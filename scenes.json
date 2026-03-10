@@ -18,9 +18,6 @@
       "height": 600,
       "fontSize": 24,
       "titleFontSize": 29
-    },
-    "tts": {
-      "volume": 0.3
     }
   },
   "avatar": {
@@ -85,7 +82,22 @@
           "name": "オーバーレイ",
           "url": "overlay",
           "width": 1920,
-          "height": 1080
+          "height": 1080,
+          "reroute_audio": false
+        },
+        {
+          "kind": "browser",
+          "name": "TTS音声",
+          "url": "audio/tts",
+          "width": 320,
+          "height": 240
+        },
+        {
+          "kind": "browser",
+          "name": "BGM",
+          "url": "audio/bgm",
+          "width": 320,
+          "height": 240
         }
       ]
     },
@@ -122,8 +134,12 @@
       ]
     }
   ],
+  "audio_volumes": {
+    "master": 0.8,
+    "tts": 0.8,
+    "bgm": 1.0
+  },
   "bgm": {
-    "volume": 1.0,
-    "track": "4K  自然環境音  湧き水が流れる川の音  鳥のさえずり　birds chirping.mp3"
+    "track": "【自分の部屋で集中が続く】在宅ワーク×勉強に使える2時間のジャズ音楽.mp3"
   }
 }

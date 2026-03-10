@@ -1,6 +1,7 @@
 """Web インターフェース（console.py相当）"""
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -117,6 +118,53 @@ async def get_status():
     }
 
 
+def _apply_audio_settings(result=None):
+    """音声ソースのモニタリング設定と保存済みボリュームを適用する"""
+    prefix = scene_config.PREFIX
+    audio_sources = {
+        "tts": f"{prefix}TTS音声",
+        "bgm": f"{prefix}BGM",
+    }
+    # scenes.jsonから保存済みボリュームを読み込む
+    config = {}
+    try:
+        with open(scene_config.CONFIG_PATH, encoding="utf-8") as f:
+            config = json.load(f)
+        saved_volumes = config.get("audio_volumes", {})
+    except Exception:
+        saved_volumes = {}
+
+    master = saved_volumes.get("master", 1.0)
+    # BGMの曲別音量を取得
+    try:
+        from src import db
+        bgm_track = config.get("bgm", {}).get("track", "")
+        track_vol = (db.get_bgm_track_volume(bgm_track) or 1.0) if bgm_track else 1.0
+    except Exception:
+        track_vol = 1.0
+
+    for key, src_name in audio_sources.items():
+        try:
+            state.obs._client.set_input_audio_monitor_type(
+                src_name, "OBS_MONITORING_TYPE_NONE"
+            )
+            vol = master * saved_volumes.get(key, 1.0)
+            if key == "bgm":
+                vol *= track_vol
+            vol = min(vol, 2.0)
+            state.obs.set_input_volume(src_name, vol)
+        except Exception as e:
+            if result is not None:
+                result.setdefault("errors", []).append(f"音声設定 {src_name}: {e}")
+            logger.warning("音声設定失敗 %s: %s", src_name, e)
+
+    # オーバーレイのキャッシュクリア
+    try:
+        state.obs.refresh_browser_source(f"{prefix}オーバーレイ")
+    except Exception:
+        pass
+
+
 # --- セットアップ & 配信開始 ---
 
 @app.post("/api/start")
@@ -136,14 +184,8 @@ async def start():
         state.vts_connected = True
     scene_config.reload()
     setup_result = state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
-    # ブラウザソースの音声をOBSミキサーに出力 & モニタリング有効化 & キャッシュクリア
-    overlay_name = f"{scene_config.PREFIX}オーバーレイ"
-    try:
-        state.obs.set_input_settings(overlay_name, {"reroute_audio": True})
-        state.obs._client.set_input_audio_monitor_type(overlay_name, "OBS_MONITORING_TYPE_NONE")
-        state.obs.refresh_browser_source(overlay_name)
-    except Exception as e:
-        setup_result.setdefault("errors", []).append(f"オーバーレイ音声設定: {e}")
+    # 音声ソースの設定 & 保存済みボリューム適用
+    _apply_audio_settings(setup_result)
     await state.ensure_reader()
     await state.git_watcher.start()
 
@@ -169,13 +211,7 @@ async def startup():
     try:
         state.obs.connect()
         state.obs_connected = True
-        # 音声モニタリングをオフに設定（配信出力のみ）
-        overlay_name = f"{scene_config.PREFIX}オーバーレイ"
-        try:
-            state.obs.set_input_settings(overlay_name, {"reroute_audio": True})
-            state.obs._client.set_input_audio_monitor_type(overlay_name, "OBS_MONITORING_TYPE_NONE")
-        except Exception:
-            pass
+        _apply_audio_settings()
         logger.info("OBS接続復旧OK")
     except Exception as e:
         logger.warning("OBS接続復旧失敗: %s", e)

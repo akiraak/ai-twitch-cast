@@ -30,14 +30,12 @@ def load_bgm_settings() -> dict:
         return {}
 
 
-def _save_bgm(volume: float | None = None, track: str | None = None):
-    """scenes.jsonにBGM設定を保存する"""
+def _save_bgm(track: str | None = None):
+    """scenes.jsonにBGM再生状態を保存する"""
     with open(CONFIG_PATH, encoding="utf-8") as f:
         config = json.load(f)
     if "bgm" not in config:
         config["bgm"] = {}
-    if volume is not None:
-        config["bgm"]["volume"] = volume
     if track is not None:
         config["bgm"]["track"] = track  # "" で停止状態
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -45,84 +43,69 @@ def _save_bgm(volume: float | None = None, track: str | None = None):
         f.write("\n")
 
 
+def _apply_bgm_volume():
+    """BGMの実効音量をOBSに反映する（曲音量含む）"""
+    from scripts.routes.obs import _apply_effective_volume
+    try:
+        _apply_effective_volume("bgm")
+    except Exception as e:
+        logger.warning("BGM音量適用失敗: %s", e)
+
+
 @router.get("/api/bgm/list")
 async def bgm_list():
-    """BGMトラック一覧を返す"""
+    """BGMトラック一覧を返す（曲別音量付き）"""
     BGM_DIR.mkdir(parents=True, exist_ok=True)
-    track_volumes = db.get_all_bgm_track_volumes()
+    volumes = db.get_all_bgm_track_volumes()
     tracks = []
     for f in sorted(BGM_DIR.iterdir()):
         if f.suffix.lower() in (".mp3", ".wav", ".ogg", ".m4a"):
             tracks.append({
                 "name": f.stem,
                 "file": f.name,
-                "volume": track_volumes.get(f.name, 1.0),
+                "volume": volumes.get(f.name, 1.0),
             })
     settings = load_bgm_settings()
-    return {"tracks": tracks, "master_volume": settings.get("volume", 0.3), "track": settings.get("track", "")}
+    return {"tracks": tracks, "track": settings.get("track", "")}
 
 
 class BGMControl(BaseModel):
-    action: str  # play, stop, master_volume
+    action: str  # play, stop
     track: str = ""
-    volume: float = 0.3
-
-
-def _effective_volume(master: float, track_file: str) -> float:
-    """マスター × 曲別ボリューム"""
-    track_vol = db.get_bgm_track_volume(track_file)
-    return master * track_vol
 
 
 @router.post("/api/bgm")
 async def bgm_control(body: BGMControl):
-    """BGM制御（overlay経由で再生）"""
+    """BGM制御（専用ブラウザソース経由で再生、音量はOBSミキサーで制御）"""
     if body.action == "play":
-        _save_bgm(volume=body.volume, track=body.track)
-        effective = _effective_volume(body.volume, body.track)
-        await state.broadcast_overlay({
+        _save_bgm(track=body.track)
+        await state.broadcast_bgm({
             "type": "bgm_play",
             "url": f"/bgm/{body.track}",
-            "volume": effective,
         })
+        # 曲音量を含めた実効音量をOBSに反映
+        _apply_bgm_volume()
         return {"ok": True}
     elif body.action == "stop":
         _save_bgm(track="")
-        await state.broadcast_overlay({"type": "bgm_stop"})
-        return {"ok": True}
-    elif body.action == "master_volume":
-        _save_bgm(volume=body.volume)
-        # 再生中ならマスター変更を反映
-        settings = load_bgm_settings()
-        current_track = settings.get("track", "")
-        if current_track:
-            effective = _effective_volume(body.volume, current_track)
-            await state.broadcast_overlay({
-                "type": "bgm_volume",
-                "volume": effective,
-            })
+        await state.broadcast_bgm({"type": "bgm_stop"})
         return {"ok": True}
     return {"ok": False, "error": f"不明なアクション: {body.action}"}
 
 
 class BGMTrackVolume(BaseModel):
-    filename: str
-    volume: float  # 0.0 ~ 1.0
+    file: str
+    volume: float  # 0.0 - 1.0
 
 
 @router.post("/api/bgm/track-volume")
 async def bgm_track_volume(body: BGMTrackVolume):
-    """曲別ボリュームを保存し、再生中なら即反映"""
-    db.set_bgm_track_volume(body.filename, body.volume)
-    # 再生中の曲ならボリューム即反映
+    """曲別音量を設定する（DBに保存、再生中ならOBSに即反映）"""
+    db.set_bgm_track_volume(body.file, body.volume)
+    # 再生中の曲なら実効音量を再計算してOBSに反映
     settings = load_bgm_settings()
-    if settings.get("track") == body.filename:
-        master = settings.get("volume", 0.3)
-        effective = master * body.volume
-        await state.broadcast_overlay({
-            "type": "bgm_volume",
-            "volume": effective,
-        })
+    if settings.get("track") == body.file:
+        _apply_bgm_volume()
     return {"ok": True}
 
 
