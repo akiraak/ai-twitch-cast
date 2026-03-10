@@ -164,6 +164,7 @@ class CommentReader:
         if self._vsf:
             try:
                 lipsync_frames = await asyncio.to_thread(analyze_amplitude, wav_path)
+                logger.info("[lipsync] 振幅解析完了: %dフレーム", len(lipsync_frames))
             except Exception as e:
                 logger.warning("リップシンク解析失敗: %s", e)
 
