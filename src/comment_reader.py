@@ -126,8 +126,15 @@ class CommentReader:
         """1件のコメントにAIで応答して読み上げる"""
         try:
             user = await asyncio.to_thread(db.get_or_create_user, author)
+            already_greeted = False
+            if self._episode_id:
+                ep_count = await asyncio.to_thread(
+                    db.count_user_comments_in_episode, self._episode_id, user["id"],
+                )
+                already_greeted = ep_count > 0
             result = await self._generate_ai_response(
                 author, message, user["comment_count"], user.get("note", ""),
+                already_greeted=already_greeted,
             )
             await self._save_to_db(user, message, result)
             await asyncio.to_thread(db.update_user_last_seen, user["id"])
@@ -143,7 +150,7 @@ class CommentReader:
         except Exception as e:
             logger.error("応答失敗: %s", e)
 
-    async def _generate_ai_response(self, author, message, comment_count, user_note=""):
+    async def _generate_ai_response(self, author, message, comment_count, user_note="", already_greeted=False):
         """AI応答を生成する（会話履歴・配信コンテキスト付き）"""
         logger.info("[ai] 応答生成中...")
         history = await asyncio.to_thread(db.get_recent_comments, 10, 2)
@@ -151,7 +158,7 @@ class CommentReader:
         result = await asyncio.to_thread(
             generate_response, author, message, comment_count,
             history=history, stream_context=stream_context,
-            user_note=user_note or None,
+            user_note=user_note or None, already_greeted=already_greeted,
         )
         logger.info("[ai] [%s] %s", result["emotion"], result["response"])
         return result

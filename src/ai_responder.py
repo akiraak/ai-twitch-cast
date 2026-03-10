@@ -132,7 +132,7 @@ def _build_system_prompt(stream_context=None):
     return "\n".join(parts)
 
 
-def generate_response(author, message, comment_count=0, history=None, stream_context=None, user_note=None):
+def generate_response(author, message, comment_count=0, history=None, stream_context=None, user_note=None, already_greeted=False):
     """コメントに対するAI応答を生成する
 
     Args:
@@ -142,6 +142,7 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
         history: 直近の会話履歴 [{user_name, message, response}, ...]
         stream_context: 配信情報 {title, topic, todo_items}
         user_note: このユーザーについてのメモ
+        already_greeted: この配信で既に挨拶済みか
 
     Returns:
         dict: {"response": str, "emotion": str}
@@ -150,10 +151,12 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
     system_prompt = _build_system_prompt(stream_context=stream_context)
 
     context_parts = []
-    if comment_count == 0:
+    if comment_count == 0 and not already_greeted:
         context_parts.append("初見のユーザーです")
+    elif not already_greeted:
+        context_parts.append(f"過去{comment_count}回コメントしている常連です、今日はまだ挨拶していません")
     else:
-        context_parts.append(f"過去{comment_count}回コメントしている常連です")
+        context_parts.append("この配信で挨拶済み、再度の挨拶は不要")
     if user_note:
         context_parts.append(f"メモ: {user_note}")
     context = f"（{'、'.join(context_parts)}）"

@@ -257,6 +257,16 @@ def increment_comment_count(user_id):
     conn.commit()
 
 
+def count_user_comments_in_episode(episode_id, user_id):
+    """このエピソード（配信）でのユーザーのコメント数を返す"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) as cnt FROM comments WHERE episode_id = ? AND user_id = ?",
+        (episode_id, user_id),
+    ).fetchone()
+    return row["cnt"]
+
+
 def update_user_last_seen(user_id):
     """ユーザーの最終コメント日時を更新する"""
     conn = get_connection()
