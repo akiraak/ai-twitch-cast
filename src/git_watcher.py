@@ -3,11 +3,17 @@
 import asyncio
 import logging
 import subprocess
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
+
+# クールダウン後にまとめて通知するまでの待機時間（秒）
+_BATCH_WAIT = 30
+# クールダウン時間（秒）- 最後の通知からこの時間は新たな通知をしない
+_COOLDOWN = 60
 
 
 class GitWatcher:
@@ -26,6 +32,9 @@ class GitWatcher:
         self._last_hash = None
         self._task = None
         self._running = False
+        self._last_notify_time = 0.0
+        self._pending_commits = []
+        self._batch_task = None
 
     def _get_latest_commit(self):
         """最新コミットのハッシュとメッセージを取得する"""
@@ -57,6 +66,9 @@ class GitWatcher:
     async def stop(self):
         """監視を停止する"""
         self._running = False
+        if self._batch_task:
+            self._batch_task.cancel()
+            self._batch_task = None
         if self._task:
             self._task.cancel()
             try:
@@ -64,6 +76,7 @@ class GitWatcher:
             except (asyncio.CancelledError, Exception):
                 pass
             self._task = None
+        self._pending_commits.clear()
         logger.info("Git監視を停止しました")
 
     async def _watch_loop(self):
@@ -75,9 +88,42 @@ class GitWatcher:
                 if commit_hash and commit_hash != self._last_hash:
                     self._last_hash = commit_hash
                     logger.info("新規コミット検知: %s %s", commit_hash[:8], message)
-                    try:
-                        await self._on_commit(commit_hash[:8], message)
-                    except Exception as e:
-                        logger.error("コミット通知コールバック失敗: %s", e)
+                    self._pending_commits.append((commit_hash[:8], message))
+                    # バッチ通知タスクがなければ起動
+                    if self._batch_task is None or self._batch_task.done():
+                        self._batch_task = asyncio.create_task(self._batch_notify())
+        except asyncio.CancelledError:
+            pass
+
+    async def _batch_notify(self):
+        """クールダウンを待ってから溜まったコミットをまとめて通知する"""
+        try:
+            # クールダウン中なら残り時間を待つ
+            elapsed = time.monotonic() - self._last_notify_time
+            if elapsed < _COOLDOWN:
+                await asyncio.sleep(_COOLDOWN - elapsed)
+
+            # さらに少し待って連続コミットをまとめる
+            await asyncio.sleep(_BATCH_WAIT)
+
+            if not self._pending_commits:
+                return
+
+            commits = list(self._pending_commits)
+            self._pending_commits.clear()
+            self._last_notify_time = time.monotonic()
+
+            if len(commits) == 1:
+                hash_, msg = commits[0]
+                detail = f"{hash_}: {msg}"
+            else:
+                lines = [f"- {h}: {m}" for h, m in commits]
+                detail = f"{len(commits)}件のコミット\n" + "\n".join(lines)
+
+            logger.info("コミット通知: %d件まとめて", len(commits))
+            try:
+                await self._on_commit(commits[-1][0], detail)
+            except Exception as e:
+                logger.error("コミット通知コールバック失敗: %s", e)
         except asyncio.CancelledError:
             pass
