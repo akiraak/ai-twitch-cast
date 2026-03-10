@@ -353,53 +353,65 @@ def generate_user_notes(users_with_comments):
         return {}
 
 
-def generate_topic_scripts(title, description="", count=5, already_spoken=None):
-    """トピックについての発話スクリプトを生成する（Gemini 3 Flash + Google Search + Thinking）
+def generate_topic_line(title, description="", last_speeches=None, recent_comments=None):
+    """トピックについて1件の発話を生成する（前回の発話から続く自然な流れ）
 
     Args:
         title: トピックのタイトル
         description: トピックの説明
-        count: 生成するスクリプト数
-        already_spoken: 既に話した内容のリスト（重複回避用）
+        last_speeches: 直近の自分の発話リスト（流れを作るため）
+        recent_comments: 直近の視聴者コメント [{user_name, message, response}, ...]
 
     Returns:
-        list[dict]: [{"content": str, "emotion": str, "sort_order": int}, ...]
+        dict: {"content": str, "emotion": str}
     """
     client = get_client()
     char = get_character()
     emotions = char.get("emotions", {})
     emotion_list = ", ".join(emotions.keys())
 
+    lang = LANGUAGE_MODES.get(_language_mode, LANGUAGE_MODES["ja"])
+
     parts = [
         char["system_prompt"],
         "",
         "## タスク",
-        f"配信中に視聴者に向かって「{title}」というトピックについて自然に話すセリフを{count}個生成してください。",
-        "Web検索で最新情報を調べてから、具体的で正確な内容を盛り込んでください。",
+        f"配信中に「{title}」について視聴者に向かって一言話してください。",
     ]
     if description:
         parts.append(f"トピックの説明: {description}")
     parts.extend([
         "",
         "## ルール",
-        "- 各セリフは1〜3文で短く",
+        "- 1文のみ、30文字以内で短く（日本語の場合。英語は15 words以内）",
         "- 視聴者に話しかけるような自然なトーンで",
-        "- セリフ同士は独立していて、どの順番でも自然に聞こえるように",
-        "- トピックの異なる側面や切り口を取り上げる",
-        "- 最新の情報や具体的な作品名・データを盛り込む",
+        "- 前回の自分の発話がある場合は、その続きや展開として自然に繋げる",
+        "- 同じことを繰り返さない",
     ])
-    if already_spoken:
+    if last_speeches:
         parts.append("")
-        parts.append("## 既に話した内容（重複しないでください）")
-        for s in already_spoken:
+        parts.append("## あなたの直前の発話（この続きを話してください）")
+        for s in last_speeches[-3:]:
             parts.append(f"- {s}")
+    if recent_comments:
+        parts.append("")
+        parts.append("## 直近の視聴者との会話")
+        for c in recent_comments[-5:]:
+            parts.append(f"- {c['user_name']}: {c['message']}")
+            if c.get("response"):
+                parts.append(f"  → {c['response']}")
+
+    parts.extend(["", "## 言語ルール"])
+    for rule in lang["rules"]:
+        parts.append(rule)
+
+    english_label = lang.get("english_label", "翻訳")
     parts.extend([
         "",
         "## 出力形式",
-        "以下のJSON配列で返してください。それ以外のテキストは出力しないでください。",
-        f'[{{"content": "セリフ", "emotion": "感情", "sort_order": 0}}, ...]',
+        "必ず以下のJSON形式で返してください。それ以外のテキストは出力しないでください。",
+        f'{{"content": "セリフ", "emotion": "感情", "english": "{english_label}"}}',
         f"emotionは次のいずれか: {emotion_list}",
-        "sort_orderは0から連番",
     ])
 
     system_prompt = "\n".join(parts)
@@ -407,36 +419,26 @@ def generate_topic_scripts(title, description="", count=5, already_spoken=None):
 
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
-        tools=[types.Tool(google_search=types.GoogleSearch())],
         response_mime_type="application/json",
     )
 
-    # Gemini 3系はthinkingLevel、2.5系はthinking_config
     if "gemini-3" in topic_model:
-        config.thinking_config = types.ThinkingConfig(thinking_level="medium")
-    elif "gemini-2.5" in topic_model:
-        # 2.5系はSearch+JSON併用不可なのでSearchなしで生成
-        config.tools = None
-        config.thinking_config = types.ThinkingConfig(thinking_budget=1024)
+        config.thinking_config = types.ThinkingConfig(thinking_level="low")
 
     response = client.models.generate_content(
         model=topic_model,
-        contents="スクリプトを生成してください",
+        contents="次の一言を話してください",
         config=config,
     )
 
     try:
         result = json.loads(response.text)
-        if not isinstance(result, list):
-            result = [result]
     except (json.JSONDecodeError, AttributeError):
-        result = [{"content": f"{title}について話したいんだけど...", "emotion": "neutral", "sort_order": 0}]
+        result = {"content": f"{title}...", "emotion": "neutral", "english": ""}
 
-    # emotionバリデーション
-    for item in result:
-        if item.get("emotion") not in emotions:
-            item["emotion"] = "neutral"
-        item.setdefault("sort_order", 0)
+    result.setdefault("english", "")
+    if result.get("emotion") not in emotions:
+        result["emotion"] = "neutral"
 
     return result
 

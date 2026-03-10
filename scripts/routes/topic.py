@@ -47,14 +47,14 @@ async def clear_topic():
 
 @router.get("/api/topic/scripts")
 async def get_scripts():
-    """現在のトピックのスクリプト一覧を取得する"""
+    """現在のトピックの発話履歴を取得する"""
     topic = db.get_active_topic()
     if not topic:
-        return {"scripts": [], "generating": state.topic_talker._replenishing}
-    scripts = db.get_all_scripts(topic["id"])
+        return {"scripts": [], "generating": state.topic_talker._generating}
+    scripts = db.get_spoken_scripts(topic["id"])
     return {
         "scripts": scripts,
-        "generating": state.topic_talker._replenishing,
+        "generating": state.topic_talker._generating,
     }
 
 

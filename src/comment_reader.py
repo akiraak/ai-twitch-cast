@@ -108,13 +108,14 @@ class CommentReader:
             script = await self._topic_talker.get_next()
             if not script:
                 return
+            english = script.get("english", "")
             logger.info("[topic] 自発的発話: [%s] %s", script["emotion"], script["content"])
             self._apply_emotion(script["emotion"])
             await self._speak(script["content"], subtitle={
                 "author": "ちょび",
                 "message": script["content"],
-                "result": {"response": script["content"], "emotion": script["emotion"], "english": ""},
-            }, chat_result={"response": script["content"], "english": ""})
+                "result": {"response": script["content"], "emotion": script["emotion"], "english": english},
+            }, chat_result={"response": script["content"], "english": english})
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
             # アバター発話をDBに保存
