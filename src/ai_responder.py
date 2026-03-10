@@ -175,7 +175,7 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
     ))
 
     response = client.models.generate_content(
-        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.5-flash"),
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
         contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -318,7 +318,7 @@ def generate_event_response(event_type, detail):
     user_prompt = f"【{event_type}イベント】{detail}"
 
     response = client.models.generate_content(
-        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.5-flash"),
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
         contents=user_prompt,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
