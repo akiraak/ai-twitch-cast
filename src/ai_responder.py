@@ -9,7 +9,7 @@ from src.gemini_client import get_client
 
 # DBが空のときに使うデフォルトキャラクター設定
 DEFAULT_CHARACTER = {
-    "name": "ちょび",
+    "name": "ちょビ",
     "system_prompt": "あなたはTwitch配信者「ちょび」です。明るくフレンドリーな性格で、視聴者のコメントに元気に返事します。",
     "rules": [
         "短く簡潔に返答する（1〜2文程度）",
@@ -377,7 +377,7 @@ def generate_self_note(recent_comments, current_note=""):
 
     client = get_client()
     char = get_character()
-    char_name = char.get("name", "ちょび")
+    char_name = char.get("name", "ちょビ")
 
     parts = [
         f"あなたは{char_name}の記憶係です。",

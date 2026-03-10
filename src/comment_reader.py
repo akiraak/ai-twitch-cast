@@ -121,16 +121,17 @@ class CommentReader:
             logger.info("[topic] 自発的発話: [%s] %s", script["emotion"], script["content"])
             self._apply_emotion(script["emotion"])
             await self._speak(script["content"], subtitle={
-                "author": "ちょび",
+                "author": "ちょビ",
                 "message": script["content"],
                 "result": {"response": script["content"], "emotion": script["emotion"], "english": english},
             }, chat_result={"response": script["content"], "english": english})
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
             # アバター発話をDBに保存
+            logger.info("[topic] DB保存呼び出し: episode=%s", self._episode_id)
             await self._save_avatar_speech("[トピック]", script["content"], script["emotion"])
         except Exception as e:
-            logger.error("自発的発話失敗: %s", e)
+            logger.error("自発的発話失敗: %s", e, exc_info=True)
 
     async def _respond(self, author, message):
         """1件のコメントにAIで応答して読み上げる"""
@@ -347,7 +348,7 @@ class CommentReader:
     async def _get_self_note(self):
         """アバター自身の記憶メモを取得する"""
         try:
-            char_name = get_character().get("name", "ちょび")
+            char_name = get_character().get("name", "ちょビ")
             user = await asyncio.to_thread(db.get_or_create_user, char_name)
             return user.get("note", "") or None
         except Exception:
@@ -356,7 +357,7 @@ class CommentReader:
     async def _update_self_note(self):
         """アバター自身の記憶メモを更新する"""
         try:
-            char_name = get_character().get("name", "ちょび")
+            char_name = get_character().get("name", "ちょビ")
             user = await asyncio.to_thread(db.get_or_create_user, char_name)
             recent = await asyncio.to_thread(db.get_recent_comments, 20, 2)
             if not recent:
@@ -374,13 +375,15 @@ class CommentReader:
     async def _save_avatar_speech(self, message, response, emotion="neutral"):
         """アバターの発話をDBに保存する（会話履歴に含めるため）"""
         if not self._episode_id:
+            logger.warning("[avatar-save] episode_id未設定のためスキップ: %s", message[:30])
             return
         try:
-            char_name = get_character().get("name", "ちょび")
+            char_name = get_character().get("name", "ちょビ")
             user = await asyncio.to_thread(db.get_or_create_user, char_name)
             await asyncio.to_thread(
                 db.save_comment, self._episode_id, user["id"], message, response, emotion,
             )
+            logger.info("[avatar-save] 保存OK: ep=%s, msg=%s", self._episode_id, message[:30])
         except Exception as e:
             logger.warning("アバター発話DB保存失敗: %s", e)
 
