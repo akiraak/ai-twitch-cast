@@ -219,21 +219,21 @@ async def _restore_session():
     """前回のセッションをバックグラウンドで自動復旧する"""
     logger.info("前回のセッションを自動復旧中...")
     try:
-        state.obs.connect()
+        await asyncio.to_thread(state.obs.connect)
         state.obs_connected = True
-        _apply_audio_settings()
+        await asyncio.to_thread(_apply_audio_settings)
         logger.info("OBS接続復旧OK")
     except Exception as e:
         logger.warning("OBS接続復旧失敗: %s", e)
 
     try:
         if AVATAR_APP == "vsf":
-            state.vsf.connect()
+            await asyncio.to_thread(state.vsf.connect)
             state.vsf_connected = True
-            state.vsf.apply_default_pose()
+            await asyncio.to_thread(state.vsf.apply_default_pose)
             defaults = state.load_vsf_defaults()
             if defaults.get("blendshapes"):
-                state.vsf.set_blendshapes(defaults["blendshapes"])
+                await asyncio.to_thread(state.vsf.set_blendshapes, defaults["blendshapes"])
             state.vsf.start_idle(defaults.get("idle_scale", 1.0))
             logger.info("アバター復旧OK")
         else:
