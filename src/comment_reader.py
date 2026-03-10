@@ -175,10 +175,6 @@ class CommentReader:
                     subtitle["author"], subtitle["message"], subtitle["result"],
                 )
 
-            # チャット投稿（音声再生と同時）
-            if chat_result:
-                await self._post_to_chat(chat_result)
-
             # リップシンク開始（音声再生と同時）
             if self._vsf and lipsync_frames:
                 self._vsf.start_lipsync(lipsync_frames)
@@ -190,6 +186,12 @@ class CommentReader:
                 "type": "play_audio",
                 "url": audio_url,
             })
+            # チャット投稿（音声再生の2秒後）
+            if chat_result:
+                async def _delayed_chat(result):
+                    await asyncio.sleep(2.0)
+                    await self._post_to_chat(result)
+                asyncio.create_task(_delayed_chat(chat_result))
             # 音声の長さ分だけ待機
             with wave.open(str(wav_path), "rb") as wf:
                 duration = wf.getnframes() / wf.getframerate()
