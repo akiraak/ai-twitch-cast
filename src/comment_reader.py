@@ -11,7 +11,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from src import db
-from src.ai_responder import generate_event_response, generate_response, generate_user_notes, get_character
+from src.ai_responder import generate_event_response, generate_response, generate_self_note, generate_user_notes, get_character
 from src.lipsync import analyze_amplitude
 from src.tts import synthesize
 from src.twitch_chat import TwitchChat
@@ -164,10 +164,13 @@ class CommentReader:
         logger.info("[ai] 応答生成中...")
         history = await asyncio.to_thread(db.get_recent_comments, 10, 2)
         stream_context = await self._get_stream_context()
+        # アバター自身のメモを取得
+        self_note = await self._get_self_note()
         result = await asyncio.to_thread(
             generate_response, author, message, comment_count,
             history=history, stream_context=stream_context,
             user_note=user_note or None, already_greeted=already_greeted,
+            self_note=self_note,
         )
         logger.info("[ai] [%s] %s", result["emotion"], result["response"])
         return result
@@ -338,6 +341,33 @@ class CommentReader:
         except Exception as e:
             logger.error("イベント発話失敗: %s", e)
 
+    async def _get_self_note(self):
+        """アバター自身の記憶メモを取得する"""
+        try:
+            char_name = get_character().get("name", "ちょび")
+            user = await asyncio.to_thread(db.get_or_create_user, char_name)
+            return user.get("note", "") or None
+        except Exception:
+            return None
+
+    async def _update_self_note(self):
+        """アバター自身の記憶メモを更新する"""
+        try:
+            char_name = get_character().get("name", "ちょび")
+            user = await asyncio.to_thread(db.get_or_create_user, char_name)
+            recent = await asyncio.to_thread(db.get_recent_comments, 20, 2)
+            if not recent:
+                return
+            current_note = user.get("note", "")
+            new_note = await asyncio.to_thread(
+                generate_self_note, recent, current_note,
+            )
+            if new_note and new_note != current_note:
+                await asyncio.to_thread(db.update_user_note, user["id"], new_note)
+                logger.info("[note] アバターメモ更新: %s", new_note)
+        except Exception as e:
+            logger.warning("[note] アバターメモ更新失敗: %s", e)
+
     async def _save_avatar_speech(self, message, response, emotion="neutral"):
         """アバターの発話をDBに保存する（会話履歴に含めるため）"""
         if not self._episode_id:
@@ -389,6 +419,8 @@ class CommentReader:
                                 db.update_user_note, u["id"], notes[u["name"]],
                             )
                     logger.info("[note] ユーザーメモ更新完了: %s", notes)
+                    # アバター自身のメモも更新
+                    await self._update_self_note()
                 except Exception as e:
                     logger.error("[note] ユーザーメモ更新失敗: %s", e)
         except asyncio.CancelledError:

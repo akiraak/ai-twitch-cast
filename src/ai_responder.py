@@ -178,7 +178,7 @@ def invalidate_character_cache():
     _character_id = None
 
 
-def _build_system_prompt(stream_context=None):
+def _build_system_prompt(stream_context=None, self_note=None):
     """キャラクター設定からシステムプロンプトを構築する"""
     char = get_character()
     emotions = char.get("emotions", {})
@@ -191,6 +191,14 @@ def _build_system_prompt(stream_context=None):
     ]
     for rule in char.get("rules", []):
         parts.append(f"- {rule}")
+
+    # 自分の記憶メモ
+    if self_note:
+        parts.extend([
+            "",
+            "## あなたの記憶メモ（今日の配信で話したこと・感じたこと）",
+            self_note,
+        ])
 
     # 配信コンテキスト
     if stream_context:
@@ -221,7 +229,7 @@ def _build_system_prompt(stream_context=None):
     return "\n".join(parts)
 
 
-def generate_response(author, message, comment_count=0, history=None, stream_context=None, user_note=None, already_greeted=False):
+def generate_response(author, message, comment_count=0, history=None, stream_context=None, user_note=None, already_greeted=False, self_note=None):
     """コメントに対するAI応答を生成する
 
     Args:
@@ -232,12 +240,13 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
         stream_context: 配信情報 {title, topic, todo_items}
         user_note: このユーザーについてのメモ
         already_greeted: この配信で既に挨拶済みか
+        self_note: アバター自身の記憶メモ
 
     Returns:
         dict: {"response": str, "emotion": str}
     """
     client = get_client()
-    system_prompt = _build_system_prompt(stream_context=stream_context)
+    system_prompt = _build_system_prompt(stream_context=stream_context, self_note=self_note)
 
     context_parts = []
     if comment_count == 0 and not already_greeted:
@@ -351,6 +360,63 @@ def generate_user_notes(users_with_comments):
         return json.loads(response.text)
     except (json.JSONDecodeError, AttributeError):
         return {}
+
+
+def generate_self_note(recent_comments, current_note=""):
+    """アバター自身の記憶メモを生成する
+
+    Args:
+        recent_comments: 直近の会話 [{user_name, message, response}, ...]
+        current_note: 現在のメモ
+
+    Returns:
+        str: 更新されたメモ
+    """
+    if not recent_comments:
+        return current_note or ""
+
+    client = get_client()
+    char = get_character()
+    char_name = char.get("name", "ちょび")
+
+    parts = [
+        f"あなたは{char_name}の記憶係です。",
+        f"{char_name}が配信中に話したことや感じたことを短いメモにまとめてください。",
+        "",
+        "## ルール",
+        "- 100文字以内で簡潔に",
+        "- 今日話したトピック、盛り上がった話題、印象的なやりとりを記録",
+        "- 視聴者との関係性（誰とどんな話をしたか）も含める",
+        "- 既存メモがある場合は更新・補足（古い情報は削除OK）",
+        "- 次の会話で自然に活かせる情報を優先",
+        "",
+        "## 出力形式",
+        '{"note": "メモ内容"}',
+    ]
+
+    lines = []
+    if current_note:
+        lines.append(f"既存メモ: {current_note}")
+    lines.append("直近の会話:")
+    for c in recent_comments:
+        lines.append(f"  {c['user_name']}: {c['message']}")
+        if c.get("response"):
+            lines.append(f"  {char_name}: {c['response']}")
+
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents="\n".join(lines),
+        config=types.GenerateContentConfig(
+            system_instruction="\n".join(parts),
+            response_mime_type="application/json",
+        ),
+    )
+
+    try:
+        result = json.loads(response.text)
+        return result.get("note", current_note or "")
+    except (json.JSONDecodeError, AttributeError):
+        return current_note or ""
 
 
 def generate_topic_line(title, description="", last_speeches=None, recent_comments=None):
