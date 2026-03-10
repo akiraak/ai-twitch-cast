@@ -18,6 +18,9 @@
       "height": 600,
       "fontSize": 24,
       "titleFontSize": 29
+    },
+    "tts": {
+      "volume": 0.3
     }
   },
   "avatar": {

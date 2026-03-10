@@ -440,6 +440,14 @@
         </div>
       </div>
     </div>
+    <div class="card">
+      <h2>読み上げ音量</h2>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <input type="range" id="ov-tts-volume" min="0" max="100" step="1" value="30" style="flex:1;"
+          oninput="document.getElementById('ov-tts-volume-label').textContent=this.value+'%'">
+        <span id="ov-tts-volume-label">30%</span>
+      </div>
+    </div>
     <div class="btn-row" style="margin-top:12px;">
       <button onclick="saveOverlaySettings()">保存</button>
       <button class="secondary" onclick="loadOverlaySettings()">読込</button>
@@ -1032,6 +1040,9 @@ function getOverlayValues() {
       fontSize: parseInt(document.getElementById('ov-todo-font').value),
       titleFontSize: parseInt(document.getElementById('ov-todo-title-font').value),
     },
+    tts: {
+      volume: parseInt(document.getElementById('ov-tts-volume').value) / 100,
+    },
   };
 }
 
@@ -1057,6 +1068,11 @@ function setOverlayValues(s) {
     document.getElementById('ov-todo-font-num').value = s.todo.fontSize ?? 15;
     document.getElementById('ov-todo-title-font').value = s.todo.titleFontSize ?? 18;
     document.getElementById('ov-todo-title-font-num').value = s.todo.titleFontSize ?? 18;
+  }
+  if (s.tts) {
+    const pct = Math.round((s.tts.volume ?? 0.3) * 100);
+    document.getElementById('ov-tts-volume').value = pct;
+    document.getElementById('ov-tts-volume-label').textContent = pct + '%';
   }
 }
 
