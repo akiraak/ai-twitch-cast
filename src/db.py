@@ -1,7 +1,7 @@
 """データベース管理モジュール（SQLite）"""
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -256,6 +256,24 @@ def save_comment(episode_id, user_id, message, response="", emotion="neutral"):
     )
     conn.commit()
     return cur.lastrowid
+
+
+def get_recent_comments(limit=20, hours=2):
+    """直近N時間以内のコメントを取得する（配信またぎ対応）
+
+    Returns:
+        list[dict]: [{user_name, message, response, emotion, created_at}, ...]
+    """
+    conn = get_connection()
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    rows = conn.execute(
+        """SELECT u.name as user_name, c.message, c.response, c.emotion, c.created_at
+           FROM comments c JOIN users u ON c.user_id = u.id
+           WHERE c.created_at > ?
+           ORDER BY c.created_at DESC LIMIT ?""",
+        (since, limit),
+    ).fetchall()
+    return [dict(r) for r in reversed(rows)]
 
 
 # --- actions ---

@@ -88,7 +88,7 @@ def invalidate_character_cache():
     _character_id = None
 
 
-def _build_system_prompt():
+def _build_system_prompt(stream_context=None):
     """キャラクター設定からシステムプロンプトを構築する"""
     char = get_character()
     emotions = char.get("emotions", {})
@@ -101,6 +101,18 @@ def _build_system_prompt():
     ]
     for rule in char.get("rules", []):
         parts.append(f"- {rule}")
+
+    # 配信コンテキスト
+    if stream_context:
+        parts.extend(["", "## 現在の配信情報"])
+        if stream_context.get("title"):
+            parts.append(f"- 配信タイトル: {stream_context['title']}")
+        if stream_context.get("topic"):
+            parts.append(f"- 話題のトピック: {stream_context['topic']}")
+        if stream_context.get("todo_items"):
+            parts.append("- 作業中のタスク:")
+            for item in stream_context["todo_items"]:
+                parts.append(f"  - {item}")
 
     parts.extend([
         "",
@@ -120,30 +132,51 @@ def _build_system_prompt():
     return "\n".join(parts)
 
 
-def generate_response(author, message, comment_count=0):
+def generate_response(author, message, comment_count=0, history=None, stream_context=None):
     """コメントに対するAI応答を生成する
 
     Args:
         author: コメント投稿者名
         message: コメント内容
         comment_count: このユーザーの過去コメント数
+        history: 直近の会話履歴 [{user_name, message, response}, ...]
+        stream_context: 配信情報 {title, topic, todo_items}
 
     Returns:
         dict: {"response": str, "emotion": str}
     """
     client = get_client()
-    system_prompt = _build_system_prompt()
+    system_prompt = _build_system_prompt(stream_context=stream_context)
 
     if comment_count == 0:
         context = f"（初見のユーザーです）"
     else:
         context = f"（過去{comment_count}回コメントしている常連です）"
 
-    user_prompt = f"{author}さんのコメント{context}: {message}"
+    # 会話履歴をcontentsに組み立て（Geminiのマルチターン形式）
+    contents = []
+    if history:
+        char = get_character()
+        char_name = char.get("name", "ちょび")
+        for h in history:
+            contents.append(types.Content(
+                role="user",
+                parts=[types.Part(text=f"{h['user_name']}さんのコメント: {h['message']}")]
+            ))
+            if h.get("response"):
+                contents.append(types.Content(
+                    role="model",
+                    parts=[types.Part(text=h["response"])]
+                ))
+
+    contents.append(types.Content(
+        role="user",
+        parts=[types.Part(text=f"{author}さんのコメント{context}: {message}")]
+    ))
 
     response = client.models.generate_content(
         model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.5-flash"),
-        contents=user_prompt,
+        contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",

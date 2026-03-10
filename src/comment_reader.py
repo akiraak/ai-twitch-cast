@@ -113,6 +113,8 @@ class CommentReader:
             }, chat_result={"response": script["content"], "english": ""})
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
+            # アバター発話をDBに保存
+            await self._save_avatar_speech("[トピック]", script["content"], script["emotion"])
         except Exception as e:
             logger.error("自発的発話失敗: %s", e)
 
@@ -135,13 +137,50 @@ class CommentReader:
             logger.error("応答失敗: %s", e)
 
     async def _generate_ai_response(self, author, message, comment_count):
-        """AI応答を生成する"""
+        """AI応答を生成する（会話履歴・配信コンテキスト付き）"""
         logger.info("[ai] 応答生成中...")
+        history = await asyncio.to_thread(db.get_recent_comments, 20, 2)
+        stream_context = await self._get_stream_context()
         result = await asyncio.to_thread(
-            generate_response, author, message, comment_count
+            generate_response, author, message, comment_count,
+            history=history, stream_context=stream_context,
         )
         logger.info("[ai] [%s] %s", result["emotion"], result["response"])
         return result
+
+    async def _get_stream_context(self):
+        """配信コンテキストを収集する（タイトル・トピック・TODO）"""
+        context = {}
+        # 配信タイトル
+        try:
+            from src.twitch_api import TwitchAPI
+            api = TwitchAPI()
+            info = await api.get_channel_info()
+            if info.get("title"):
+                context["title"] = info["title"]
+        except Exception:
+            pass
+        # 現在のトピック
+        if self._topic_talker:
+            status = self._topic_talker.get_status()
+            if status.get("active") and status.get("topic"):
+                context["topic"] = status["topic"]["title"]
+        # TODO（作業中タスク）
+        try:
+            from pathlib import Path
+            todo_path = Path(__file__).resolve().parent.parent / "TODO.md"
+            if todo_path.exists():
+                import re
+                items = []
+                for line in todo_path.read_text(encoding="utf-8").splitlines():
+                    m = re.match(r"\s*-\s*\[>\]\s*(.*)", line)
+                    if m:
+                        items.append(m.group(1).strip())
+                if items:
+                    context["todo_items"] = items
+        except Exception:
+            pass
+        return context if context else None
 
     async def _save_to_db(self, user, message, result):
         """コメントと応答をDBに保存する"""
@@ -259,8 +298,23 @@ class CommentReader:
             await self._notify_overlay_end()
             if self._topic_talker:
                 self._topic_talker.mark_spoken()
+            # アバター発話をDBに保存
+            await self._save_avatar_speech(f"[{event_type}] {detail}", result["response"], result["emotion"])
         except Exception as e:
             logger.error("イベント発話失敗: %s", e)
+
+    async def _save_avatar_speech(self, message, response, emotion="neutral"):
+        """アバターの発話をDBに保存する（会話履歴に含めるため）"""
+        if not self._episode_id:
+            return
+        try:
+            char_name = get_character().get("name", "ちょび")
+            user = await asyncio.to_thread(db.get_or_create_user, char_name)
+            await asyncio.to_thread(
+                db.save_comment, self._episode_id, user["id"], message, response, emotion,
+            )
+        except Exception as e:
+            logger.warning("アバター発話DB保存失敗: %s", e)
 
     def _apply_emotion(self, emotion):
         """感情に対応するBlendShapeを適用する"""
