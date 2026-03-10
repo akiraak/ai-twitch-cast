@@ -1,10 +1,10 @@
 """VSeeFace VMC Protocol (OSC) 制御モジュール"""
 
-import asyncio
 import logging
 import math
 import os
 import random
+import threading
 import time
 
 from pythonosc import udp_client
@@ -21,7 +21,8 @@ class VSFController:
         self.host = resolve_host(host or os.environ.get("VSF_OSC_HOST", "127.0.0.1"))
         self.port = int(port or os.environ.get("VSF_OSC_PORT", "39539"))
         self._client = None
-        self._idle_task = None
+        self._idle_thread = None
+        self._idle_stop = threading.Event()
 
     def connect(self):
         """OSCクライアントを作成する"""
@@ -119,8 +120,11 @@ class VSFController:
             aw * bw - ax * bx - ay * by - az * bz,
         )
 
-    async def _idle_loop(self, scale):
-        """待機モーションのメインループ
+    def _idle_loop(self, scale):
+        """待機モーションのメインループ（専用スレッドで実行）
+
+        asyncioイベントループとは独立したスレッドで動作するため、
+        サーバーの負荷やイベントループのブロッキングに影響されない。
 
         Args:
             scale: 動きの大きさの倍率 (1.0が標準)
@@ -131,8 +135,8 @@ class VSFController:
         next_ear_twitch = t0 + random.uniform(3.0, 8.0)
         ear_twitch_end = 0.0
 
-        try:
-            while True:
+        while not self._idle_stop.is_set():
+            try:
                 t = time.time() - t0
                 now = time.time()
 
@@ -189,13 +193,14 @@ class VSFController:
                 # --- まばたき: ランダム間隔 ---
                 if now >= next_blink:
                     self.set_blendshape("Blink", 1.0)
-                    await asyncio.sleep(0.08)
+                    time.sleep(0.08)
                     self.set_blendshape("Blink", 0.0)
                     next_blink = now + random.uniform(2.0, 6.0)
 
-                await asyncio.sleep(1 / 30)  # 30fps
-        except asyncio.CancelledError:
-            pass
+                time.sleep(1 / 30)  # 30fps
+            except Exception as e:
+                logger.warning("idle loop エラー (継続): %s", e)
+                time.sleep(0.1)
 
     def start_idle(self, scale=1.0):
         """待機モーションを開始する
@@ -204,14 +209,19 @@ class VSFController:
             scale: 動きの大きさの倍率 (1.0が標準、2.0で2倍、0.5で半分)
         """
         self.stop_idle()
-        self._idle_task = asyncio.create_task(self._idle_loop(scale))
+        self._idle_stop.clear()
+        self._idle_thread = threading.Thread(
+            target=self._idle_loop, args=(scale,), daemon=True, name="vsf-idle"
+        )
+        self._idle_thread.start()
 
     def stop_idle(self):
         """待機モーションを停止する"""
-        if self._idle_task and not self._idle_task.done():
-            self._idle_task.cancel()
-            self._idle_task = None
+        if self._idle_thread and self._idle_thread.is_alive():
+            self._idle_stop.set()
+            self._idle_thread.join(timeout=2.0)
+            self._idle_thread = None
 
     @property
     def is_idle_running(self):
-        return self._idle_task is not None and not self._idle_task.done()
+        return self._idle_thread is not None and self._idle_thread.is_alive()

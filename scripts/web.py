@@ -22,6 +22,8 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+logger = logging.getLogger(__name__)
+
 from scripts import state
 from scripts.routes.avatar import router as avatar_router
 from scripts.routes.character import router as character_router
@@ -37,6 +39,7 @@ app = FastAPI()
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
+STATE_FILE = PROJECT_DIR / ".server_state"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ルーターを登録
@@ -139,16 +142,77 @@ async def start():
     await state.ensure_reader()
     await state.git_watcher.start()
 
+    # 状態ファイルを作成（再起動時の自動復旧用）
+    STATE_FILE.touch()
+
     return {"ok": True, **setup_result}
 
 
 @app.on_event("startup")
-async def startup_seed():
-    """起動時にキャラクターをDBにシードする"""
+async def startup():
+    """起動時にキャラクターをDBにシード＆前回の接続状態を自動復旧する"""
     try:
         load_character()
     except Exception:
         pass
+
+    # Setup済みの状態ファイルがなければ復旧しない
+    if not STATE_FILE.exists():
+        return
+
+    logger.info("前回のセッションを自動復旧中...")
+    try:
+        state.obs.connect()
+        state.obs_connected = True
+        logger.info("OBS接続復旧OK")
+    except Exception as e:
+        logger.warning("OBS接続復旧失敗: %s", e)
+
+    try:
+        if AVATAR_APP == "vsf":
+            state.vsf.connect()
+            state.vsf_connected = True
+            state.vsf.apply_default_pose()
+            defaults = state.load_vsf_defaults()
+            if defaults.get("blendshapes"):
+                state.vsf.set_blendshapes(defaults["blendshapes"])
+            state.vsf.start_idle(defaults.get("idle_scale", 1.0))
+            logger.info("アバター復旧OK")
+        else:
+            await state.vts.connect()
+            state.vts_connected = True
+            logger.info("VTS接続復旧OK")
+    except Exception as e:
+        logger.warning("アバター復旧失敗: %s", e)
+
+    try:
+        await state.ensure_reader()
+        logger.info("Reader復旧OK")
+    except Exception as e:
+        logger.warning("Reader復旧失敗: %s", e)
+
+    try:
+        await state.git_watcher.start()
+        logger.info("Git監視復旧OK")
+    except Exception as e:
+        logger.warning("Git監視復旧失敗: %s", e)
+
+    logger.info("自動復旧完了")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """終了時にリソースを解放する"""
+    state.vsf.stop_idle()
+    try:
+        await state.reader.stop()
+    except Exception:
+        pass
+    try:
+        await state.git_watcher.stop()
+    except Exception:
+        pass
+    logger.info("シャットダウン完了")
 
 
 if __name__ == "__main__":

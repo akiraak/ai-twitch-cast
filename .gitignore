@@ -11,3 +11,5 @@ resources/audio/
 resources/vrm/
 tmp/
 *.zip
+.server.pid
+.server_state
