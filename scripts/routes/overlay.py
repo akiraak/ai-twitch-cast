@@ -35,6 +35,11 @@ async def overlay_page():
     return (STATIC_DIR / "overlay.html").read_text(encoding="utf-8")
 
 
+@router.get("/design-proposal", response_class=HTMLResponse)
+async def design_proposal_page():
+    return (STATIC_DIR / "design-proposal.html").read_text(encoding="utf-8")
+
+
 @router.get("/api/overlay/settings")
 async def get_overlay_settings():
     with open(CONFIG_PATH, encoding="utf-8") as f:

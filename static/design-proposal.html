@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Twitch Cast - Design Proposal</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* テーマ変数 */
+  :root {
+    --bg: #0d1117;
+    --bg-card: #161b22;
+    --bg-input: #0d1117;
+    --border: #30363d;
+    --border-hover: #484f58;
+    --text: #e6edf3;
+    --text-sub: #8b949e;
+    --text-muted: #484f58;
+    --primary: #7c4dff;
+    --primary-hover: #651fff;
+    --primary-bg: #7c4dff22;
+    --primary-text: #d2b8ff;
+    --primary-border: #7c4dff44;
+    --success: #238636;
+    --success-hover: #2ea043;
+    --success-text: #3fb950;
+    --danger: #da3633;
+    --danger-hover: #f85149;
+    --danger-text: #f85149;
+    --streaming-bg: #1a0f0f;
+    --streaming-border: #f8514966;
+    --hover-bg: #1c2128;
+    --accent-color: #7c4dff;
+  }
+
+  /* Theme 1: GitHub Dark (default) - already defined in :root */
+
+  /* Theme 2: Ocean Blue */
+  [data-theme="ocean"] {
+    --bg: #0a1628; --bg-card: #0f1f36; --bg-input: #0a1628;
+    --border: #1e3a5f; --border-hover: #2d5a8e; --text: #d4e4f7; --text-sub: #7a9ec5;
+    --text-muted: #3d6a9e; --primary: #2196f3; --primary-hover: #1976d2;
+    --primary-bg: #2196f322; --primary-text: #90caf9; --primary-border: #2196f344;
+    --success: #00897b; --success-hover: #00a693; --success-text: #4dd0c8;
+    --danger: #c62828; --danger-hover: #ef5350; --danger-text: #ef5350;
+    --hover-bg: #132d4f; --accent-color: #2196f3;
+  }
+
+  /* Theme 3: Cyberpunk */
+  [data-theme="cyberpunk"] {
+    --bg: #0a0a12; --bg-card: #12121f; --bg-input: #0a0a12;
+    --border: #2a1f4e; --border-hover: #4a3580; --text: #e0d4f5; --text-sub: #9580c5;
+    --text-muted: #4a3580; --primary: #e040fb; --primary-hover: #d500f9;
+    --primary-bg: #e040fb22; --primary-text: #f3a0ff; --primary-border: #e040fb44;
+    --success: #00e676; --success-hover: #00c853; --success-text: #69f0ae;
+    --danger: #ff1744; --danger-hover: #ff5252; --danger-text: #ff5252;
+    --hover-bg: #1a1a2e; --accent-color: #e040fb;
+  }
+
+  /* Theme 4: Forest Green */
+  [data-theme="forest"] {
+    --bg: #0b1410; --bg-card: #111f19; --bg-input: #0b1410;
+    --border: #1e3b2e; --border-hover: #2d5a44; --text: #d4e8dc; --text-sub: #7aac8e;
+    --text-muted: #3d7a5a; --primary: #4caf50; --primary-hover: #388e3c;
+    --primary-bg: #4caf5022; --primary-text: #a5d6a7; --primary-border: #4caf5044;
+    --success: #00c853; --success-hover: #00e676; --success-text: #69f0ae;
+    --danger: #c62828; --danger-hover: #ef5350; --danger-text: #ef5350;
+    --hover-bg: #152a1f; --accent-color: #4caf50;
+  }
+
+  /* Theme 5: Sunset Orange */
+  [data-theme="sunset"] {
+    --bg: #14100a; --bg-card: #1f1811; --bg-input: #14100a;
+    --border: #3b2e1e; --border-hover: #5a4a2d; --text: #f0e4d4; --text-sub: #b5956a;
+    --text-muted: #7a6540; --primary: #ff9800; --primary-hover: #f57c00;
+    --primary-bg: #ff980022; --primary-text: #ffcc80; --primary-border: #ff980044;
+    --success: #7cb342; --success-hover: #9ccc65; --success-text: #aed581;
+    --danger: #d84315; --danger-hover: #ff5722; --danger-text: #ff7043;
+    --hover-bg: #2a200f; --accent-color: #ff9800;
+  }
+
+  /* Theme 6: Rose Pink */
+  [data-theme="rose"] {
+    --bg: #140a10; --bg-card: #1f1118; --bg-input: #140a10;
+    --border: #3b1e2e; --border-hover: #5a2d44; --text: #f0d4e4; --text-sub: #c57a9e;
+    --text-muted: #7a3d5a; --primary: #e91e63; --primary-hover: #c2185b;
+    --primary-bg: #e91e6322; --primary-text: #f48fb1; --primary-border: #e91e6344;
+    --success: #26a69a; --success-hover: #4db6ac; --success-text: #80cbc4;
+    --danger: #d32f2f; --danger-hover: #ef5350; --danger-text: #ef5350;
+    --hover-bg: #2a0f1f; --accent-color: #e91e63;
+  }
+
+  /* Theme 7: Midnight Indigo */
+  [data-theme="indigo"] {
+    --bg: #0a0c1a; --bg-card: #111428; --bg-input: #0a0c1a;
+    --border: #1e2450; --border-hover: #2d3880; --text: #d4d8f5; --text-sub: #808ac5;
+    --text-muted: #3d4a80; --primary: #5c6bc0; --primary-hover: #3f51b5;
+    --primary-bg: #5c6bc022; --primary-text: #9fa8da; --primary-border: #5c6bc044;
+    --success: #66bb6a; --success-hover: #81c784; --success-text: #a5d6a7;
+    --danger: #e53935; --danger-hover: #ef5350; --danger-text: #ef5350;
+    --hover-bg: #151830; --accent-color: #5c6bc0;
+  }
+
+  /* Theme 8: Monokai */
+  [data-theme="monokai"] {
+    --bg: #1e1f1c; --bg-card: #272822; --bg-input: #1e1f1c;
+    --border: #3e3d32; --border-hover: #575748; --text: #f8f8f2; --text-sub: #a6a693;
+    --text-muted: #75715e; --primary: #a6e22e; --primary-hover: #8bc218;
+    --primary-bg: #a6e22e22; --primary-text: #c6f06e; --primary-border: #a6e22e44;
+    --success: #a6e22e; --success-hover: #b8f040; --success-text: #c6f06e;
+    --danger: #f92672; --danger-hover: #ff4a8d; --danger-text: #ff6698;
+    --hover-bg: #32332c; --accent-color: #a6e22e;
+  }
+
+  /* Theme 9: Nord */
+  [data-theme="nord"] {
+    --bg: #2e3440; --bg-card: #3b4252; --bg-input: #2e3440;
+    --border: #4c566a; --border-hover: #5e6a82; --text: #eceff4; --text-sub: #a3b1c6;
+    --text-muted: #6b7b95; --primary: #88c0d0; --primary-hover: #6fb3c4;
+    --primary-bg: #88c0d022; --primary-text: #a3d8e4; --primary-border: #88c0d044;
+    --success: #a3be8c; --success-hover: #b5ce9e; --success-text: #a3be8c;
+    --danger: #bf616a; --danger-hover: #d08770; --danger-text: #bf616a;
+    --hover-bg: #434c5e; --accent-color: #88c0d0;
+  }
+
+  /* Theme 10: Dracula */
+  [data-theme="dracula"] {
+    --bg: #282a36; --bg-card: #343746; --bg-input: #282a36;
+    --border: #44475a; --border-hover: #565a72; --text: #f8f8f2; --text-sub: #a9adc1;
+    --text-muted: #6272a4; --primary: #bd93f9; --primary-hover: #a675f5;
+    --primary-bg: #bd93f922; --primary-text: #d4b8ff; --primary-border: #bd93f944;
+    --success: #50fa7b; --success-hover: #69ff92; --success-text: #50fa7b;
+    --danger: #ff5555; --danger-hover: #ff6e6e; --danger-text: #ff5555;
+    --hover-bg: #3d4058; --accent-color: #bd93f9;
+  }
+
+  /* ===== Light Themes ===== */
+
+  /* Theme 11: GitHub Light */
+  [data-theme="light"] {
+    --bg: #f6f8fa; --bg-card: #ffffff; --bg-input: #f6f8fa;
+    --border: #d0d7de; --border-hover: #b0b8c1; --text: #1f2328; --text-sub: #656d76;
+    --text-muted: #8c959f; --primary: #7c4dff; --primary-hover: #651fff;
+    --primary-bg: #7c4dff18; --primary-text: #5a2dcc; --primary-border: #7c4dff33;
+    --success: #1a7f37; --success-hover: #2da44e; --success-text: #1a7f37;
+    --danger: #cf222e; --danger-hover: #a40e26; --danger-text: #cf222e;
+    --streaming-bg: #fff5f5; --streaming-border: #cf222e44;
+    --hover-bg: #eef1f4; --accent-color: #7c4dff;
+  }
+
+  /* Theme 12: Cream */
+  [data-theme="cream"] {
+    --bg: #faf8f2; --bg-card: #ffffff; --bg-input: #f5f2ea;
+    --border: #e0d8c8; --border-hover: #c8bfa8; --text: #2c2a22; --text-sub: #6b6555;
+    --text-muted: #a09880; --primary: #c47a20; --primary-hover: #a86510;
+    --primary-bg: #c47a2018; --primary-text: #8b5510; --primary-border: #c47a2033;
+    --success: #447730; --success-hover: #5a9040; --success-text: #447730;
+    --danger: #b83230; --danger-hover: #a02020; --danger-text: #b83230;
+    --streaming-bg: #fff2f0; --streaming-border: #b8323044;
+    --hover-bg: #f0ece2; --accent-color: #c47a20;
+  }
+
+  /* Theme 13: Sky Blue Light */
+  [data-theme="sky"] {
+    --bg: #f0f7ff; --bg-card: #ffffff; --bg-input: #e8f2fd;
+    --border: #c4d9f0; --border-hover: #a0bfdf; --text: #1a2940; --text-sub: #4a6a90;
+    --text-muted: #8aaac5; --primary: #1976d2; --primary-hover: #1565c0;
+    --primary-bg: #1976d218; --primary-text: #0d47a1; --primary-border: #1976d233;
+    --success: #2e7d32; --success-hover: #388e3c; --success-text: #2e7d32;
+    --danger: #c62828; --danger-hover: #b71c1c; --danger-text: #c62828;
+    --streaming-bg: #fff0f0; --streaming-border: #c6282844;
+    --hover-bg: #e4eef8; --accent-color: #1976d2;
+  }
+
+  /* Theme 14: Mint */
+  [data-theme="mint"] {
+    --bg: #f0faf5; --bg-card: #ffffff; --bg-input: #e6f5ed;
+    --border: #b8dcc8; --border-hover: #90c5a8; --text: #1a3028; --text-sub: #4a7a60;
+    --text-muted: #80b098; --primary: #00897b; --primary-hover: #00796b;
+    --primary-bg: #00897b18; --primary-text: #004d40; --primary-border: #00897b33;
+    --success: #2e7d32; --success-hover: #388e3c; --success-text: #2e7d32;
+    --danger: #c62828; --danger-hover: #b71c1c; --danger-text: #c62828;
+    --streaming-bg: #fff0f0; --streaming-border: #c6282844;
+    --hover-bg: #dff0e6; --accent-color: #00897b;
+  }
+
+  /* Theme 15: Lavender */
+  [data-theme="lavender"] {
+    --bg: #f5f0ff; --bg-card: #ffffff; --bg-input: #ece5fa;
+    --border: #d0c0e8; --border-hover: #b8a0d8; --text: #2a1f40; --text-sub: #6a5590;
+    --text-muted: #9a88b5; --primary: #7b1fa2; --primary-hover: #6a1b9a;
+    --primary-bg: #7b1fa218; --primary-text: #4a148c; --primary-border: #7b1fa233;
+    --success: #2e7d32; --success-hover: #388e3c; --success-text: #2e7d32;
+    --danger: #c62828; --danger-hover: #b71c1c; --danger-text: #c62828;
+    --streaming-bg: #fff0f0; --streaming-border: #c6282844;
+    --hover-bg: #e8ddf5; --accent-color: #7b1fa2;
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
+
+  /* ヘッダー */
+  .header {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .header h1 {
+    font-size: 1.1rem;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .header-actions button {
+    padding: 8px 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  /* ステータスバー */
+  .status-bar {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 24px;
+    display: flex;
+    gap: 24px;
+    font-size: 0.8rem;
+  }
+  .status-bar.streaming {
+    background: var(--streaming-bg);
+    border-bottom-color: var(--streaming-border);
+  }
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .status-dot.on { background: var(--success-text); }
+  .status-dot.off { background: var(--text-muted); }
+  .status-dot.live { background: var(--danger-text); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .status-label { color: var(--text-sub); }
+  .status-value { color: var(--text); }
+
+  /* タブ */
+  .tabs {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    gap: 0;
+  }
+  .tab {
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    color: var(--text-sub);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--text);
+    border-bottom-color: var(--accent-color);
+    font-weight: 600;
+  }
+
+  /* メインコンテンツ */
+  .main { padding: 20px 24px; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+  }
+
+  /* カード */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .card h2 {
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    color: var(--text);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h3 {
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    margin: 12px 0 8px;
+    font-weight: 500;
+  }
+
+  /* ボタン */
+  button {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: background 0.15s;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover { background: var(--danger-hover); }
+  .btn-secondary { background: var(--hover-bg); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:hover { background: var(--success-hover); }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+  /* TODO */
+  .todo-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--hover-bg);
+    transition: background 0.1s;
+  }
+  .todo-item:hover { background: var(--hover-bg); }
+  .todo-item:last-child { border-bottom: none; }
+  .todo-checkbox {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--text-muted);
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .todo-item.in-progress .todo-checkbox {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+  .todo-text { flex: 1; font-size: 0.85rem; }
+  .todo-item.in-progress .todo-text {
+    color: var(--primary-text);
+    font-weight: 600;
+  }
+  .todo-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+  }
+  .todo-badge.wip { background: var(--primary-bg); color: var(--primary-text); }
+  .todo-btn { font-size: 0.75rem; padding: 3px 12px; }
+  .todo-footer {
+    padding: 8px 12px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--hover-bg);
+  }
+
+  /* シーンリスト */
+  .scene-list { list-style: none; }
+  .scene-list li {
+    padding: 6px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    transition: background 0.1s;
+  }
+  .scene-list li:hover { background: var(--hover-bg); }
+  .scene-list li.active {
+    background: var(--primary-bg);
+    color: var(--primary-text);
+    font-weight: 600;
+    border: 1px solid var(--primary-border);
+  }
+
+  /* スライダー */
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .slider-row label {
+    font-size: 0.8rem;
+    min-width: 50px;
+    color: var(--text-sub);
+  }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--accent-color); }
+  .slider-row .val {
+    font-size: 0.8rem;
+    min-width: 40px;
+    text-align: right;
+    color: var(--text-sub);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+
+  /* 入力フィールド */
+  input[type=text], textarea {
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    width: 100%;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus, textarea:focus {
+    border-color: var(--accent-color);
+    outline: none;
+  }
+
+  /* ログ */
+  .log-panel {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.75rem;
+    height: 160px;
+    overflow-y: auto;
+    color: var(--text-sub);
+    margin-top: 16px;
+  }
+  .log-panel .log-time { color: var(--text-muted); }
+  .log-panel .log-ok { color: var(--success-text); }
+  .log-panel .log-err { color: var(--danger-text); }
+
+  /* 配信情報 */
+  .stream-info-row {
+    margin-bottom: 10px;
+  }
+  .stream-info-row label {
+    font-size: 0.75rem;
+    color: var(--text-sub);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  /* 折りたたみ */
+  .collapsible summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-sub);
+    padding: 6px 0;
+    user-select: none;
+  }
+  .collapsible summary:hover { color: var(--text); }
+
+  /* 注釈 */
+  .note {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: var(--primary-bg);
+    border: 1px solid var(--primary-border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.8rem;
+    color: var(--primary-text);
+    max-width: 300px;
+  }
+
+  /* テーマスイッチャー */
+  .theme-switcher {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-right: 12px;
+  }
+  .theme-switcher label {
+    font-size: 0.75rem;
+    color: var(--text-sub);
+    margin-right: 4px;
+  }
+  .theme-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.15s, border-color 0.15s;
+    position: relative;
+  }
+  .theme-btn:hover { transform: scale(1.2); }
+  .theme-btn.active { border-color: var(--text); transform: scale(1.15); }
+  .theme-btn::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div class="header">
+  <div class="header-left">
+    <h1>AI Twitch Cast</h1>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div class="theme-switcher">
+      <label>Dark:</label>
+      <button class="theme-btn active" onclick="setTheme('')" style="background:#7c4dff;" title="GitHub Dark"></button>
+      <button class="theme-btn" onclick="setTheme('ocean')" style="background:#2196f3;" title="Ocean Blue"></button>
+      <button class="theme-btn" onclick="setTheme('cyberpunk')" style="background:#e040fb;" title="Cyberpunk"></button>
+      <button class="theme-btn" onclick="setTheme('forest')" style="background:#4caf50;" title="Forest Green"></button>
+      <button class="theme-btn" onclick="setTheme('sunset')" style="background:#ff9800;" title="Sunset Orange"></button>
+      <button class="theme-btn" onclick="setTheme('rose')" style="background:#e91e63;" title="Rose Pink"></button>
+      <button class="theme-btn" onclick="setTheme('indigo')" style="background:#5c6bc0;" title="Midnight Indigo"></button>
+      <button class="theme-btn" onclick="setTheme('monokai')" style="background:#a6e22e;" title="Monokai"></button>
+      <button class="theme-btn" onclick="setTheme('nord')" style="background:#88c0d0;" title="Nord"></button>
+      <button class="theme-btn" onclick="setTheme('dracula')" style="background:#bd93f9;" title="Dracula"></button>
+      <span style="margin-left:8px;"></span>
+      <label>Light:</label>
+      <button class="theme-btn" onclick="setTheme('light')" style="background:linear-gradient(135deg,#7c4dff,#fff);border:1px solid #ccc;" title="GitHub Light"></button>
+      <button class="theme-btn" onclick="setTheme('cream')" style="background:linear-gradient(135deg,#c47a20,#faf8f2);border:1px solid #ccc;" title="Cream"></button>
+      <button class="theme-btn" onclick="setTheme('sky')" style="background:linear-gradient(135deg,#1976d2,#f0f7ff);border:1px solid #ccc;" title="Sky Blue"></button>
+      <button class="theme-btn" onclick="setTheme('mint')" style="background:linear-gradient(135deg,#00897b,#f0faf5);border:1px solid #ccc;" title="Mint"></button>
+      <button class="theme-btn" onclick="setTheme('lavender')" style="background:linear-gradient(135deg,#7b1fa2,#f5f0ff);border:1px solid #ccc;" title="Lavender"></button>
+    </div>
+    <div class="header-actions">
+      <button class="btn-primary" style="padding:8px 24px;">Setup</button>
+      <button class="btn-success">配信開始</button>
+      <button class="btn-danger">配信停止</button>
+    </div>
+  </div>
+</div>
+
+<!-- ステータスバー -->
+<div class="status-bar">
+  <div class="status-item">
+    <span class="status-dot on"></span>
+    <span class="status-label">OBS</span>
+    <span class="status-value">接続中</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot on"></span>
+    <span class="status-label">VSF</span>
+    <span class="status-value">接続中 / Idle</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot off"></span>
+    <span class="status-label">VTS</span>
+    <span class="status-value">未接続</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot off"></span>
+    <span class="status-label">配信</span>
+    <span class="status-value">停止中</span>
+  </div>
+</div>
+
+<!-- タブ -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('dashboard')">ダッシュボード</div>
+  <div class="tab" onclick="switchTab('obs')">OBS</div>
+  <div class="tab" onclick="switchTab('avatar')">アバター</div>
+  <div class="tab" onclick="switchTab('overlay')">オーバーレイ</div>
+  <div class="tab" onclick="switchTab('character')">キャラクター</div>
+</div>
+
+<!-- メイン -->
+<div class="main">
+
+  <!-- ダッシュボード -->
+  <div class="tab-content active" id="tab-dashboard">
+    <div class="grid">
+
+      <!-- TODO -->
+      <div class="card">
+        <h2>TODO</h2>
+        <div class="todo-item in-progress">
+          <span class="todo-checkbox"></span>
+          <span class="todo-text">WEB UIのデザインを修正</span>
+          <span class="todo-badge wip">作業中</span>
+        </div>
+        <div class="todo-item">
+          <span class="todo-checkbox"></span>
+          <span class="todo-text">VSeeFace 画面左上の文字がOBSに表示されているのを修正</span>
+          <button class="btn-secondary todo-btn">開始</button>
+        </div>
+        <div class="todo-item">
+          <span class="todo-checkbox"></span>
+          <span class="todo-text">アバターアイドルモーションの繋ぎでかくつくのを修正</span>
+          <button class="btn-secondary todo-btn">開始</button>
+        </div>
+        <div class="todo-item">
+          <span class="todo-checkbox"></span>
+          <span class="todo-text">Twitch配信時の過去のコメントを削除</span>
+          <button class="btn-secondary todo-btn">開始</button>
+        </div>
+        <div class="todo-item">
+          <span class="todo-checkbox"></span>
+          <span class="todo-text">配信のネタを設定してそれについて話す</span>
+          <button class="btn-secondary todo-btn">開始</button>
+        </div>
+        <div class="todo-footer">完了: 65件</div>
+      </div>
+
+
+    </div>
+
+    <!-- ログ -->
+    <div class="log-panel">
+      <div><span class="log-time">[15:32:09]</span> <span class="log-ok">OK</span> /api/start</div>
+      <div><span class="log-time">[15:32:10]</span> <span class="log-ok">OK</span> Setup完了: 2シーン, 5ソース</div>
+      <div><span class="log-time">[15:32:11]</span> <span class="log-ok">OK</span> /api/vsf/connect</div>
+      <div><span class="log-time">[15:32:12]</span> <span class="log-ok">OK</span> /api/vsf/idle</div>
+      <div><span class="log-time">[15:33:01]</span> <span class="log-ok">OK</span> /api/todo/start</div>
+      <div><span class="log-time">[15:33:45]</span> <span class="log-err">ERROR</span> /api/obs/scene: 接続されていません</div>
+    </div>
+  </div>
+
+  <!-- OBS -->
+  <div class="tab-content" id="tab-obs">
+    <div class="grid">
+      <div class="card">
+        <h2><span class="status-dot on" style="width:8px;height:8px;"></span> OBS接続</h2>
+        <div class="btn-row">
+          <button class="btn-primary">接続</button>
+          <button class="btn-secondary">切断</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn-primary">Setup</button>
+          <button class="btn-danger">Teardown</button>
+        </div>
+
+        <h3>シーン</h3>
+        <ul class="scene-list">
+          <li class="active">[ATC] メイン</li>
+          <li>[ATC] 開始画面</li>
+          <li>デスクトップ</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>アバター位置</h2>
+        <div class="slider-row">
+          <label>X</label>
+          <input type="range" min="-960" max="1920" value="800">
+          <span class="val">800</span>
+        </div>
+        <div class="slider-row">
+          <label>Y</label>
+          <input type="range" min="-540" max="1080" value="0">
+          <span class="val">0</span>
+        </div>
+        <div class="slider-row">
+          <label>幅</label>
+          <input type="range" min="0" max="3840" value="1920">
+          <span class="val">1920</span>
+        </div>
+        <div class="slider-row">
+          <label>高さ</label>
+          <input type="range" min="0" max="2160" value="1080">
+          <span class="val">1080</span>
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn-secondary">取得</button>
+          <button class="btn-primary">scenes.jsonに保存</button>
+        </div>
+
+        <details class="collapsible" style="margin-top:12px;">
+          <summary>ターミナル位置</summary>
+          <div style="padding-top:8px;">
+            <div class="slider-row">
+              <label>X</label>
+              <input type="range" min="-960" max="1920" value="0">
+              <span class="val">0</span>
+            </div>
+            <div class="slider-row">
+              <label>Y</label>
+              <input type="range" min="-540" max="1080" value="0">
+              <span class="val">0</span>
+            </div>
+            <div class="slider-row">
+              <label>幅</label>
+              <input type="range" min="0" max="3840" value="960">
+              <span class="val">960</span>
+            </div>
+            <div class="slider-row">
+              <label>高さ</label>
+              <input type="range" min="0" max="2160" value="540">
+              <span class="val">540</span>
+            </div>
+            <div class="btn-row" style="margin-top:8px;">
+              <button class="btn-secondary">取得</button>
+              <button class="btn-primary">scenes.jsonに保存</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <!-- アバター -->
+  <div class="tab-content" id="tab-avatar">
+    <div class="grid">
+      <div class="card">
+        <h2><span class="status-dot on" style="width:8px;height:8px;"></span> VSeeFace (VRM)</h2>
+        <div class="btn-row">
+          <button class="btn-primary">接続</button>
+          <button class="btn-secondary">切断</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn-secondary">Pose</button>
+          <button class="btn-primary">Idle</button>
+          <button class="btn-secondary">Stop</button>
+        </div>
+        <div class="slider-row">
+          <label>Idle倍率</label>
+          <input type="range" min="0.1" max="5.0" step="0.1" value="1.0">
+          <span class="val">1.0</span>
+        </div>
+
+        <h3>BlendShape</h3>
+        <div class="btn-row">
+          <button class="btn-secondary">Joy</button>
+          <button class="btn-secondary">Angry</button>
+          <button class="btn-secondary">Sorrow</button>
+          <button class="btn-secondary">Fun</button>
+          <button class="btn-danger" style="font-size:0.75rem;">Reset</button>
+        </div>
+        <div class="slider-row">
+          <label>A (口)</label>
+          <input type="range" min="0" max="1" step="0.05" value="0">
+          <span class="val">0</span>
+        </div>
+        <div class="slider-row">
+          <label>Blink</label>
+          <input type="range" min="0" max="1" step="0.05" value="0">
+          <span class="val">0</span>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn-primary">初期値として保存</button>
+          <button class="btn-secondary">初期値を読込</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="status-dot off" style="width:8px;height:8px;"></span> VTube Studio (Live2D)</h2>
+        <div class="btn-row">
+          <button class="btn-primary">接続</button>
+          <button class="btn-secondary">切断</button>
+        </div>
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-top:8px;">未接続</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- オーバーレイ -->
+  <div class="tab-content" id="tab-overlay">
+    <div class="grid">
+      <div class="card">
+        <h2>字幕設定</h2>
+        <div class="slider-row">
+          <label>下余白</label>
+          <input type="range" min="0" max="500" value="80">
+          <span class="val">80</span>
+        </div>
+        <div class="slider-row">
+          <label>文字</label>
+          <input type="range" min="14" max="64" value="28">
+          <span class="val">28</span>
+        </div>
+        <div class="slider-row">
+          <label>フェード</label>
+          <input type="range" min="1" max="15" step="0.5" value="3">
+          <span class="val">3.0</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>TODOパネル設定</h2>
+        <div class="slider-row">
+          <label>X</label>
+          <input type="range" min="0" max="1920" value="470">
+          <span class="val">470</span>
+        </div>
+        <div class="slider-row">
+          <label>Y</label>
+          <input type="range" min="0" max="1080" value="40">
+          <span class="val">40</span>
+        </div>
+        <div class="slider-row">
+          <label>幅</label>
+          <input type="range" min="200" max="1920" value="990">
+          <span class="val">990</span>
+        </div>
+        <div class="slider-row">
+          <label>高さ</label>
+          <input type="range" min="0" max="1080" value="600">
+          <span class="val">600</span>
+        </div>
+        <div class="slider-row">
+          <label>文字</label>
+          <input type="range" min="10" max="40" value="24">
+          <span class="val">24</span>
+        </div>
+        <div class="slider-row">
+          <label>タイトル</label>
+          <input type="range" min="12" max="48" value="29">
+          <span class="val">29</span>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn-primary">保存</button>
+      <button class="btn-secondary">読込</button>
+      <button class="btn-secondary">プレビュー</button>
+    </div>
+  </div>
+
+  <!-- キャラクター -->
+  <div class="tab-content" id="tab-character">
+    <div class="card">
+      <h2>キャラクター設定</h2>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div>
+          <div class="stream-info-row">
+            <label>名前</label>
+            <input type="text" value="あかり">
+          </div>
+        </div>
+        <div></div>
+        <div style="grid-column: 1 / -1;">
+          <div class="stream-info-row">
+            <label>システムプロンプト</label>
+            <textarea rows="3" style="resize:vertical;">あなたはTwitch配信者「あかり」です。明るくフレンドリーな性格で、視聴者のコメントに元気に返事します。</textarea>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:var(--text-sub); display:block; margin-bottom:6px;">ルール</label>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="display:flex; gap:4px;">
+              <input type="text" value="短く簡潔に返答する（1〜2文程度）" style="flex:1;">
+              <button class="btn-danger" style="padding:2px 8px;">x</button>
+            </div>
+            <div style="display:flex; gap:4px;">
+              <input type="text" value="初見の人には「いらっしゃい！」と歓迎する" style="flex:1;">
+              <button class="btn-danger" style="padding:2px 8px;">x</button>
+            </div>
+            <div style="display:flex; gap:4px;">
+              <input type="text" value="配信の雰囲気を明るく保つ" style="flex:1;">
+              <button class="btn-danger" style="padding:2px 8px;">x</button>
+            </div>
+          </div>
+          <button class="btn-secondary" style="margin-top:6px; font-size:0.75rem;">+ ルール追加</button>
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:var(--text-sub); display:block; margin-bottom:6px;">感情</label>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="display:flex; gap:4px;">
+              <input type="text" value="joy" style="width:70px;">
+              <input type="text" value="嬉しい・楽しいとき" style="flex:1;">
+              <button class="btn-danger" style="padding:2px 8px;">x</button>
+            </div>
+            <div style="display:flex; gap:4px;">
+              <input type="text" value="surprise" style="width:70px;">
+              <input type="text" value="驚いたとき" style="flex:1;">
+              <button class="btn-danger" style="padding:2px 8px;">x</button>
+            </div>
+            <div style="display:flex; gap:4px;">
+              <input type="text" value="neutral" style="width:70px;">
+              <input type="text" value="通常時" style="flex:1;">
+              <button class="btn-danger" style="padding:2px 8px;">x</button>
+            </div>
+          </div>
+          <button class="btn-secondary" style="margin-top:6px; font-size:0.75rem;">+ 感情追加</button>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:16px;">
+        <button class="btn-primary">保存</button>
+        <button class="btn-secondary">リロード</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  これはデザイン提案のモックアップです。<br>
+  ボタンやタブは見た目の確認用で、<br>実際の機能は動作しません。
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab-content#tab-${name}`).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function setTheme(name) {
+  if (name) {
+    document.documentElement.setAttribute('data-theme', name);
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

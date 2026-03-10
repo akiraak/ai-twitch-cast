@@ -6,40 +6,40 @@
 <title>AI Twitch Cast</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 16px; }
-  h1 { font-size: 1.3rem; margin-bottom: 16px; color: #b388ff; }
+  body { font-family: system-ui, sans-serif; background: #f5f0ff; color: #2a1f40; padding: 16px; }
+  h1 { font-size: 1.3rem; margin-bottom: 16px; color: #7b1fa2; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
-  .card { background: #16213e; border-radius: 8px; padding: 16px; }
-  .card h2 { font-size: 1rem; margin-bottom: 12px; color: #7c4dff; display: flex; align-items: center; gap: 8px; }
+  .card { background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #d0c0e8; }
+  .card h2 { font-size: 1rem; margin-bottom: 12px; color: #7b1fa2; display: flex; align-items: center; gap: 8px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-  .dot.on { background: #69f0ae; }
-  .dot.off { background: #616161; }
+  .dot.on { background: #2e7d32; }
+  .dot.off { background: #9a88b5; }
   .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  button { background: #7c4dff; color: #fff; border: none; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-size: 0.85rem; }
-  button:hover { background: #651fff; }
-  button:active { background: #6200ea; }
-  button.danger { background: #e53935; }
-  button.danger:hover { background: #c62828; }
-  button.secondary { background: #455a64; }
-  button.secondary:hover { background: #37474f; }
-  .status { font-size: 0.8rem; color: #9e9e9e; margin-top: 8px; min-height: 1.2em; }
+  button { background: #7b1fa2; color: #fff; border: none; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-size: 0.85rem; }
+  button:hover { background: #6a1b9a; }
+  button:active { background: #4a148c; }
+  button.danger { background: #c62828; }
+  button.danger:hover { background: #b71c1c; }
+  button.secondary { background: #e8ddf5; color: #2a1f40; }
+  button.secondary:hover { background: #d0c0e8; }
+  .status { font-size: 0.8rem; color: #6a5590; margin-top: 8px; min-height: 1.2em; }
   .scene-list { list-style: none; margin-top: 8px; }
   .scene-list li { padding: 4px 10px; cursor: pointer; border-radius: 4px; font-size: 0.85rem; }
-  .scene-list li:hover { background: #1a237e; }
-  .scene-list li.active { background: #311b92; color: #b388ff; font-weight: bold; }
+  .scene-list li:hover { background: #e8ddf5; }
+  .scene-list li.active { background: #ece5fa; color: #4a148c; font-weight: bold; border: 1px solid #d0c0e8; }
   .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .slider-row label { font-size: 0.8rem; min-width: 50px; }
-  .slider-row input[type=range] { flex: 1; }
+  .slider-row label { font-size: 0.8rem; min-width: 50px; color: #6a5590; }
+  .slider-row input[type=range] { flex: 1; accent-color: #7b1fa2; }
   .slider-row .val { font-size: 0.8rem; min-width: 30px; text-align: right; }
-  #log { background: #0f0f23; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 0.8rem; height: 180px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap; }
+  #log { background: #ece5fa; border: 1px solid #d0c0e8; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 0.8rem; height: 180px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap; color: #4a148c; }
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 12px 24px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; max-width: 80vw; text-align: center; animation: fadeIn 0.3s; }
-  .toast.success { background: #1b5e20; color: #a5d6a7; border: 1px solid #4caf50; }
-  .toast.error { background: #b71c1c; color: #ffcdd2; border: 1px solid #e53935; }
+  .toast.success { background: #e8f5e9; color: #1b5e20; border: 1px solid #4caf50; }
+  .toast.error { background: #ffebee; color: #b71c1c; border: 1px solid #e53935; }
   @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-  .env-card { background: #1a2332; border: 1px solid #2a3a4a; border-radius: 6px; }
-  #env-table td { padding: 3px 6px; border-bottom: 1px solid #1a2332; }
-  #env-table td:first-child { color: #78909c; }
-  #env-table td:nth-child(2) { font-family: monospace; color: #80cbc4; }
+  .env-card { background: #ffffff; border: 1px solid #d0c0e8; border-radius: 6px; }
+  #env-table td { padding: 3px 6px; border-bottom: 1px solid #ece5fa; }
+  #env-table td:first-child { color: #6a5590; }
+  #env-table td:nth-child(2) { font-family: monospace; color: #4a148c; }
 </style>
 </head>
 <body>
@@ -53,7 +53,7 @@
 </div>
 
 <details class="env-card" style="margin-bottom:16px;">
-  <summary style="cursor:pointer; font-size:0.8rem; color:#4fc3f7; padding:8px 12px;">.env 設定</summary>
+  <summary style="cursor:pointer; font-size:0.8rem; color:#7b1fa2; padding:8px 12px;">.env 設定</summary>
   <table id="env-table" style="width:100%; font-size:0.75rem; border-collapse:collapse; padding:0 12px 8px;">
   </table>
 </details>
@@ -63,22 +63,22 @@
   <div class="card">
     <h2>Twitch 配信情報</h2>
     <div style="margin-bottom:8px;">
-      <label style="font-size:0.8rem; color:#9e9e9e;">タイトル</label>
-      <input type="text" id="twitch-title" placeholder="配信タイトル" style="width:100%; padding:6px 10px; background:#0f0f23; border:1px solid #2a3a4a; border-radius:4px; color:#e0e0e0; font-size:0.9rem; margin-top:4px;">
+      <label style="font-size:0.8rem; color:#6a5590;">タイトル</label>
+      <input type="text" id="twitch-title" placeholder="配信タイトル" style="width:100%; padding:6px 10px; background:#ece5fa; border:1px solid #d0c0e8; border-radius:4px; color:#2a1f40; font-size:0.9rem; margin-top:4px;">
     </div>
     <div style="margin-bottom:8px;">
-      <label style="font-size:0.8rem; color:#9e9e9e;">カテゴリ</label>
+      <label style="font-size:0.8rem; color:#6a5590;">カテゴリ</label>
       <div style="display:flex; gap:6px; margin-top:4px;">
-        <input type="text" id="twitch-category-search" placeholder="カテゴリを検索..." style="flex:1; padding:6px 10px; background:#0f0f23; border:1px solid #2a3a4a; border-radius:4px; color:#e0e0e0; font-size:0.85rem;">
+        <input type="text" id="twitch-category-search" placeholder="カテゴリを検索..." style="flex:1; padding:6px 10px; background:#ece5fa; border:1px solid #d0c0e8; border-radius:4px; color:#2a1f40; font-size:0.85rem;">
         <button class="secondary" onclick="searchCategories()">検索</button>
       </div>
       <div id="twitch-category-results" style="margin-top:4px;"></div>
-      <div id="twitch-category-current" style="font-size:0.8rem; color:#80cbc4; margin-top:4px;"></div>
+      <div id="twitch-category-current" style="font-size:0.8rem; color:#4a148c; margin-top:4px;"></div>
       <input type="hidden" id="twitch-game-id">
     </div>
     <div style="margin-bottom:8px;">
-      <label style="font-size:0.8rem; color:#9e9e9e;">タグ（カンマ区切り）</label>
-      <input type="text" id="twitch-tags" placeholder="日本語, AI, VTuber" style="width:100%; padding:6px 10px; background:#0f0f23; border:1px solid #2a3a4a; border-radius:4px; color:#e0e0e0; font-size:0.85rem; margin-top:4px;">
+      <label style="font-size:0.8rem; color:#6a5590;">タグ（カンマ区切り）</label>
+      <input type="text" id="twitch-tags" placeholder="日本語, AI, VTuber" style="width:100%; padding:6px 10px; background:#ece5fa; border:1px solid #d0c0e8; border-radius:4px; color:#2a1f40; font-size:0.85rem; margin-top:4px;">
     </div>
     <div class="btn-row">
       <button onclick="loadChannelInfo()">読み込み</button>
@@ -99,52 +99,52 @@
       <button class="danger" onclick="api('POST','/api/obs/teardown')">Teardown</button>
     </div>
     <div id="obs-scenes"></div>
-    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">アバター位置</h3>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#6a5590;">アバター位置</h3>
     <div class="slider-row">
       <label>X</label>
       <input type="range" class="avatar-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
-      <input type="number" class="avatar-num" data-key="positionX" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+      <input type="number" class="avatar-num" data-key="positionX" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
     </div>
     <div class="slider-row">
       <label>Y</label>
       <input type="range" class="avatar-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
-      <input type="number" class="avatar-num" data-key="positionY" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+      <input type="number" class="avatar-num" data-key="positionY" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
     </div>
     <div class="slider-row">
       <label>幅</label>
       <input type="range" class="avatar-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="1920">
-      <input type="number" class="avatar-num" data-key="boundsWidth" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="1920">
+      <input type="number" class="avatar-num" data-key="boundsWidth" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="1920">
     </div>
     <div class="slider-row">
       <label>高さ</label>
       <input type="range" class="avatar-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="1080">
-      <input type="number" class="avatar-num" data-key="boundsHeight" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="1080">
+      <input type="number" class="avatar-num" data-key="boundsHeight" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="1080">
     </div>
     <div class="btn-row" style="margin-top:4px;">
       <button class="secondary" onclick="loadAvatarTransform()">取得</button>
       <button onclick="saveAvatarToJson()">scenes.jsonに保存</button>
     </div>
     <div class="status" id="avatar-status"></div>
-    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">ターミナル位置</h3>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#6a5590;">ターミナル位置</h3>
     <div class="slider-row">
       <label>X</label>
       <input type="range" class="term-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
-      <input type="number" class="term-num" data-key="positionX" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+      <input type="number" class="term-num" data-key="positionX" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
     </div>
     <div class="slider-row">
       <label>Y</label>
       <input type="range" class="term-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
-      <input type="number" class="term-num" data-key="positionY" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+      <input type="number" class="term-num" data-key="positionY" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
     </div>
     <div class="slider-row">
       <label>幅</label>
       <input type="range" class="term-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="960">
-      <input type="number" class="term-num" data-key="boundsWidth" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="960">
+      <input type="number" class="term-num" data-key="boundsWidth" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="960">
     </div>
     <div class="slider-row">
       <label>高さ</label>
       <input type="range" class="term-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="540">
-      <input type="number" class="term-num" data-key="boundsHeight" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="540">
+      <input type="number" class="term-num" data-key="boundsHeight" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="540">
     </div>
     <div class="btn-row" style="margin-top:4px;">
       <button class="secondary" onclick="loadTerminalTransform()">取得</button>
@@ -171,7 +171,7 @@
       <input type="range" id="idle-scale" min="0.1" max="5.0" step="0.1" value="1.0">
       <span class="val" id="idle-scale-val">1.0</span>
     </div>
-    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">BlendShape</h3>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#6a5590;">BlendShape</h3>
     <div class="btn-row">
       <button class="secondary" onclick="blend('Joy',1)">Joy</button>
       <button class="secondary" onclick="blend('Angry',1)">Angry</button>
@@ -216,52 +216,52 @@
   <!-- Overlay -->
   <div class="card">
     <h2>オーバーレイ設定</h2>
-    <h3 style="font-size:0.85rem; margin: 0 0 6px; color:#9e9e9e;">字幕（リアルタイム）</h3>
+    <h3 style="font-size:0.85rem; margin: 0 0 6px; color:#6a5590;">字幕（リアルタイム）</h3>
     <div class="slider-row">
       <label>下余白</label>
       <input type="range" id="ov-sub-bottom" min="0" max="500" step="5" value="80">
-      <input type="number" id="ov-sub-bottom-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="80">
+      <input type="number" id="ov-sub-bottom-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="80">
     </div>
     <div class="slider-row">
       <label>文字</label>
       <input type="range" id="ov-sub-font" min="14" max="64" step="1" value="28">
-      <input type="number" id="ov-sub-font-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="28">
+      <input type="number" id="ov-sub-font-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="28">
     </div>
     <div class="slider-row">
       <label>フェード</label>
       <input type="range" id="ov-sub-fade" min="1" max="15" step="0.5" value="3">
-      <input type="number" id="ov-sub-fade-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="3" step="0.5">
+      <input type="number" id="ov-sub-fade-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="3" step="0.5">
     </div>
-    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#9e9e9e;">TODOパネル</h3>
+    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#6a5590;">TODOパネル</h3>
     <div class="slider-row">
       <label>X</label>
       <input type="range" id="ov-todo-x" min="0" max="1920" step="10" value="960">
-      <input type="number" id="ov-todo-x-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="960">
+      <input type="number" id="ov-todo-x-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="960">
     </div>
     <div class="slider-row">
       <label>Y</label>
       <input type="range" id="ov-todo-y" min="0" max="1080" step="10" value="540">
-      <input type="number" id="ov-todo-y-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="540">
+      <input type="number" id="ov-todo-y-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="540">
     </div>
     <div class="slider-row">
       <label>幅</label>
       <input type="range" id="ov-todo-width" min="200" max="1920" step="10" value="460">
-      <input type="number" id="ov-todo-width-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="460">
+      <input type="number" id="ov-todo-width-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="460">
     </div>
     <div class="slider-row">
       <label>高さ</label>
       <input type="range" id="ov-todo-height" min="0" max="1080" step="10" value="0">
-      <input type="number" id="ov-todo-height-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
+      <input type="number" id="ov-todo-height-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
     </div>
     <div class="slider-row">
       <label>文字</label>
       <input type="range" id="ov-todo-font" min="10" max="40" step="1" value="15">
-      <input type="number" id="ov-todo-font-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="15">
+      <input type="number" id="ov-todo-font-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="15">
     </div>
     <div class="slider-row">
       <label>タイトル</label>
       <input type="range" id="ov-todo-title-font" min="12" max="48" step="1" value="18">
-      <input type="number" id="ov-todo-title-font-num" style="width:60px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; text-align:right; font-size:0.8rem;" value="18">
+      <input type="number" id="ov-todo-title-font-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="18">
     </div>
     <div class="btn-row" style="margin-top:8px;">
       <button onclick="saveOverlaySettings()">保存</button>
@@ -276,26 +276,26 @@
     <h2>キャラクター設定</h2>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
       <div>
-        <label style="font-size:0.8rem; color:#9e9e9e;">名前</label>
-        <input type="text" id="char-name" style="width:100%; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:4px; padding:4px 8px; font-size:0.85rem;">
+        <label style="font-size:0.8rem; color:#6a5590;">名前</label>
+        <input type="text" id="char-name" style="width:100%; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:4px; padding:4px 8px; font-size:0.85rem;">
       </div>
       <div></div>
       <div style="grid-column: 1 / -1;">
-        <label style="font-size:0.8rem; color:#9e9e9e;">システムプロンプト</label>
-        <textarea id="char-prompt" rows="3" style="width:100%; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:4px; padding:4px 8px; font-size:0.85rem; resize:vertical;"></textarea>
+        <label style="font-size:0.8rem; color:#6a5590;">システムプロンプト</label>
+        <textarea id="char-prompt" rows="3" style="width:100%; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:4px; padding:4px 8px; font-size:0.85rem; resize:vertical;"></textarea>
       </div>
       <div>
-        <label style="font-size:0.8rem; color:#9e9e9e;">ルール</label>
+        <label style="font-size:0.8rem; color:#6a5590;">ルール</label>
         <div id="char-rules"></div>
         <button class="secondary" style="margin-top:4px; font-size:0.75rem;" onclick="addRule()">+ ルール追加</button>
       </div>
       <div>
-        <label style="font-size:0.8rem; color:#9e9e9e;">感情</label>
+        <label style="font-size:0.8rem; color:#6a5590;">感情</label>
         <div id="char-emotions"></div>
         <button class="secondary" style="margin-top:4px; font-size:0.75rem;" onclick="addEmotion()">+ 感情追加</button>
       </div>
       <div style="grid-column: 1 / -1;">
-        <label style="font-size:0.8rem; color:#9e9e9e;">感情BlendShape</label>
+        <label style="font-size:0.8rem; color:#6a5590;">感情BlendShape</label>
         <div id="char-blendshapes"></div>
       </div>
     </div>
@@ -582,7 +582,7 @@ async function loadEnv() {
     table.innerHTML = '';
     for (const item of data) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${item.label}</td><td>${item.value || '<span style="color:#616161">未設定</span>'}</td>`;
+      tr.innerHTML = `<td>${item.label}</td><td>${item.value || '<span style="color:#9a88b5">未設定</span>'}</td>`;
       table.appendChild(tr);
     }
   } catch (e) {}
@@ -645,7 +645,7 @@ function renderRules(rules) {
   rules.forEach((rule, i) => {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-    row.innerHTML = `<input type="text" class="char-rule" value="${escHtml(rule)}" style="flex:1; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;">
+    row.innerHTML = `<input type="text" class="char-rule" value="${escHtml(rule)}" style="flex:1; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;">
       <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
     el.appendChild(row);
   });
@@ -655,7 +655,7 @@ function addRule() {
   const el = document.getElementById('char-rules');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-  row.innerHTML = `<input type="text" class="char-rule" value="" style="flex:1; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;">
+  row.innerHTML = `<input type="text" class="char-rule" value="" style="flex:1; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;">
     <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
   el.appendChild(row);
 }
@@ -670,8 +670,8 @@ function renderEmotions() {
   for (const [key, desc] of Object.entries(_charEmotions)) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-    row.innerHTML = `<input type="text" class="emo-key" value="${escHtml(key)}" style="width:70px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
-      <input type="text" class="emo-desc" value="${escHtml(desc)}" style="flex:1; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
+    row.innerHTML = `<input type="text" class="emo-key" value="${escHtml(key)}" style="width:70px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
+      <input type="text" class="emo-desc" value="${escHtml(desc)}" style="flex:1; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
       <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
     el.appendChild(row);
   }
@@ -681,8 +681,8 @@ function addEmotion() {
   const el = document.getElementById('char-emotions');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-  row.innerHTML = `<input type="text" class="emo-key" value="" style="width:70px; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
-    <input type="text" class="emo-desc" value="" style="flex:1; background:#0f0f23; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
+  row.innerHTML = `<input type="text" class="emo-key" value="" style="width:70px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
+    <input type="text" class="emo-desc" value="" style="flex:1; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
     <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
   el.appendChild(row);
 }
@@ -702,9 +702,9 @@ function renderBlendshapes() {
   el.innerHTML = '';
   for (const [emotion, shapes] of Object.entries(_charBlendshapes)) {
     const section = document.createElement('div');
-    section.style.cssText = 'margin-bottom:8px; padding:6px; background:#0f0f23; border-radius:4px;';
+    section.style.cssText = 'margin-bottom:8px; padding:6px; background:#ece5fa; border-radius:4px;';
     const header = document.createElement('div');
-    header.style.cssText = 'font-size:0.8rem; color:#7c4dff; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;';
+    header.style.cssText = 'font-size:0.8rem; color:#7b1fa2; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;';
     header.innerHTML = `<span>${escHtml(emotion)}</span>
       <button class="secondary" style="font-size:0.7rem; padding:1px 6px;" onclick="addBlendshapeRow(this.parentElement.nextElementSibling, '${escHtml(emotion)}')">+</button>`;
     section.appendChild(header);
@@ -722,8 +722,8 @@ function renderBlendshapes() {
 function makeBlendshapeRow(name, val) {
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:2px;';
-  row.innerHTML = `<input type="text" class="bs-name" value="${escHtml(name)}" style="width:80px; background:#1a1a2e; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 4px; font-size:0.75rem;">
-    <input type="number" class="bs-val" value="${val}" step="0.1" min="0" max="1" style="width:60px; background:#1a1a2e; color:#e0e0e0; border:1px solid #455a64; border-radius:3px; padding:2px 4px; font-size:0.75rem;">
+  row.innerHTML = `<input type="text" class="bs-name" value="${escHtml(name)}" style="width:80px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 4px; font-size:0.75rem;">
+    <input type="number" class="bs-val" value="${val}" step="0.1" min="0" max="1" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 4px; font-size:0.75rem;">
     <button class="danger" style="font-size:0.65rem; padding:1px 4px;" onclick="this.parentElement.remove()">×</button>`;
   return row;
 }
@@ -898,11 +898,11 @@ async function searchCategories() {
   const query = document.getElementById('twitch-category-search').value.trim();
   if (!query) return;
   const container = document.getElementById('twitch-category-results');
-  container.innerHTML = '<span style="font-size:0.8rem;color:#9e9e9e;">検索中...</span>';
+  container.innerHTML = '<span style="font-size:0.8rem;color:#6a5590;">検索中...</span>';
   try {
     const res = await api('POST', '/api/twitch/categories/search', { query });
     if (!res?.categories?.length) {
-      container.innerHTML = '<span style="font-size:0.8rem;color:#9e9e9e;">見つかりませんでした</span>';
+      container.innerHTML = '<span style="font-size:0.8rem;color:#6a5590;">見つかりませんでした</span>';
       return;
     }
     container.innerHTML = '';
@@ -933,12 +933,12 @@ async function loadTodoUI() {
       const text = typeof item === 'string' ? item : item.text;
       const status = typeof item === 'string' ? 'todo' : item.status;
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #2a3a4a;';
+      row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #d0c0e8;';
       const label = document.createElement('span');
       label.style.cssText = 'flex:1; font-size:0.85rem;';
       label.textContent = text;
       if (status === 'in_progress') {
-        label.style.color = '#b388ff';
+        label.style.color = '#7b1fa2';
         label.style.fontWeight = 'bold';
       }
       row.appendChild(label);
@@ -951,7 +951,7 @@ async function loadTodoUI() {
       } else {
         const badge = document.createElement('span');
         badge.textContent = '作業中';
-        badge.style.cssText = 'font-size:0.7rem; color:#b388ff; background:#311b92; padding:2px 8px; border-radius:3px;';
+        badge.style.cssText = 'font-size:0.7rem; color:#7b1fa2; background:#ece5fa; padding:2px 8px; border-radius:3px; border:1px solid #d0c0e8;';
         row.appendChild(badge);
       }
       el.appendChild(row);
