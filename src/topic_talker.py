@@ -23,7 +23,7 @@ class TopicTalker:
         self._min_interval = DEFAULT_MIN_INTERVAL
         self._last_speak_time = 0.0
         self._replenishing = False
-        self._paused = False
+        self._paused = True
 
     @property
     def idle_threshold(self):
@@ -50,6 +50,7 @@ class TopicTalker:
         # 既存のアクティブトピックを完了にする
         db.deactivate_all_topics()
         topic = db.create_topic(title, description)
+        self._paused = False
         logger.info("[topic] トピック設定: %s", title)
 
         # バックグラウンドでスクリプト生成
