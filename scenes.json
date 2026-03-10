@@ -18,6 +18,12 @@
       "height": 600,
       "fontSize": 24,
       "titleFontSize": 29
+    },
+    "topic": {
+      "positionX": 60,
+      "positionY": 40,
+      "width": 390,
+      "titleFontSize": 24
     }
   },
   "avatar": {
