@@ -494,6 +494,11 @@
   <!-- ===== キャラクター ===== -->
   <div class="tab-content" id="tab-character">
     <div class="card">
+      <h2>言語モード</h2>
+      <div id="language-modes" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+      <div class="status" id="lang-status" style="margin-top:6px;"></div>
+    </div>
+    <div class="card">
       <h2>キャラクター設定</h2>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
         <div>
@@ -666,6 +671,7 @@ function switchTab(name, el) {
   document.getElementById('tab-' + name).classList.add('active');
   el.classList.add('active');
   if (name === 'db') loadDbTables();
+  if (name === 'character') loadLanguageModes();
 }
 
 function log(msg) {
@@ -985,6 +991,32 @@ async function loadVsfDefaults() {
   } catch (e) {
     log('ERROR VSeeFace初期値の読込に失敗: ' + e.message);
   }
+}
+
+// --- 言語モード ---
+async function loadLanguageModes() {
+  try {
+    const d = await (await fetch('/api/language')).json();
+    const el = document.getElementById('language-modes');
+    el.innerHTML = d.modes.map(m =>
+      `<button class="${m.active ? 'btn' : 'secondary'}" onclick="setLanguageMode('${m.key}')" title="${esc(m.description)}" style="font-size:0.8rem; padding:6px 14px;">
+        ${esc(m.name)}
+      </button>`
+    ).join('');
+  } catch(e) {}
+}
+
+async function setLanguageMode(mode) {
+  try {
+    const r = await fetch('/api/language', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({mode}) });
+    const d = await r.json();
+    if (d.ok) {
+      showToast('言語モード変更: ' + mode, 'success');
+      loadLanguageModes();
+    } else {
+      showToast(d.error || '変更失敗', 'error');
+    }
+  } catch(e) { showToast('言語モード変更失敗', 'error'); }
 }
 
 // --- キャラクター設定 ---
@@ -1467,6 +1499,7 @@ async function ytDownload() {
 loadTodoUI();
 setInterval(loadTodoUI, 30000);
 loadCharacter();
+loadLanguageModes();
 loadVsfDefaults();
 loadOverlaySettings();
 loadBgmTracks();

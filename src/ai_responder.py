@@ -34,6 +34,75 @@ DEFAULT_CHARACTER = {
 
 _character = None
 _character_id = None
+_language_mode = "ja"
+
+# 言語モードのプリセット定義
+LANGUAGE_MODES = {
+    "ja": {
+        "name": "日本語メイン",
+        "description": "日本語ベースで返答、英語訳を添える",
+        "rules": [
+            "これは日本語の配信なので、日本語ベースで返答しつつ相手の言語も混ぜて親しみを出す。",
+            "- 日本語コメント → response: 日本語、english: 英語訳",
+            "- 英語コメント → response: 英語メインで返答、english: 日本語訳",
+            "- その他の言語（スペイン語・韓国語等） → response: 相手の言語での挨拶や一言を混ぜつつ日本語も交えて返答、english: 英語訳",
+            "- 例: スペイン語コメントなら「¡Hola! いらっしゃい！Gracias por venir! 楽しんでいってね～」のように両方混ぜると喜ばれる",
+        ],
+        "english_label": "翻訳（上記言語ルール参照）",
+    },
+    "en_bilingual": {
+        "name": "英語メイン＋日本語字幕",
+        "description": "英語で返答、日本語訳を添える（海外視聴者向け）",
+        "rules": [
+            "This is an English-language stream. Always respond in English.",
+            "- English comments → response: English, english: 日本語訳",
+            "- Japanese comments → response: English (you may include a brief Japanese phrase for friendliness), english: 日本語訳",
+            "- Other languages → response: English (include a greeting in their language), english: 日本語訳",
+            "- Keep a warm, friendly anime-style personality in English",
+        ],
+        "english_label": "日本語訳",
+    },
+    "en_mixed": {
+        "name": "英語＋日本語混ぜ",
+        "description": "英語ベースに日本語の相槌・感嘆詞を混ぜる（日本人キャラの英語配信）",
+        "rules": [
+            "You are a Japanese streamer who speaks primarily in English but naturally mixes in Japanese words and expressions.",
+            "- Use English as the base language, but sprinkle in Japanese interjections, greetings, and reactions naturally",
+            "- Examples: 'Sugoi! That anime is amazing!', 'Ara ara, welcome to the stream!', 'That's so kawaii ne~'",
+            "- English comments → response: English with Japanese flavor, english: 日本語訳",
+            "- Japanese comments → response: Mix of English and Japanese, english: full 日本語訳",
+            "- Other languages → response: English with Japanese flavor + a word in their language, english: 日本語訳",
+        ],
+        "english_label": "日本語訳",
+    },
+    "multilingual": {
+        "name": "マルチリンガル",
+        "description": "相手の言語に合わせる、デフォルト英語",
+        "rules": [
+            "You are a multilingual streamer. Match the viewer's language when possible, default to English.",
+            "- English comments → response: English, english: 日本語訳",
+            "- Japanese comments → response: 日本語, english: English translation",
+            "- Spanish comments → response: Spanish with English mix, english: 日本語訳",
+            "- Korean comments → response: Korean with English mix, english: 日本語訳",
+            "- Other languages → response: attempt their language + English fallback, english: 日本語訳",
+            "- Always be warm and welcoming regardless of language",
+        ],
+        "english_label": "翻訳（上記言語ルール参照）",
+    },
+}
+
+
+def get_language_mode():
+    """現在の言語モードを返す"""
+    return _language_mode
+
+
+def set_language_mode(mode):
+    """言語モードを設定する"""
+    global _language_mode
+    if mode not in LANGUAGE_MODES:
+        raise ValueError(f"Unknown language mode: {mode}")
+    _language_mode = mode
 
 
 def seed_character(channel_id):
@@ -114,18 +183,17 @@ def _build_system_prompt(stream_context=None):
             for item in stream_context["todo_items"]:
                 parts.append(f"  - {item}")
 
+    lang = LANGUAGE_MODES.get(_language_mode, LANGUAGE_MODES["ja"])
+    parts.extend(["", "## 言語ルール"])
+    for rule in lang["rules"]:
+        parts.append(rule)
+
+    english_label = lang.get("english_label", "翻訳")
     parts.extend([
-        "",
-        "## 言語ルール",
-        "これは日本語の配信なので、日本語ベースで返答しつつ相手の言語も混ぜて親しみを出す。",
-        "- 日本語コメント → response: 日本語、english: 英語訳",
-        "- 英語コメント → response: 英語メインで返答、english: 日本語訳",
-        "- その他の言語（スペイン語・韓国語等） → response: 相手の言語での挨拶や一言を混ぜつつ日本語も交えて返答、english: 英語訳",
-        "- 例: スペイン語コメントなら「¡Hola! いらっしゃい！Gracias por venir! 楽しんでいってね～」のように両方混ぜると喜ばれる",
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        '{"response": "返答テキスト", "emotion": "感情", "english": "翻訳（上記言語ルール参照）"}',
+        f'{{"response": "返答テキスト", "emotion": "感情", "english": "{english_label}"}}',
         f"emotionは次のいずれか: {emotion_list}",
     ])
 

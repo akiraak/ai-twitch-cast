@@ -207,6 +207,17 @@ async def startup():
     except Exception:
         pass
 
+    # 言語モードを復元
+    try:
+        with open(scene_config.CONFIG_PATH, encoding="utf-8") as f:
+            cfg = json.load(f)
+        if cfg.get("language_mode"):
+            from src.ai_responder import set_language_mode
+            set_language_mode(cfg["language_mode"])
+            logger.info("言語モード復元: %s", cfg["language_mode"])
+    except Exception:
+        pass
+
     # Setup済みの状態ファイルがなければ復旧しない
     if not STATE_FILE.exists():
         return
