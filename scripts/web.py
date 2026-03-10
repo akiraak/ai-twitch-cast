@@ -139,13 +139,6 @@ async def start():
     await state.ensure_reader()
     await state.git_watcher.start()
 
-    # Setup完了後に音声テスト（ブラウザソース接続待ち）
-    async def _startup_speak():
-        import asyncio
-        await asyncio.sleep(3)
-        await state.reader.speak_event("セットアップ", "セットアップ完了！配信準備OKです！")
-
-    asyncio.ensure_future(_startup_speak())
     return {"ok": True, **setup_result}
 
 

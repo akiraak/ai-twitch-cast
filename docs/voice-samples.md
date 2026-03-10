@@ -2,9 +2,9 @@
 
 Gemini 2.5 Flash TTSの全30ボイス × 5スタイルを比較するページです。
 
-**サンプルテキスト(日本語):** 「こんにちは！あかりです。今日も楽しく配信していきましょう！よろしくお願いします。」
+**サンプルテキスト(日本語):** 「こんにちは！ちょびです。今日も楽しく配信していきましょう！よろしくお願いします。」
 
-**サンプルテキスト(英語):** "Hi everyone! I'm Akari! Let's have a fun stream today! Thanks for joining!"
+**サンプルテキスト(英語):** "Hi everyone! I'm Chobi! Let's have a fun stream today! Thanks for joining!"
 
 **スタイル:**
 

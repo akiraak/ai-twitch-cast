@@ -26,8 +26,8 @@ ALL_VOICES = [
 ]
 
 # ベースのセリフ
-BASE_TEXT_JA = "こんにちは！あかりです。今日も楽しく配信していきましょう！よろしくお願いします。"
-BASE_TEXT_EN = "Hi everyone! I'm Akari! Let's have a fun stream today! Thanks for joining!"
+BASE_TEXT_JA = "こんにちは！ちょびです。今日も楽しく配信していきましょう！よろしくお願いします。"
+BASE_TEXT_EN = "Hi everyone! I'm Chobi! Let's have a fun stream today! Thanks for joining!"
 
 # スタイル設定（名前, プロンプト）
 STYLES = [
