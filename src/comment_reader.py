@@ -133,8 +133,10 @@ class CommentReader:
                     db.count_user_comments_in_episode, self._episode_id, user["id"],
                 )
                 already_greeted = ep_count > 0
+            # メモは初回挨拶時のみ渡す（過剰な言及を防ぐ）
+            note = user.get("note", "") if not already_greeted else ""
             result = await self._generate_ai_response(
-                author, message, user["comment_count"], user.get("note", ""),
+                author, message, user["comment_count"], note,
                 already_greeted=already_greeted,
             )
             await self._save_to_db(user, message, result)

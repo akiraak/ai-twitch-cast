@@ -247,7 +247,7 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
     else:
         context_parts.append("この配信で挨拶済み、再度の挨拶は不要")
     if user_note:
-        context_parts.append(f"メモ: {user_note}")
+        context_parts.append(f"メモ: {user_note}（※メモの内容を直接言及しないこと。会話の雰囲気づくりに自然に活かす程度に）")
     context = f"（{'、'.join(context_parts)}）"
 
     # 会話履歴をcontentsに組み立て（Geminiのマルチターン形式）
