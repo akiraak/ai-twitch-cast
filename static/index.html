@@ -88,12 +88,18 @@
   .status { font-size: 0.8rem; color: #6a5590; margin-top: 8px; min-height: 1.2em; }
 
   /* DB表 */
-  #db-data th, #db-data td { padding: 5px 8px; text-align: left; border-bottom: 1px solid #e0d8f0; white-space: nowrap; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
-  #db-data th { background: #ede7f6; color: #6a5590; font-weight: 600; position: sticky; top: 0; }
+  #db-data { color: #2a1f40; }
+  #db-data th, #db-data td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #d0c0e8; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+  #db-data th { background: #ede7f6; color: #6a5590; font-weight: 600; position: sticky; top: 0; white-space: nowrap; }
+  #db-data td { color: #2a1f40; background: #fff; white-space: nowrap; }
   #db-data tr:hover td { background: #f5f0ff; }
-  .db-tab { padding: 6px 14px; border-radius: 6px; border: 1px solid #d0c0e8; background: #fff; cursor: pointer; font-size: 0.8rem; }
+  #db-data tr:nth-child(even) td { background: #faf8ff; }
+  #db-data tr:nth-child(even):hover td { background: #f5f0ff; }
+  .db-tab { padding: 6px 14px; border-radius: 6px; border: 1px solid #d0c0e8; background: #fff; color: #2a1f40; cursor: pointer; font-size: 0.8rem; }
   .db-tab.active { background: #7b1fa2; color: #fff; border-color: #7b1fa2; }
   .db-tab .db-tab-count { font-size: 0.7rem; opacity: 0.7; margin-left: 4px; }
+  .db-scroll { overflow-x: auto; max-height: 500px; overflow-y: auto; border: 1px solid #d0c0e8; border-radius: 6px; }
+  .db-er { font-size: 0.75rem; color: #6a5590; line-height: 1.6; font-family: monospace; white-space: pre; overflow-x: auto; padding: 10px; background: #faf8ff; border-radius: 6px; border: 1px solid #e0d8f0; }
 
   /* TODO */
   .todo-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #ece5fa; transition: background 0.1s; }
@@ -616,13 +622,32 @@
         <h2 id="db-table-name">テーブルを選択してください</h2>
         <span id="db-table-count" style="font-size:0.8rem; color:#9a88b5;"></span>
       </div>
-      <div style="overflow-x:auto;">
+      <div class="db-scroll">
         <table id="db-data" style="width:100%; border-collapse:collapse; font-size:0.8rem;">
           <thead id="db-thead"></thead>
           <tbody id="db-tbody"></tbody>
         </table>
       </div>
       <div id="db-pager" style="display:flex; gap:8px; align-items:center; margin-top:10px;"></div>
+    </div>
+    <div class="card">
+      <h2>テーブル関連図</h2>
+      <div class="db-er">channels ─┬─ characters ───── episodes ─┬─ comments ── users
+           │                    │       │
+           └─── shows ──────────┘       └─ actions
+
+topics ── topic_scripts
+
+bgm_tracks (独立)
+
+channels    1──N  characters    (channel_id)
+channels    1──N  shows         (channel_id)
+shows       1──N  episodes      (show_id)
+characters  1──N  episodes      (character_id)
+episodes    1──N  comments      (episode_id)
+episodes    1──N  actions       (episode_id)
+users       1──N  comments      (user_id)
+topics      1──N  topic_scripts (topic_id)</div>
     </div>
   </div>
 
