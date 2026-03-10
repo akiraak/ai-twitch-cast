@@ -87,12 +87,11 @@ class CommentReader:
             user = await asyncio.to_thread(db.get_or_create_user, author)
             result = await self._generate_ai_response(author, message, user["comment_count"])
             await self._save_to_db(user, message, result)
-            await self._post_to_chat(result)
             self._apply_emotion(result["emotion"])
-            # 字幕と音声を同時に送信（TTS生成後に両方発火）
+            # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
             await self._speak(result["response"], subtitle={
                 "author": author, "message": message, "result": result,
-            })
+            }, chat_result=result)
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
         except Exception as e:
@@ -146,11 +145,12 @@ class CommentReader:
         if self._on_overlay:
             await self._on_overlay({"type": "speaking_end"})
 
-    async def _speak(self, text, voice=None, subtitle=None):
+    async def _speak(self, text, voice=None, subtitle=None, chat_result=None):
         """TTS生成・ブラウザソース経由で再生する
 
         Args:
             subtitle: 字幕データ {author, message, result}。指定時はTTS生成後に字幕と音声を同時送信
+            chat_result: チャット投稿データ。指定時はTTS生成後に投稿
         """
         wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
         logger.info("[tts] 生成中...")
@@ -174,6 +174,10 @@ class CommentReader:
                 await self._notify_overlay(
                     subtitle["author"], subtitle["message"], subtitle["result"],
                 )
+
+            # チャット投稿（音声再生と同時）
+            if chat_result:
+                await self._post_to_chat(chat_result)
 
             # リップシンク開始（音声再生と同時）
             if self._vsf and lipsync_frames:
@@ -205,14 +209,13 @@ class CommentReader:
             logger.info("[event] %s: %s", event_type, detail)
             result = await asyncio.to_thread(generate_event_response, event_type, detail)
             logger.info("[event] [%s] %s", result["emotion"], result["response"])
-            await self._post_to_chat(result)
             self._apply_emotion(result["emotion"])
-            # 字幕と音声を同時に送信（TTS生成後に両方発火）
+            # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
             await self._speak(result["response"], voice=voice, subtitle={
                 "author": "システム",
                 "message": f"[{event_type}] {detail}",
                 "result": result,
-            })
+            }, chat_result=result)
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
         except Exception as e:
