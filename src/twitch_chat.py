@@ -49,8 +49,10 @@ class TwitchChat:
             channel = self._client.get_channel(self.channel)
             if channel:
                 await channel.send(text)
+                logger.info("チャット送信OK: %s", text[:50])
             else:
-                logger.warning("チャンネル '%s' が見つかりません", self.channel)
+                logger.warning("チャンネル '%s' が見つかりません (joined: %s)",
+                               self.channel, self._client.connected_channels)
         except Exception as e:
             logger.error("チャット送信失敗: %s", e)
 
