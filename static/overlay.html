@@ -153,11 +153,10 @@
     padding: 0;
     backdrop-filter: blur(6px);
     pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.4s ease;
+    opacity: 1;
     overflow: hidden;
   }
-  #topic-panel.visible { opacity: 1; }
+  #topic-panel.idle { border-color: rgba(255, 255, 255, 0.1); }
   #topic-panel .topic-header {
     display: flex;
     align-items: center;
@@ -329,11 +328,19 @@ function updateTopicPanel(data) {
   const statsEl = document.getElementById('topic-stats');
   const dotEl = document.getElementById('topic-dot');
 
-  if (!data || !data.active) {
-    topicPanelEl.classList.remove('visible');
+  const isIdle = !data || !data.active || data.paused;
+
+  if (isIdle) {
+    topicPanelEl.classList.add('idle');
+    titleEl.textContent = '----';
+    descEl.textContent = '';
+    descEl.style.display = 'none';
+    statsEl.textContent = '';
+    dotEl.classList.add('paused');
     return;
   }
 
+  topicPanelEl.classList.remove('idle');
   titleEl.textContent = data.topic.title;
   descEl.textContent = data.topic.description || '';
   descEl.style.display = data.topic.description ? '' : 'none';
@@ -341,11 +348,9 @@ function updateTopicPanel(data) {
   const parts = [];
   if (data.remaining_scripts != null) parts.push(`残り ${data.remaining_scripts}件`);
   if (data.spoken_count != null) parts.push(`発話済み ${data.spoken_count}件`);
-  if (data.paused) parts.push('一時停止中');
   statsEl.textContent = parts.join(' / ');
 
-  dotEl.classList.toggle('paused', !!data.paused);
-  topicPanelEl.classList.add('visible');
+  dotEl.classList.toggle('paused', false);
 }
 
 async function loadTopicPanel() {
