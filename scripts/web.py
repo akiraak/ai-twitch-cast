@@ -29,6 +29,7 @@ from scripts import state
 from scripts.routes.avatar import router as avatar_router
 from scripts.routes.bgm import router as bgm_router
 from scripts.routes.character import router as character_router
+from scripts.routes.db_viewer import router as db_viewer_router
 from scripts.routes.obs import router as obs_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream import router as stream_router
@@ -54,6 +55,7 @@ app.include_router(stream_router)
 app.include_router(avatar_router)
 app.include_router(bgm_router)
 app.include_router(character_router)
+app.include_router(db_viewer_router)
 app.include_router(overlay_router)
 app.include_router(topic_router)
 app.include_router(twitch_router)
