@@ -176,6 +176,7 @@ class CommentReader:
             result = await asyncio.to_thread(generate_event_response, event_type, detail)
             logger.info("[event] [%s] %s", result["emotion"], result["response"])
             await self._notify_overlay("システム", f"[{event_type}] {detail}", result)
+            await self._post_to_chat(result)
             self._apply_emotion(result["emotion"])
             await self._speak(result["response"], voice=voice)
             self._apply_emotion("neutral")
