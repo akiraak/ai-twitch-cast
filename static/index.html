@@ -496,7 +496,7 @@
     <div class="card">
       <h2>言語モード</h2>
       <div id="language-modes" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
-      <div class="status" id="lang-status" style="margin-top:6px;"></div>
+      <div id="lang-description" style="margin-top:10px; padding:10px 14px; background:#f3e5f5; border-radius:8px; font-size:0.85rem; color:#4a148c; display:none;"></div>
     </div>
     <div class="card">
       <h2>キャラクター設定</h2>
@@ -999,10 +999,18 @@ async function loadLanguageModes() {
     const d = await (await fetch('/api/language')).json();
     const el = document.getElementById('language-modes');
     el.innerHTML = d.modes.map(m =>
-      `<button class="${m.active ? 'btn' : 'secondary'}" onclick="setLanguageMode('${m.key}')" title="${esc(m.description)}" style="font-size:0.8rem; padding:6px 14px;">
+      `<button class="${m.active ? 'btn' : 'secondary'}" onclick="setLanguageMode('${m.key}')" style="font-size:0.8rem; padding:6px 14px;">
         ${esc(m.name)}
       </button>`
     ).join('');
+    const active = d.modes.find(m => m.active);
+    const descEl = document.getElementById('lang-description');
+    if (active) {
+      descEl.innerHTML = `<strong>${esc(active.name)}</strong>: ${esc(active.description)}<ul style="margin:6px 0 0; padding-left:20px;">${active.rules.map(r => `<li>${esc(r)}</li>`).join('')}</ul>`;
+      descEl.style.display = '';
+    } else {
+      descEl.style.display = 'none';
+    }
   } catch(e) {}
 }
 

@@ -51,6 +51,7 @@ async def get_language():
             "key": key,
             "name": mode["name"],
             "description": mode["description"],
+            "rules": mode["rules"],
             "active": key == current,
         })
     return {"current": current, "modes": modes}
