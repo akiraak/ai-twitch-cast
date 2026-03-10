@@ -40,6 +40,7 @@ LANGUAGE_MODES = {
     "ja": {
         "name": "日本語メイン",
         "description": "日本語ベースで返答、英語訳を添える",
+        "tts_style": "終始にこにこしているような、柔らかく楽しげなトーンで読み上げてください",
         "rules": [
             "これは日本語の配信なので、日本語ベースで返答しつつ相手の言語も混ぜて親しみを出す。",
             "- 日本語コメント → response: 日本語、english: 英語訳",
@@ -52,6 +53,7 @@ LANGUAGE_MODES = {
     "en_bilingual": {
         "name": "英語メイン＋日本語字幕",
         "description": "英語で返答、日本語訳を添える（海外視聴者向け）",
+        "tts_style": "Read in a cheerful, warm, and friendly tone with natural English pronunciation",
         "rules": [
             "This is an English-language stream. Always respond in English.",
             "- English comments → response: English, english: 日本語訳",
@@ -64,6 +66,7 @@ LANGUAGE_MODES = {
     "en_mixed": {
         "name": "英語＋日本語混ぜ",
         "description": "英語ベースに日本語の相槌・感嘆詞を混ぜる（日本人キャラの英語配信）",
+        "tts_style": "Read in a cheerful, anime-style tone. Use natural English pronunciation for English words and Japanese pronunciation for Japanese words",
         "rules": [
             "You are a Japanese streamer who speaks primarily in English but naturally mixes in Japanese words and expressions.",
             "- Use English as the base language, but sprinkle in Japanese interjections, greetings, and reactions naturally",
@@ -77,6 +80,7 @@ LANGUAGE_MODES = {
     "multilingual": {
         "name": "マルチリンガル",
         "description": "相手の言語に合わせる、デフォルト英語",
+        "tts_style": "Read in a cheerful, friendly tone. Pronounce each language naturally in its native accent",
         "rules": [
             "You are a multilingual streamer. Match the viewer's language when possible, default to English.",
             "- English comments → response: English, english: 日本語訳",
@@ -91,6 +95,7 @@ LANGUAGE_MODES = {
     "en_global": {
         "name": "英語＋相手の言語＋日本語",
         "description": "英語ベースで相手の言語を混ぜつつ、日本語も自然に入れる",
+        "tts_style": "Read in a cheerful, anime-style tone. Use natural English pronunciation for English words and Japanese pronunciation for Japanese words",
         "rules": [
             "You are a Japanese streamer speaking primarily in English. You naturally mix in Japanese and the viewer's language.",
             "- Always use English as the main language",

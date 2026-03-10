@@ -20,6 +20,17 @@ DEFAULT_VOICE = "Despina"
 DEFAULT_STYLE = "終始にこにこしているような、柔らかく楽しげなトーンで読み上げてください"
 
 
+def _get_tts_style():
+    """現在の言語モードに応じたTTSスタイルを返す"""
+    try:
+        from src.ai_responder import get_language_mode, LANGUAGE_MODES
+        mode = get_language_mode()
+        lang = LANGUAGE_MODES.get(mode, {})
+        return lang.get("tts_style", DEFAULT_STYLE)
+    except Exception:
+        return DEFAULT_STYLE
+
+
 def synthesize(text, output_path, voice=None):
     """テキストから音声ファイルを生成する
 
@@ -28,7 +39,7 @@ def synthesize(text, output_path, voice=None):
         output_path: 出力ファイルパス (.wav)
         voice: 音声名 (デフォルト: Despina)
     """
-    style = os.environ.get("TTS_STYLE", DEFAULT_STYLE)
+    style = os.environ.get("TTS_STYLE") or _get_tts_style()
     prompt = f"{style}: {text}"
     return synthesize_with_prompt(prompt, output_path, voice=voice)
 
