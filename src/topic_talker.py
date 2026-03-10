@@ -75,11 +75,8 @@ class TopicTalker:
         return len(spoken) >= TOPIC_ROTATE_SPEECHES
 
     def should_speak(self, idle_seconds):
-        """自発的発話すべきかを判定する"""
+        """自発的発話すべきかを判定する（トピックがなければ自動生成も含む）"""
         if self._paused or self._generating:
-            return False
-        topic = db.get_active_topic()
-        if not topic:
             return False
         if idle_seconds < self._idle_threshold:
             return False
@@ -88,40 +85,44 @@ class TopicTalker:
             return False
         return True
 
-    async def maybe_rotate_topic(self, stream_context=None):
-        """条件を満たしていればトピックを自動ローテーションする
+    async def maybe_rotate_topic(self, stream_context=None, self_note=None):
+        """トピックがなければ自動生成、条件を満たしていればローテーションする
 
         Args:
             stream_context: 配信情報（トピック生成の参考に）
+            self_note: アバター自身の記憶メモ
 
         Returns:
-            dict or None: 新しいトピック、またはローテーション不要ならNone
+            dict or None: 新しいトピック、またはローテーション/生成不要ならNone
         """
         if self._paused or self._generating:
             return None
-        if not self._should_rotate():
+
+        current_topic = db.get_active_topic()
+        needs_new = current_topic is None or self._should_rotate()
+        if not needs_new:
             return None
 
         self._generating = True
         try:
-            current_topic = db.get_active_topic()
             current_title = current_topic["title"] if current_topic else None
-
             recent_comments = db.get_recent_comments(10, 2)
 
-            logger.info("[topic] トピック自動ローテーション中...")
+            action = "自動生成" if not current_topic else "自動ローテーション"
+            logger.info("[topic] トピック%s中...", action)
             new_title = await asyncio.to_thread(
                 generate_topic_title,
                 recent_comments=recent_comments,
                 current_topic=current_title,
                 stream_context=stream_context,
+                self_note=self_note,
             )
 
             topic = await self.set_topic(new_title)
             logger.info("[topic] 新トピック: %s", new_title)
             return topic
         except Exception as e:
-            logger.error("[topic] トピックローテーション失敗: %s", e)
+            logger.error("[topic] トピック生成失敗: %s", e)
             return None
         finally:
             self._generating = False

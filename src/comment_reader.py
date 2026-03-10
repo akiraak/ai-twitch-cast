@@ -105,9 +105,12 @@ class CommentReader:
     async def _auto_speak(self):
         """トピックに基づいて自発的に発話する"""
         try:
-            # トピックローテーションチェック
+            # トピック自動生成・ローテーションチェック
             stream_context = await self._get_stream_context()
-            new_topic = await self._topic_talker.maybe_rotate_topic(stream_context=stream_context)
+            self_note = await self._get_self_note()
+            new_topic = await self._topic_talker.maybe_rotate_topic(
+                stream_context=stream_context, self_note=self_note,
+            )
             if new_topic:
                 logger.info("[topic] トピック自動変更: %s", new_topic["title"])
 

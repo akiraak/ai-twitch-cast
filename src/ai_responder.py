@@ -571,30 +571,49 @@ def generate_event_response(event_type, detail):
     return result
 
 
-def generate_topic_title(recent_comments=None, current_topic=None, stream_context=None):
+def generate_topic_title(recent_comments=None, current_topic=None, stream_context=None, self_note=None):
     """会話や配信状況から次のトピックを自動生成する
+
+    50%の確率で会話ベースのトピック、50%でキャラの記憶から突拍子もないトピックを生成。
 
     Args:
         recent_comments: 直近の会話 [{user_name, message, response}, ...]
         current_topic: 現在のトピック名（あれば別のものを生成）
         stream_context: 配信情報 {title, topic, todo_items}
+        self_note: アバター自身の記憶メモ
 
     Returns:
         str: トピックのタイトル
     """
+    import random
     client = get_client()
     char = get_character()
 
-    parts = [
-        f"あなたは{char.get('name', 'ちょび')}の配信アシスタントです。",
-        "配信中に話すトピックを1つ提案してください。",
-        "",
-        "## ルール",
-        "- トピック名は短く（10文字以内）",
-        "- 視聴者が興味を持ちそうな話題",
-        "- 直近の会話の流れから自然に繋がるトピック",
-        "- 会話がない場合は配信内容や一般的な雑談トピック",
-    ]
+    # 50%で会話ベース、50%でキャラの記憶・興味から自由なトピック
+    use_conversation = random.random() < 0.5 and bool(recent_comments)
+
+    if use_conversation:
+        parts = [
+            f"あなたは{char.get('name', 'ちょび')}の配信アシスタントです。",
+            "直近の会話の流れから自然に繋がるトピックを1つ提案してください。",
+            "",
+            "## ルール",
+            "- トピック名は短く（10文字以内）",
+            "- 会話で出た話題を広げたり、関連する話題にする",
+        ]
+    else:
+        parts = [
+            f"あなたは{char.get('name', 'ちょび')}の配信アシスタントです。",
+            "配信中に突然話し始めるような、意外で面白いトピックを1つ提案してください。",
+            "",
+            "## ルール",
+            "- トピック名は短く（10文字以内）",
+            "- ふと思いついたような、脈絡のない面白い話題",
+            "- キャラの趣味・興味・最近気になっていることから着想する",
+        ]
+        if self_note:
+            parts.extend(["", f"## {char.get('name', 'ちょび')}の記憶メモ", self_note])
+
     if current_topic:
         parts.append(f"- 現在のトピック「{current_topic}」とは違う話題にする")
 
@@ -605,7 +624,7 @@ def generate_topic_title(recent_comments=None, current_topic=None, stream_contex
         if stream_context.get("todo_items"):
             parts.append(f"- 作業中: {', '.join(stream_context['todo_items'])}")
 
-    if recent_comments:
+    if use_conversation and recent_comments:
         parts.extend(["", "## 直近の会話"])
         for c in recent_comments[-10:]:
             parts.append(f"- {c['user_name']}: {c['message']}")
