@@ -211,6 +211,12 @@ async def startup():
     if not STATE_FILE.exists():
         return
 
+    # 復旧処理はバックグラウンドで実行（サーバーを即座に応答可能にする）
+    asyncio.ensure_future(_restore_session())
+
+
+async def _restore_session():
+    """前回のセッションをバックグラウンドで自動復旧する"""
     logger.info("前回のセッションを自動復旧中...")
     try:
         state.obs.connect()
@@ -254,7 +260,7 @@ async def startup():
     # 保留コミットの読み上げ（TTSクライアント接続を待ってから）
     pending_file = PROJECT_DIR / ".pending_commit"
     if pending_file.exists():
-        asyncio.ensure_future(_speak_pending_commits(pending_file))
+        await _speak_pending_commits(pending_file)
 
 
 async def _speak_pending_commits(pending_file):
