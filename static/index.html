@@ -1444,9 +1444,9 @@ async function loadBgmTracks() {
         ${isPlaying ? '<span style="font-size:0.8rem; margin-right:2px;">▶</span>' : ''}
         <span style="flex:1; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${isPlaying ? ' font-weight:600; color:var(--accent, #6366f1);' : ''}">${esc(t.name)}</span>
         ${isPlaying
-          ? `<button class="secondary" onclick="bgmStop()" style="font-size:0.75rem;">停止</button>`
-          : `<button onclick="bgmPlay('${esc(t.file)}')" style="font-size:0.75rem;">再生</button>`}
-        <button class="btn-danger" onclick="bgmDelete('${esc(t.file)}')" style="font-size:0.7rem; padding:2px 6px;" title="削除">×</button>
+          ? `<button class="secondary" data-bgm-stop style="font-size:0.75rem;">停止</button>`
+          : `<button data-bgm-play="${esc(t.file)}" style="font-size:0.75rem;">再生</button>`}
+        <button class="btn-danger" data-bgm-del="${esc(t.file)}" style="font-size:0.7rem; padding:2px 6px;" title="削除">×</button>
       </div>
       <div class="vol-row" style="margin-top:4px;">
         <span class="vol-label">曲音量</span>
@@ -1461,6 +1461,13 @@ async function loadBgmTracks() {
   if (data.tracks.length === 0) {
     bgmTracksEl.innerHTML = '<div style="color:var(--text-muted); font-size:0.85rem;">BGMファイルがありません</div>';
   }
+  // イベントリスナー
+  bgmTracksEl.querySelectorAll('[data-bgm-play]').forEach(btn =>
+    btn.addEventListener('click', () => bgmPlay(btn.dataset.bgmPlay)));
+  bgmTracksEl.querySelectorAll('[data-bgm-stop]').forEach(btn =>
+    btn.addEventListener('click', () => bgmStop()));
+  bgmTracksEl.querySelectorAll('[data-bgm-del]').forEach(btn =>
+    btn.addEventListener('click', () => bgmDelete(btn.dataset.bgmDel)));
 }
 
 async function setTrackVolume(file, pct) {
@@ -1484,12 +1491,26 @@ async function bgmStop() {
 }
 
 async function bgmDelete(file) {
-  if (!confirm('「' + file + '」を削除しますか？')) return;
-  const res = await api('DELETE', '/api/bgm/track?file=' + encodeURIComponent(file));
-  if (res && res.ok) {
-    toast('削除しました');
+  // 確認用トースト表示
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.style.cssText = 'cursor:default; display:flex; align-items:center; gap:8px;';
+  el.innerHTML = `<span>削除しますか？</span>
+    <button style="font-size:0.75rem; padding:2px 10px; background:#e74c3c; color:#fff; border:none; border-radius:4px; cursor:pointer;">削除</button>
+    <button style="font-size:0.75rem; padding:2px 10px; cursor:pointer; border:1px solid #ccc; border-radius:4px; background:#fff;">取消</button>`;
+  document.body.appendChild(el);
+  el.querySelector('button:last-child').addEventListener('click', () => el.remove());
+  el.querySelector('button:first-of-type').addEventListener('click', async () => {
+    el.remove();
+    const r = await fetch('/api/bgm/track?file=' + encodeURIComponent(file), { method: 'DELETE' });
+    const data = await r.json();
+    if (data.ok) {
+      toast('削除しました');
+    } else {
+      toast(data.error || '削除失敗', true);
+    }
     loadBgmTracks();
-  }
+  });
 }
 
 
