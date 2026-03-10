@@ -1485,7 +1485,7 @@ async function bgmStop() {
 
 async function bgmDelete(file) {
   if (!confirm('「' + file + '」を削除しますか？')) return;
-  const res = await api('DELETE', '/api/bgm/track', { file });
+  const res = await api('DELETE', '/api/bgm/track?file=' + encodeURIComponent(file));
   if (res && res.ok) {
     toast('削除しました');
     loadBgmTracks();

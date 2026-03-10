@@ -109,28 +109,24 @@ async def bgm_track_volume(body: BGMTrackVolume):
     return {"ok": True}
 
 
-class BGMTrackDelete(BaseModel):
-    file: str
-
-
 @router.delete("/api/bgm/track")
-async def bgm_track_delete(body: BGMTrackDelete):
+async def bgm_track_delete(file: str):
     """BGMトラックを削除する（再生中なら停止してから削除）"""
-    file_path = BGM_DIR / body.file
+    file_path = BGM_DIR / file
     if not file_path.exists():
         return {"ok": False, "error": "ファイルが見つかりません"}
 
     # 再生中なら停止
     settings = load_bgm_settings()
-    if settings.get("track") == body.file:
+    if settings.get("track") == file:
         _save_bgm(track="")
         await state.broadcast_bgm({"type": "bgm_stop"})
 
     # ファイル削除
     file_path.unlink()
     # DB音量レコードも削除
-    db.delete_bgm_track_volume(body.file)
-    logger.info("BGMトラック削除: %s", body.file)
+    db.delete_bgm_track_volume(file)
+    logger.info("BGMトラック削除: %s", file)
     return {"ok": True}
 
 
