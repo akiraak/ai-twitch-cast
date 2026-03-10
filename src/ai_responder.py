@@ -451,7 +451,10 @@ def generate_event_response(event_type, detail):
     emotions = char.get("emotions", {})
     emotion_list = ", ".join(emotions.keys())
 
-    system_prompt = "\n".join([
+    lang = LANGUAGE_MODES.get(_language_mode, LANGUAGE_MODES["ja"])
+    english_label = lang.get("english_label", "翻訳")
+
+    parts = [
         char["system_prompt"],
         "",
         "## ルール",
@@ -459,12 +462,19 @@ def generate_event_response(event_type, detail):
         "- 視聴者に向かって話すように、自然で楽しいコメントをしてください",
         "- 1〜2文で簡潔に",
         "",
+        "## 言語ルール",
+    ]
+    for rule in lang["rules"]:
+        parts.append(rule)
+    parts.extend([
+        "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        '{"response": "返答テキスト", "emotion": "感情", "english": "responseの英語訳"}',
+        f'{{"response": "返答テキスト", "emotion": "感情", "english": "{english_label}"}}',
         f"emotionは次のいずれか: {emotion_list}",
     ])
 
+    system_prompt = "\n".join(parts)
     user_prompt = f"【{event_type}イベント】{detail}"
 
     response = client.models.generate_content(
