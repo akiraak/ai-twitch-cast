@@ -11,7 +11,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from src import db
-from src.ai_responder import generate_event_response, generate_response, get_character
+from src.ai_responder import generate_event_response, generate_response, generate_user_notes, get_character
 from src.lipsync import analyze_amplitude
 from src.tts import synthesize
 from src.twitch_chat import TwitchChat
@@ -27,6 +27,7 @@ class CommentReader:
         self._topic_talker = topic_talker
         self._queue = deque()
         self._process_task = None
+        self._note_task = None
         self._running = False
         self._episode_id = None
         self._idle_since = None  # キューが空になった時刻
@@ -42,19 +43,22 @@ class CommentReader:
         self._running = True
         await self._chat.start(self._on_message)
         self._process_task = asyncio.create_task(self._process_loop())
+        self._note_task = asyncio.create_task(self._note_update_loop())
         logger.info("コメント読み上げを開始しました")
 
     async def stop(self):
         """読み上げを停止する"""
         self._running = False
         await self._chat.stop()
-        if self._process_task:
-            self._process_task.cancel()
-            try:
-                await self._process_task
-            except (asyncio.CancelledError, Exception):
-                pass
-            self._process_task = None
+        for task in [self._process_task, self._note_task]:
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+        self._process_task = None
+        self._note_task = None
         self._queue.clear()
         self._episode_id = None
         logger.info("コメント読み上げを停止しました")
@@ -122,8 +126,11 @@ class CommentReader:
         """1件のコメントにAIで応答して読み上げる"""
         try:
             user = await asyncio.to_thread(db.get_or_create_user, author)
-            result = await self._generate_ai_response(author, message, user["comment_count"])
+            result = await self._generate_ai_response(
+                author, message, user["comment_count"], user.get("note", ""),
+            )
             await self._save_to_db(user, message, result)
+            await asyncio.to_thread(db.update_user_last_seen, user["id"])
             self._apply_emotion(result["emotion"])
             # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
             await self._speak(result["response"], subtitle={
@@ -136,7 +143,7 @@ class CommentReader:
         except Exception as e:
             logger.error("応答失敗: %s", e)
 
-    async def _generate_ai_response(self, author, message, comment_count):
+    async def _generate_ai_response(self, author, message, comment_count, user_note=""):
         """AI応答を生成する（会話履歴・配信コンテキスト付き）"""
         logger.info("[ai] 応答生成中...")
         history = await asyncio.to_thread(db.get_recent_comments, 10, 2)
@@ -144,6 +151,7 @@ class CommentReader:
         result = await asyncio.to_thread(
             generate_response, author, message, comment_count,
             history=history, stream_context=stream_context,
+            user_note=user_note or None,
         )
         logger.info("[ai] [%s] %s", result["emotion"], result["response"])
         return result
@@ -315,6 +323,49 @@ class CommentReader:
             )
         except Exception as e:
             logger.warning("アバター発話DB保存失敗: %s", e)
+
+    async def _note_update_loop(self):
+        """15分ごとにユーザーメモをバッチ更新する"""
+        from datetime import datetime, timedelta, timezone
+        NOTE_INTERVAL = 15 * 60  # 15分
+        try:
+            last_run = datetime.now(timezone.utc)
+            while self._running:
+                await asyncio.sleep(NOTE_INTERVAL)
+                if not self._running:
+                    break
+                try:
+                    since = last_run.isoformat()
+                    last_run = datetime.now(timezone.utc)
+                    users = await asyncio.to_thread(db.get_users_commented_since, since)
+                    if not users:
+                        continue
+                    # 各ユーザーの直近コメントを取得
+                    users_data = []
+                    for u in users:
+                        comments = await asyncio.to_thread(
+                            db.get_user_recent_comments, u["name"], 10, 2,
+                        )
+                        if comments:
+                            users_data.append({
+                                "name": u["name"],
+                                "note": u.get("note", ""),
+                                "comments": comments,
+                            })
+                    if not users_data:
+                        continue
+                    logger.info("[note] ユーザーメモ更新中... (%d人)", len(users_data))
+                    notes = await asyncio.to_thread(generate_user_notes, users_data)
+                    for u in users:
+                        if u["name"] in notes and notes[u["name"]]:
+                            await asyncio.to_thread(
+                                db.update_user_note, u["id"], notes[u["name"]],
+                            )
+                    logger.info("[note] ユーザーメモ更新完了: %s", notes)
+                except Exception as e:
+                    logger.error("[note] ユーザーメモ更新失敗: %s", e)
+        except asyncio.CancelledError:
+            pass
 
     def _apply_emotion(self, emotion):
         """感情に対応するBlendShapeを適用する"""

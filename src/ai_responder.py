@@ -132,7 +132,7 @@ def _build_system_prompt(stream_context=None):
     return "\n".join(parts)
 
 
-def generate_response(author, message, comment_count=0, history=None, stream_context=None):
+def generate_response(author, message, comment_count=0, history=None, stream_context=None, user_note=None):
     """コメントに対するAI応答を生成する
 
     Args:
@@ -141,6 +141,7 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
         comment_count: このユーザーの過去コメント数
         history: 直近の会話履歴 [{user_name, message, response}, ...]
         stream_context: 配信情報 {title, topic, todo_items}
+        user_note: このユーザーについてのメモ
 
     Returns:
         dict: {"response": str, "emotion": str}
@@ -148,16 +149,18 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
     client = get_client()
     system_prompt = _build_system_prompt(stream_context=stream_context)
 
+    context_parts = []
     if comment_count == 0:
-        context = f"（初見のユーザーです）"
+        context_parts.append("初見のユーザーです")
     else:
-        context = f"（過去{comment_count}回コメントしている常連です）"
+        context_parts.append(f"過去{comment_count}回コメントしている常連です")
+    if user_note:
+        context_parts.append(f"メモ: {user_note}")
+    context = f"（{'、'.join(context_parts)}）"
 
     # 会話履歴をcontentsに組み立て（Geminiのマルチターン形式）
     contents = []
     if history:
-        char = get_character()
-        char_name = char.get("name", "ちょび")
         for h in history:
             contents.append(types.Content(
                 role="user",
@@ -196,6 +199,66 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
         result["emotion"] = "neutral"
 
     return result
+
+
+def generate_user_notes(users_with_comments):
+    """複数ユーザーのメモをバッチ生成する
+
+    Args:
+        users_with_comments: [{name, note, comments: [{message, response}]}, ...]
+
+    Returns:
+        dict: {user_name: new_note, ...}
+    """
+    if not users_with_comments:
+        return {}
+
+    client = get_client()
+    char = get_character()
+
+    parts = [
+        f"あなたは{char.get('name', 'ちょび')}の記憶係です。",
+        "視聴者との会話から、各ユーザーの特徴を短いメモにまとめてください。",
+        "",
+        "## ルール",
+        "- 各メモは50文字以内で簡潔に",
+        "- 趣味・興味・性格・特徴など、次の会話で役立つ情報を抽出",
+        "- 既存メモがある場合は内容を更新・補足（古い情報は削除OK）",
+        "- 会話から特徴が読み取れない場合は既存メモをそのまま返す",
+        "- 既存メモがなく特徴も読み取れない場合は空文字を返す",
+        "",
+        "## 出力形式",
+        '{"ユーザー名": "メモ", ...}',
+    ]
+
+    user_sections = []
+    for u in users_with_comments:
+        lines = [f"### {u['name']}"]
+        if u.get("note"):
+            lines.append(f"既存メモ: {u['note']}")
+        lines.append("直近の会話:")
+        for c in u["comments"]:
+            lines.append(f"  {u['name']}: {c['message']}")
+            if c.get("response"):
+                lines.append(f"  {char.get('name', 'ちょび')}: {c['response']}")
+        user_sections.append("\n".join(lines))
+
+    system_prompt = "\n".join(parts)
+    user_prompt = "\n\n".join(user_sections)
+
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+        ),
+    )
+
+    try:
+        return json.loads(response.text)
+    except (json.JSONDecodeError, AttributeError):
+        return {}
 
 
 def generate_topic_scripts(title, description="", count=5, already_spoken=None):

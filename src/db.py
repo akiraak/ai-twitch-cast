@@ -117,6 +117,17 @@ def _create_tables(conn):
         conn.commit()
     except sqlite3.OperationalError:
         pass
+    # Migration: add display_name, note, last_seen to users
+    for col, typedef in [
+        ("display_name", "TEXT NOT NULL DEFAULT ''"),
+        ("note", "TEXT NOT NULL DEFAULT ''"),
+        ("last_seen", "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} {typedef}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
 
 
 # --- channels ---
@@ -244,6 +255,49 @@ def increment_comment_count(user_id):
     conn = get_connection()
     conn.execute("UPDATE users SET comment_count = comment_count + 1 WHERE id = ?", (user_id,))
     conn.commit()
+
+
+def update_user_last_seen(user_id):
+    """ユーザーの最終コメント日時を更新する"""
+    conn = get_connection()
+    conn.execute("UPDATE users SET last_seen = ? WHERE id = ?", (_now(), user_id))
+    conn.commit()
+
+
+def update_user_note(user_id, note):
+    """ユーザーメモを更新する"""
+    conn = get_connection()
+    conn.execute("UPDATE users SET note = ? WHERE id = ?", (note, user_id))
+    conn.commit()
+
+
+def get_users_commented_since(since_iso):
+    """指定時刻以降にコメントしたユーザー一覧を返す（アバター自身を除く）"""
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT DISTINCT u.id, u.name, u.note, u.comment_count, u.first_seen
+           FROM comments c JOIN users u ON c.user_id = u.id
+           WHERE c.created_at > ? AND u.name NOT IN (
+               SELECT json_extract(config, '$.name') FROM characters
+           )
+           ORDER BY u.name""",
+        (since_iso,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_user_recent_comments(user_name, limit=10, hours=2):
+    """指定ユーザーの直近コメントを取得する"""
+    conn = get_connection()
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    rows = conn.execute(
+        """SELECT c.message, c.response, c.created_at
+           FROM comments c JOIN users u ON c.user_id = u.id
+           WHERE u.name = ? AND c.created_at > ?
+           ORDER BY c.created_at DESC LIMIT ?""",
+        (user_name, since, limit),
+    ).fetchall()
+    return [dict(r) for r in reversed(rows)]
 
 
 # --- comments ---
