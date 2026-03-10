@@ -5,13 +5,15 @@ import logging
 import time
 
 from src import db
-from src.ai_responder import generate_topic_line
+from src.ai_responder import generate_topic_line, generate_topic_title
 
 logger = logging.getLogger(__name__)
 
 # デフォルト設定
 DEFAULT_IDLE_THRESHOLD = 30  # 秒: この時間コメントがなければ発話開始
 DEFAULT_MIN_INTERVAL = 45  # 秒: 発話間の最低間隔
+TOPIC_ROTATE_INTERVAL = 10 * 60  # 秒: トピック自動ローテーション間隔（10分）
+TOPIC_ROTATE_SPEECHES = 5  # 発話数: この回数話したらトピック変更
 
 
 class TopicTalker:
@@ -23,6 +25,7 @@ class TopicTalker:
         self._last_speak_time = 0.0
         self._generating = False
         self._paused = True
+        self._topic_set_time = 0.0  # トピック設定時刻
 
     @property
     def idle_threshold(self):
@@ -49,6 +52,7 @@ class TopicTalker:
         db.deactivate_all_topics()
         topic = db.create_topic(title, description)
         self._paused = False
+        self._topic_set_time = time.monotonic()
         logger.info("[topic] トピック設定: %s", title)
         return topic
 
@@ -56,6 +60,19 @@ class TopicTalker:
         """トピックを解除する"""
         db.deactivate_all_topics()
         logger.info("[topic] トピック解除")
+
+    def _should_rotate(self):
+        """トピックをローテーションすべきか判定する"""
+        topic = db.get_active_topic()
+        if not topic:
+            return False
+        # 経過時間チェック
+        elapsed = time.monotonic() - self._topic_set_time
+        if elapsed < TOPIC_ROTATE_INTERVAL:
+            return False
+        # 発話数チェック
+        spoken = db.get_spoken_scripts(topic["id"])
+        return len(spoken) >= TOPIC_ROTATE_SPEECHES
 
     def should_speak(self, idle_seconds):
         """自発的発話すべきかを判定する"""
@@ -70,6 +87,44 @@ class TopicTalker:
         if elapsed < self._min_interval:
             return False
         return True
+
+    async def maybe_rotate_topic(self, stream_context=None):
+        """条件を満たしていればトピックを自動ローテーションする
+
+        Args:
+            stream_context: 配信情報（トピック生成の参考に）
+
+        Returns:
+            dict or None: 新しいトピック、またはローテーション不要ならNone
+        """
+        if self._paused or self._generating:
+            return None
+        if not self._should_rotate():
+            return None
+
+        self._generating = True
+        try:
+            current_topic = db.get_active_topic()
+            current_title = current_topic["title"] if current_topic else None
+
+            recent_comments = db.get_recent_comments(10, 2)
+
+            logger.info("[topic] トピック自動ローテーション中...")
+            new_title = await asyncio.to_thread(
+                generate_topic_title,
+                recent_comments=recent_comments,
+                current_topic=current_title,
+                stream_context=stream_context,
+            )
+
+            topic = await self.set_topic(new_title)
+            logger.info("[topic] 新トピック: %s", new_title)
+            return topic
+        except Exception as e:
+            logger.error("[topic] トピックローテーション失敗: %s", e)
+            return None
+        finally:
+            self._generating = False
 
     async def get_next(self):
         """次の発話をリアルタイム生成する。直前の発話と会話から自然な続きを作る。
