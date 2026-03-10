@@ -13,3 +13,4 @@ tmp/
 *.zip
 .server.pid
 .server_state
+.pending_commit

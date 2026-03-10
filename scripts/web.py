@@ -199,6 +199,31 @@ async def startup():
 
     logger.info("自動復旧完了")
 
+    # 保留コミットの読み上げ
+    pending_file = PROJECT_DIR / ".pending_commit"
+    if pending_file.exists():
+        try:
+            text = pending_file.read_text(encoding="utf-8").strip()
+            pending_file.unlink()
+            if text and state.reader:
+                commits = []
+                for line in text.splitlines():
+                    parts = line.split("\t", 1)
+                    if len(parts) == 2:
+                        commits.append((parts[0], parts[1]))
+                if commits:
+                    if len(commits) == 1:
+                        detail = f"{commits[0][0]}: {commits[0][1]}"
+                    else:
+                        lines = [f"- {h}: {m}" for h, m in commits]
+                        detail = f"{len(commits)}件のコミット\n" + "\n".join(lines)
+                    logger.info("保留コミット読み上げ: %d件", len(commits))
+                    asyncio.ensure_future(
+                        state.reader.speak_event("コミット", detail)
+                    )
+        except Exception as e:
+            logger.warning("保留コミット読み上げ失敗: %s", e)
+
 
 @app.on_event("shutdown")
 async def shutdown():
