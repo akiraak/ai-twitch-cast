@@ -139,7 +139,7 @@ class CommentReader:
     async def _generate_ai_response(self, author, message, comment_count):
         """AI応答を生成する（会話履歴・配信コンテキスト付き）"""
         logger.info("[ai] 応答生成中...")
-        history = await asyncio.to_thread(db.get_recent_comments, 20, 2)
+        history = await asyncio.to_thread(db.get_recent_comments, 10, 2)
         stream_context = await self._get_stream_context()
         result = await asyncio.to_thread(
             generate_response, author, message, comment_count,
