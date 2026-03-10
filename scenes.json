@@ -61,11 +61,11 @@
         {
           "kind": "avatar",
           "transform": {
-            "positionX": 1014.0,
-            "positionY": 345.0,
+            "positionX": 1293.0,
+            "positionY": 442.0,
             "boundsType": "OBS_BOUNDS_SCALE_INNER",
-            "boundsWidth": 1307.0,
-            "boundsHeight": 915.0
+            "boundsWidth": 1028.0,
+            "boundsHeight": 818.0
           }
         },
         {
@@ -148,7 +148,7 @@
     "bgm": 1.0
   },
   "bgm": {
-    "track": "Slow-Down.mp3"
+    "track": "Morning Cafe Jazz - Piano & Guitar Bossa Nova Music for Study, Work.mp3"
   },
   "language_mode": "en_mixed"
 }
