@@ -71,6 +71,7 @@
 - [x] Claude Code作業中にアバターの動きが止まる問題を修正（idle animationをasyncio taskから専用スレッドに移行）
 - [x] サーバー再起動方式を改善（--reload廃止、コミット時のみ再起動、startup自動復旧）
 - [x] TODO表示の作業中アイテム強調（グロー+▶矢印+ボーダー）＆左上を汎用情報パネルに刷新
+- [x] BGM再生機能（overlay audio経由、Web UIから選曲・音量調整・試聴、YouTube URLダウンロード対応）
 
 ## Phase 0: 環境構築・基盤
 

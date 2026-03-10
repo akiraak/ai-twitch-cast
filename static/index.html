@@ -195,6 +195,7 @@
   <div class="tab" onclick="switchTab('avatar', this)">アバター</div>
   <div class="tab" onclick="switchTab('overlay', this)">オーバーレイ</div>
   <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
+  <div class="tab" onclick="switchTab('bgm', this)">BGM</div>
 </div>
 
 <div class="main">
@@ -481,6 +482,33 @@
         <button class="secondary" onclick="loadCharacter()">リロード</button>
       </div>
       <div class="status" id="char-status"></div>
+    </div>
+  </div>
+
+  <!-- ===== BGM ===== -->
+  <div class="tab-content" id="tab-bgm">
+    <div class="card">
+      <h2>BGM再生</h2>
+      <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
+        <label class="field-label" style="margin:0;">音量</label>
+        <input type="range" id="bgm-volume" min="0" max="100" value="30" style="flex:1;">
+        <span id="bgm-volume-label">30%</span>
+        <button class="secondary" onclick="bgmStop()">停止</button>
+      </div>
+      <div id="bgm-tracks"></div>
+      <div class="status" id="bgm-status"></div>
+    </div>
+    <div class="card">
+      <h2>YouTubeから追加</h2>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="yt-url" class="text-input" placeholder="YouTube URL" style="flex:1;">
+        <button onclick="ytDownload()">ダウンロード</button>
+      </div>
+      <div class="status" id="yt-status"></div>
+    </div>
+    <div class="card">
+      <h2>試聴（ローカル）</h2>
+      <audio id="bgm-preview" controls style="width:100%;"></audio>
     </div>
   </div>
 
@@ -1161,12 +1189,99 @@ async function startTodo(text) {
   }
 }
 
+function setStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === 'err' ? '#c62828' : type === 'ok' ? '#2e7d32' : '#6a5590';
+}
+
+// --- BGM ---
+const bgmVolumeEl = document.getElementById('bgm-volume');
+const bgmVolumeLabelEl = document.getElementById('bgm-volume-label');
+const bgmTracksEl = document.getElementById('bgm-tracks');
+
+bgmVolumeEl.addEventListener('input', () => {
+  bgmVolumeLabelEl.textContent = bgmVolumeEl.value + '%';
+});
+bgmVolumeEl.addEventListener('change', async () => {
+  const vol = parseInt(bgmVolumeEl.value) / 100;
+  await api('POST', '/api/bgm', { action: 'volume', volume: vol });
+});
+
+async function loadBgmTracks() {
+  const res = await fetch('/api/bgm/list');
+  const data = await res.json();
+  bgmTracksEl.innerHTML = '';
+  for (const t of data.tracks) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border);';
+    row.innerHTML = `
+      <span style="flex:1; font-size:0.9rem;">${esc(t.name)}</span>
+      <button onclick="bgmPlay('${esc(t.file)}')" style="font-size:0.75rem;">再生</button>
+      <button class="secondary" onclick="bgmPreview('${esc(t.file)}')" style="font-size:0.75rem;">試聴</button>
+    `;
+    bgmTracksEl.appendChild(row);
+  }
+  if (data.tracks.length === 0) {
+    bgmTracksEl.innerHTML = '<div style="color:var(--text-muted); font-size:0.85rem;">BGMファイルがありません</div>';
+  }
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function bgmPlay(file) {
+  const vol = parseInt(bgmVolumeEl.value) / 100;
+  const res = await api('POST', '/api/bgm', { action: 'play', track: file, volume: vol });
+  if (res && res.ok) setStatus('bgm-status', '再生中: ' + file, 'ok');
+}
+
+async function bgmStop() {
+  await api('POST', '/api/bgm', { action: 'stop' });
+  setStatus('bgm-status', '停止', 'ok');
+}
+
+function bgmPreview(file) {
+  const preview = document.getElementById('bgm-preview');
+  preview.src = '/bgm/' + file;
+  preview.volume = parseInt(bgmVolumeEl.value) / 100;
+  preview.play();
+}
+
+async function ytDownload() {
+  const url = document.getElementById('yt-url').value.trim();
+  if (!url) return;
+  setStatus('yt-status', 'ダウンロード中...', '');
+  try {
+    const res = await fetch('/api/bgm/youtube', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setStatus('yt-status', '完了: ' + (data.title || data.file), 'ok');
+      document.getElementById('yt-url').value = '';
+      loadBgmTracks();
+    } else {
+      setStatus('yt-status', 'エラー: ' + data.error, 'err');
+    }
+  } catch (e) {
+    setStatus('yt-status', 'エラー: ' + e.message, 'err');
+  }
+}
+
 // 初期読み込み
 loadTodoUI();
 setInterval(loadTodoUI, 30000);
 loadCharacter();
 loadVsfDefaults();
 loadOverlaySettings();
+loadBgmTracks();
 refreshStatus();
 setInterval(refreshStatus, 3000);
 </script>

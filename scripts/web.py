@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 from scripts import state
 from scripts.routes.avatar import router as avatar_router
+from scripts.routes.bgm import router as bgm_router
 from scripts.routes.character import router as character_router
 from scripts.routes.obs import router as obs_router
 from scripts.routes.overlay import router as overlay_router
@@ -40,12 +41,16 @@ app = FastAPI()
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
 STATE_FILE = PROJECT_DIR / ".server_state"
+BGM_DIR = PROJECT_DIR / "resources" / "audio" / "bgm"
+BGM_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/bgm", StaticFiles(directory=str(BGM_DIR)), name="bgm")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ルーターを登録
 app.include_router(obs_router)
 app.include_router(stream_router)
 app.include_router(avatar_router)
+app.include_router(bgm_router)
 app.include_router(character_router)
 app.include_router(overlay_router)
 app.include_router(twitch_router)

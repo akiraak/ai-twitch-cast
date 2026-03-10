@@ -402,7 +402,7 @@ async function loadTodo() {
   }
 }
 
-// 音声再生
+// TTS音声再生
 const audioEl = document.createElement('audio');
 document.body.appendChild(audioEl);
 
@@ -410,6 +410,27 @@ function playAudio(url) {
   audioEl.src = url;
   audioEl.load();
   audioEl.play().catch(e => console.log('音声再生エラー:', e));
+}
+
+// BGM再生
+const bgmEl = document.createElement('audio');
+bgmEl.loop = true;
+document.body.appendChild(bgmEl);
+
+function bgmPlay(url, volume) {
+  bgmEl.src = url;
+  bgmEl.volume = Math.max(0, Math.min(1, volume || 0.3));
+  bgmEl.load();
+  bgmEl.play().catch(e => console.log('BGM再生エラー:', e));
+}
+
+function bgmStop() {
+  bgmEl.pause();
+  bgmEl.src = '';
+}
+
+function bgmVolume(volume) {
+  bgmEl.volume = Math.max(0, Math.min(1, volume));
 }
 
 // WebSocket接続
@@ -430,6 +451,12 @@ function connectWS() {
       addInfoRow(data.icon || '📋', data.text, data.label);
     } else if (data.type === 'play_audio') {
       playAudio(data.url);
+    } else if (data.type === 'bgm_play') {
+      bgmPlay(data.url, data.volume);
+    } else if (data.type === 'bgm_stop') {
+      bgmStop();
+    } else if (data.type === 'bgm_volume') {
+      bgmVolume(data.volume);
     } else if (data.type === 'settings_update') {
       applySettings(data);
     }
