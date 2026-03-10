@@ -6,264 +6,440 @@
 <title>AI Twitch Cast</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f5f0ff; color: #2a1f40; padding: 16px; }
-  h1 { font-size: 1.3rem; margin-bottom: 16px; color: #7b1fa2; }
+  body { font-family: system-ui, sans-serif; background: #f5f0ff; color: #2a1f40; }
+
+  /* ヘッダー */
+  .header {
+    background: #ffffff;
+    border-bottom: 1px solid #d0c0e8;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 { font-size: 1.1rem; color: #7b1fa2; font-weight: 600; }
+  .header-actions { display: flex; gap: 8px; }
+  .header-actions button { padding: 8px 20px; font-size: 0.9rem; font-weight: 600; }
+
+  /* ステータスバー */
+  .status-bar {
+    background: #ffffff;
+    border-bottom: 1px solid #d0c0e8;
+    padding: 6px 24px;
+    display: flex;
+    gap: 24px;
+    font-size: 0.8rem;
+  }
+  .status-bar.streaming { background: #fff5f5; border-bottom-color: #c6282844; }
+  .status-item { display: flex; align-items: center; gap: 6px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-dot.on { background: #2e7d32; }
+  .status-dot.off { background: #9a88b5; }
+  .status-dot.live { background: #c62828; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .status-label { color: #6a5590; }
+  .status-value { color: #2a1f40; }
+
+  /* タブ */
+  .tabs {
+    background: #ffffff;
+    border-bottom: 1px solid #d0c0e8;
+    padding: 0 24px;
+    display: flex;
+    gap: 0;
+  }
+  .tab {
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    color: #6a5590;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }
+  .tab:hover { color: #2a1f40; }
+  .tab.active { color: #7b1fa2; border-bottom-color: #7b1fa2; font-weight: 600; }
+
+  /* メインコンテンツ */
+  .main { padding: 20px 24px; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
   .card { background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #d0c0e8; }
-  .card h2 { font-size: 1rem; margin-bottom: 12px; color: #7b1fa2; display: flex; align-items: center; gap: 8px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-  .dot.on { background: #2e7d32; }
-  .dot.off { background: #9a88b5; }
+  .card h2 { font-size: 0.95rem; margin-bottom: 12px; color: #7b1fa2; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .card h3 { font-size: 0.85rem; margin: 12px 0 8px; color: #6a5590; font-weight: 500; }
+
+  /* ボタン */
   .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  button { background: #7b1fa2; color: #fff; border: none; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-size: 0.85rem; }
+  button { background: #7b1fa2; color: #fff; border: none; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: background 0.15s; }
   button:hover { background: #6a1b9a; }
   button:active { background: #4a148c; }
   button.danger { background: #c62828; }
   button.danger:hover { background: #b71c1c; }
-  button.secondary { background: #e8ddf5; color: #2a1f40; }
+  button.secondary { background: #e8ddf5; color: #2a1f40; border: 1px solid #d0c0e8; }
   button.secondary:hover { background: #d0c0e8; }
+  button.success { background: #2e7d32; }
+  button.success:hover { background: #388e3c; }
+
   .status { font-size: 0.8rem; color: #6a5590; margin-top: 8px; min-height: 1.2em; }
+
+  /* TODO */
+  .todo-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #ece5fa; transition: background 0.1s; }
+  .todo-item:hover { background: #f5f0ff; }
+  .todo-item:last-child { border-bottom: none; }
+  .todo-checkbox { width: 18px; height: 18px; border: 2px solid #9a88b5; border-radius: 4px; flex-shrink: 0; }
+  .todo-item.in-progress .todo-checkbox { background: #7b1fa2; border-color: #7b1fa2; }
+  .todo-text { flex: 1; font-size: 0.85rem; }
+  .todo-item.in-progress .todo-text { color: #7b1fa2; font-weight: 600; }
+  .todo-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 12px; font-weight: 500; background: #ece5fa; color: #7b1fa2; border: 1px solid #d0c0e8; }
+  .todo-btn { font-size: 0.75rem; padding: 3px 12px; }
+  .todo-footer { padding: 8px 12px; font-size: 0.75rem; color: #9a88b5; border-top: 1px solid #ece5fa; }
+
+  /* シーンリスト */
   .scene-list { list-style: none; margin-top: 8px; }
-  .scene-list li { padding: 4px 10px; cursor: pointer; border-radius: 4px; font-size: 0.85rem; }
+  .scene-list li { padding: 6px 12px; cursor: pointer; border-radius: 6px; font-size: 0.85rem; transition: background 0.1s; }
   .scene-list li:hover { background: #e8ddf5; }
-  .scene-list li.active { background: #ece5fa; color: #4a148c; font-weight: bold; border: 1px solid #d0c0e8; }
+  .scene-list li.active { background: #ece5fa; color: #4a148c; font-weight: 600; border: 1px solid #d0c0e8; }
+
+  /* スライダー */
   .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .slider-row label { font-size: 0.8rem; min-width: 50px; color: #6a5590; }
   .slider-row input[type=range] { flex: 1; accent-color: #7b1fa2; }
   .slider-row .val { font-size: 0.8rem; min-width: 30px; text-align: right; }
-  #log { background: #ece5fa; border: 1px solid #d0c0e8; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 0.8rem; height: 180px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap; color: #4a148c; }
+  .num-input { width: 60px; background: #ece5fa; color: #2a1f40; border: 1px solid #d0c0e8; border-radius: 4px; text-align: right; font-size: 0.8rem; padding: 2px 6px; }
+  .text-input { width: 100%; padding: 6px 10px; background: #ece5fa; border: 1px solid #d0c0e8; border-radius: 6px; color: #2a1f40; font-size: 0.85rem; transition: border-color 0.15s; }
+  .text-input:focus { border-color: #7b1fa2; outline: none; }
+  textarea.text-input { resize: vertical; }
+
+  /* ログ */
+  .log-panel {
+    background: #ece5fa;
+    border: 1px solid #d0c0e8;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    height: 160px;
+    overflow-y: auto;
+    margin-top: 16px;
+    white-space: pre-wrap;
+    color: #4a148c;
+  }
+
+  /* トースト */
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 12px 24px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; max-width: 80vw; text-align: center; animation: fadeIn 0.3s; }
   .toast.success { background: #e8f5e9; color: #1b5e20; border: 1px solid #4caf50; }
   .toast.error { background: #ffebee; color: #b71c1c; border: 1px solid #e53935; }
   @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-  .env-card { background: #ffffff; border: 1px solid #d0c0e8; border-radius: 6px; }
+
+  /* 環境変数 */
+  .env-card { background: #ffffff; border: 1px solid #d0c0e8; border-radius: 6px; margin-bottom: 16px; }
+  .env-card summary { cursor: pointer; font-size: 0.8rem; color: #7b1fa2; padding: 8px 12px; }
+  #env-table { width: 100%; font-size: 0.75rem; border-collapse: collapse; padding: 0 12px 8px; }
   #env-table td { padding: 3px 6px; border-bottom: 1px solid #ece5fa; }
   #env-table td:first-child { color: #6a5590; }
   #env-table td:nth-child(2) { font-family: monospace; color: #4a148c; }
+
+  /* 折りたたみ */
+  .collapsible summary { cursor: pointer; font-size: 0.85rem; color: #6a5590; padding: 6px 0; user-select: none; }
+  .collapsible summary:hover { color: #2a1f40; }
+
+  /* 入力ラベル */
+  .field-label { font-size: 0.8rem; color: #6a5590; display: block; margin-bottom: 4px; }
 </style>
 </head>
 <body>
 
-<h1>AI Twitch Cast</h1>
-
-<div class="btn-row" style="margin-bottom:16px;">
-  <button style="padding:10px 28px; font-size:1rem;" onclick="runSetup('/api/start')">Setup</button>
-  <button style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/stream/start')">配信開始</button>
-  <button class="danger" style="padding:10px 28px; font-size:1rem;" onclick="api('POST','/api/stream/stop')">配信停止</button>
+<!-- ヘッダー -->
+<div class="header">
+  <h1>AI Twitch Cast</h1>
+  <div class="header-actions">
+    <button onclick="runSetup('/api/start')" style="padding:8px 24px;">Setup</button>
+    <button class="success" onclick="api('POST','/api/stream/start')">配信開始</button>
+    <button class="danger" onclick="api('POST','/api/stream/stop')">配信停止</button>
+  </div>
 </div>
 
-<details class="env-card" style="margin-bottom:16px;">
-  <summary style="cursor:pointer; font-size:0.8rem; color:#7b1fa2; padding:8px 12px;">.env 設定</summary>
-  <table id="env-table" style="width:100%; font-size:0.75rem; border-collapse:collapse; padding:0 12px 8px;">
-  </table>
-</details>
+<!-- ステータスバー -->
+<div class="status-bar" id="status-bar">
+  <div class="status-item">
+    <span class="status-dot off" id="sb-obs-dot"></span>
+    <span class="status-label">OBS</span>
+    <span class="status-value" id="sb-obs-text">未接続</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot off" id="sb-vsf-dot"></span>
+    <span class="status-label">VSF</span>
+    <span class="status-value" id="sb-vsf-text">未接続</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot off" id="sb-vts-dot"></span>
+    <span class="status-label">VTS</span>
+    <span class="status-value" id="sb-vts-text">未接続</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot off" id="sb-stream-dot"></span>
+    <span class="status-label">配信</span>
+    <span class="status-value" id="sb-stream-text">停止中</span>
+  </div>
+</div>
 
-<div class="grid">
-  <!-- Twitch 配信情報 -->
-  <div class="card">
-    <h2>Twitch 配信情報</h2>
-    <div style="margin-bottom:8px;">
-      <label style="font-size:0.8rem; color:#6a5590;">タイトル</label>
-      <input type="text" id="twitch-title" placeholder="配信タイトル" style="width:100%; padding:6px 10px; background:#ece5fa; border:1px solid #d0c0e8; border-radius:4px; color:#2a1f40; font-size:0.9rem; margin-top:4px;">
-    </div>
-    <div style="margin-bottom:8px;">
-      <label style="font-size:0.8rem; color:#6a5590;">カテゴリ</label>
-      <div style="display:flex; gap:6px; margin-top:4px;">
-        <input type="text" id="twitch-category-search" placeholder="カテゴリを検索..." style="flex:1; padding:6px 10px; background:#ece5fa; border:1px solid #d0c0e8; border-radius:4px; color:#2a1f40; font-size:0.85rem;">
-        <button class="secondary" onclick="searchCategories()">検索</button>
+<!-- タブ -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('dashboard', this)">ダッシュボード</div>
+  <div class="tab" onclick="switchTab('obs', this)">OBS</div>
+  <div class="tab" onclick="switchTab('avatar', this)">アバター</div>
+  <div class="tab" onclick="switchTab('overlay', this)">オーバーレイ</div>
+  <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
+</div>
+
+<div class="main">
+
+  <!-- ===== ダッシュボード ===== -->
+  <div class="tab-content active" id="tab-dashboard">
+    <details class="env-card">
+      <summary>.env 設定</summary>
+      <table id="env-table"></table>
+    </details>
+
+    <div class="grid">
+      <!-- TODO -->
+      <div class="card">
+        <h2>TODO</h2>
+        <div id="todo-list-ui"></div>
+        <div class="status" id="todo-status"></div>
       </div>
-      <div id="twitch-category-results" style="margin-top:4px;"></div>
-      <div id="twitch-category-current" style="font-size:0.8rem; color:#4a148c; margin-top:4px;"></div>
-      <input type="hidden" id="twitch-game-id">
+
+      <!-- Twitch 配信情報 -->
+      <div class="card">
+        <h2>Twitch 配信情報</h2>
+        <div style="margin-bottom:8px;">
+          <label class="field-label">タイトル</label>
+          <input type="text" id="twitch-title" class="text-input" placeholder="配信タイトル">
+        </div>
+        <div style="margin-bottom:8px;">
+          <label class="field-label">カテゴリ</label>
+          <div style="display:flex; gap:6px; margin-top:4px;">
+            <input type="text" id="twitch-category-search" class="text-input" placeholder="カテゴリを検索..." style="flex:1;">
+            <button class="secondary" onclick="searchCategories()">検索</button>
+          </div>
+          <div id="twitch-category-results" style="margin-top:4px;"></div>
+          <div id="twitch-category-current" style="font-size:0.8rem; color:#4a148c; margin-top:4px;"></div>
+          <input type="hidden" id="twitch-game-id">
+        </div>
+        <div style="margin-bottom:8px;">
+          <label class="field-label">タグ（カンマ区切り）</label>
+          <input type="text" id="twitch-tags" class="text-input" placeholder="日本語, AI, VTuber">
+        </div>
+        <div class="btn-row">
+          <button class="secondary" onclick="loadChannelInfo()">読み込み</button>
+          <button onclick="saveChannelInfo()">保存</button>
+        </div>
+        <div class="status" id="twitch-status"></div>
+      </div>
     </div>
-    <div style="margin-bottom:8px;">
-      <label style="font-size:0.8rem; color:#6a5590;">タグ（カンマ区切り）</label>
-      <input type="text" id="twitch-tags" placeholder="日本語, AI, VTuber" style="width:100%; padding:6px 10px; background:#ece5fa; border:1px solid #d0c0e8; border-radius:4px; color:#2a1f40; font-size:0.85rem; margin-top:4px;">
-    </div>
-    <div class="btn-row">
-      <button onclick="loadChannelInfo()">読み込み</button>
-      <button onclick="saveChannelInfo()">保存</button>
-    </div>
-    <div class="status" id="twitch-status"></div>
+
+    <!-- ログ -->
+    <div class="log-panel" id="log"></div>
   </div>
 
-  <!-- OBS -->
-  <div class="card">
-    <h2><span class="dot" id="obs-dot"></span> OBS</h2>
-    <div class="btn-row">
-      <button onclick="api('POST','/api/obs/connect')">接続</button>
-      <button class="secondary" onclick="api('POST','/api/obs/disconnect')">切断</button>
+  <!-- ===== OBS ===== -->
+  <div class="tab-content" id="tab-obs">
+    <div class="grid">
+      <div class="card">
+        <h2><span class="status-dot" id="obs-dot"></span> OBS接続</h2>
+        <div class="btn-row">
+          <button onclick="api('POST','/api/obs/connect')">接続</button>
+          <button class="secondary" onclick="api('POST','/api/obs/disconnect')">切断</button>
+        </div>
+        <div class="btn-row">
+          <button onclick="runSetup('/api/obs/setup')">Setup</button>
+          <button class="danger" onclick="api('POST','/api/obs/teardown')">Teardown</button>
+        </div>
+        <h3>シーン</h3>
+        <div id="obs-scenes"></div>
+        <div class="status" id="obs-status"></div>
+      </div>
+
+      <div class="card">
+        <h2>アバター位置</h2>
+        <div class="slider-row">
+          <label>X</label>
+          <input type="range" class="avatar-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
+          <input type="number" class="num-input avatar-num" data-key="positionX" value="0">
+        </div>
+        <div class="slider-row">
+          <label>Y</label>
+          <input type="range" class="avatar-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
+          <input type="number" class="num-input avatar-num" data-key="positionY" value="0">
+        </div>
+        <div class="slider-row">
+          <label>幅</label>
+          <input type="range" class="avatar-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="1920">
+          <input type="number" class="num-input avatar-num" data-key="boundsWidth" value="1920">
+        </div>
+        <div class="slider-row">
+          <label>高さ</label>
+          <input type="range" class="avatar-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="1080">
+          <input type="number" class="num-input avatar-num" data-key="boundsHeight" value="1080">
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="secondary" onclick="loadAvatarTransform()">取得</button>
+          <button onclick="saveAvatarToJson()">scenes.jsonに保存</button>
+        </div>
+        <div class="status" id="avatar-status"></div>
+
+        <details class="collapsible" style="margin-top:12px;">
+          <summary>ターミナル位置</summary>
+          <div style="padding-top:8px;">
+            <div class="slider-row">
+              <label>X</label>
+              <input type="range" class="term-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
+              <input type="number" class="num-input term-num" data-key="positionX" value="0">
+            </div>
+            <div class="slider-row">
+              <label>Y</label>
+              <input type="range" class="term-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
+              <input type="number" class="num-input term-num" data-key="positionY" value="0">
+            </div>
+            <div class="slider-row">
+              <label>幅</label>
+              <input type="range" class="term-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="960">
+              <input type="number" class="num-input term-num" data-key="boundsWidth" value="960">
+            </div>
+            <div class="slider-row">
+              <label>高さ</label>
+              <input type="range" class="term-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="540">
+              <input type="number" class="num-input term-num" data-key="boundsHeight" value="540">
+            </div>
+            <div class="btn-row" style="margin-top:8px;">
+              <button class="secondary" onclick="loadTerminalTransform()">取得</button>
+              <button onclick="saveTerminalToJson()">scenes.jsonに保存</button>
+            </div>
+            <div class="status" id="term-status"></div>
+          </div>
+        </details>
+      </div>
     </div>
-    <div class="btn-row">
-      <button onclick="runSetup('/api/obs/setup')">Setup</button>
-      <button class="danger" onclick="api('POST','/api/obs/teardown')">Teardown</button>
-    </div>
-    <div id="obs-scenes"></div>
-    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#6a5590;">アバター位置</h3>
-    <div class="slider-row">
-      <label>X</label>
-      <input type="range" class="avatar-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
-      <input type="number" class="avatar-num" data-key="positionX" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
-    </div>
-    <div class="slider-row">
-      <label>Y</label>
-      <input type="range" class="avatar-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
-      <input type="number" class="avatar-num" data-key="positionY" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
-    </div>
-    <div class="slider-row">
-      <label>幅</label>
-      <input type="range" class="avatar-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="1920">
-      <input type="number" class="avatar-num" data-key="boundsWidth" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="1920">
-    </div>
-    <div class="slider-row">
-      <label>高さ</label>
-      <input type="range" class="avatar-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="1080">
-      <input type="number" class="avatar-num" data-key="boundsHeight" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="1080">
-    </div>
-    <div class="btn-row" style="margin-top:4px;">
-      <button class="secondary" onclick="loadAvatarTransform()">取得</button>
-      <button onclick="saveAvatarToJson()">scenes.jsonに保存</button>
-    </div>
-    <div class="status" id="avatar-status"></div>
-    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#6a5590;">ターミナル位置</h3>
-    <div class="slider-row">
-      <label>X</label>
-      <input type="range" class="term-slider" data-key="positionX" min="-960" max="1920" step="10" value="0">
-      <input type="number" class="term-num" data-key="positionX" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
-    </div>
-    <div class="slider-row">
-      <label>Y</label>
-      <input type="range" class="term-slider" data-key="positionY" min="-540" max="1080" step="10" value="0">
-      <input type="number" class="term-num" data-key="positionY" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
-    </div>
-    <div class="slider-row">
-      <label>幅</label>
-      <input type="range" class="term-slider" data-key="boundsWidth" min="0" max="3840" step="10" value="960">
-      <input type="number" class="term-num" data-key="boundsWidth" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="960">
-    </div>
-    <div class="slider-row">
-      <label>高さ</label>
-      <input type="range" class="term-slider" data-key="boundsHeight" min="0" max="2160" step="10" value="540">
-      <input type="number" class="term-num" data-key="boundsHeight" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="540">
-    </div>
-    <div class="btn-row" style="margin-top:4px;">
-      <button class="secondary" onclick="loadTerminalTransform()">取得</button>
-      <button onclick="saveTerminalToJson()">scenes.jsonに保存</button>
-    </div>
-    <div class="status" id="term-status"></div>
-    <div class="status" id="obs-status"></div>
   </div>
 
-  <!-- VSF -->
-  <div class="card" id="vsf-card">
-    <h2><span class="dot" id="vsf-dot"></span> VSeeFace (VRM)</h2>
-    <div class="btn-row">
-      <button onclick="api('POST','/api/vsf/connect')">接続</button>
-      <button class="secondary" onclick="api('POST','/api/vsf/disconnect')">切断</button>
+  <!-- ===== アバター ===== -->
+  <div class="tab-content" id="tab-avatar">
+    <div class="grid">
+      <div class="card" id="vsf-card">
+        <h2><span class="status-dot" id="vsf-dot"></span> VSeeFace (VRM)</h2>
+        <div class="btn-row">
+          <button onclick="api('POST','/api/vsf/connect')">接続</button>
+          <button class="secondary" onclick="api('POST','/api/vsf/disconnect')">切断</button>
+        </div>
+        <div class="btn-row">
+          <button class="secondary" onclick="api('POST','/api/vsf/pose')">Pose</button>
+          <button onclick="startIdle()">Idle</button>
+          <button class="secondary" onclick="api('POST','/api/vsf/stop')">Stop</button>
+        </div>
+        <div class="slider-row">
+          <label>Idle倍率</label>
+          <input type="range" id="idle-scale" min="0.1" max="5.0" step="0.1" value="1.0">
+          <span class="val" id="idle-scale-val">1.0</span>
+        </div>
+
+        <h3>BlendShape</h3>
+        <div class="btn-row">
+          <button class="secondary" onclick="blend('Joy',1)">Joy</button>
+          <button class="secondary" onclick="blend('Angry',1)">Angry</button>
+          <button class="secondary" onclick="blend('Sorrow',1)">Sorrow</button>
+          <button class="secondary" onclick="blend('Fun',1)">Fun</button>
+          <button class="danger" style="font-size:0.75rem;" onclick="resetBlend()">Reset</button>
+        </div>
+        <div class="slider-row">
+          <label>A (口)</label>
+          <input type="range" class="bs-slider" data-name="A" min="0" max="1" step="0.05" value="0">
+          <span class="val">0</span>
+        </div>
+        <div class="slider-row">
+          <label>Blink</label>
+          <input type="range" class="bs-slider" data-name="Blink" min="0" max="1" step="0.05" value="0">
+          <span class="val">0</span>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button onclick="saveVsfDefaults()">初期値として保存</button>
+          <button class="secondary" onclick="loadVsfDefaults()">初期値を読込</button>
+        </div>
+        <div class="status" id="vsf-status"></div>
+      </div>
+
+      <div class="card" id="vts-card">
+        <h2><span class="status-dot" id="vts-dot"></span> VTube Studio (Live2D)</h2>
+        <div class="btn-row">
+          <button onclick="api('POST','/api/vts/connect')">接続</button>
+          <button class="secondary" onclick="api('POST','/api/vts/disconnect')">切断</button>
+        </div>
+        <div class="status" id="vts-status"></div>
+      </div>
     </div>
-    <div class="btn-row">
-      <button onclick="api('POST','/api/vsf/pose')">Pose</button>
-      <button onclick="startIdle()">Idle</button>
-      <button class="secondary" onclick="api('POST','/api/vsf/stop')">Stop</button>
-    </div>
-    <div class="slider-row">
-      <label>Idle倍率</label>
-      <input type="range" id="idle-scale" min="0.1" max="5.0" step="0.1" value="1.0">
-      <span class="val" id="idle-scale-val">1.0</span>
-    </div>
-    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#6a5590;">BlendShape</h3>
-    <div class="btn-row">
-      <button class="secondary" onclick="blend('Joy',1)">Joy</button>
-      <button class="secondary" onclick="blend('Angry',1)">Angry</button>
-      <button class="secondary" onclick="blend('Sorrow',1)">Sorrow</button>
-      <button class="secondary" onclick="blend('Fun',1)">Fun</button>
-      <button class="secondary" onclick="resetBlend()">Reset</button>
-    </div>
-    <div class="slider-row">
-      <label>A (口)</label>
-      <input type="range" class="bs-slider" data-name="A" min="0" max="1" step="0.05" value="0">
-      <span class="val">0</span>
-    </div>
-    <div class="slider-row">
-      <label>Blink</label>
-      <input type="range" class="bs-slider" data-name="Blink" min="0" max="1" step="0.05" value="0">
-      <span class="val">0</span>
-    </div>
-    <div class="btn-row" style="margin-top:10px;">
-      <button onclick="saveVsfDefaults()">初期値として保存</button>
-      <button class="secondary" onclick="loadVsfDefaults()">初期値を読込</button>
-    </div>
-    <div class="status" id="vsf-status"></div>
   </div>
 
-  <!-- VTS -->
-  <div class="card" id="vts-card">
-    <h2><span class="dot" id="vts-dot"></span> VTube Studio (Live2D)</h2>
-    <div class="btn-row">
-      <button onclick="api('POST','/api/vts/connect')">接続</button>
-      <button class="secondary" onclick="api('POST','/api/vts/disconnect')">切断</button>
-    </div>
-    <div class="status" id="vts-status"></div>
-  </div>
+  <!-- ===== オーバーレイ ===== -->
+  <div class="tab-content" id="tab-overlay">
+    <div class="grid">
+      <div class="card">
+        <h2>字幕設定</h2>
+        <div class="slider-row">
+          <label>下余白</label>
+          <input type="range" id="ov-sub-bottom" min="0" max="500" step="5" value="80">
+          <input type="number" class="num-input" id="ov-sub-bottom-num" value="80">
+        </div>
+        <div class="slider-row">
+          <label>文字</label>
+          <input type="range" id="ov-sub-font" min="14" max="64" step="1" value="28">
+          <input type="number" class="num-input" id="ov-sub-font-num" value="28">
+        </div>
+        <div class="slider-row">
+          <label>フェード</label>
+          <input type="range" id="ov-sub-fade" min="1" max="15" step="0.5" value="3">
+          <input type="number" class="num-input" id="ov-sub-fade-num" value="3" step="0.5">
+        </div>
+      </div>
 
-  <!-- TODO -->
-  <div class="card">
-    <h2>TODO</h2>
-    <div id="todo-list-ui"></div>
-    <div class="status" id="todo-status"></div>
-  </div>
-
-  <!-- Overlay -->
-  <div class="card">
-    <h2>オーバーレイ設定</h2>
-    <h3 style="font-size:0.85rem; margin: 0 0 6px; color:#6a5590;">字幕（リアルタイム）</h3>
-    <div class="slider-row">
-      <label>下余白</label>
-      <input type="range" id="ov-sub-bottom" min="0" max="500" step="5" value="80">
-      <input type="number" id="ov-sub-bottom-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="80">
+      <div class="card">
+        <h2>TODOパネル設定</h2>
+        <div class="slider-row">
+          <label>X</label>
+          <input type="range" id="ov-todo-x" min="0" max="1920" step="10" value="960">
+          <input type="number" class="num-input" id="ov-todo-x-num" value="960">
+        </div>
+        <div class="slider-row">
+          <label>Y</label>
+          <input type="range" id="ov-todo-y" min="0" max="1080" step="10" value="540">
+          <input type="number" class="num-input" id="ov-todo-y-num" value="540">
+        </div>
+        <div class="slider-row">
+          <label>幅</label>
+          <input type="range" id="ov-todo-width" min="200" max="1920" step="10" value="460">
+          <input type="number" class="num-input" id="ov-todo-width-num" value="460">
+        </div>
+        <div class="slider-row">
+          <label>高さ</label>
+          <input type="range" id="ov-todo-height" min="0" max="1080" step="10" value="0">
+          <input type="number" class="num-input" id="ov-todo-height-num" value="0">
+        </div>
+        <div class="slider-row">
+          <label>文字</label>
+          <input type="range" id="ov-todo-font" min="10" max="40" step="1" value="15">
+          <input type="number" class="num-input" id="ov-todo-font-num" value="15">
+        </div>
+        <div class="slider-row">
+          <label>タイトル</label>
+          <input type="range" id="ov-todo-title-font" min="12" max="48" step="1" value="18">
+          <input type="number" class="num-input" id="ov-todo-title-font-num" value="18">
+        </div>
+      </div>
     </div>
-    <div class="slider-row">
-      <label>文字</label>
-      <input type="range" id="ov-sub-font" min="14" max="64" step="1" value="28">
-      <input type="number" id="ov-sub-font-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="28">
-    </div>
-    <div class="slider-row">
-      <label>フェード</label>
-      <input type="range" id="ov-sub-fade" min="1" max="15" step="0.5" value="3">
-      <input type="number" id="ov-sub-fade-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="3" step="0.5">
-    </div>
-    <h3 style="font-size:0.85rem; margin: 10px 0 6px; color:#6a5590;">TODOパネル</h3>
-    <div class="slider-row">
-      <label>X</label>
-      <input type="range" id="ov-todo-x" min="0" max="1920" step="10" value="960">
-      <input type="number" id="ov-todo-x-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="960">
-    </div>
-    <div class="slider-row">
-      <label>Y</label>
-      <input type="range" id="ov-todo-y" min="0" max="1080" step="10" value="540">
-      <input type="number" id="ov-todo-y-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="540">
-    </div>
-    <div class="slider-row">
-      <label>幅</label>
-      <input type="range" id="ov-todo-width" min="200" max="1920" step="10" value="460">
-      <input type="number" id="ov-todo-width-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="460">
-    </div>
-    <div class="slider-row">
-      <label>高さ</label>
-      <input type="range" id="ov-todo-height" min="0" max="1080" step="10" value="0">
-      <input type="number" id="ov-todo-height-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="0">
-    </div>
-    <div class="slider-row">
-      <label>文字</label>
-      <input type="range" id="ov-todo-font" min="10" max="40" step="1" value="15">
-      <input type="number" id="ov-todo-font-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="15">
-    </div>
-    <div class="slider-row">
-      <label>タイトル</label>
-      <input type="range" id="ov-todo-title-font" min="12" max="48" step="1" value="18">
-      <input type="number" id="ov-todo-title-font-num" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; text-align:right; font-size:0.8rem;" value="18">
-    </div>
-    <div class="btn-row" style="margin-top:8px;">
+    <div class="btn-row" style="margin-top:12px;">
       <button onclick="saveOverlaySettings()">保存</button>
       <button class="secondary" onclick="loadOverlaySettings()">読込</button>
       <button class="secondary" onclick="window.open('/overlay','_blank')">プレビュー</button>
@@ -271,47 +447,55 @@
     <div class="status" id="ov-status"></div>
   </div>
 
-  <!-- Character -->
-  <div class="card" style="grid-column: 1 / -1;">
-    <h2>キャラクター設定</h2>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-      <div>
-        <label style="font-size:0.8rem; color:#6a5590;">名前</label>
-        <input type="text" id="char-name" style="width:100%; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:4px; padding:4px 8px; font-size:0.85rem;">
+  <!-- ===== キャラクター ===== -->
+  <div class="tab-content" id="tab-character">
+    <div class="card">
+      <h2>キャラクター設定</h2>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div>
+          <label class="field-label">名前</label>
+          <input type="text" id="char-name" class="text-input">
+        </div>
+        <div></div>
+        <div style="grid-column: 1 / -1;">
+          <label class="field-label">システムプロンプト</label>
+          <textarea id="char-prompt" rows="3" class="text-input"></textarea>
+        </div>
+        <div>
+          <label class="field-label">ルール</label>
+          <div id="char-rules"></div>
+          <button class="secondary" style="margin-top:6px; font-size:0.75rem;" onclick="addRule()">+ ルール追加</button>
+        </div>
+        <div>
+          <label class="field-label">感情</label>
+          <div id="char-emotions"></div>
+          <button class="secondary" style="margin-top:6px; font-size:0.75rem;" onclick="addEmotion()">+ 感情追加</button>
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <label class="field-label">感情BlendShape</label>
+          <div id="char-blendshapes"></div>
+        </div>
       </div>
-      <div></div>
-      <div style="grid-column: 1 / -1;">
-        <label style="font-size:0.8rem; color:#6a5590;">システムプロンプト</label>
-        <textarea id="char-prompt" rows="3" style="width:100%; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:4px; padding:4px 8px; font-size:0.85rem; resize:vertical;"></textarea>
+      <div class="btn-row" style="margin-top:16px;">
+        <button onclick="saveCharacter()">保存</button>
+        <button class="secondary" onclick="loadCharacter()">リロード</button>
       </div>
-      <div>
-        <label style="font-size:0.8rem; color:#6a5590;">ルール</label>
-        <div id="char-rules"></div>
-        <button class="secondary" style="margin-top:4px; font-size:0.75rem;" onclick="addRule()">+ ルール追加</button>
-      </div>
-      <div>
-        <label style="font-size:0.8rem; color:#6a5590;">感情</label>
-        <div id="char-emotions"></div>
-        <button class="secondary" style="margin-top:4px; font-size:0.75rem;" onclick="addEmotion()">+ 感情追加</button>
-      </div>
-      <div style="grid-column: 1 / -1;">
-        <label style="font-size:0.8rem; color:#6a5590;">感情BlendShape</label>
-        <div id="char-blendshapes"></div>
-      </div>
+      <div class="status" id="char-status"></div>
     </div>
-    <div class="btn-row" style="margin-top:10px;">
-      <button onclick="saveCharacter()">保存</button>
-      <button class="secondary" onclick="loadCharacter()">リロード</button>
-    </div>
-    <div class="status" id="char-status"></div>
   </div>
 
 </div>
 
-<div id="log"></div>
-
 <script>
 const logEl = document.getElementById('log');
+
+// --- タブ切替 ---
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  el.classList.add('active');
+}
 
 function log(msg) {
   const t = new Date().toLocaleTimeString();
@@ -367,7 +551,6 @@ async function runSetup(url) {
       showToast(`Setup失敗: ${msg}`, 'error', 8000);
       return;
     }
-    // 結果をログに出力
     const scenes = data.created_scenes || [];
     const sources = data.created_sources || [];
     const errors = data.errors || [];
@@ -424,27 +607,44 @@ async function refreshStatus() {
   try {
     const data = await (await fetch('/api/status')).json();
 
-    // OBS
-    document.getElementById('obs-dot').className = 'dot ' + (data.obs.connected ? 'on' : 'off');
-    if (data.obs.connected && data.obs.stream) {
-      const s = data.obs.stream;
-      document.getElementById('obs-status').textContent = s.active ? `配信中 ${s.timecode}` : '停止中';
+    // ステータスバー更新
+    const obsOn = data.obs.connected;
+    const vsfOn = data.vsf.connected;
+    const vtsOn = data.vts.connected;
+    const streaming = obsOn && data.obs.stream && data.obs.stream.active;
+
+    document.getElementById('sb-obs-dot').className = 'status-dot ' + (obsOn ? 'on' : 'off');
+    document.getElementById('sb-obs-text').textContent = obsOn ? '接続中' : '未接続';
+
+    document.getElementById('sb-vsf-dot').className = 'status-dot ' + (vsfOn ? 'on' : 'off');
+    let vsfText = vsfOn ? '接続中' : '未接続';
+    if (data.vsf.idle) vsfText += ' / Idle';
+    document.getElementById('sb-vsf-text').textContent = vsfText;
+
+    document.getElementById('sb-vts-dot').className = 'status-dot ' + (vtsOn ? 'on' : 'off');
+    document.getElementById('sb-vts-text').textContent = vtsOn ? '接続中' : '未接続';
+
+    if (streaming) {
+      document.getElementById('sb-stream-dot').className = 'status-dot live';
+      document.getElementById('sb-stream-text').textContent = '配信中 ' + (data.obs.stream.timecode || '');
+      document.getElementById('status-bar').classList.add('streaming');
     } else {
-      document.getElementById('obs-status').textContent = data.obs.connected ? '接続中' : '未接続';
+      document.getElementById('sb-stream-dot').className = 'status-dot off';
+      document.getElementById('sb-stream-text').textContent = '停止中';
+      document.getElementById('status-bar').classList.remove('streaming');
     }
 
-    // VTS
-    document.getElementById('vts-dot').className = 'dot ' + (data.vts.connected ? 'on' : 'off');
-    document.getElementById('vts-status').textContent = data.vts.connected ? '接続中' : '未接続';
+    // カード内ドット（OBSタブ）
+    document.getElementById('obs-dot').className = 'status-dot ' + (obsOn ? 'on' : 'off');
+    document.getElementById('obs-status').textContent = obsOn ? '接続中' : '未接続';
 
-    // VSF
-    document.getElementById('vsf-dot').className = 'dot ' + (data.vsf.connected ? 'on' : 'off');
-    let vsfText = data.vsf.connected ? '接続中' : '未接続';
-    if (data.vsf.idle) vsfText += ' / Idle実行中';
+    document.getElementById('vts-dot').className = 'status-dot ' + (vtsOn ? 'on' : 'off');
+    document.getElementById('vts-status').textContent = vtsOn ? '接続中' : '未接続';
+
+    document.getElementById('vsf-dot').className = 'status-dot ' + (vsfOn ? 'on' : 'off');
     document.getElementById('vsf-status').textContent = vsfText;
 
-    // シーン一覧
-    if (data.obs.connected) {
+    if (obsOn) {
       loadScenes();
     } else {
       document.getElementById('obs-scenes').innerHTML = '';
@@ -596,7 +796,6 @@ function saveVsfDefaults() {
     const val = parseFloat(s.value);
     if (val > 0) blendshapes[s.dataset.name] = val;
   });
-  // 表情ボタンの状態も含める
   const idle_scale = parseFloat(document.getElementById('idle-scale').value);
   api('POST', '/api/vsf/defaults/save', { idle_scale, blendshapes });
 }
@@ -604,10 +803,8 @@ function saveVsfDefaults() {
 async function loadVsfDefaults() {
   try {
     const data = await (await fetch('/api/vsf/defaults')).json();
-    // Idle倍率
     document.getElementById('idle-scale').value = data.idle_scale || 1.0;
     document.getElementById('idle-scale-val').textContent = (data.idle_scale || 1.0).toFixed(1);
-    // BlendShape
     document.querySelectorAll('.bs-slider').forEach(s => {
       const val = (data.blendshapes || {})[s.dataset.name] || 0;
       s.value = val;
@@ -645,7 +842,7 @@ function renderRules(rules) {
   rules.forEach((rule, i) => {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-    row.innerHTML = `<input type="text" class="char-rule" value="${escHtml(rule)}" style="flex:1; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;">
+    row.innerHTML = `<input type="text" class="char-rule text-input" value="${escHtml(rule)}" style="flex:1; padding:2px 6px; font-size:0.8rem;">
       <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
     el.appendChild(row);
   });
@@ -655,7 +852,7 @@ function addRule() {
   const el = document.getElementById('char-rules');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-  row.innerHTML = `<input type="text" class="char-rule" value="" style="flex:1; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;">
+  row.innerHTML = `<input type="text" class="char-rule text-input" value="" style="flex:1; padding:2px 6px; font-size:0.8rem;">
     <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
   el.appendChild(row);
 }
@@ -670,8 +867,8 @@ function renderEmotions() {
   for (const [key, desc] of Object.entries(_charEmotions)) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-    row.innerHTML = `<input type="text" class="emo-key" value="${escHtml(key)}" style="width:70px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
-      <input type="text" class="emo-desc" value="${escHtml(desc)}" style="flex:1; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
+    row.innerHTML = `<input type="text" class="emo-key text-input" value="${escHtml(key)}" style="width:70px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
+      <input type="text" class="emo-desc text-input" value="${escHtml(desc)}" style="flex:1; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
       <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
     el.appendChild(row);
   }
@@ -681,8 +878,8 @@ function addEmotion() {
   const el = document.getElementById('char-emotions');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-  row.innerHTML = `<input type="text" class="emo-key" value="" style="width:70px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
-    <input type="text" class="emo-desc" value="" style="flex:1; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
+  row.innerHTML = `<input type="text" class="emo-key text-input" value="" style="width:70px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
+    <input type="text" class="emo-desc text-input" value="" style="flex:1; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
     <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
   el.appendChild(row);
 }
@@ -702,7 +899,7 @@ function renderBlendshapes() {
   el.innerHTML = '';
   for (const [emotion, shapes] of Object.entries(_charBlendshapes)) {
     const section = document.createElement('div');
-    section.style.cssText = 'margin-bottom:8px; padding:6px; background:#ece5fa; border-radius:4px;';
+    section.style.cssText = 'margin-bottom:8px; padding:6px; background:#ece5fa; border-radius:6px;';
     const header = document.createElement('div');
     header.style.cssText = 'font-size:0.8rem; color:#7b1fa2; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;';
     header.innerHTML = `<span>${escHtml(emotion)}</span>
@@ -722,8 +919,8 @@ function renderBlendshapes() {
 function makeBlendshapeRow(name, val) {
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:2px;';
-  row.innerHTML = `<input type="text" class="bs-name" value="${escHtml(name)}" style="width:80px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 4px; font-size:0.75rem;">
-    <input type="number" class="bs-val" value="${val}" step="0.1" min="0" max="1" style="width:60px; background:#ece5fa; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; padding:2px 4px; font-size:0.75rem;">
+  row.innerHTML = `<input type="text" class="bs-name text-input" value="${escHtml(name)}" style="width:80px; padding:2px 4px; font-size:0.75rem;">
+    <input type="number" class="bs-val num-input" value="${val}" step="0.1" min="0" max="1" style="width:60px; font-size:0.75rem;">
     <button class="danger" style="font-size:0.65rem; padding:1px 4px;" onclick="this.parentElement.remove()">×</button>`;
   return row;
 }
@@ -744,7 +941,6 @@ function collectBlendshapes() {
     });
     result[emotion] = shapes;
   });
-  // 感情リストに新しいキーがあれば空で追加
   const emotions = collectEmotions();
   for (const key of Object.keys(emotions)) {
     if (!(key in result)) result[key] = {};
@@ -763,7 +959,6 @@ async function saveCharacter() {
   const res = await api('PUT', '/api/character', body);
   if (res?.ok) {
     document.getElementById('char-status').textContent = '保存しました';
-    // リロードしてBlendShapeセクションを更新
     await loadCharacter();
   }
 }
@@ -933,25 +1128,24 @@ async function loadTodoUI() {
       const text = typeof item === 'string' ? item : item.text;
       const status = typeof item === 'string' ? 'todo' : item.status;
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #d0c0e8;';
+      row.className = 'todo-item' + (status === 'in_progress' ? ' in-progress' : '');
+      const checkbox = document.createElement('span');
+      checkbox.className = 'todo-checkbox';
+      row.appendChild(checkbox);
       const label = document.createElement('span');
-      label.style.cssText = 'flex:1; font-size:0.85rem;';
+      label.className = 'todo-text';
       label.textContent = text;
-      if (status === 'in_progress') {
-        label.style.color = '#7b1fa2';
-        label.style.fontWeight = 'bold';
-      }
       row.appendChild(label);
       if (status === 'todo') {
         const btn = document.createElement('button');
         btn.textContent = '開始';
-        btn.style.cssText = 'font-size:0.75rem; padding:3px 10px;';
+        btn.className = 'secondary todo-btn';
         btn.onclick = () => startTodo(text);
         row.appendChild(btn);
       } else {
         const badge = document.createElement('span');
         badge.textContent = '作業中';
-        badge.style.cssText = 'font-size:0.7rem; color:#7b1fa2; background:#ece5fa; padding:2px 8px; border-radius:3px; border:1px solid #d0c0e8;';
+        badge.className = 'todo-badge';
         row.appendChild(badge);
       }
       el.appendChild(row);
