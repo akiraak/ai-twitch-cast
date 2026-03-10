@@ -615,7 +615,10 @@
   <div class="tab-content" id="tab-db">
     <div class="card">
       <h2>テーブル選択</h2>
-      <div id="db-tables" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+        <div id="db-tables" style="display:flex; gap:6px; flex-wrap:wrap; flex:1;"></div>
+        <button class="btn" onclick="updateUserNotes()" id="btn-update-notes" style="font-size:0.75rem; padding:4px 10px;">メモ更新</button>
+      </div>
     </div>
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -1623,6 +1626,23 @@ async function loadDbTables() {
       `<button class="db-tab${t.name === _dbCurrentTable ? ' active' : ''}" onclick="selectDbTable('${t.name}')">${esc(t.name)}<span class="db-tab-count">(${t.count})</span></button>`
     ).join('');
   } catch(e) {}
+}
+
+async function updateUserNotes() {
+  const btn = document.getElementById('btn-update-notes');
+  btn.disabled = true;
+  btn.textContent = '更新中...';
+  try {
+    const r = await fetch('/api/db/update-notes', { method: 'POST' });
+    const d = await r.json();
+    showToast(`メモ更新完了: ${d.updated}人`, 'success');
+    if (_dbCurrentTable === 'users') await loadDbData();
+  } catch(e) {
+    showToast('メモ更新失敗', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'メモ更新';
+  }
 }
 
 async function selectDbTable(name) {

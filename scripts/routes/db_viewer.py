@@ -1,8 +1,15 @@
 """DB閲覧ルート"""
 
+import asyncio
+import logging
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter
 
 from src import db
+from src.ai_responder import generate_user_notes
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -17,7 +24,7 @@ TABLES = {
         "count": "SELECT COUNT(*) as cnt FROM comments",
     },
     "users": {
-        "query": "SELECT id, name, comment_count, first_seen FROM users ORDER BY comment_count DESC LIMIT ? OFFSET ?",
+        "query": "SELECT id, name, note, comment_count, first_seen, last_seen FROM users ORDER BY comment_count DESC LIMIT ? OFFSET ?",
         "count": "SELECT COUNT(*) as cnt FROM users",
     },
     "episodes": {
@@ -48,6 +55,38 @@ async def list_tables():
         row = conn.execute(TABLES[name]["count"]).fetchone()
         result.append({"name": name, "count": row["cnt"]})
     return {"tables": result}
+
+
+@router.post("/api/db/update-notes")
+async def update_notes():
+    """ユーザーメモを手動で即時更新する"""
+    since = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    users = await asyncio.to_thread(db.get_users_commented_since, since)
+    if not users:
+        return {"ok": True, "updated": 0, "message": "対象ユーザーなし"}
+
+    users_data = []
+    for u in users:
+        comments = await asyncio.to_thread(db.get_user_recent_comments, u["name"], 10, 2)
+        if comments:
+            users_data.append({
+                "name": u["name"],
+                "note": u.get("note", ""),
+                "comments": comments,
+            })
+    if not users_data:
+        return {"ok": True, "updated": 0, "message": "コメントなし"}
+
+    logger.info("[note] 手動メモ更新中... (%d人)", len(users_data))
+    notes = await asyncio.to_thread(generate_user_notes, users_data)
+    updated = 0
+    for u in users:
+        if u["name"] in notes and notes[u["name"]]:
+            await asyncio.to_thread(db.update_user_note, u["id"], notes[u["name"]])
+            updated += 1
+
+    logger.info("[note] 手動メモ更新完了: %s", notes)
+    return {"ok": True, "updated": updated, "notes": notes}
 
 
 @router.get("/api/db/{table}")
