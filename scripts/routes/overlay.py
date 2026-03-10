@@ -117,7 +117,10 @@ async def get_todo():
         m = re.match(r"\s*-\s*\[>\]\s*(.*)", line)
         if m:
             items.append({"text": m.group(1).strip(), "status": "in_progress", "section": current_section})
-    return {"items": items}
+    # 作業中タスクを「作業中」セクションとして先頭に表示
+    in_progress = [{"text": i["text"], "status": i["status"], "section": "作業中"} for i in items if i["status"] == "in_progress"]
+    others = [i for i in items if i["status"] != "in_progress"]
+    return {"items": in_progress + others}
 
 
 @router.post("/api/todo/start")
