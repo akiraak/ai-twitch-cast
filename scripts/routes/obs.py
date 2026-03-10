@@ -193,12 +193,12 @@ async def obs_overlay_refresh():
 
 @router.post("/api/obs/overlay/enable-audio")
 async def obs_overlay_enable_audio():
-    """ブラウザソースの音声をOBSミキサーに出力し、モニタリングを有効にする"""
+    """ブラウザソースの音声をOBSミキサーに出力する（配信のみ、モニターなし）"""
     _ensure_obs()
     state.obs.set_input_settings(OVERLAY_SOURCE_NAME, {"reroute_audio": True})
-    # 音声モニタリングを「モニターと出力」に設定
+    # 音声モニタリングをオフ（配信出力のみ）
     try:
-        state.obs._client.set_input_audio_monitor_type(OVERLAY_SOURCE_NAME, "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT")
+        state.obs._client.set_input_audio_monitor_type(OVERLAY_SOURCE_NAME, "OBS_MONITORING_TYPE_NONE")
     except Exception as e:
         logger.warning("モニタリング設定失敗: %s", e)
     return {"ok": True}

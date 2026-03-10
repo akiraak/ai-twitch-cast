@@ -23,6 +23,22 @@ TODO_PATH = PROJECT_DIR / "TODO.md"
 async def overlay_ws(websocket: WebSocket):
     await websocket.accept()
     state.overlay_clients.add(websocket)
+
+    # 保存済みBGMがあれば自動再生
+    try:
+        from scripts.routes.bgm import load_bgm_settings, _effective_volume
+        bgm = load_bgm_settings()
+        track = bgm.get("track", "")
+        if track:
+            master = bgm.get("volume", 0.3)
+            await websocket.send_json({
+                "type": "bgm_play",
+                "url": f"/bgm/{track}",
+                "volume": _effective_volume(master, track),
+            })
+    except Exception:
+        pass
+
     try:
         while True:
             await websocket.receive_text()

@@ -140,7 +140,7 @@ async def start():
     overlay_name = f"{scene_config.PREFIX}オーバーレイ"
     try:
         state.obs.set_input_settings(overlay_name, {"reroute_audio": True})
-        state.obs._client.set_input_audio_monitor_type(overlay_name, "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT")
+        state.obs._client.set_input_audio_monitor_type(overlay_name, "OBS_MONITORING_TYPE_NONE")
         state.obs.refresh_browser_source(overlay_name)
     except Exception as e:
         setup_result.setdefault("errors", []).append(f"オーバーレイ音声設定: {e}")
@@ -169,6 +169,13 @@ async def startup():
     try:
         state.obs.connect()
         state.obs_connected = True
+        # 音声モニタリングをオフに設定（配信出力のみ）
+        overlay_name = f"{scene_config.PREFIX}オーバーレイ"
+        try:
+            state.obs.set_input_settings(overlay_name, {"reroute_audio": True})
+            state.obs._client.set_input_audio_monitor_type(overlay_name, "OBS_MONITORING_TYPE_NONE")
+        except Exception:
+            pass
         logger.info("OBS接続復旧OK")
     except Exception as e:
         logger.warning("OBS接続復旧失敗: %s", e)

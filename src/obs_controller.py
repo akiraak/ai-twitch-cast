@@ -369,7 +369,7 @@ class OBSController:
         for src_name in browser_sources:
             try:
                 self._client.set_input_audio_monitor_type(
-                    src_name, "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT"
+                    src_name, "OBS_MONITORING_TYPE_NONE"
                 )
                 logger.info("音声モニタリング設定: %s", src_name)
             except Exception as e:

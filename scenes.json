@@ -120,6 +120,7 @@
     }
   ],
   "bgm": {
-    "volume": 0.2
+    "volume": 1.0,
+    "track": "4K  自然環境音  湧き水が流れる川の音  鳥のさえずり　birds chirping.mp3"
   }
 }

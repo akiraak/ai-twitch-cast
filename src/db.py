@@ -85,6 +85,12 @@ def _create_tables(conn):
             detail TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS bgm_tracks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT UNIQUE NOT NULL,
+            volume REAL NOT NULL DEFAULT 1.0
+        );
     """)
     conn.commit()
     # Migration: add updated_at to characters
@@ -253,3 +259,30 @@ def get_user_comment_count(user_name):
     conn = get_connection()
     row = conn.execute("SELECT comment_count FROM users WHERE name = ?", (user_name,)).fetchone()
     return row["comment_count"] if row else 0
+
+
+# --- BGM tracks ---
+
+def get_bgm_track_volume(filename):
+    """BGMトラックの個別ボリュームを取得する（デフォルト1.0）"""
+    conn = get_connection()
+    row = conn.execute("SELECT volume FROM bgm_tracks WHERE filename = ?", (filename,)).fetchone()
+    return row["volume"] if row else 1.0
+
+
+def get_all_bgm_track_volumes():
+    """全BGMトラックのボリュームをdict{filename: volume}で返す"""
+    conn = get_connection()
+    rows = conn.execute("SELECT filename, volume FROM bgm_tracks").fetchall()
+    return {row["filename"]: row["volume"] for row in rows}
+
+
+def set_bgm_track_volume(filename, volume):
+    """BGMトラックの個別ボリュームを保存する"""
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO bgm_tracks (filename, volume) VALUES (?, ?) "
+        "ON CONFLICT(filename) DO UPDATE SET volume = excluded.volume",
+        (filename, volume),
+    )
+    conn.commit()

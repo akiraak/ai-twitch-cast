@@ -490,10 +490,9 @@
     <div class="card">
       <h2>BGM再生</h2>
       <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
-        <label class="field-label" style="margin:0;">音量</label>
+        <label class="field-label" style="margin:0; white-space:nowrap;">マスター音量</label>
         <input type="range" id="bgm-volume" min="0" max="100" value="30" style="flex:1;">
         <span id="bgm-volume-label">30%</span>
-        <button class="secondary" onclick="bgmStop()">停止</button>
       </div>
       <div id="bgm-tracks"></div>
       <div class="status" id="bgm-status"></div>
@@ -505,10 +504,6 @@
         <button onclick="ytDownload()">ダウンロード</button>
       </div>
       <div class="status" id="yt-status"></div>
-    </div>
-    <div class="card">
-      <h2>試聴（ローカル）</h2>
-      <audio id="bgm-preview" controls style="width:100%;"></audio>
     </div>
   </div>
 
@@ -1206,26 +1201,36 @@ bgmVolumeEl.addEventListener('input', () => {
 });
 bgmVolumeEl.addEventListener('change', async () => {
   const vol = parseInt(bgmVolumeEl.value) / 100;
-  await api('POST', '/api/bgm', { action: 'volume', volume: vol });
+  await api('POST', '/api/bgm', { action: 'master_volume', volume: vol });
 });
 
 async function loadBgmTracks() {
   const res = await fetch('/api/bgm/list');
   const data = await res.json();
-  // 保存済み音量を復元
-  if (data.volume !== undefined) {
-    const pct = Math.round(data.volume * 100);
-    bgmVolumeEl.value = pct;
-    bgmVolumeLabelEl.textContent = pct + '%';
-  }
+  // マスターボリューム復元
+  const masterPct = Math.round((data.master_volume ?? 0.3) * 100);
+  bgmVolumeEl.value = masterPct;
+  bgmVolumeLabelEl.textContent = masterPct + '%';
+  const currentTrack = data.track || '';
   bgmTracksEl.innerHTML = '';
   for (const t of data.tracks) {
+    const volPct = Math.round((t.volume ?? 1) * 100);
+    const isPlaying = t.file === currentTrack;
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border);';
+    row.dataset.file = t.file;
+    row.style.cssText = 'display:flex; gap:8px; align-items:center; padding:8px 6px; border-bottom:1px solid var(--border);'
+      + (isPlaying ? ' background:var(--accent-light, rgba(99,102,241,0.12)); border-radius:6px;' : '');
     row.innerHTML = `
-      <span style="flex:1; font-size:0.9rem;">${esc(t.name)}</span>
-      <button onclick="bgmPlay('${esc(t.file)}')" style="font-size:0.75rem;">再生</button>
-      <button class="secondary" onclick="bgmPreview('${esc(t.file)}')" style="font-size:0.75rem;">試聴</button>
+      ${isPlaying ? '<span style="font-size:0.8rem; margin-right:2px;">▶</span>' : ''}
+      <span style="flex:1; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${isPlaying ? ' font-weight:600; color:var(--accent, #6366f1);' : ''}">${esc(t.name)}</span>
+      <input type="range" min="0" max="100" value="${volPct}" style="width:100px;"
+        data-file="${esc(t.file)}"
+        oninput="this.nextElementSibling.textContent=this.value+'%'"
+        onchange="bgmTrackVol(this.dataset.file, this.value)">
+      <span style="font-size:0.75rem; min-width:36px; text-align:right;">${volPct}%</span>
+      ${isPlaying
+        ? `<button class="secondary" onclick="bgmStop()" style="font-size:0.75rem;">停止</button>`
+        : `<button onclick="bgmPlay('${esc(t.file)}')" style="font-size:0.75rem;">再生</button>`}
     `;
     bgmTracksEl.appendChild(row);
   }
@@ -1241,22 +1246,20 @@ function esc(s) {
 }
 
 async function bgmPlay(file) {
-  const vol = parseInt(bgmVolumeEl.value) / 100;
-  const res = await api('POST', '/api/bgm', { action: 'play', track: file, volume: vol });
-  if (res && res.ok) setStatus('bgm-status', '再生中: ' + file, 'ok');
+  const master = parseInt(bgmVolumeEl.value) / 100;
+  const res = await api('POST', '/api/bgm', { action: 'play', track: file, volume: master });
+  if (res && res.ok) loadBgmTracks();
+}
+
+async function bgmTrackVol(file, pct) {
+  await api('POST', '/api/bgm/track-volume', { filename: file, volume: parseInt(pct) / 100 });
 }
 
 async function bgmStop() {
   await api('POST', '/api/bgm', { action: 'stop' });
-  setStatus('bgm-status', '停止', 'ok');
+  loadBgmTracks();
 }
 
-function bgmPreview(file) {
-  const preview = document.getElementById('bgm-preview');
-  preview.src = '/bgm/' + file;
-  preview.volume = parseInt(bgmVolumeEl.value) / 100;
-  preview.play();
-}
 
 async function ytDownload() {
   const url = document.getElementById('yt-url').value.trim();
