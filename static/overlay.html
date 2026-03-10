@@ -139,9 +139,8 @@
     50% { transform: translateX(3px); }
   }
 
-  /* 情報パネル（左上） */
-  #info-panel {
-    display: none; /* 一時的に非表示 */
+  /* トピックパネル（左上） */
+  #topic-panel {
     position: absolute;
     top: 20px;
     left: 20px;
@@ -149,7 +148,7 @@
     max-width: 600px;
     min-width: 280px;
     background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(5, 0, 10, 0.95));
-    border: 1px solid rgba(77, 208, 255, 0.25);
+    border: 1px solid rgba(124, 77, 255, 0.3);
     border-radius: 10px;
     padding: 0;
     backdrop-filter: blur(6px);
@@ -158,63 +157,61 @@
     transition: opacity 0.4s ease;
     overflow: hidden;
   }
-  #info-panel.visible { opacity: 1; }
-  #info-panel .info-header {
+  #topic-panel.visible { opacity: 1; }
+  #topic-panel .topic-header {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 14px;
-    background: linear-gradient(90deg, rgba(77, 208, 225, 0.15), transparent);
-    border-bottom: 1px solid rgba(77, 208, 255, 0.1);
+    background: linear-gradient(90deg, rgba(124, 77, 255, 0.15), transparent);
+    border-bottom: 1px solid rgba(124, 77, 255, 0.1);
   }
-  #info-panel .info-dot {
+  #topic-panel .topic-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #4dd0e1;
-    box-shadow: 0 0 6px rgba(77, 208, 255, 0.6);
+    background: #b388ff;
+    box-shadow: 0 0 6px rgba(124, 77, 255, 0.6);
     animation: dot-pulse 2s ease-in-out infinite;
+  }
+  #topic-panel .topic-dot.paused {
+    background: #666;
+    box-shadow: none;
+    animation: none;
   }
   @keyframes dot-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
-  #info-panel .info-label {
+  #topic-panel .topic-label {
     font-size: 15px;
-    color: #4dd0e1;
+    color: #b388ff;
     font-weight: bold;
     letter-spacing: 2px;
-    text-shadow: 0 0 8px rgba(77, 208, 255, 0.3);
+    text-shadow: 0 0 8px rgba(124, 77, 255, 0.3);
   }
-  #info-panel .info-body {
-    padding: 10px 14px;
+  #topic-panel .topic-body {
+    padding: 12px 14px;
   }
-  #info-panel .info-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 4px 0;
-  }
-  #info-panel .info-row:not(:last-child) {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-  #info-panel .info-icon {
-    font-size: 20px;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-  #info-panel .info-text {
-    font-size: 22px;
-    color: #f0f0f0;
-    line-height: 1.5;
+  #topic-panel .topic-title {
+    font-size: 24px;
+    color: #ffffff;
+    font-weight: bold;
+    line-height: 1.4;
     word-break: break-word;
   }
-  #info-panel .info-time {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.45);
-    margin-left: auto;
-    flex-shrink: 0;
-    margin-top: 3px;
+  #topic-panel .topic-desc {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 6px;
+    line-height: 1.4;
+  }
+  #topic-panel .topic-stats {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
 
 </style>
@@ -232,12 +229,16 @@
   <div id="todo-list"></div>
 </div>
 
-<div id="info-panel">
-  <div class="info-header">
-    <span class="info-dot"></span>
-    <span class="info-label">ACTIVITY</span>
+<div id="topic-panel">
+  <div class="topic-header">
+    <span class="topic-dot" id="topic-dot"></span>
+    <span class="topic-label">TOPIC</span>
   </div>
-  <div class="info-body" id="info-body"></div>
+  <div class="topic-body">
+    <div class="topic-title" id="topic-title-text"></div>
+    <div class="topic-desc" id="topic-desc-text"></div>
+    <div class="topic-stats" id="topic-stats"></div>
+  </div>
 </div>
 
 
@@ -281,6 +282,16 @@ function applySettings(s) {
     // TODOを再読み込みして確実に反映
     loadTodo();
   }
+  if (s.topic) {
+    if (s.topic.positionX != null || s.topic.positionY != null) {
+      topicPanelEl.style.left = (s.topic.positionX ?? 20) + 'px';
+      topicPanelEl.style.top = (s.topic.positionY ?? 20) + 'px';
+    }
+    if (s.topic.width != null) topicPanelEl.style.width = s.topic.width + 'px';
+    if (s.topic.titleFontSize != null) {
+      document.getElementById('topic-title-text').style.fontSize = s.topic.titleFontSize + 'px';
+    }
+  }
 }
 
 function showSubtitle(data) {
@@ -309,52 +320,40 @@ function esc(s) {
   return d.innerHTML;
 }
 
-// 情報パネル（左上）
-const infoPanelEl = document.getElementById('info-panel');
-const infoBodyEl = document.getElementById('info-body');
-const MAX_INFO_ROWS = 5;
-let infoRows = [];
+// トピックパネル（左上）
+const topicPanelEl = document.getElementById('topic-panel');
 
-function addInfoRow(icon, text, label) {
-  const now = new Date();
-  const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+function updateTopicPanel(data) {
+  const titleEl = document.getElementById('topic-title-text');
+  const descEl = document.getElementById('topic-desc-text');
+  const statsEl = document.getElementById('topic-stats');
+  const dotEl = document.getElementById('topic-dot');
 
-  infoRows.push({ icon, text, time: timeStr, label: label || '' });
-  if (infoRows.length > MAX_INFO_ROWS) {
-    infoRows.shift();
+  if (!data || !data.active) {
+    topicPanelEl.classList.remove('visible');
+    return;
   }
-  renderInfoPanel();
-  infoPanelEl.classList.add('visible');
+
+  titleEl.textContent = data.topic.title;
+  descEl.textContent = data.topic.description || '';
+  descEl.style.display = data.topic.description ? '' : 'none';
+
+  const parts = [];
+  if (data.remaining_scripts != null) parts.push(`残り ${data.remaining_scripts}件`);
+  if (data.spoken_count != null) parts.push(`発話済み ${data.spoken_count}件`);
+  if (data.paused) parts.push('一時停止中');
+  statsEl.textContent = parts.join(' / ');
+
+  dotEl.classList.toggle('paused', !!data.paused);
+  topicPanelEl.classList.add('visible');
 }
 
-function setInfoLabel(label) {
-  const labelEl = infoPanelEl.querySelector('.info-label');
-  if (labelEl) labelEl.textContent = label;
-}
-
-function renderInfoPanel() {
-  infoBodyEl.innerHTML = '';
-  for (const row of infoRows) {
-    const div = document.createElement('div');
-    div.className = 'info-row';
-
-    const icon = document.createElement('span');
-    icon.className = 'info-icon';
-    icon.textContent = row.icon;
-    div.appendChild(icon);
-
-    const text = document.createElement('span');
-    text.className = 'info-text';
-    text.textContent = row.text;
-    div.appendChild(text);
-
-    const time = document.createElement('span');
-    time.className = 'info-time';
-    time.textContent = row.time;
-    div.appendChild(time);
-
-    infoBodyEl.appendChild(div);
-  }
+async function loadTopicPanel() {
+  try {
+    const res = await fetch('/api/topic');
+    const data = await res.json();
+    updateTopicPanel(data);
+  } catch (e) {}
 }
 
 // TODO読み込み
@@ -415,10 +414,8 @@ function connectWS() {
       showSubtitle(data);
     } else if (data.type === 'speaking_end') {
       fadeSubtitle();
-    } else if (data.type === 'current_task') {
-      addInfoRow('🔧', data.task);
-    } else if (data.type === 'info') {
-      addInfoRow(data.icon || '📋', data.text, data.label);
+    } else if (data.type === 'topic_update') {
+      updateTopicPanel(data);
     } else if (data.type === 'settings_update') {
       applySettings(data);
     }
@@ -443,7 +440,9 @@ async function init() {
     console.log('設定読み込みスキップ:', e.message);
   }
   await loadTodo();
+  await loadTopicPanel();
   setInterval(loadTodo, 30000);
+  setInterval(loadTopicPanel, 15000);
   connectWS();
 }
 

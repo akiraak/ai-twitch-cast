@@ -9,6 +9,7 @@ from src import db
 from src.ai_responder import get_character_id, seed_character
 from src.comment_reader import CommentReader
 from src.git_watcher import GitWatcher
+from src.topic_talker import TopicTalker
 from src.obs_controller import OBSController
 from src.scene_config import CONFIG_PATH
 from src.twitch_api import TwitchAPI
@@ -71,8 +72,11 @@ async def _dispatch_event(event: dict):
         await broadcast_overlay(event)
 
 
+# トピック管理
+topic_talker = TopicTalker()
+
 # Reader（_dispatch_event定義後に作成）
-reader = CommentReader(vsf=vsf, on_overlay=_dispatch_event)
+reader = CommentReader(vsf=vsf, on_overlay=_dispatch_event, topic_talker=topic_talker)
 
 
 async def _on_git_commit(commit_hash, message):

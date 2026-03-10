@@ -32,6 +32,7 @@ from scripts.routes.character import router as character_router
 from scripts.routes.obs import router as obs_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream import router as stream_router
+from scripts.routes.topic import router as topic_router
 from scripts.routes.twitch import router as twitch_router
 from src.ai_responder import load_character
 from src import scene_config
@@ -54,6 +55,7 @@ app.include_router(avatar_router)
 app.include_router(bgm_router)
 app.include_router(character_router)
 app.include_router(overlay_router)
+app.include_router(topic_router)
 app.include_router(twitch_router)
 
 

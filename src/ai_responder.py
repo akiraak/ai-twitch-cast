@@ -165,6 +165,94 @@ def generate_response(author, message, comment_count=0):
     return result
 
 
+def generate_topic_scripts(title, description="", count=5, already_spoken=None):
+    """トピックについての発話スクリプトを生成する（Gemini 3 Flash + Google Search + Thinking）
+
+    Args:
+        title: トピックのタイトル
+        description: トピックの説明
+        count: 生成するスクリプト数
+        already_spoken: 既に話した内容のリスト（重複回避用）
+
+    Returns:
+        list[dict]: [{"content": str, "emotion": str, "sort_order": int}, ...]
+    """
+    client = get_client()
+    char = get_character()
+    emotions = char.get("emotions", {})
+    emotion_list = ", ".join(emotions.keys())
+
+    parts = [
+        char["system_prompt"],
+        "",
+        "## タスク",
+        f"配信中に視聴者に向かって「{title}」というトピックについて自然に話すセリフを{count}個生成してください。",
+        "Web検索で最新情報を調べてから、具体的で正確な内容を盛り込んでください。",
+    ]
+    if description:
+        parts.append(f"トピックの説明: {description}")
+    parts.extend([
+        "",
+        "## ルール",
+        "- 各セリフは1〜3文で短く",
+        "- 視聴者に話しかけるような自然なトーンで",
+        "- セリフ同士は独立していて、どの順番でも自然に聞こえるように",
+        "- トピックの異なる側面や切り口を取り上げる",
+        "- 最新の情報や具体的な作品名・データを盛り込む",
+    ])
+    if already_spoken:
+        parts.append("")
+        parts.append("## 既に話した内容（重複しないでください）")
+        for s in already_spoken:
+            parts.append(f"- {s}")
+    parts.extend([
+        "",
+        "## 出力形式",
+        "以下のJSON配列で返してください。それ以外のテキストは出力しないでください。",
+        f'[{{"content": "セリフ", "emotion": "感情", "sort_order": 0}}, ...]',
+        f"emotionは次のいずれか: {emotion_list}",
+        "sort_orderは0から連番",
+    ])
+
+    system_prompt = "\n".join(parts)
+    topic_model = os.environ.get("GEMINI_TOPIC_MODEL", "gemini-3-flash-preview")
+
+    config = types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        tools=[types.Tool(google_search=types.GoogleSearch())],
+        response_mime_type="application/json",
+    )
+
+    # Gemini 3系はthinkingLevel、2.5系はthinking_config
+    if "gemini-3" in topic_model:
+        config.thinking_config = types.ThinkingConfig(thinking_level="medium")
+    elif "gemini-2.5" in topic_model:
+        # 2.5系はSearch+JSON併用不可なのでSearchなしで生成
+        config.tools = None
+        config.thinking_config = types.ThinkingConfig(thinking_budget=1024)
+
+    response = client.models.generate_content(
+        model=topic_model,
+        contents="スクリプトを生成してください",
+        config=config,
+    )
+
+    try:
+        result = json.loads(response.text)
+        if not isinstance(result, list):
+            result = [result]
+    except (json.JSONDecodeError, AttributeError):
+        result = [{"content": f"{title}について話したいんだけど...", "emotion": "neutral", "sort_order": 0}]
+
+    # emotionバリデーション
+    for item in result:
+        if item.get("emotion") not in emotions:
+            item["emotion"] = "neutral"
+        item.setdefault("sort_order", 0)
+
+    return result
+
+
 def generate_event_response(event_type, detail):
     """イベント（コミット・作業開始等）に対するAI応答を生成する
 

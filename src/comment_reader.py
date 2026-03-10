@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import tempfile
+import time
 import wave
 from collections import deque
 from pathlib import Path
@@ -19,14 +20,16 @@ from src.twitch_chat import TwitchChat
 class CommentReader:
     """Twitchコメントを読み上げるサービス"""
 
-    def __init__(self, vsf=None, on_overlay=None):
+    def __init__(self, vsf=None, on_overlay=None, topic_talker=None):
         self._chat = TwitchChat()
         self._vsf = vsf
         self._on_overlay = on_overlay
+        self._topic_talker = topic_talker
         self._queue = deque()
         self._process_task = None
         self._running = False
         self._episode_id = None
+        self._idle_since = None  # キューが空になった時刻
 
     def set_episode(self, episode_id):
         """現在のエピソードIDを設定する"""
@@ -74,12 +77,44 @@ class CommentReader:
         try:
             while self._running:
                 if self._queue:
+                    self._idle_since = None
                     author, message = self._queue.popleft()
                     await self._respond(author, message)
+                elif self._topic_talker and self._should_auto_speak():
+                    await self._auto_speak()
+                    # 発話後にidleタイマーをリセット（即座に連続発話しないように）
+                    self._idle_since = time.monotonic()
                 else:
-                    await asyncio.sleep(0.1)
+                    if self._idle_since is None:
+                        self._idle_since = time.monotonic()
+                    await asyncio.sleep(0.5)
         except asyncio.CancelledError:
             pass
+
+    def _should_auto_speak(self):
+        """自発的発話すべきかを判定する"""
+        if self._idle_since is None:
+            return False
+        idle_seconds = time.monotonic() - self._idle_since
+        return self._topic_talker.should_speak(idle_seconds)
+
+    async def _auto_speak(self):
+        """トピックに基づいて自発的に発話する"""
+        try:
+            script = await self._topic_talker.get_next()
+            if not script:
+                return
+            logger.info("[topic] 自発的発話: [%s] %s", script["emotion"], script["content"])
+            self._apply_emotion(script["emotion"])
+            await self._speak(script["content"], subtitle={
+                "author": "ちょび",
+                "message": script["content"],
+                "result": {"response": script["content"], "emotion": script["emotion"], "english": ""},
+            }, chat_result={"response": script["content"], "english": ""})
+            self._apply_emotion("neutral")
+            await self._notify_overlay_end()
+        except Exception as e:
+            logger.error("自発的発話失敗: %s", e)
 
     async def _respond(self, author, message):
         """1件のコメントにAIで応答して読み上げる"""
@@ -94,6 +129,8 @@ class CommentReader:
             }, chat_result=result)
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
+            if self._topic_talker:
+                self._topic_talker.mark_spoken()
         except Exception as e:
             logger.error("応答失敗: %s", e)
 
@@ -220,6 +257,8 @@ class CommentReader:
             }, chat_result=result)
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
+            if self._topic_talker:
+                self._topic_talker.mark_spoken()
         except Exception as e:
             logger.error("イベント発話失敗: %s", e)
 

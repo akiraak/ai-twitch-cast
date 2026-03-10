@@ -91,6 +91,24 @@ def _create_tables(conn):
             filename TEXT UNIQUE NOT NULL,
             volume REAL NOT NULL DEFAULT 1.0
         );
+
+        CREATE TABLE IF NOT EXISTS topics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS topic_scripts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_id INTEGER NOT NULL REFERENCES topics(id),
+            content TEXT NOT NULL,
+            emotion TEXT NOT NULL DEFAULT 'neutral',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            spoken_at TEXT,
+            created_at TEXT NOT NULL
+        );
     """)
     conn.commit()
     # Migration: add updated_at to characters
@@ -286,3 +304,111 @@ def set_bgm_track_volume(filename, volume):
         (filename, volume),
     )
     conn.commit()
+
+
+# --- topics ---
+
+def create_topic(title, description=""):
+    """トピックを作成する"""
+    conn = get_connection()
+    cur = conn.execute(
+        "INSERT INTO topics (title, description, status, created_at) VALUES (?, ?, 'active', ?)",
+        (title, description, _now()),
+    )
+    conn.commit()
+    return dict(conn.execute("SELECT * FROM topics WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def get_active_topic():
+    """アクティブなトピックを取得する"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM topics WHERE status = 'active' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def deactivate_topic(topic_id):
+    """トピックを完了にする"""
+    conn = get_connection()
+    conn.execute("UPDATE topics SET status = 'completed' WHERE id = ?", (topic_id,))
+    conn.commit()
+
+
+def deactivate_all_topics():
+    """全アクティブトピックを完了にする"""
+    conn = get_connection()
+    conn.execute("UPDATE topics SET status = 'completed' WHERE status = 'active'")
+    conn.commit()
+
+
+# --- topic_scripts ---
+
+def add_topic_scripts(topic_id, scripts):
+    """トピックにスクリプトを一括追加する
+
+    Args:
+        topic_id: トピックID
+        scripts: list of {"content": str, "emotion": str, "sort_order": int}
+    """
+    conn = get_connection()
+    now = _now()
+    for s in scripts:
+        conn.execute(
+            "INSERT INTO topic_scripts (topic_id, content, emotion, sort_order, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (topic_id, s["content"], s.get("emotion", "neutral"), s.get("sort_order", 0), now),
+        )
+    conn.commit()
+
+
+def get_next_unspoken_script(topic_id):
+    """未発話のスクリプトを1件取得する"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM topic_scripts WHERE topic_id = ? AND spoken_at IS NULL "
+        "ORDER BY sort_order, id LIMIT 1",
+        (topic_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def mark_script_spoken(script_id):
+    """スクリプトを発話済みにする"""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE topic_scripts SET spoken_at = ? WHERE id = ?",
+        (_now(), script_id),
+    )
+    conn.commit()
+
+
+def count_unspoken_scripts(topic_id):
+    """未発話スクリプトの件数を返す"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) as cnt FROM topic_scripts WHERE topic_id = ? AND spoken_at IS NULL",
+        (topic_id,),
+    ).fetchone()
+    return row["cnt"]
+
+
+def get_spoken_scripts(topic_id):
+    """発話済みスクリプトを取得する"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM topic_scripts WHERE topic_id = ? AND spoken_at IS NOT NULL "
+        "ORDER BY spoken_at",
+        (topic_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_all_scripts(topic_id):
+    """トピックの全スクリプトを取得する"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM topic_scripts WHERE topic_id = ? ORDER BY sort_order, id",
+        (topic_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
