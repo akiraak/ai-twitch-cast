@@ -82,15 +82,17 @@ ai-twitch-cast/
 │   └── comment_reader.py     # Twitchコメント読み上げ
 ├── static/                   # Webインターフェース静的ファイル
 │   ├── index.html            # Web UI（Lavenderテーマ、タブ構成）
-│   └── overlay.html          # OBSオーバーレイ（TODO・情報パネル・字幕・音声再生）
+│   ├── overlay.html          # OBSオーバーレイ（TODO・情報パネル・字幕、表示専用）
+│   ├── audio-tts.html        # TTS音声再生用ブラウザソース（WebSocket /ws/tts）
+│   └── audio-bgm.html        # BGM音声再生用ブラウザソース（WebSocket /ws/bgm）
 ├── resources/                # リソース（画像・モデル・音声・動画）
 │   ├── images/
 │   ├── live2d/
 │   ├── vrm/                  # VRMモデル
 │   ├── audio/
 │   └── video/
-├── run.sh                    # サーバー起動スクリプト（再起動ループ+PIDファイル管理）
-├── scenes.json               # シーン構成設定（シーン・ソース・アバター配置）
+├── run.sh                    # サーバー起動スクリプト（再起動ループ+PIDファイル管理+二重起動防止）
+├── scenes.json               # シーン構成設定（シーン・ソース・アバター配置・音量設定）
 ├── mkdocs.yml                # MkDocs設定
 ├── requirements.txt          # Python依存パッケージ
 ├── .env.example              # 環境変数テンプレート
@@ -117,10 +119,24 @@ ai-twitch-cast/
 ## Webサーバー運用注意
 
 - Webサーバーは `./run.sh` で起動（`.env` の `WEB_PORT` を自動読み込み、デフォルト8080）
+- **二重起動防止**: `run.sh` は起動時に既存プロセスをPIDファイル＋ポート使用チェックで自動停止する
 - **`--reload` は使わない**。コード変更はコミット時に自動反映される（post-commit hookがサーバーを再起動）
 - コミット時の動作: post-commit hook → `.pending_commit` にコミット情報保存 → サーバーkill → run.shが自動再起動 → startup復旧（OBS・アバター・Reader・Git監視） → コミット読み上げ
 - **Setup済みの状態は `.server_state` ファイルで管理**。このファイルが存在する場合、サーバー起動時に自動復旧する
 - OBSのブラウザソースはHTMLをキャッシュするため、overlay.html等を変更した場合はSetupボタン押下またはOBS側でブラウザソースの「キャッシュを無視してページをリフレッシュ」が必要
+
+## 音声アーキテクチャ
+
+- **3つの独立したOBSブラウザソース**で音声を管理:
+  - `[ATC]オーバーレイ` — 表示のみ（`reroute_audio: false`）
+  - `[ATC]TTS音声` — 読み上げ再生（`reroute_audio: true`、WebSocket `/ws/tts`）
+  - `[ATC]BGM` — BGM再生（`reroute_audio: true`、WebSocket `/ws/bgm`）
+- **音量制御はOBS `SetInputVolume` APIのみ**。`reroute_audio: true` はブラウザ側の音量制御（HTML5 audio.volume / Web Audio API）を完全にバイパスするため
+- **実効音量の計算**:
+  - 読み上げ: `master × tts`
+  - BGM: `master × bgm × 曲音量`
+- **保存先**: マスター・TTS・BGM音量 → `scenes.json` の `audio_volumes`、曲別音量 → SQLite DB
+- **モニタリング**: `OBS_MONITORING_TYPE_NONE`（配信出力のみ、ローカルモニターなし）
 
 ## 機能変更時の必須チェック（リグレッション防止）
 
@@ -162,7 +178,7 @@ curl -s http://localhost:$WEB_PORT/api/obs/diag | python -m json.tool
 | TODO表示 | OBS画面にTODOリストが表示される |
 | 情報パネル | 左上にACTIVITYパネルが表示される（汎用ログ） |
 | 字幕表示 | コメント応答時に下部に字幕が出る |
-| TTS音声 | コメント応答時に音声が再生される |
+| TTS音声 | コメント応答時に `[ATC]TTS音声` ブラウザソース経由で音声が再生される |
 | アバター表示 | OBS画面にアバターが表示される |
 | ターミナル表示 | OBS画面にターミナルが表示される |
 | WebSocket接続 | overlay.htmlがWebSocketで接続している（ブラウザDevToolsで確認） |
