@@ -1212,6 +1212,12 @@ bgmVolumeEl.addEventListener('change', async () => {
 async function loadBgmTracks() {
   const res = await fetch('/api/bgm/list');
   const data = await res.json();
+  // 保存済み音量を復元
+  if (data.volume !== undefined) {
+    const pct = Math.round(data.volume * 100);
+    bgmVolumeEl.value = pct;
+    bgmVolumeLabelEl.textContent = pct + '%';
+  }
   bgmTracksEl.innerHTML = '';
   for (const t of data.tracks) {
     const row = document.createElement('div');
