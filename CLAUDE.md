@@ -66,8 +66,8 @@ ai-twitch-cast/
 │   ├── scene_config.py       # シーン構成の定義（scenes.jsonから読み込み）
 │   ├── tts.py                # TTS音声合成（Gemini 2.5 Flash TTS）
 │   ├── twitch_chat.py        # Twitchチャット受信
-│   ├── ai_responder.py       # AI応答生成（DB管理のキャラクター設定ベース）
-│   ├── comment_reader.py     # コメント読み上げサービス
+│   ├── ai_responder.py       # AI応答生成（会話履歴・配信コンテキスト・ユーザーメモ対応）
+│   ├── comment_reader.py     # コメント読み上げサービス（15分バッチでユーザーメモ更新）
 │   ├── topic_talker.py       # トピック管理と自発的発話
 │   ├── git_watcher.py        # Gitコミット監視（クールダウン60秒+バッチ通知）
 │   ├── db.py                 # データベース管理（SQLite）
@@ -78,7 +78,7 @@ ai-twitch-cast/
 │   ├── console.py            # 対話式コンソール
 │   ├── web.py                # Webインターフェース（startup自動復旧・shutdownハンドラ付き）
 │   ├── state.py              # 共有状態（コントローラー・WebSocket・GitWatcher）
-│   ├── routes/               # ルートモジュール（obs/stream/avatar/character/overlay/twitch/topic）
+│   ├── routes/               # ルートモジュール（obs/stream/avatar/character/overlay/twitch/topic/bgm/db_viewer）
 │   ├── deploy_model.py       # Live2Dモデルデプロイ
 │   ├── convert_to_vrm.py     # FBX→VRM変換（Blenderスクリプト）
 │   ├── fix_vrm_mtoon.py      # VRM MToonシェーダ修正
