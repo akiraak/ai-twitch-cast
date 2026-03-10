@@ -148,13 +148,26 @@ class VSFController:
         s = scale
         t0 = time.time()
         next_blink = t0 + random.uniform(2.0, 5.0)
+        blink_end = 0.0
         next_ear_twitch = t0 + random.uniform(3.0, 8.0)
         ear_twitch_end = 0.0
+        ear_twitch_start = 0.0
+        ear_twitch_duration = 0.2
+
+        frame_interval = 1.0 / 30
+        next_frame = time.time()
 
         while not self._idle_stop.is_set():
             try:
-                t = time.time() - t0
                 now = time.time()
+                # フレームタイミング調整（一定間隔を維持）
+                sleep_time = next_frame - now
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                    now = time.time()
+                next_frame = now + frame_interval
+
+                t = now - t0
 
                 # --- 呼吸: 胸が前後にゆっくり動く (約4秒周期) ---
                 breath = math.sin(t * 1.6) * 0.8 * s
@@ -194,16 +207,26 @@ class VSFController:
                 # --- BlendShapeをフレームごとにまとめて送信 ---
                 frame_shapes = {}
 
+                # まばたき: フレームベース（ブロッキングsleep廃止）
+                if now >= next_blink and blink_end == 0.0:
+                    blink_end = now + 0.08
+                if blink_end > 0:
+                    if now < blink_end:
+                        frame_shapes["Blink"] = 1.0
+                    else:
+                        frame_shapes["Blink"] = 0.0
+                        blink_end = 0.0
+                        next_blink = now + random.uniform(2.0, 6.0)
+
                 # 耳ぴくぴく: ランダム間隔で耳を動かす
                 if now >= next_ear_twitch and now >= ear_twitch_end:
-                    twitch_duration = random.uniform(0.15, 0.3)
-                    ear_twitch_end = now + twitch_duration
-                    self._ear_twitch_start = now
-                    self._ear_twitch_duration = twitch_duration
+                    ear_twitch_duration = random.uniform(0.15, 0.3)
+                    ear_twitch_end = now + ear_twitch_duration
+                    ear_twitch_start = now
                     next_ear_twitch = now + random.uniform(3.0, 10.0)
 
                 if now < ear_twitch_end:
-                    progress = (now - self._ear_twitch_start) / self._ear_twitch_duration
+                    progress = (now - ear_twitch_start) / ear_twitch_duration
                     frame_shapes["ear_stand"] = math.sin(progress * math.pi)
                 else:
                     frame_shapes["ear_stand"] = 0.0
@@ -223,14 +246,6 @@ class VSFController:
 
                 self._send_blend_apply(frame_shapes)
 
-                # まばたき: ランダム間隔
-                if now >= next_blink:
-                    self._send_blend_apply({"Blink": 1.0})
-                    time.sleep(0.08)
-                    self._send_blend_apply({"Blink": 0.0})
-                    next_blink = now + random.uniform(2.0, 6.0)
-
-                time.sleep(1 / 30)  # 30fps
             except Exception as e:
                 logger.warning("idle loop エラー (継続): %s", e)
                 time.sleep(0.1)
