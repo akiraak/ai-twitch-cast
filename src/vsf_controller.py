@@ -23,6 +23,10 @@ class VSFController:
         self._client = None
         self._idle_thread = None
         self._idle_stop = threading.Event()
+        # リップシンク状態
+        self._lipsync_frames = None
+        self._lipsync_start = 0.0
+        self._lipsync_lock = threading.Lock()
 
     def connect(self):
         """OSCクライアントを作成する"""
@@ -120,6 +124,18 @@ class VSFController:
             aw * bw - ax * bx - ay * by - az * bz,
         )
 
+    def start_lipsync(self, frames):
+        """リップシンクを開始する（振幅フレームデータを設定）"""
+        with self._lipsync_lock:
+            self._lipsync_frames = frames
+            self._lipsync_start = time.time()
+
+    def stop_lipsync(self):
+        """リップシンクを停止する"""
+        with self._lipsync_lock:
+            self._lipsync_frames = None
+        self._send_blend_apply({"A": 0.0})
+
     def _idle_loop(self, scale):
         """待機モーションのメインループ（専用スレッドで実行）
 
@@ -175,7 +191,10 @@ class VSFController:
                 self.set_bone("RightLowerArm", qx=q_rf[0], qy=q_rf[1], qz=q_rf[2], qw=q_rf[3])
                 self.set_bone("LeftLowerArm", qx=q_lf[0], qy=q_lf[1], qz=q_lf[2], qw=q_lf[3])
 
-                # --- 耳ぴくぴく: ランダム間隔でBlendShapeで耳を動かす ---
+                # --- BlendShapeをフレームごとにまとめて送信 ---
+                frame_shapes = {}
+
+                # 耳ぴくぴく: ランダム間隔で耳を動かす
                 if now >= next_ear_twitch and now >= ear_twitch_end:
                     twitch_duration = random.uniform(0.15, 0.3)
                     ear_twitch_end = now + twitch_duration
@@ -185,16 +204,30 @@ class VSFController:
 
                 if now < ear_twitch_end:
                     progress = (now - self._ear_twitch_start) / self._ear_twitch_duration
-                    ear_val = math.sin(progress * math.pi)
-                    self._send_blend_apply({"ear_stand": ear_val})
+                    frame_shapes["ear_stand"] = math.sin(progress * math.pi)
                 else:
-                    self._send_blend_apply({"ear_stand": 0.0})
+                    frame_shapes["ear_stand"] = 0.0
 
-                # --- まばたき: ランダム間隔 ---
+                # リップシンク: 音声振幅に合わせて口を動かす
+                with self._lipsync_lock:
+                    ls_frames = self._lipsync_frames
+                    ls_start = self._lipsync_start
+                if ls_frames is not None:
+                    frame_idx = int((now - ls_start) * 30)
+                    if 0 <= frame_idx < len(ls_frames):
+                        frame_shapes["A"] = ls_frames[frame_idx]
+                    else:
+                        with self._lipsync_lock:
+                            self._lipsync_frames = None
+                        frame_shapes["A"] = 0.0
+
+                self._send_blend_apply(frame_shapes)
+
+                # まばたき: ランダム間隔
                 if now >= next_blink:
-                    self.set_blendshape("Blink", 1.0)
+                    self._send_blend_apply({"Blink": 1.0})
                     time.sleep(0.08)
-                    self.set_blendshape("Blink", 0.0)
+                    self._send_blend_apply({"Blink": 0.0})
                     next_blink = now + random.uniform(2.0, 6.0)
 
                 time.sleep(1 / 30)  # 30fps

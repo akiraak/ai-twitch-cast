@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 from src import db
 from src.ai_responder import generate_event_response, generate_response, get_character
+from src.lipsync import analyze_amplitude
 from src.tts import synthesize
 from src.twitch_chat import TwitchChat
 
@@ -158,12 +159,24 @@ class CommentReader:
         # 音声ファイルパスを保持（APIで配信用）
         self._current_audio = wav_path
 
+        # リップシンク用振幅解析
+        lipsync_frames = None
+        if self._vsf:
+            try:
+                lipsync_frames = await asyncio.to_thread(analyze_amplitude, wav_path)
+            except Exception as e:
+                logger.warning("リップシンク解析失敗: %s", e)
+
         if self._on_overlay:
             # 字幕を音声と同時に送信（TTS生成完了後）
             if subtitle:
                 await self._notify_overlay(
                     subtitle["author"], subtitle["message"], subtitle["result"],
                 )
+
+            # リップシンク開始（音声再生と同時）
+            if self._vsf and lipsync_frames:
+                self._vsf.start_lipsync(lipsync_frames)
 
             # 音声再生を指示
             import time
@@ -176,6 +189,10 @@ class CommentReader:
             with wave.open(str(wav_path), "rb") as wf:
                 duration = wf.getnframes() / wf.getframerate()
             await asyncio.sleep(duration + 0.5)
+
+            # リップシンク停止
+            if self._vsf and lipsync_frames:
+                self._vsf.stop_lipsync()
 
         # 再生後にクリーンアップ
         wav_path.unlink(missing_ok=True)
