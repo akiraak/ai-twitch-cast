@@ -1446,6 +1446,7 @@ async function loadBgmTracks() {
         ${isPlaying
           ? `<button class="secondary" onclick="bgmStop()" style="font-size:0.75rem;">停止</button>`
           : `<button onclick="bgmPlay('${esc(t.file)}')" style="font-size:0.75rem;">再生</button>`}
+        <button class="btn-danger" onclick="bgmDelete('${esc(t.file)}')" style="font-size:0.7rem; padding:2px 6px;" title="削除">×</button>
       </div>
       <div class="vol-row" style="margin-top:4px;">
         <span class="vol-label">曲音量</span>
@@ -1480,6 +1481,15 @@ async function bgmPlay(file) {
 async function bgmStop() {
   await api('POST', '/api/bgm', { action: 'stop' });
   loadBgmTracks();
+}
+
+async function bgmDelete(file) {
+  if (!confirm('「' + file + '」を削除しますか？')) return;
+  const res = await api('DELETE', '/api/bgm/track', { file });
+  if (res && res.ok) {
+    toast('削除しました');
+    loadBgmTracks();
+  }
 }
 
 

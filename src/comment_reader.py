@@ -383,6 +383,7 @@ class CommentReader:
             await asyncio.to_thread(
                 db.save_comment, self._episode_id, user["id"], message, response, emotion,
             )
+            await asyncio.to_thread(db.increment_comment_count, user["id"])
             logger.info("[avatar-save] 保存OK: ep=%s, msg=%s", self._episode_id, message[:30])
         except Exception as e:
             logger.warning("アバター発話DB保存失敗: %s", e)

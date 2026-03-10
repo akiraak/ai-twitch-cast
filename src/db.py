@@ -388,6 +388,13 @@ def set_bgm_track_volume(filename, volume):
     conn.commit()
 
 
+def delete_bgm_track_volume(filename):
+    """BGMトラックのボリュームレコードを削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM bgm_tracks WHERE filename = ?", (filename,))
+    conn.commit()
+
+
 # --- topics ---
 
 def create_topic(title, description=""):

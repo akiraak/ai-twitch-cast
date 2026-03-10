@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter
 
 from src import db
-from src.ai_responder import generate_user_notes
+from src.ai_responder import generate_self_note, generate_user_notes, get_character
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,23 @@ async def update_notes():
             updated += 1
 
     logger.info("[note] 手動メモ更新完了: %s", notes)
+
+    # アバター自身のメモも更新
+    try:
+        char_name = get_character().get("name", "ちょビ")
+        avatar_user = await asyncio.to_thread(db.get_or_create_user, char_name)
+        recent = await asyncio.to_thread(db.get_recent_comments, 20, 2)
+        if recent:
+            current_note = avatar_user.get("note", "")
+            new_note = await asyncio.to_thread(generate_self_note, recent, current_note)
+            if new_note and new_note != current_note:
+                await asyncio.to_thread(db.update_user_note, avatar_user["id"], new_note)
+                updated += 1
+                notes[char_name] = new_note
+                logger.info("[note] アバターメモ更新: %s", new_note)
+    except Exception as e:
+        logger.warning("[note] アバターメモ更新失敗: %s", e)
+
     return {"ok": True, "updated": updated, "notes": notes}
 
 
