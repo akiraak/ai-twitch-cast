@@ -86,6 +86,11 @@ def _create_tables(conn):
             created_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS bgm_tracks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT UNIQUE NOT NULL,
@@ -501,3 +506,32 @@ def get_all_scripts(topic_id):
         (topic_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# --- settings ---
+
+def get_setting(key, default=None):
+    """設定値を取得する"""
+    conn = get_connection()
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(key, value):
+    """設定値を保存する"""
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, str(value)),
+    )
+    conn.commit()
+
+
+def get_settings_by_prefix(prefix):
+    """プレフィックスに一致する設定をdict{key: value}で返す"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT key, value FROM settings WHERE key LIKE ?", (prefix + "%",)
+    ).fetchall()
+    return {row["key"]: row["value"] for row in rows}

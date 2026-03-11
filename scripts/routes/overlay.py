@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from scripts import state
+from src import db
 from src.scene_config import CONFIG_PATH
 
 router = APIRouter()
@@ -81,18 +82,21 @@ async def broadcast_ws(websocket: WebSocket):
             })
     except Exception:
         pass
-    # 音量設定を送信
+    # 音量設定を送信（DB優先、なければscenes.jsonのデフォルト）
     try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
-        vols = config.get("audio_volumes", {})
-        for source in ("master", "tts", "bgm"):
-            if source in vols:
-                await websocket.send_json({
-                    "type": "volume",
-                    "source": source,
-                    "volume": vols[source],
-                })
+        try:
+            with open(CONFIG_PATH, encoding="utf-8") as f:
+                defaults = json.load(f).get("audio_volumes", {})
+        except Exception:
+            defaults = {}
+        for source, fallback in [("master", 0.8), ("tts", 0.8), ("bgm", 1.0)]:
+            val = db.get_setting(f"volume.{source}")
+            vol = float(val) if val is not None else defaults.get(source, fallback)
+            await websocket.send_json({
+                "type": "volume",
+                "source": source,
+                "volume": vol,
+            })
     except Exception:
         pass
     try:
@@ -114,10 +118,18 @@ async def broadcast_ui_page():
 
 @router.get("/api/broadcast/volumes")
 async def get_broadcast_volumes():
-    """broadcast.html用の音量設定を返す"""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    return config.get("audio_volumes", {"master": 0.8, "tts": 0.8, "bgm": 1.0})
+    """broadcast.html用の音量設定を返す（DB優先、なければscenes.jsonのデフォルト）"""
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            config = json.load(f)
+        defaults = config.get("audio_volumes", {})
+    except Exception:
+        defaults = {}
+    result = {}
+    for key, fallback in [("master", 0.8), ("tts", 0.8), ("bgm", 1.0)]:
+        val = db.get_setting(f"volume.{key}")
+        result[key] = float(val) if val is not None else defaults.get(key, fallback)
+    return result
 
 
 @router.get("/overlay", response_class=HTMLResponse)

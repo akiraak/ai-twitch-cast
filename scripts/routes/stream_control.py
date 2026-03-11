@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from scripts import state
+from src import db
 from src.scene_config import CONFIG_PATH
 
 logger = logging.getLogger(__name__)
@@ -94,8 +95,8 @@ class VolumeRequest(BaseModel):
     volume: float
 
 
-def _load_audio_volumes():
-    """scenes.jsonからaudio_volumesを読み込む"""
+def _get_default_volumes():
+    """scenes.jsonからデフォルト音量を読み込む"""
     try:
         with open(CONFIG_PATH, encoding="utf-8") as f:
             config = json.load(f)
@@ -104,42 +105,34 @@ def _load_audio_volumes():
         return {}
 
 
-def _save_audio_volumes(volumes):
-    """audio_volumesをscenes.jsonに保存する"""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    config["audio_volumes"] = volumes
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+def _get_volume(source):
+    """DBから音量を取得（なければscenes.jsonのデフォルト値）"""
+    val = db.get_setting(f"volume.{source}")
+    if val is not None:
+        return float(val)
+    defaults = _get_default_volumes()
+    return defaults.get(source, {"master": 0.8, "tts": 0.8, "bgm": 1.0}.get(source, 1.0))
 
 
 @router.get("/api/broadcast/volume")
 async def broadcast_get_volumes():
     """音量設定を取得"""
-    volumes = _load_audio_volumes()
     return {
-        "master": volumes.get("master", 0.8),
-        "tts": volumes.get("tts", 0.8),
-        "bgm": volumes.get("bgm", 1.0),
+        "master": _get_volume("master"),
+        "tts": _get_volume("tts"),
+        "bgm": _get_volume("bgm"),
     }
 
 
 @router.post("/api/broadcast/volume")
 async def broadcast_set_volume(body: VolumeRequest):
-    """音量を設定してscenes.jsonに保存し、broadcast.htmlに反映する"""
+    """音量を設定してDBに保存し、broadcast.htmlに反映する"""
     if body.source not in ("master", "tts", "bgm"):
         raise HTTPException(status_code=400, detail=f"不明なソース: {body.source}")
 
-    volumes = _load_audio_volumes()
-    volumes[body.source] = body.volume
-    _save_audio_volumes(volumes)
+    db.set_setting(f"volume.{body.source}", body.volume)
 
-    # broadcast.htmlに音量変更を送信
-    if body.source == "master":
-        await state.stream.set_volume("master", body.volume)
-    else:
-        await state.stream.set_volume(body.source, body.volume)
+    await state.stream.set_volume(body.source, body.volume)
 
     return {"ok": True}
 
