@@ -32,29 +32,7 @@
     object-fit: contain;
   }
 
-  /* === シーン切替 === */
-  .scene-main, .scene-start, .scene-end { display: none; }
-  body[data-scene="main"] .scene-main { display: block; }
-  body[data-scene="start"] .scene-start { display: flex; }
-  body[data-scene="end"] .scene-end { display: flex; }
-
-  /* 開始・終了画面のテキスト */
-  .scene-text-overlay {
-    position: absolute; top: 0; left: 0;
-    width: 1920px; height: 1080px;
-    z-index: 50;
-    align-items: center; justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
-  }
-  .scene-text-overlay .scene-text {
-    font-size: 72px;
-    color: #ffffff;
-    font-weight: bold;
-    text-align: center;
-    text-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
-    white-space: pre-line;
-    line-height: 1.5;
-  }
+  /* === シーン切替（将来拡張用） === */
 
   /* === リアルタイム字幕（下中央） === */
   #subtitle {
@@ -236,13 +214,13 @@
   }
 </style>
 </head>
-<body data-scene="main">
+<body>
 
 <!-- 背景画像 -->
 <img id="background" src="/resources/images/background.png" alt="">
 
 <!-- メインシーン -->
-<div class="scene-main">
+<div>
   <!-- アバター（Three.js VRMレンダリング） -->
   <div id="avatar-area">
     <canvas id="avatar-canvas"></canvas>
@@ -276,15 +254,6 @@
   </div>
 </div>
 
-<!-- 開始画面 -->
-<div class="scene-start scene-text-overlay">
-  <div class="scene-text">まもなく開始</div>
-</div>
-
-<!-- 終了画面 -->
-<div class="scene-end scene-text-overlay">
-  <div class="scene-text">配信終了&#10;ご視聴ありがとうございました</div>
-</div>
 
 <!-- 音声要素（非表示） -->
 <audio id="tts-audio"></audio>
@@ -717,12 +686,6 @@ function connectWS() {
         }
         break;
 
-      // シーン切替
-      case 'scene':
-        if (data.name) {
-          document.body.dataset.scene = data.name;
-        }
-        break;
 
       // VRMアバター制御
       case 'blendshape':

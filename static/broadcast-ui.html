@@ -132,6 +132,13 @@
 </div>
 
 <div class="main">
+  <!-- 配信プレビュー -->
+  <div style="margin-bottom:16px;">
+    <div style="position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:8px; overflow:hidden; border:1px solid #d0c0e8;">
+      <iframe id="preview-iframe" src="/broadcast" style="width:1920px; height:1080px; border:none; transform-origin:top left;" allowtransparency="true"></iframe>
+    </div>
+  </div>
+
   <div class="grid">
 
     <!-- 配信制御 -->
@@ -488,11 +495,22 @@ async function loadAvatarUrl() {
   } catch (e) {}
 }
 
+// --- プレビューiframeスケーリング ---
+function scalePreview() {
+  const iframe = document.getElementById('preview-iframe');
+  const container = iframe.parentElement;
+  const scale = container.clientWidth / 1920;
+  iframe.style.transform = `scale(${scale})`;
+  container.style.height = (1080 * scale) + 'px';
+}
+window.addEventListener('resize', scalePreview);
+
 // --- 初期化 ---
 loadVolumes();
 loadAvatarUrl();
 refreshStatus();
 setInterval(refreshStatus, 5000);
+scalePreview();
 </script>
 </body>
 </html>
