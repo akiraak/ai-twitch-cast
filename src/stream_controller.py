@@ -101,7 +101,7 @@ class StreamController:
 
         stream_key = os.environ.get("TWITCH_STREAM_KEY", "")
         if not stream_key:
-            raise ValueError("TWITCH_STREAM_KEY が設定されていません")
+            raise ValueError("TWITCH_STREAM_KEY が .env に設定されていません。Twitchダッシュボードからストリームキーを取得して .env に追加してください")
 
         rtmp_url = f"rtmp://live-tyo.twitch.tv/app/{stream_key}"
         width, height = self._resolution.split("x")
