@@ -6,7 +6,7 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    width: 1920px; height: 1080px;
+    width: 1280px; height: 720px;
     position: relative; overflow: hidden;
     font-family: "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
     background: #000;
@@ -15,7 +15,7 @@
   /* === 背景 === */
   #background {
     position: absolute; top: 0; left: 0;
-    width: 1920px; height: 1080px;
+    width: 1280px; height: 720px;
     z-index: 0;
     object-fit: cover;
   }
@@ -25,7 +25,7 @@
     position: absolute;
     z-index: 5;
     right: 0; bottom: 0;
-    width: 1028px; height: 818px;
+    width: 685px; height: 545px;
   }
   #avatar-area img, #avatar-area canvas {
     width: 100%; height: 100%;
@@ -45,8 +45,8 @@
     border: 1px solid rgba(124, 77, 255, 0.3);
     border-radius: 16px;
     padding: 20px 32px;
-    max-width: 1200px;
-    min-width: 400px;
+    max-width: 800px;
+    min-width: 280px;
     text-align: center;
     opacity: 0;
     transition: opacity 0.4s ease;
@@ -57,7 +57,7 @@
   #subtitle.fading { opacity: 0; transition: opacity 1.5s ease; }
   #subtitle .comment { display: none; }
   #subtitle .response {
-    font-size: 36px;
+    font-size: 24px;
     color: #ffffff;
     font-weight: bold;
     margin-bottom: 10px;
@@ -278,11 +278,11 @@ import * as VRM from '@pixiv/three-vrm';
 // === VRMアバターレンダラー ===
 const canvas = document.getElementById('avatar-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-renderer.setSize(1028, 818);
+renderer.setSize(685, 545);
 renderer.setPixelRatio(1);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(20, 1028 / 818, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(20, 685 / 545, 0.1, 100);
 camera.position.set(0, 1.2, 3.0);
 camera.lookAt(0, 1.1, 0);
 
