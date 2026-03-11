@@ -188,10 +188,36 @@ class StreamController:
 
     # === 内部メソッド ===
 
+    def _cleanup_stale_xvfb(self):
+        """前回のサーバー再起動で残ったXvfbプロセスとロックファイルを掃除"""
+        import glob
+        display_num = self._display.lstrip(":")
+        lock_file = f"/tmp/.X{display_num}-lock"
+        socket_file = f"/tmp/.X11-unix/X{display_num}"
+
+        # 古いXvfbプロセスをkill
+        try:
+            result = subprocess.run(
+                ["pkill", "-f", f"Xvfb {self._display}"],
+                capture_output=True, timeout=3,
+            )
+        except Exception:
+            pass
+
+        # ロックファイル削除
+        for f in [lock_file, socket_file]:
+            try:
+                os.remove(f)
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                logger.warning("ロックファイル削除失敗 %s: %s", f, e)
+
     async def _start_xvfb(self):
         """Xvfb仮想ディスプレイを起動"""
         # 既存プロセスがあれば停止
         self._stop_process("xvfb", self._xvfb_proc)
+        self._cleanup_stale_xvfb()
 
         cmd = [
             "Xvfb", self._display,
@@ -257,6 +283,11 @@ class StreamController:
     async def _start_browser(self):
         """ヘッドレスChromiumを起動してbroadcast.htmlを表示"""
         self._stop_process("browser", self._browser_proc)
+        # 前回の残存Chromiumプロセスをkill
+        try:
+            subprocess.run(["pkill", "-f", "chromium.*broadcast"], capture_output=True, timeout=3)
+        except Exception:
+            pass
 
         web_port = os.environ.get("WEB_PORT", "8080")
         broadcast_url = f"http://localhost:{web_port}/broadcast"
