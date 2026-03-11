@@ -64,6 +64,62 @@ async def bgm_ws(websocket: WebSocket):
         state.bgm_clients.discard(websocket)
 
 
+@router.websocket("/ws/broadcast")
+async def broadcast_ws(websocket: WebSocket):
+    """broadcast.html用WebSocket（overlay+tts+bgm統合）"""
+    await websocket.accept()
+    state.broadcast_clients.add(websocket)
+    # 保存済みBGMがあれば自動再生
+    try:
+        from scripts.routes.bgm import load_bgm_settings
+        bgm = load_bgm_settings()
+        track = bgm.get("track", "")
+        if track:
+            await websocket.send_json({
+                "type": "bgm_play",
+                "url": f"/bgm/{track}",
+            })
+    except Exception:
+        pass
+    # 音量設定を送信
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            config = json.load(f)
+        vols = config.get("audio_volumes", {})
+        for source in ("master", "tts", "bgm"):
+            if source in vols:
+                await websocket.send_json({
+                    "type": "volume",
+                    "source": source,
+                    "volume": vols[source],
+                })
+    except Exception:
+        pass
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        state.broadcast_clients.discard(websocket)
+
+
+@router.get("/broadcast", response_class=HTMLResponse)
+async def broadcast_page():
+    return (STATIC_DIR / "broadcast.html").read_text(encoding="utf-8")
+
+
+@router.get("/broadcast-ui", response_class=HTMLResponse)
+async def broadcast_ui_page():
+    return (STATIC_DIR / "broadcast-ui.html").read_text(encoding="utf-8")
+
+
+@router.get("/api/broadcast/volumes")
+async def get_broadcast_volumes():
+    """broadcast.html用の音量設定を返す"""
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = json.load(f)
+    return config.get("audio_volumes", {"master": 0.8, "tts": 0.8, "bgm": 1.0})
+
+
 @router.get("/overlay", response_class=HTMLResponse)
 async def overlay_page():
     return (STATIC_DIR / "overlay.html").read_text(encoding="utf-8")

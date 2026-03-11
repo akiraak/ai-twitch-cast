@@ -109,6 +109,13 @@
 - [x] 手動メモ更新ボタンでアバター自身のnoteも更新するよう修正
 - [x] Web UIのBGMトラック削除ボタン追加（確認ダイアログ付き、再生中は自動停止）
 - [x] 英語+日本語混合の単調パターン改善（語尾だけ日本語→文中どこでも配置、ローマ字禁止、履歴5件に削減、多様性指示追加）
+- [x] OBS不要配信システム構築（xvfb+Chromium+PulseAudio+FFmpegによるWSL2完結配信）
+- [x] 配信合成ページ broadcast.html（overlay+TTS+BGM+VRMアバター統合、WebSocket統合接続）
+- [x] 配信制御UI broadcast-ui.html（Setup/Start/Stop/Scene/Volume/Diag）
+- [x] StreamController（xvfb/Chromium/PulseAudio/FFmpegプロセス管理、WSLg自動検出）
+- [x] 配信制御API stream_control.py（/api/broadcast/*エンドポイント群）
+- [x] ブラウザVRMアバター（Three.js+three-vrmでVSeeFace不要化、アイドルアニメーション移植）
+- [x] VRMアバターWebSocket連携（blendshape/lipsync/lipsync_stopイベントでブラウザ側アバター制御）
 
 ## Phase 0: 環境構築・基盤
 

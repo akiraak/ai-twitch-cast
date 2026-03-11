@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>AI Twitch Cast - Broadcast</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 1920px; height: 1080px;
+    position: relative; overflow: hidden;
+    font-family: "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+    background: #000;
+  }
+
+  /* === 背景 === */
+  #background {
+    position: absolute; top: 0; left: 0;
+    width: 1920px; height: 1080px;
+    z-index: 0;
+    object-fit: cover;
+  }
+
+  /* === アバター === */
+  #avatar-area {
+    position: absolute;
+    z-index: 5;
+    right: 0; bottom: 0;
+    width: 1028px; height: 818px;
+  }
+  #avatar-area img, #avatar-area canvas {
+    width: 100%; height: 100%;
+    object-fit: contain;
+  }
+
+  /* === シーン切替 === */
+  .scene-main, .scene-start, .scene-end { display: none; }
+  body[data-scene="main"] .scene-main { display: block; }
+  body[data-scene="start"] .scene-start { display: flex; }
+  body[data-scene="end"] .scene-end { display: flex; }
+
+  /* 開始・終了画面のテキスト */
+  .scene-text-overlay {
+    position: absolute; top: 0; left: 0;
+    width: 1920px; height: 1080px;
+    z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  .scene-text-overlay .scene-text {
+    font-size: 72px;
+    color: #ffffff;
+    font-weight: bold;
+    text-align: center;
+    text-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
+    white-space: pre-line;
+    line-height: 1.5;
+  }
+
+  /* === リアルタイム字幕（下中央） === */
+  #subtitle {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: linear-gradient(135deg, rgba(20, 20, 40, 0.85), rgba(30, 20, 50, 0.85));
+    border: 1px solid rgba(124, 77, 255, 0.3);
+    border-radius: 16px;
+    padding: 20px 32px;
+    max-width: 1200px;
+    min-width: 400px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+  }
+  #subtitle.visible { opacity: 1; }
+  #subtitle.fading { opacity: 0; transition: opacity 1.5s ease; }
+  #subtitle .comment { display: none; }
+  #subtitle .response {
+    font-size: 36px;
+    color: #ffffff;
+    font-weight: bold;
+    margin-bottom: 10px;
+    line-height: 1.5;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7), 0 0 20px rgba(124, 77, 255, 0.2);
+    letter-spacing: 0.5px;
+  }
+  #subtitle .english {
+    font-size: 20px;
+    color: #b2dfdb;
+    font-style: italic;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  /* === TODOパネル（中央） === */
+  #todo-panel {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+    width: 540px;
+    max-height: 70vh;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(5, 0, 10, 0.95));
+    border: 1px solid rgba(124, 77, 255, 0.3);
+    border-radius: 12px;
+    padding: 20px 24px;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+  #todo-panel .todo-title {
+    font-size: 28px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+  }
+  #todo-panel .todo-section {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin-top: 10px;
+    margin-bottom: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  #todo-panel .todo-section:first-child {
+    margin-top: 0; padding-top: 0; border-top: none;
+  }
+  #todo-panel .todo-item {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 24px;
+    padding: 6px 0;
+    line-height: 1.5;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+  }
+  #todo-panel .todo-checkbox {
+    flex-shrink: 0;
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 3px;
+  }
+  #todo-panel .todo-item.in-progress {
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 26px;
+    padding: 10px 12px;
+    margin: 4px -10px;
+    background: linear-gradient(90deg, rgba(124, 77, 255, 0.2), rgba(124, 77, 255, 0.05));
+    border-radius: 8px;
+    border-left: 3px solid #b388ff;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  #todo-panel .todo-item.in-progress .todo-checkbox {
+    width: 20px; height: 20px;
+    background: #7c4dff;
+    border-color: #b388ff;
+    border-radius: 4px;
+    box-shadow: 0 0 8px rgba(124, 77, 255, 0.5);
+  }
+  #todo-panel .todo-item.in-progress .todo-arrow {
+    color: #b388ff;
+    font-size: 18px;
+    animation: arrow-bounce 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0px rgba(124, 77, 255, 0); }
+    50% { box-shadow: 0 0 12px rgba(124, 77, 255, 0.15); }
+  }
+  @keyframes arrow-bounce {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(3px); }
+  }
+
+  /* === トピックパネル（左上） === */
+  #topic-panel {
+    position: absolute;
+    top: 20px; left: 20px;
+    z-index: 20;
+    max-width: 600px; min-width: 280px;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(5, 0, 10, 0.95));
+    border: 1px solid rgba(124, 77, 255, 0.3);
+    border-radius: 10px;
+    padding: 0;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+    opacity: 1;
+    overflow: hidden;
+  }
+  #topic-panel.idle { border-color: rgba(255, 255, 255, 0.1); }
+  #topic-panel .topic-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    background: linear-gradient(90deg, rgba(124, 77, 255, 0.15), transparent);
+    border-bottom: 1px solid rgba(124, 77, 255, 0.1);
+  }
+  #topic-panel .topic-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #b388ff;
+    box-shadow: 0 0 6px rgba(124, 77, 255, 0.6);
+    animation: dot-pulse 2s ease-in-out infinite;
+  }
+  #topic-panel .topic-dot.paused {
+    background: #666; box-shadow: none; animation: none;
+  }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  #topic-panel .topic-label {
+    font-size: 15px; color: #b388ff;
+    font-weight: bold; letter-spacing: 2px;
+    text-shadow: 0 0 8px rgba(124, 77, 255, 0.3);
+  }
+  #topic-panel .topic-body { padding: 12px 14px; }
+  #topic-panel .topic-title {
+    font-size: 24px; color: #ffffff;
+    font-weight: bold; line-height: 1.4;
+    word-break: break-word;
+  }
+  #topic-panel .topic-desc {
+    font-size: 16px; color: rgba(255, 255, 255, 0.5);
+    margin-top: 6px; line-height: 1.4;
+  }
+  #topic-panel .topic-stats {
+    font-size: 13px; color: rgba(255, 255, 255, 0.35);
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+</style>
+</head>
+<body data-scene="main">
+
+<!-- 背景画像 -->
+<img id="background" src="/resources/images/background.png" alt="">
+
+<!-- メインシーン -->
+<div class="scene-main">
+  <!-- アバター（Three.js VRMレンダリング） -->
+  <div id="avatar-area">
+    <canvas id="avatar-canvas"></canvas>
+    <img id="avatar-stream" style="display:none;" alt="">
+  </div>
+
+  <!-- 字幕 -->
+  <div id="subtitle">
+    <div class="comment"><span class="author"></span><span class="message"></span></div>
+    <div class="response"></div>
+    <div class="english"></div>
+  </div>
+
+  <!-- TODOパネル -->
+  <div id="todo-panel">
+    <div class="todo-title">TODO</div>
+    <div id="todo-list"></div>
+  </div>
+
+  <!-- トピックパネル -->
+  <div id="topic-panel">
+    <div class="topic-header">
+      <span class="topic-dot" id="topic-dot"></span>
+      <span class="topic-label">TOPIC</span>
+    </div>
+    <div class="topic-body">
+      <div class="topic-title" id="topic-title-text"></div>
+      <div class="topic-desc" id="topic-desc-text"></div>
+      <div class="topic-stats" id="topic-stats"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 開始画面 -->
+<div class="scene-start scene-text-overlay">
+  <div class="scene-text">まもなく開始</div>
+</div>
+
+<!-- 終了画面 -->
+<div class="scene-end scene-text-overlay">
+  <div class="scene-text">配信終了&#10;ご視聴ありがとうございました</div>
+</div>
+
+<!-- 音声要素（非表示） -->
+<audio id="tts-audio"></audio>
+<audio id="bgm-audio" loop></audio>
+
+<!-- Three.js + three-vrm -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.3.3/lib/three-vrm.module.min.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as VRM from '@pixiv/three-vrm';
+
+// === VRMアバターレンダラー ===
+const canvas = document.getElementById('avatar-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setSize(1028, 818);
+renderer.setPixelRatio(1);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(20, 1028 / 818, 0.1, 100);
+camera.position.set(0, 1.2, 3.0);
+camera.lookAt(0, 1.1, 0);
+
+// ライティング
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(1, 2, 3);
+scene.add(dirLight);
+
+let currentVRM = null;
+let idleScale = 1.0;
+let t0 = performance.now() / 1000;
+
+// まばたき状態
+let nextBlink = t0 + 2 + Math.random() * 3;
+let blinkEnd = 0;
+
+// 耳ぴくぴく状態
+let nextEarTwitch = t0 + 3 + Math.random() * 5;
+let earTwitchEnd = 0;
+let earTwitchStart = 0;
+let earTwitchDuration = 0.2;
+
+// リップシンク状態
+let lipsyncFrames = null;
+let lipsyncStart = 0;
+
+// 外部BlendShape（感情等）
+let externalShapes = {};
+
+// グローバル公開
+window.avatarVRM = {
+  setBlendShapes(shapes) { externalShapes = shapes; },
+  setLipsync(frames) { lipsyncFrames = frames; lipsyncStart = performance.now() / 1000; },
+  stopLipsync() { lipsyncFrames = null; },
+  setIdleScale(s) { idleScale = s; },
+};
+
+// VRMモデル読み込み
+async function loadVRM(url) {
+  const loader = new GLTFLoader();
+  loader.register((parser) => new VRM.VRMLoaderPlugin(parser));
+
+  try {
+    const gltf = await loader.loadAsync(url);
+    const vrm = gltf.userData.vrm;
+    if (!vrm) { console.error('VRMデータがありません'); return; }
+
+    // 既存モデル削除
+    if (currentVRM) {
+      scene.remove(currentVRM.scene);
+      VRM.VRMUtils.deepDispose(currentVRM.scene);
+    }
+
+    // VRM追加
+    VRM.VRMUtils.rotateVRM0(vrm);
+    scene.add(vrm.scene);
+    currentVRM = vrm;
+
+    console.log('VRM読み込み完了:', url);
+    t0 = performance.now() / 1000;
+  } catch (e) {
+    console.error('VRM読み込み失敗:', e);
+  }
+}
+
+// クォータニオン生成（軸+角度）
+function quatFromAxisAngle(ax, ay, az, deg) {
+  const rad = (deg * Math.PI / 180) / 2;
+  const s = Math.sin(rad);
+  return new THREE.Quaternion(ax * s, ay * s, az * s, Math.cos(rad));
+}
+
+// ボーン回転設定
+function setBoneRotation(vrm, boneName, quat) {
+  const node = vrm.humanoid?.getNormalizedBoneNode(boneName);
+  if (node) node.quaternion.copy(quat);
+}
+
+// アイドルアニメーション + レンダリングループ
+function animate() {
+  requestAnimationFrame(animate);
+  if (!currentVRM) { renderer.render(scene, camera); return; }
+
+  const now = performance.now() / 1000;
+  const t = now - t0;
+  const s = idleScale;
+
+  // --- 呼吸 (~4秒周期) ---
+  const breath = Math.sin(t * 1.6) * 0.8 * s;
+  setBoneRotation(currentVRM, 'chest', quatFromAxisAngle(1, 0, 0, breath));
+
+  // --- 体の揺れ (~7秒周期) ---
+  const sway = (Math.sin(t * 0.9) * 1.0 + Math.sin(t * 0.37) * 0.4) * s;
+  setBoneRotation(currentVRM, 'spine', quatFromAxisAngle(0, 0, 1, sway));
+
+  // --- 頭の動き ---
+  const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s;
+  const headZ = (Math.sin(t * 0.5) * 1.6 + Math.sin(t * 1.1) * 0.6) * s;
+  const headY = Math.sin(t * 0.4) * 1.2 * s;
+  const qHead = quatFromAxisAngle(1, 0, 0, headX)
+    .multiply(quatFromAxisAngle(0, 1, 0, headY))
+    .multiply(quatFromAxisAngle(0, 0, 1, headZ));
+  setBoneRotation(currentVRM, 'head', qHead);
+
+  // --- 腕の揺れ ---
+  const rArmSway = Math.sin(t * 0.6 + 1.0) * 0.8 * s;
+  const lArmSway = Math.sin(t * 0.6 + 2.5) * 0.8 * s;
+  setBoneRotation(currentVRM, 'rightUpperArm', quatFromAxisAngle(0, 0, 1, -70 + rArmSway));
+  setBoneRotation(currentVRM, 'leftUpperArm', quatFromAxisAngle(0, 0, 1, 70 + lArmSway));
+
+  // --- 前腕 ---
+  const rFore = 20 + Math.sin(t * 0.8 + 0.5) * 0.6 * s;
+  const lFore = -20 + Math.sin(t * 0.8 + 2.0) * 0.6 * s;
+  setBoneRotation(currentVRM, 'rightLowerArm', quatFromAxisAngle(0, 1, 0, rFore));
+  setBoneRotation(currentVRM, 'leftLowerArm', quatFromAxisAngle(0, 1, 0, lFore));
+
+  // --- BlendShape ---
+  const em = currentVRM.expressionManager;
+  if (em) {
+    // まばたき
+    if (now >= nextBlink && blinkEnd === 0) {
+      blinkEnd = now + 0.08;
+    }
+    if (blinkEnd > 0) {
+      if (now < blinkEnd) {
+        em.setValue('blink', 1.0);
+      } else {
+        em.setValue('blink', 0.0);
+        blinkEnd = 0;
+        nextBlink = now + 2 + Math.random() * 4;
+      }
+    }
+
+    // 耳ぴくぴく（カスタムBlendShape）
+    if (now >= nextEarTwitch && now >= earTwitchEnd) {
+      earTwitchDuration = 0.15 + Math.random() * 0.15;
+      earTwitchEnd = now + earTwitchDuration;
+      earTwitchStart = now;
+      nextEarTwitch = now + 3 + Math.random() * 7;
+    }
+    // ear_standがある場合のみ
+    try {
+      if (now < earTwitchEnd) {
+        const progress = (now - earTwitchStart) / earTwitchDuration;
+        em.setValue('ear_stand', Math.sin(progress * Math.PI));
+      } else {
+        em.setValue('ear_stand', 0.0);
+      }
+    } catch (e) { /* ear_stand BlendShapeがない場合は無視 */ }
+
+    // リップシンク
+    if (lipsyncFrames) {
+      const frameIdx = Math.floor((now - lipsyncStart) * 30);
+      if (frameIdx >= 0 && frameIdx < lipsyncFrames.length) {
+        em.setValue('aa', lipsyncFrames[frameIdx]);
+      } else {
+        lipsyncFrames = null;
+        em.setValue('aa', 0.0);
+      }
+    }
+
+    // 外部BlendShape（感情等）
+    for (const [name, value] of Object.entries(externalShapes)) {
+      try { em.setValue(name.toLowerCase(), value); } catch (e) {}
+    }
+
+    em.update();
+  }
+
+  currentVRM.update(1 / 30);
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// デフォルトでVRMモデルを読み込み
+async function initAvatar() {
+  try {
+    const res = await fetch('/api/broadcast/avatar');
+    const data = await res.json();
+    // VRM URLが設定されていればそれを使う、なければデフォルト
+    const vrmUrl = data.vrm_url || '/resources/vrm/Shinano.vrm';
+    await loadVRM(vrmUrl);
+  } catch (e) {
+    // デフォルトモデル読み込み
+    await loadVRM('/resources/vrm/Shinano.vrm');
+  }
+}
+
+initAvatar();
+
+// グローバル公開（非module scriptからアクセス用）
+window.loadVRM = loadVRM;
+</script>
+
+<script>
+// === 要素参照 ===
+const subtitleEl = document.getElementById('subtitle');
+const todoPanelEl = document.getElementById('todo-panel');
+const todoListEl = document.getElementById('todo-list');
+const topicPanelEl = document.getElementById('topic-panel');
+const ttsAudio = document.getElementById('tts-audio');
+const bgmAudio = document.getElementById('bgm-audio');
+let fadeTimer = null;
+let todoSettings = {};
+
+// === 音量管理 ===
+let volumes = { master: 0.8, tts: 0.8, bgm: 1.0 };
+
+function applyVolume() {
+  ttsAudio.volume = volumes.master * volumes.tts;
+  bgmAudio.volume = volumes.master * volumes.bgm;
+}
+
+// === 設定適用 ===
+function applySettings(s) {
+  if (s.subtitle) {
+    if (s.subtitle.bottom != null) subtitleEl.style.bottom = s.subtitle.bottom + 'px';
+    if (s.subtitle.fontSize != null) subtitleEl.querySelector('.response').style.fontSize = s.subtitle.fontSize + 'px';
+    if (s.subtitle.fadeDuration != null) subtitleEl.dataset.fadeDuration = s.subtitle.fadeDuration;
+  }
+  if (s.todo) {
+    todoSettings = s.todo;
+    if (s.todo.width != null) todoPanelEl.style.width = s.todo.width + 'px';
+    if (s.todo.height) {
+      todoPanelEl.style.height = s.todo.height + 'px';
+      todoPanelEl.style.overflowY = 'hidden';
+    } else {
+      todoPanelEl.style.height = '';
+      todoPanelEl.style.overflowY = '';
+    }
+    if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'px';
+    if (s.todo.positionX != null || s.todo.positionY != null) {
+      const x = s.todo.positionX ?? 960;
+      const y = s.todo.positionY ?? 540;
+      todoPanelEl.style.left = x + 'px';
+      todoPanelEl.style.top = y + 'px';
+      todoPanelEl.style.transform = 'none';
+    }
+    if (s.todo.fontSize != null) {
+      todoPanelEl.querySelectorAll('.todo-item').forEach(el => el.style.fontSize = s.todo.fontSize + 'px');
+    }
+    loadTodo();
+  }
+  if (s.topic) {
+    if (s.topic.positionX != null || s.topic.positionY != null) {
+      topicPanelEl.style.left = (s.topic.positionX ?? 20) + 'px';
+      topicPanelEl.style.top = (s.topic.positionY ?? 20) + 'px';
+    }
+    if (s.topic.width != null) topicPanelEl.style.width = s.topic.width + 'px';
+    if (s.topic.titleFontSize != null) {
+      document.getElementById('topic-title-text').style.fontSize = s.topic.titleFontSize + 'px';
+    }
+  }
+}
+
+// === 字幕 ===
+function showSubtitle(data) {
+  clearTimeout(fadeTimer);
+  subtitleEl.classList.remove('fading');
+  subtitleEl.querySelector('.author').textContent = '';
+  subtitleEl.querySelector('.message').textContent = data.message;
+  subtitleEl.querySelector('.response').textContent = data.response;
+  subtitleEl.querySelector('.english').textContent = data.english || '';
+  subtitleEl.classList.add('visible');
+}
+
+function fadeSubtitle() {
+  const duration = parseFloat(subtitleEl.dataset.fadeDuration || 3) * 1000;
+  fadeTimer = setTimeout(() => {
+    subtitleEl.classList.add('fading');
+    subtitleEl.classList.remove('visible');
+  }, duration);
+}
+
+// === トピックパネル ===
+function updateTopicPanel(data) {
+  const titleEl = document.getElementById('topic-title-text');
+  const descEl = document.getElementById('topic-desc-text');
+  const statsEl = document.getElementById('topic-stats');
+  const dotEl = document.getElementById('topic-dot');
+  const isIdle = !data || !data.active || data.paused;
+
+  if (isIdle) {
+    topicPanelEl.classList.add('idle');
+    titleEl.textContent = '----';
+    descEl.textContent = '';
+    descEl.style.display = 'none';
+    statsEl.textContent = '';
+    dotEl.classList.add('paused');
+    return;
+  }
+  topicPanelEl.classList.remove('idle');
+  titleEl.textContent = data.topic.title;
+  descEl.textContent = data.topic.description || '';
+  descEl.style.display = data.topic.description ? '' : 'none';
+  const parts = [];
+  if (data.remaining_scripts != null) parts.push(`残り ${data.remaining_scripts}件`);
+  if (data.spoken_count != null) parts.push(`発話済み ${data.spoken_count}件`);
+  statsEl.textContent = parts.join(' / ');
+  dotEl.classList.toggle('paused', false);
+}
+
+async function loadTopicPanel() {
+  try {
+    const res = await fetch('/api/topic');
+    const data = await res.json();
+    updateTopicPanel(data);
+  } catch (e) {}
+}
+
+// === TODO読み込み ===
+async function loadTodo() {
+  try {
+    const res = await fetch('/api/todo');
+    const data = await res.json();
+    todoListEl.innerHTML = '';
+    const fs = todoSettings.fontSize;
+    let lastSection = null;
+    for (const item of data.items) {
+      const text_val = typeof item === 'string' ? item : item.text;
+      const status = typeof item === 'string' ? 'todo' : item.status;
+      const section = item.section || '';
+      if (section && section !== lastSection) {
+        const sectionEl = document.createElement('div');
+        sectionEl.className = 'todo-section';
+        sectionEl.textContent = section;
+        todoListEl.appendChild(sectionEl);
+        lastSection = section;
+      }
+      const div = document.createElement('div');
+      div.className = 'todo-item' + (status === 'in_progress' ? ' in-progress' : '');
+      if (status === 'in_progress') {
+        const arrow = document.createElement('span');
+        arrow.className = 'todo-arrow';
+        arrow.textContent = '\u25B6';
+        div.appendChild(arrow);
+      }
+      const cb = document.createElement('span');
+      cb.className = 'todo-checkbox';
+      const text = document.createElement('span');
+      text.textContent = text_val;
+      if (fs) text.style.fontSize = fs + 'px';
+      div.appendChild(cb);
+      div.appendChild(text);
+      todoListEl.appendChild(div);
+    }
+  } catch (e) {
+    console.log('TODO読み込みエラー:', e.message);
+  }
+}
+
+// === WebSocket（統合: overlay + tts + bgm） ===
+function connectWS() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${location.host}/ws/broadcast`);
+
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+
+    switch (data.type) {
+      // オーバーレイイベント
+      case 'comment':
+        showSubtitle(data);
+        break;
+      case 'speaking_end':
+        fadeSubtitle();
+        break;
+      case 'topic_update':
+        updateTopicPanel(data);
+        break;
+      case 'settings_update':
+        applySettings(data);
+        break;
+
+      // TTS音声
+      case 'play_audio':
+        ttsAudio.src = data.url;
+        ttsAudio.load();
+        ttsAudio.play().catch(e => console.log('TTS再生エラー:', e));
+        break;
+
+      // BGM
+      case 'bgm_play':
+        bgmAudio.src = data.url;
+        bgmAudio.load();
+        bgmAudio.play().catch(e => console.log('BGM再生エラー:', e));
+        break;
+      case 'bgm_stop':
+        bgmAudio.pause();
+        bgmAudio.src = '';
+        break;
+
+      // 音量制御
+      case 'volume':
+        if (data.source && data.volume != null) {
+          volumes[data.source] = data.volume;
+          applyVolume();
+        }
+        break;
+
+      // シーン切替
+      case 'scene':
+        if (data.name) {
+          document.body.dataset.scene = data.name;
+        }
+        break;
+
+      // VRMアバター制御
+      case 'blendshape':
+        if (window.avatarVRM && data.shapes) {
+          window.avatarVRM.setBlendShapes(data.shapes);
+        }
+        break;
+      case 'lipsync':
+        if (window.avatarVRM && data.frames) {
+          window.avatarVRM.setLipsync(data.frames);
+        }
+        break;
+      case 'lipsync_stop':
+        if (window.avatarVRM) {
+          window.avatarVRM.stopLipsync();
+        }
+        break;
+
+      // アバターストリーム（MJPEG fallback）
+      case 'avatar_stream':
+        setAvatarStream(data.url);
+        break;
+      case 'avatar_stop':
+        stopAvatarStream();
+        break;
+    }
+  };
+
+  ws.onclose = () => setTimeout(connectWS, 3000);
+  ws.onerror = () => ws.close();
+}
+
+// === アバターストリーム ===
+const avatarImg = document.getElementById('avatar-stream');
+
+function setAvatarStream(url) {
+  avatarImg.src = url;
+  avatarImg.style.display = '';
+  avatarImg.onerror = () => {
+    // ストリーム切断時は非表示
+    avatarImg.style.display = 'none';
+  };
+}
+
+function stopAvatarStream() {
+  avatarImg.src = '';
+  avatarImg.style.display = 'none';
+}
+
+// === 初期化 ===
+async function init() {
+  // オーバーレイ設定読み込み
+  try {
+    const res = await fetch('/api/overlay/settings');
+    const s = await res.json();
+    applySettings(s);
+  } catch (e) {
+    console.log('設定読み込みスキップ:', e.message);
+  }
+
+  // 音量設定読み込み
+  try {
+    const res = await fetch('/api/broadcast/volumes');
+    const v = await res.json();
+    if (v.master != null) volumes.master = v.master;
+    if (v.tts != null) volumes.tts = v.tts;
+    if (v.bgm != null) volumes.bgm = v.bgm;
+    applyVolume();
+  } catch (e) {
+    console.log('音量設定読み込みスキップ:', e.message);
+  }
+
+  // アバターストリーム復元
+  try {
+    const res = await fetch('/api/broadcast/avatar');
+    const av = await res.json();
+    if (av.url) setAvatarStream(av.url);
+  } catch (e) {}
+
+  await loadTodo();
+  await loadTopicPanel();
+  setInterval(loadTodo, 30000);
+  setInterval(loadTopicPanel, 15000);
+  connectWS();
+}
+
+init();
+</script>
+</body>
+</html>

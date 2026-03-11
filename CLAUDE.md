@@ -58,9 +58,11 @@ ai-twitch-cast/
 │   ├── obs-research.md       # OBS機能調査レポート
 │   ├── avatar-research.md   # アバター表示・アニメーション調査
 │   ├── 3d-model-research.md # 3Dモデル調査
-│   └── vrm-conversion-log.md # VRM変換作業ログ
+│   ├── vrm-conversion-log.md # VRM変換作業ログ
+│   └── obs-free-streaming.md # OBS不要配信ガイド
 ├── src/                      # ソースコード
 │   ├── obs_controller.py     # OBS WebSocket制御
+│   ├── stream_controller.py  # OBS不要配信プロセス管理（xvfb/Chromium/PulseAudio/FFmpeg）
 │   ├── vts_controller.py     # VTube Studio API制御（Live2D）
 │   ├── vsf_controller.py     # VSeeFace VMC Protocol制御（VRM）
 │   ├── scene_config.py       # シーン構成の定義（scenes.jsonから読み込み）
@@ -77,15 +79,18 @@ ai-twitch-cast/
 │   ├── stop_stream.py        # 配信停止
 │   ├── console.py            # 対話式コンソール
 │   ├── web.py                # Webインターフェース（startup自動復旧・shutdownハンドラ付き）
-│   ├── state.py              # 共有状態（コントローラー・WebSocket・GitWatcher）
-│   ├── routes/               # ルートモジュール（obs/stream/avatar/character/overlay/twitch/topic/bgm/db_viewer）
+│   ├── state.py              # 共有状態（コントローラー・WebSocket・GitWatcher・StreamController）
+│   ├── routes/               # ルートモジュール（obs/stream/avatar/character/overlay/twitch/topic/bgm/db_viewer/stream_control）
 │   ├── deploy_model.py       # Live2Dモデルデプロイ
 │   ├── convert_to_vrm.py     # FBX→VRM変換（Blenderスクリプト）
 │   ├── fix_vrm_mtoon.py      # VRM MToonシェーダ修正
+│   ├── avatar_capture.py     # Windows側VSeeFaceキャプチャ（MJPEGストリーム、非推奨）
 │   └── comment_reader.py     # Twitchコメント読み上げ
 ├── static/                   # Webインターフェース静的ファイル
 │   ├── index.html            # Web UI（Lavenderテーマ、タブ構成）
 │   ├── overlay.html          # OBSオーバーレイ（TODO・情報パネル・字幕、表示専用）
+│   ├── broadcast.html        # OBS不要版合成ページ（overlay+audio+VRMアバター統合）
+│   ├── broadcast-ui.html     # OBS不要版配信制御UI
 │   ├── audio-tts.html        # TTS音声再生用ブラウザソース（WebSocket /ws/tts）
 │   └── audio-bgm.html        # BGM音声再生用ブラウザソース（WebSocket /ws/bgm）
 ├── resources/                # リソース（画像・モデル・音声・動画）

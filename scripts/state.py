@@ -11,6 +11,7 @@ from src.comment_reader import CommentReader
 from src.git_watcher import GitWatcher
 from src.topic_talker import TopicTalker
 from src.obs_controller import OBSController
+from src.stream_controller import StreamController
 from src.scene_config import CONFIG_PATH
 from src.twitch_api import TwitchAPI
 from src.vsf_controller import VSFController
@@ -18,6 +19,7 @@ from src.vts_controller import VTSController
 
 # コントローラー
 obs = OBSController()
+stream = StreamController()
 vts = VTSController()
 vsf = VSFController()
 twitch_api = TwitchAPI()
@@ -34,6 +36,7 @@ current_episode = None
 overlay_clients: set[WebSocket] = set()
 tts_clients: set[WebSocket] = set()
 bgm_clients: set[WebSocket] = set()
+broadcast_clients: set[WebSocket] = set()
 
 
 async def _broadcast(clients: set, event: dict):
@@ -49,16 +52,24 @@ async def _broadcast(clients: set, event: dict):
 async def broadcast_overlay(event: dict):
     """オーバーレイ（画面表示）にイベントを送信する"""
     await _broadcast(overlay_clients, event)
+    await _broadcast(broadcast_clients, event)
 
 
 async def broadcast_tts(event: dict):
     """TTS音声ソースにイベントを送信する"""
     await _broadcast(tts_clients, event)
+    await _broadcast(broadcast_clients, event)
 
 
 async def broadcast_bgm(event: dict):
     """BGM音声ソースにイベントを送信する"""
     await _broadcast(bgm_clients, event)
+    await _broadcast(broadcast_clients, event)
+
+
+async def broadcast_to_broadcast(event: dict):
+    """broadcast.html専用イベントを送信する（シーン切替・音量等）"""
+    await _broadcast(broadcast_clients, event)
 
 
 async def _dispatch_event(event: dict):
@@ -86,6 +97,9 @@ async def _on_git_commit(commit_hash, message):
 
 # Git監視
 git_watcher = GitWatcher(on_commit=_on_git_commit)
+
+# StreamControllerにブロードキャスト関数を注入
+stream.set_broadcast_fn(broadcast_to_broadcast)
 
 
 async def ensure_reader():

@@ -33,6 +33,7 @@ from scripts.routes.db_viewer import router as db_viewer_router
 from scripts.routes.obs import router as obs_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream import router as stream_router
+from scripts.routes.stream_control import router as stream_control_router
 from scripts.routes.topic import router as topic_router
 from scripts.routes.twitch import router as twitch_router
 from src.ai_responder import load_character
@@ -46,12 +47,15 @@ STATIC_DIR = PROJECT_DIR / "static"
 STATE_FILE = PROJECT_DIR / ".server_state"
 BGM_DIR = PROJECT_DIR / "resources" / "audio" / "bgm"
 BGM_DIR.mkdir(parents=True, exist_ok=True)
+RESOURCES_DIR = PROJECT_DIR / "resources"
 app.mount("/bgm", StaticFiles(directory=str(BGM_DIR)), name="bgm")
+app.mount("/resources", StaticFiles(directory=str(RESOURCES_DIR)), name="resources")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ルーターを登録
 app.include_router(obs_router)
 app.include_router(stream_router)
+app.include_router(stream_control_router)
 app.include_router(avatar_router)
 app.include_router(bgm_router)
 app.include_router(character_router)

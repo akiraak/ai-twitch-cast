@@ -281,16 +281,21 @@ class CommentReader:
 
                 # リップシンク用振幅解析
                 lipsync_frames = None
-                if self._vsf:
-                    try:
-                        lipsync_frames = await asyncio.to_thread(analyze_amplitude, wav_path)
-                        logger.info("[lipsync] 振幅解析完了: %dフレーム", len(lipsync_frames))
-                    except Exception as e:
-                        logger.warning("リップシンク解析失敗: %s", e)
+                try:
+                    lipsync_frames = await asyncio.to_thread(analyze_amplitude, wav_path)
+                    logger.info("[lipsync] 振幅解析完了: %dフレーム", len(lipsync_frames))
+                except Exception as e:
+                    logger.warning("リップシンク解析失敗: %s", e)
 
                 # リップシンク開始（音声再生と同時）
                 if self._vsf and lipsync_frames:
                     self._vsf.start_lipsync(lipsync_frames)
+                # broadcast.html VRMアバターにもリップシンク送信
+                if lipsync_frames:
+                    await self._on_overlay({
+                        "type": "lipsync",
+                        "frames": lipsync_frames,
+                    })
 
                 # 音声再生を指示
                 import time
@@ -313,6 +318,8 @@ class CommentReader:
                 # リップシンク停止
                 if self._vsf and lipsync_frames:
                     self._vsf.stop_lipsync()
+                if lipsync_frames:
+                    await self._on_overlay({"type": "lipsync_stop"})
             else:
                 # TTS失敗時: チャット投稿してテキスト表示のみ（数秒待つ）
                 if chat_result:
@@ -435,16 +442,22 @@ class CommentReader:
 
     def _apply_emotion(self, emotion):
         """感情に対応するBlendShapeを適用する"""
-        if not self._vsf:
-            return
         char = get_character()
         blendshapes = char.get("emotion_blendshapes", {}).get(emotion, {})
-        if blendshapes:
-            self._vsf.set_blendshapes(blendshapes)
-        else:
+        if not blendshapes:
             # ニュートラル: 表情リセット
             all_emotions = set()
             for bs in char.get("emotion_blendshapes", {}).values():
                 all_emotions.update(bs.keys())
-            if all_emotions:
-                self._vsf.set_blendshapes({k: 0.0 for k in all_emotions})
+            blendshapes = {k: 0.0 for k in all_emotions} if all_emotions else {}
+
+        # VSeeFace OSC送信
+        if self._vsf and blendshapes:
+            self._vsf.set_blendshapes(blendshapes)
+
+        # broadcast.html VRMアバターにもWebSocket送信
+        if self._on_overlay and blendshapes:
+            asyncio.create_task(self._on_overlay({
+                "type": "blendshape",
+                "shapes": blendshapes,
+            }))

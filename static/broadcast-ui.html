@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Twitch Cast - Broadcast</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f0ff; color: #2a1f40; }
+
+  .header {
+    background: #ffffff;
+    border-bottom: 1px solid #d0c0e8;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 { font-size: 1.1rem; color: #7b1fa2; font-weight: 600; }
+  .header h1 a { color: inherit; text-decoration: none; }
+  .header h1 .badge { font-size: 0.65rem; background: #ece5fa; color: #7b1fa2; border: 1px solid #d0c0e8; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+  .header-actions { display: flex; gap: 8px; }
+  .header-actions button { padding: 8px 20px; font-size: 0.9rem; font-weight: 600; }
+
+  .status-bar {
+    background: #ffffff;
+    border-bottom: 1px solid #d0c0e8;
+    padding: 6px 24px;
+    display: flex;
+    gap: 24px;
+    font-size: 0.8rem;
+  }
+  .status-bar.streaming { background: #fff5f5; border-bottom-color: #c6282844; }
+  .status-item { display: flex; align-items: center; gap: 6px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-dot.on { background: #2e7d32; }
+  .status-dot.off { background: #9a88b5; }
+  .status-dot.live { background: #c62828; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .status-label { color: #6a5590; }
+  .status-value { color: #2a1f40; }
+
+  .main { padding: 20px 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .card { background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #d0c0e8; }
+  .card h2 { font-size: 0.95rem; margin-bottom: 12px; color: #7b1fa2; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+
+  .btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  button { background: #7b1fa2; color: #fff; border: none; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: background 0.15s; }
+  button:hover { background: #6a1b9a; }
+  button:active { background: #4a148c; }
+  button.danger { background: #c62828; }
+  button.danger:hover { background: #b71c1c; }
+  button.secondary { background: #e8ddf5; color: #2a1f40; border: 1px solid #d0c0e8; }
+  button.secondary:hover { background: #d0c0e8; }
+  button.success { background: #2e7d32; }
+  button.success:hover { background: #388e3c; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .status { font-size: 0.8rem; color: #6a5590; margin-top: 8px; min-height: 1.2em; }
+
+  .scene-list { list-style: none; margin-top: 8px; }
+  .scene-list li { padding: 6px 12px; cursor: pointer; border-radius: 6px; font-size: 0.85rem; transition: background 0.1s; }
+  .scene-list li:hover { background: #e8ddf5; }
+  .scene-list li.active { background: #ece5fa; color: #4a148c; font-weight: 600; border: 1px solid #d0c0e8; }
+
+  .vol-row { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+  .vol-label { min-width: 56px; font-size: 0.8rem; color: #6a5590; white-space: nowrap; }
+  .vol-slider { flex: 1; accent-color: #7b1fa2; }
+  .vol-pct { min-width: 40px; text-align: right; font-size: 0.85rem; }
+
+  .process-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .process-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #faf8ff; border: 1px solid #ece5fa; border-radius: 6px; font-size: 0.8rem; }
+  .process-item .label { color: #6a5590; }
+  .process-item .value { color: #2a1f40; font-weight: 500; }
+
+  .log-panel {
+    background: #ece5fa; border: 1px solid #d0c0e8; border-radius: 8px;
+    padding: 12px; font-family: monospace; font-size: 0.75rem;
+    height: 160px; overflow-y: auto; margin-top: 16px;
+    white-space: pre-wrap; color: #4a148c;
+  }
+
+  .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 12px 24px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; max-width: 80vw; text-align: center; animation: fadeIn 0.3s; }
+  .toast.success { background: #e8f5e9; color: #1b5e20; border: 1px solid #4caf50; }
+  .toast.error { background: #ffebee; color: #b71c1c; border: 1px solid #e53935; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+  .link-bar { padding: 6px 24px; background: #faf8ff; border-bottom: 1px solid #ece5fa; font-size: 0.8rem; }
+  .link-bar a { color: #7b1fa2; text-decoration: none; }
+  .link-bar a:hover { text-decoration: underline; }
+
+  .uptime { font-size: 1.2rem; font-weight: bold; color: #c62828; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><a href="/">AI Twitch Cast</a> <span class="badge">Broadcast</span></h1>
+  <div class="header-actions">
+    <button onclick="doSetup()">Setup</button>
+    <button class="success" onclick="doStart()" id="btn-start">配信開始</button>
+    <button class="danger" onclick="doStop()" id="btn-stop">配信停止</button>
+  </div>
+</div>
+
+<div class="link-bar">
+  <a href="/">OBS版 UI</a> | <a href="/broadcast" target="_blank">配信プレビュー</a>
+</div>
+
+<div class="status-bar" id="status-bar">
+  <div class="status-item">
+    <span class="status-dot off" id="sb-xvfb"></span>
+    <span class="status-label">Xvfb</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot off" id="sb-browser"></span>
+    <span class="status-label">Browser</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot off" id="sb-ffmpeg"></span>
+    <span class="status-label">FFmpeg</span>
+  </div>
+  <div class="status-item">
+    <span class="status-dot off" id="sb-stream"></span>
+    <span class="status-label">配信</span>
+    <span class="status-value" id="sb-stream-text">停止中</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="grid">
+
+    <!-- 配信制御 -->
+    <div class="card">
+      <h2><span class="status-dot off" id="stream-dot"></span> 配信制御</h2>
+      <div class="btn-row">
+        <button onclick="doSetup()">Setup</button>
+        <button class="danger" onclick="doTeardown()">Teardown</button>
+      </div>
+      <div class="btn-row">
+        <button class="success" onclick="doStart()">配信開始</button>
+        <button class="danger" onclick="doStop()">配信停止</button>
+      </div>
+      <div id="uptime-display" style="margin-top:8px; display:none;">
+        <span style="font-size:0.8rem; color:#6a5590;">配信時間: </span>
+        <span class="uptime" id="uptime-text">00:00:00</span>
+      </div>
+      <div class="status" id="stream-status"></div>
+    </div>
+
+    <!-- シーン切替 -->
+    <div class="card">
+      <h2>シーン</h2>
+      <ul class="scene-list" id="scene-list">
+        <li class="active" data-scene="main" onclick="switchScene('main')">メイン</li>
+        <li data-scene="start" onclick="switchScene('start')">開始画面</li>
+        <li data-scene="end" onclick="switchScene('end')">終了画面</li>
+      </ul>
+    </div>
+
+    <!-- 音量 -->
+    <div class="card">
+      <h2>音量</h2>
+      <div class="vol-row">
+        <span class="vol-label">マスター</span>
+        <input type="range" class="vol-slider" id="vol-master" min="0" max="200" value="80" oninput="onVolume('master', this)">
+        <span class="vol-pct" id="vol-master-pct">80%</span>
+      </div>
+      <div class="vol-row">
+        <span class="vol-label">TTS</span>
+        <input type="range" class="vol-slider" id="vol-tts" min="0" max="200" value="80" oninput="onVolume('tts', this)">
+        <span class="vol-pct" id="vol-tts-pct">80%</span>
+      </div>
+      <div class="vol-row">
+        <span class="vol-label">BGM</span>
+        <input type="range" class="vol-slider" id="vol-bgm" min="0" max="200" value="100" oninput="onVolume('bgm', this)">
+        <span class="vol-pct" id="vol-bgm-pct">100%</span>
+      </div>
+    </div>
+
+    <!-- プロセス状態 -->
+    <div class="card">
+      <h2>プロセス状態</h2>
+      <div class="process-grid">
+        <div class="process-item">
+          <span class="status-dot off" id="proc-xvfb"></span>
+          <span class="label">Xvfb</span>
+          <span class="value" id="proc-xvfb-text">停止</span>
+        </div>
+        <div class="process-item">
+          <span class="status-dot off" id="proc-browser"></span>
+          <span class="label">Chromium</span>
+          <span class="value" id="proc-browser-text">停止</span>
+        </div>
+        <div class="process-item">
+          <span class="status-dot off" id="proc-ffmpeg"></span>
+          <span class="label">FFmpeg</span>
+          <span class="value" id="proc-ffmpeg-text">停止</span>
+        </div>
+        <div class="process-item">
+          <span class="label">解像度</span>
+          <span class="value" id="proc-resolution">-</span>
+        </div>
+        <div class="process-item">
+          <span class="label">FPS</span>
+          <span class="value" id="proc-fps">-</span>
+        </div>
+        <div class="process-item">
+          <span class="label">Display</span>
+          <span class="value" id="proc-display">-</span>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="secondary" onclick="loadDiag()">診断</button>
+      </div>
+      <div class="status" id="diag-status"></div>
+    </div>
+
+    <!-- アバターキャプチャ -->
+    <div class="card">
+      <h2><span class="status-dot off" id="avatar-dot"></span> アバターキャプチャ</h2>
+      <p style="font-size:0.8rem; color:#6a5590; margin-bottom:8px;">
+        Windows側で <code>python scripts/avatar_capture.py</code> を実行し、VSeeFaceウィンドウをキャプチャ
+      </p>
+      <div style="display:flex; gap:6px; margin-bottom:8px;">
+        <input type="text" id="avatar-url" class="text-input" placeholder="http://WindowsのIP:9090/stream" style="flex:1;">
+        <button onclick="connectAvatar()">接続</button>
+        <button class="secondary" onclick="disconnectAvatar()">切断</button>
+      </div>
+      <div class="btn-row">
+        <button class="secondary" onclick="testAvatarUrl()">テスト</button>
+      </div>
+      <div class="status" id="avatar-status"></div>
+      <div id="avatar-preview" style="margin-top:8px; display:none;">
+        <img id="avatar-preview-img" style="max-width:100%; border:1px solid #d0c0e8; border-radius:6px;" alt="avatar preview">
+      </div>
+    </div>
+
+  </div>
+
+  <div class="log-panel" id="log"></div>
+</div>
+
+<script>
+const logEl = document.getElementById('log');
+let currentScene = 'main';
+let _volTimer = null;
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  logEl.textContent += `[${t}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function showToast(msg, type = 'success', duration = 5000) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+
+async function api(method, url, body) {
+  try {
+    const opts = { method };
+    if (body) {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(url, opts);
+    const data = await r.json();
+    if (!r.ok) {
+      const msg = data.detail || JSON.stringify(data);
+      log(`ERROR ${url}: ${msg}`);
+      showToast(msg, 'error');
+      return null;
+    }
+    log(`OK ${url}`);
+    return data;
+  } catch (e) {
+    log(`ERROR ${url}: ${e.message}`);
+    showToast(e.message, 'error');
+    return null;
+  }
+}
+
+// --- 配信制御 ---
+async function doSetup() {
+  log('Setup開始...');
+  const res = await api('POST', '/api/broadcast/setup');
+  if (res?.ok) {
+    showToast('Setup完了', 'success');
+  }
+  refreshStatus();
+}
+
+async function doTeardown() {
+  log('Teardown開始...');
+  const res = await api('POST', '/api/broadcast/teardown');
+  if (res?.ok) {
+    showToast('Teardown完了', 'success');
+  }
+  refreshStatus();
+}
+
+async function doStart() {
+  log('配信開始...');
+  const res = await api('POST', '/api/broadcast/start');
+  if (res?.ok) {
+    showToast('配信開始', 'success');
+  }
+  refreshStatus();
+}
+
+async function doStop() {
+  log('配信停止...');
+  const res = await api('POST', '/api/broadcast/stop');
+  if (res?.ok) {
+    showToast('配信停止', 'success');
+  }
+  refreshStatus();
+}
+
+// --- シーン ---
+async function switchScene(name) {
+  const res = await api('POST', '/api/broadcast/scene', { name });
+  if (res?.ok) {
+    currentScene = name;
+    updateSceneUI();
+  }
+}
+
+function updateSceneUI() {
+  document.querySelectorAll('#scene-list li').forEach(li => {
+    li.classList.toggle('active', li.dataset.scene === currentScene);
+  });
+}
+
+// --- 音量 ---
+function onVolume(source, slider) {
+  const pct = slider.value;
+  document.getElementById(`vol-${source}-pct`).textContent = pct + '%';
+  clearTimeout(_volTimer);
+  _volTimer = setTimeout(() => {
+    api('POST', '/api/broadcast/volume', { source, volume: pct / 100 });
+  }, 150);
+}
+
+async function loadVolumes() {
+  try {
+    const data = await (await fetch('/api/broadcast/volume')).json();
+    for (const key of ['master', 'tts', 'bgm']) {
+      const val = data[key] ?? 1.0;
+      const pct = Math.round(val * 100);
+      document.getElementById(`vol-${key}`).value = pct;
+      document.getElementById(`vol-${key}-pct`).textContent = pct + '%';
+    }
+  } catch (e) {}
+}
+
+// --- ステータス更新 ---
+async function refreshStatus() {
+  try {
+    const data = await (await fetch('/api/broadcast/status')).json();
+
+    // プロセス状態
+    setDot('proc-xvfb', data.xvfb_running);
+    setDot('proc-browser', data.browser_running);
+    setDot('proc-ffmpeg', data.ffmpeg_running);
+    document.getElementById('proc-xvfb-text').textContent = data.xvfb_running ? '稼働中' : '停止';
+    document.getElementById('proc-browser-text').textContent = data.browser_running ? '稼働中' : '停止';
+    document.getElementById('proc-ffmpeg-text').textContent = data.ffmpeg_running ? '稼働中' : '停止';
+    document.getElementById('proc-resolution').textContent = data.resolution || '-';
+    document.getElementById('proc-fps').textContent = data.framerate || '-';
+    document.getElementById('proc-display').textContent = data.display || '-';
+
+    // ステータスバー
+    setDot('sb-xvfb', data.xvfb_running);
+    setDot('sb-browser', data.browser_running);
+    setDot('sb-ffmpeg', data.ffmpeg_running);
+
+    const streaming = data.streaming;
+    const streamDot = document.getElementById('sb-stream');
+    streamDot.className = 'status-dot ' + (streaming ? 'live' : 'off');
+    document.getElementById('sb-stream-text').textContent = streaming ? '配信中' : '停止中';
+    document.getElementById('status-bar').classList.toggle('streaming', streaming);
+
+    setDot('stream-dot', data.setup);
+
+    // 配信時間
+    const uptimeEl = document.getElementById('uptime-display');
+    if (data.uptime_seconds != null) {
+      uptimeEl.style.display = '';
+      document.getElementById('uptime-text').textContent = formatUptime(data.uptime_seconds);
+    } else {
+      uptimeEl.style.display = 'none';
+    }
+  } catch (e) {}
+}
+
+function setDot(id, on) {
+  document.getElementById(id).className = 'status-dot ' + (on ? 'on' : 'off');
+}
+
+function formatUptime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// --- 診断 ---
+async function loadDiag() {
+  const data = await api('GET', '/api/broadcast/diag');
+  if (!data) return;
+  const el = document.getElementById('diag-status');
+  if (data.healthy) {
+    el.textContent = '正常';
+    el.style.color = '#2e7d32';
+  } else {
+    el.textContent = data.errors.join(', ');
+    el.style.color = '#c62828';
+  }
+}
+
+// --- アバターキャプチャ ---
+async function connectAvatar() {
+  const url = document.getElementById('avatar-url').value.trim();
+  if (!url) {
+    showToast('URLを入力してください', 'error');
+    return;
+  }
+  const res = await api('POST', '/api/broadcast/avatar', { url });
+  if (res?.ok) {
+    showToast('アバター接続', 'success');
+    document.getElementById('avatar-dot').className = 'status-dot on';
+    document.getElementById('avatar-status').textContent = '接続中: ' + url;
+    showAvatarPreview(url);
+  }
+}
+
+async function disconnectAvatar() {
+  const res = await api('POST', '/api/broadcast/avatar/stop');
+  if (res?.ok) {
+    showToast('アバター切断', 'success');
+    document.getElementById('avatar-dot').className = 'status-dot off';
+    document.getElementById('avatar-status').textContent = '切断';
+    document.getElementById('avatar-preview').style.display = 'none';
+  }
+}
+
+async function testAvatarUrl() {
+  const url = document.getElementById('avatar-url').value.trim();
+  if (!url) { showToast('URLを入力してください', 'error'); return; }
+  // /stream → /status に変換してテスト
+  const statusUrl = url.replace(/\/stream$/, '/status');
+  try {
+    const r = await fetch(statusUrl, { mode: 'no-cors' });
+    document.getElementById('avatar-status').textContent = '接続テスト: 応答あり';
+    showAvatarPreview(url.replace(/\/stream$/, '/snapshot'));
+  } catch (e) {
+    document.getElementById('avatar-status').textContent = '接続テスト失敗: ' + e.message;
+  }
+}
+
+function showAvatarPreview(url) {
+  const previewEl = document.getElementById('avatar-preview');
+  const imgEl = document.getElementById('avatar-preview-img');
+  // スナップショットURLを使う
+  imgEl.src = url.replace(/\/stream$/, '/snapshot') + '?t=' + Date.now();
+  previewEl.style.display = '';
+  imgEl.onerror = () => { previewEl.style.display = 'none'; };
+}
+
+// 保存済みアバターURL復元
+async function loadAvatarUrl() {
+  try {
+    const data = await (await fetch('/api/broadcast/avatar')).json();
+    if (data.url) {
+      document.getElementById('avatar-url').value = data.url;
+      document.getElementById('avatar-dot').className = 'status-dot on';
+      document.getElementById('avatar-status').textContent = '接続中: ' + data.url;
+    }
+  } catch (e) {}
+}
+
+// --- 初期化 ---
+loadVolumes();
+loadAvatarUrl();
+refreshStatus();
+setInterval(refreshStatus, 5000);
+</script>
+</body>
+</html>
