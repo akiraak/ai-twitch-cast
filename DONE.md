@@ -116,6 +116,14 @@
 - [x] 配信制御API stream_control.py（/api/broadcast/*エンドポイント群）
 - [x] ブラウザVRMアバター（Three.js+three-vrmでVSeeFace不要化、アイドルアニメーション移植）
 - [x] VRMアバターWebSocket連携（blendshape/lipsync/lipsync_stopイベントでブラウザ側アバター制御）
+- [x] レイアウトエディタ（broadcast-ui.htmlにアバター/字幕/TODO/トピックの位置・サイズ・透明度をスライダー+数値入力で調整、DB自動保存、リアルタイムプレビュー反映）
+- [x] レイアウト設定をDB移行（scenes.jsonは初期値のみ、overlay.*キーでDB保存）
+- [x] レイアウト単位を%/vwに全面変換（px→%/vw、解像度非依存）
+- [x] アバター位置を中心座標+スケール方式に変更（right/bottom→positionX/Y+scale）
+- [x] アバターライティング調整（明るさ/コントラスト/色温度/彩度、ACESトーンマッピング+ライト比率制御）
+- [x] VRMレンダリング画質改善（pixelRatio最低2倍、SRGBColorSpace、ACESFilmicToneMapping）
+- [x] 配信プレビューを別ウィンドウ化（iframe埋め込み廃止、ポップアップウィンドウ+別タブリンク）
+- [x] パネル背景透明度をCSS変数化（--bg-opacity、字幕/TODO/トピック個別制御）
 
 ## Phase 0: 環境構築・基盤
 

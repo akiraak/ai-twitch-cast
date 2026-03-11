@@ -94,6 +94,12 @@
   .link-bar a:hover { text-decoration: underline; }
 
   .uptime { font-size: 1.2rem; font-weight: bold; color: #c62828; font-family: monospace; }
+
+  .layout-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .layout-label { min-width: 80px; font-size: 0.78rem; color: #6a5590; white-space: nowrap; }
+  .layout-num { width: 64px; text-align: right; font-size: 0.82rem; font-family: monospace; padding: 2px 4px; border: 1px solid #d0c0e8; border-radius: 4px; background: #faf8ff; color: #2a1f40; }
+  .layout-num:focus { outline: 2px solid #7b1fa2; border-color: #7b1fa2; }
+  fieldset { margin: 0; }
 </style>
 </head>
 <body>
@@ -108,7 +114,7 @@
 </div>
 
 <div class="link-bar">
-  <a href="/">OBS版 UI</a> | <a href="/broadcast" target="_blank">配信プレビュー</a>
+  <a href="/">OBS版 UI</a> | <a href="/broadcast" target="_blank">配信プレビュー (別窓)</a> | <a href="#" onclick="openPreview(); return false;">プレビューウィンドウ</a>
 </div>
 
 <div class="status-bar" id="status-bar">
@@ -132,13 +138,6 @@
 </div>
 
 <div class="main">
-  <!-- 配信プレビュー -->
-  <div style="margin-bottom:16px;">
-    <div style="position:relative; width:100%; aspect-ratio:16/9; background:#000; border-radius:8px; overflow:hidden; border:1px solid #d0c0e8;">
-      <iframe id="preview-iframe" src="/broadcast" style="width:100%; height:100%; border:none;" allowtransparency="true"></iframe>
-    </div>
-  </div>
-
   <div class="grid">
 
     <!-- 配信制御 -->
@@ -187,6 +186,58 @@
         <input type="range" class="vol-slider" id="vol-bgm" min="0" max="200" value="100" oninput="onVolume('bgm', this)">
         <span class="vol-pct" id="vol-bgm-pct">100%</span>
       </div>
+    </div>
+
+    <!-- レイアウト -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>レイアウト</h2>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <!-- アバター -->
+        <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
+          <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">アバター</legend>
+          <div class="layout-row"><span class="layout-label">X位置 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="100" step="0.25" data-key="avatar.positionX" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-avatar-positionX" min="0" max="100" step="0.25" data-key="avatar.positionX" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">Y位置 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="100" step="0.25" data-key="avatar.positionY" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-avatar-positionY" min="0" max="100" step="0.25" data-key="avatar.positionY" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">スケール</span><input type="range" class="vol-slider layout-slider" min="0.1" max="3" step="0.05" data-key="avatar.scale" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-avatar-scale" min="0.1" max="3" step="0.05" data-key="avatar.scale" oninput="onLayoutNum(this)"></div>
+        </fieldset>
+        <!-- ライティング -->
+        <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
+          <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">ライティング</legend>
+          <div class="layout-row"><span class="layout-label">明るさ</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-brightness" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">コントラスト</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-contrast" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">色温度</span><input type="range" class="vol-slider layout-slider" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-temperature" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">彩度</span><input type="range" class="vol-slider layout-slider" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-saturation" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutNum(this)"></div>
+        </fieldset>
+        <!-- 字幕 -->
+        <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
+          <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">字幕</legend>
+          <div class="layout-row"><span class="layout-label">下端 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-bottom" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">文字 (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="4" step="0.05" data-key="subtitle.fontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-fontSize" min="0.5" max="4" step="0.05" data-key="subtitle.fontSize" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">最大幅 (%)</span><input type="range" class="vol-slider layout-slider" min="20" max="90" step="1" data-key="subtitle.maxWidth" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-maxWidth" min="20" max="90" step="1" data-key="subtitle.maxWidth" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">フェード (秒)</span><input type="range" class="vol-slider layout-slider" min="1" max="10" step="0.5" data-key="subtitle.fadeDuration" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-fadeDuration" min="1" max="10" step="0.5" data-key="subtitle.fadeDuration" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">背景透明度</span><input type="range" class="vol-slider layout-slider" min="0" max="1" step="0.05" data-key="subtitle.bgOpacity" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-bgOpacity" min="0" max="1" step="0.05" data-key="subtitle.bgOpacity" oninput="onLayoutNum(this)"></div>
+        </fieldset>
+        <!-- TODO -->
+        <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
+          <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">TODOパネル</legend>
+          <div class="layout-row"><span class="layout-label">X位置 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="100" step="0.5" data-key="todo.positionX" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-positionX" min="0" max="100" step="0.5" data-key="todo.positionX" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">Y位置 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="100" step="0.5" data-key="todo.positionY" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-positionY" min="0" max="100" step="0.5" data-key="todo.positionY" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">幅 (%)</span><input type="range" class="vol-slider layout-slider" min="10" max="60" step="0.5" data-key="todo.width" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-width" min="10" max="60" step="0.5" data-key="todo.width" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">高さ (%)</span><input type="range" class="vol-slider layout-slider" min="10" max="90" step="0.5" data-key="todo.height" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-height" min="10" max="90" step="0.5" data-key="todo.height" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">文字 (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="todo.fontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-fontSize" min="0.5" max="3" step="0.05" data-key="todo.fontSize" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">タイトル (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="todo.titleFontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-titleFontSize" min="0.5" max="3" step="0.05" data-key="todo.titleFontSize" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">背景透明度</span><input type="range" class="vol-slider layout-slider" min="0" max="1" step="0.05" data-key="todo.bgOpacity" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-bgOpacity" min="0" max="1" step="0.05" data-key="todo.bgOpacity" oninput="onLayoutNum(this)"></div>
+        </fieldset>
+        <!-- トピック -->
+        <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
+          <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">トピックパネル</legend>
+          <div class="layout-row"><span class="layout-label">X位置 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="50" step="0.1" data-key="topic.positionX" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-positionX" min="0" max="50" step="0.1" data-key="topic.positionX" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">Y位置 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="50" step="0.1" data-key="topic.positionY" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-positionY" min="0" max="50" step="0.1" data-key="topic.positionY" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">最大幅 (%)</span><input type="range" class="vol-slider layout-slider" min="10" max="60" step="0.5" data-key="topic.maxWidth" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-maxWidth" min="10" max="60" step="0.5" data-key="topic.maxWidth" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">タイトル (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="topic.titleFontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-titleFontSize" min="0.5" max="3" step="0.05" data-key="topic.titleFontSize" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">背景透明度</span><input type="range" class="vol-slider layout-slider" min="0" max="1" step="0.05" data-key="topic.bgOpacity" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-bgOpacity" min="0" max="1" step="0.05" data-key="topic.bgOpacity" oninput="onLayoutNum(this)"></div>
+        </fieldset>
+      </div>
+      <div class="status" id="layout-status" style="margin-top:8px; font-size:0.75rem;">変更は自動保存されます</div>
     </div>
 
     <!-- プロセス状態 -->
@@ -256,6 +307,15 @@
 const logEl = document.getElementById('log');
 let currentScene = 'main';
 let _volTimer = null;
+let _previewWin = null;
+
+function openPreview() {
+  if (_previewWin && !_previewWin.closed) {
+    _previewWin.focus();
+    return;
+  }
+  _previewWin = window.open('/broadcast', 'broadcast-preview', 'width=960,height=540');
+}
 
 function log(msg) {
   const t = new Date().toLocaleTimeString();
@@ -495,9 +555,58 @@ async function loadAvatarUrl() {
   } catch (e) {}
 }
 
+// --- レイアウト ---
+let layoutSettings = {};
+let _layoutTimer = null;
+
+function _updateLayout(key, val) {
+  const [section, prop] = key.split('.');
+  if (!layoutSettings[section]) layoutSettings[section] = {};
+  layoutSettings[section][prop] = val;
+  // プレビュー即反映 + DB自動保存（デバウンス）
+  clearTimeout(_layoutTimer);
+  _layoutTimer = setTimeout(() => {
+    api('POST', '/api/overlay/settings', layoutSettings);
+  }, 200);
+}
+
+function onLayoutSlider(slider) {
+  const val = parseFloat(slider.value);
+  if (isNaN(val)) return;
+  const numEl = document.getElementById('lv-' + slider.dataset.key.replace('.', '-'));
+  if (numEl) numEl.value = val;
+  _updateLayout(slider.dataset.key, val);
+}
+
+function onLayoutNum(input) {
+  const val = parseFloat(input.value);
+  if (isNaN(val)) return;
+  const slider = input.closest('.layout-row').querySelector('.layout-slider');
+  if (slider) slider.value = val;
+  _updateLayout(input.dataset.key, val);
+}
+
+async function loadLayout() {
+  try {
+    const data = await (await fetch('/api/overlay/settings')).json();
+    layoutSettings = data;
+    // スライダーと数値入力に値を反映
+    document.querySelectorAll('.layout-num[data-key]').forEach(numEl => {
+      const [section, prop] = numEl.dataset.key.split('.');
+      const val = data[section]?.[prop];
+      if (val != null) {
+        numEl.value = val;
+        const slider = numEl.closest('.layout-row').querySelector('.layout-slider');
+        if (slider) slider.value = val;
+      }
+    });
+  } catch (e) {}
+}
+
 // --- 初期化 ---
 loadVolumes();
 loadAvatarUrl();
+loadLayout();
 refreshStatus();
 setInterval(refreshStatus, 5000);
 </script>

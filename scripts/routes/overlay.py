@@ -152,14 +152,40 @@ async def design_proposal_page():
     return (STATIC_DIR / "design-proposal.html").read_text(encoding="utf-8")
 
 
+def _get_overlay_defaults():
+    """scenes.jsonからオーバーレイのデフォルト値を読み込む"""
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            config = json.load(f)
+        return config.get("overlay", {})
+    except Exception:
+        return {}
+
+
+_OVERLAY_DEFAULTS = {
+    "avatar": {"positionX": 73.25, "positionY": 62.15, "scale": 1.0},
+    "lighting": {"brightness": 1.0, "contrast": 1.0, "temperature": 0, "saturation": 1.0},
+    "subtitle": {"bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3, "bgOpacity": 0.85},
+    "todo": {"positionX": 50, "positionY": 50, "width": 28, "height": 70, "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95},
+    "topic": {"positionX": 1.04, "positionY": 1.85, "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95},
+}
+
+
 @router.get("/api/overlay/settings")
 async def get_overlay_settings():
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    return config.get("overlay", {
-        "subtitle": {"bottom": 80, "fontSize": 28, "fadeDuration": 3},
-        "todo": {"width": 460, "fontSize": 15, "titleFontSize": 18},
-    })
+    """レイアウト設定を返す（DB優先→scenes.json→ハードコードデフォルト）"""
+    file_defaults = _get_overlay_defaults()
+    result = {}
+    for section, props in _OVERLAY_DEFAULTS.items():
+        result[section] = {}
+        file_section = file_defaults.get(section, {})
+        for prop, fallback in props.items():
+            val = db.get_setting(f"overlay.{section}.{prop}")
+            if val is not None:
+                result[section][prop] = float(val)
+            else:
+                result[section][prop] = file_section.get(prop, fallback)
+    return result
 
 
 @router.get("/api/todo")
@@ -239,7 +265,7 @@ async def start_todo(request: Request):
 
 @router.post("/api/overlay/preview")
 async def preview_overlay_settings(request: Request):
-    """設定をファイルに保存せずオーバーレイにリアルタイム反映する"""
+    """設定をオーバーレイにリアルタイム反映する（保存なし）"""
     body = await request.json()
     await state.broadcast_overlay({"type": "settings_update", **body})
     return {"ok": True}
@@ -247,21 +273,16 @@ async def preview_overlay_settings(request: Request):
 
 @router.post("/api/overlay/settings")
 async def save_overlay_settings(request: Request):
+    """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    # 既存設定にマージ（部分更新対応）
-    existing = config.get("overlay", {})
-    for key, val in body.items():
-        if isinstance(val, dict) and isinstance(existing.get(key), dict):
-            existing[key].update(val)
-        else:
-            existing[key] = val
-    config["overlay"] = existing
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    await state.broadcast_overlay({"type": "settings_update", **existing})
+    for section, props in body.items():
+        if not isinstance(props, dict):
+            continue
+        for prop, val in props.items():
+            db.set_setting(f"overlay.{section}.{prop}", val)
+    # 全設定を読み直してブロードキャスト
+    full = await get_overlay_settings()
+    await state.broadcast_overlay({"type": "settings_update", **full})
     return {"ok": True}
 
 

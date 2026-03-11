@@ -6,24 +6,30 @@
     }
   },
   "overlay": {
+    "avatar": {
+      "positionX": 73.25,
+      "positionY": 62.15,
+      "scale": 1.0
+    },
     "subtitle": {
-      "bottom": 80,
-      "fontSize": 28,
+      "bottom": 7.4,
+      "fontSize": 1.875,
+      "maxWidth": 62,
       "fadeDuration": 3
     },
     "todo": {
-      "positionX": 470,
-      "positionY": 40,
-      "width": 990,
-      "height": 600,
-      "fontSize": 24,
-      "titleFontSize": 29
+      "positionX": 50,
+      "positionY": 16,
+      "width": 60,
+      "fontSize": 1.25,
+      "titleFontSize": 2.3,
+      "bgOpacity": 0.6
     },
     "topic": {
-      "positionX": 60,
-      "positionY": 40,
-      "width": 390,
-      "titleFontSize": 24
+      "positionX": 1.04,
+      "positionY": 10,
+      "maxWidth": 31,
+      "titleFontSize": 1.25
     }
   },
   "avatar": {

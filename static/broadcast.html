@@ -24,8 +24,10 @@
   #avatar-area {
     position: absolute;
     z-index: 5;
-    right: 0; bottom: 0;
+    left: 73.25%; top: 62.15%;
     width: 53.5%; height: 75.7%;
+    transform: translate(-50%, -50%);
+    transform-origin: center center;
   }
   #avatar-area img, #avatar-area canvas {
     width: 100%; height: 100%;
@@ -39,7 +41,8 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 20;
-    background: linear-gradient(135deg, rgba(20, 20, 40, 0.85), rgba(30, 20, 50, 0.85));
+    --bg-opacity: 0.85;
+    background: linear-gradient(135deg, rgba(20, 20, 40, var(--bg-opacity)), rgba(30, 20, 50, var(--bg-opacity)));
     border: 1px solid rgba(124, 77, 255, 0.3);
     border-radius: 1vw;
     padding: 1.4vw 2.2vw;
@@ -73,13 +76,13 @@
   /* === TODOパネル（中央） === */
   #todo-panel {
     position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
+    top: 2%; left: 50%;
+    transform: translateX(-50%);
     z-index: 20;
     width: 28%;
-    max-height: 70%;
     overflow: hidden;
-    background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(5, 0, 10, 0.95));
+    --bg-opacity: 0.95;
+    background: linear-gradient(135deg, rgba(0, 0, 0, var(--bg-opacity)), rgba(5, 0, 10, var(--bg-opacity)));
     border: 1px solid rgba(124, 77, 255, 0.3);
     border-radius: 0.6vw;
     padding: 1vw 1.25vw;
@@ -160,7 +163,8 @@
     top: 1.85%; left: 1.04%;
     z-index: 20;
     max-width: 31%; min-width: 15%;
-    background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(5, 0, 10, 0.95));
+    --bg-opacity: 0.95;
+    background: linear-gradient(135deg, rgba(0, 0, 0, var(--bg-opacity)), rgba(5, 0, 10, var(--bg-opacity)));
     border: 1px solid rgba(124, 77, 255, 0.3);
     border-radius: 0.5vw;
     padding: 0;
@@ -277,7 +281,10 @@ import * as VRM from '@pixiv/three-vrm';
 const canvas = document.getElementById('avatar-canvas');
 const avatarArea = document.getElementById('avatar-area');
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-renderer.setPixelRatio(1);
+renderer.setPixelRatio(Math.max(window.devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(20, 1, 0.1, 100);
@@ -296,11 +303,22 @@ resizeRenderer();
 window.addEventListener('resize', resizeRenderer);
 
 // ライティング
-const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
 dirLight.position.set(1, 2, 3);
 scene.add(dirLight);
+
+// ライティング設定を外部から制御
+window.avatarLighting = {
+  setAmbient(intensity) { ambientLight.intensity = intensity; },
+  setDirectional(intensity) { dirLight.intensity = intensity; },
+  setExposure(val) { renderer.toneMappingExposure = val; },
+  setColor(r, g, b) {
+    ambientLight.color.setRGB(r, g, b);
+    dirLight.color.setRGB(r, g, b);
+  },
+};
 
 let currentVRM = null;
 let idleScale = 1.0;
@@ -508,45 +526,78 @@ function applyVolume() {
   bgmAudio.volume = volumes.master * volumes.bgm;
 }
 
-// === 設定適用 ===
+// === 背景透明度の適用（CSS変数で制御） ===
+function setBgOpacity(el, opacity) {
+  el.style.setProperty('--bg-opacity', opacity);
+}
+
+// === 設定適用（%/vw単位） ===
 function applySettings(s) {
+  const avatarArea = document.getElementById('avatar-area');
+  if (s.avatar) {
+    if (s.avatar.positionX != null) avatarArea.style.left = s.avatar.positionX + '%';
+    if (s.avatar.positionY != null) avatarArea.style.top = s.avatar.positionY + '%';
+    if (s.avatar.scale != null) {
+      avatarArea.style.transform = `translate(-50%, -50%) scale(${s.avatar.scale})`;
+    }
+    if (window.dispatchEvent) window.dispatchEvent(new Event('resize'));
+  }
+  if (s.lighting && window.avatarLighting) {
+    const L = window.avatarLighting;
+    const b = s.lighting.brightness ?? 1.0;
+    const c = s.lighting.contrast ?? 1.0;
+    const temp = s.lighting.temperature ?? 0;  // -1(寒色)〜+1(暖色)
+    const sat = s.lighting.saturation ?? 1.0;
+    // 明るさ → トーンマッピング露出（ACESが白飛び防止）
+    L.setExposure(b);
+    // コントラスト → 環境光/指向性光の比率
+    L.setAmbient(Math.max(0.5, Math.min(4.0, 2.0 / c)));
+    L.setDirectional(Math.max(0.3, Math.min(4.0, 1.5 * c)));
+    // 色温度 → ライトの色（暖色=黄、寒色=青）
+    const r = 1.0 + temp * 0.15;
+    const g = 1.0;
+    const bl = 1.0 - temp * 0.15;
+    L.setColor(r, g, bl);
+    // 彩度 → CSSフィルター
+    document.getElementById('avatar-canvas').style.filter = sat !== 1.0 ? `saturate(${sat})` : '';
+  }
   if (s.subtitle) {
-    if (s.subtitle.bottom != null) subtitleEl.style.bottom = s.subtitle.bottom + 'px';
-    if (s.subtitle.fontSize != null) subtitleEl.querySelector('.response').style.fontSize = s.subtitle.fontSize + 'px';
+    if (s.subtitle.bottom != null) subtitleEl.style.bottom = s.subtitle.bottom + '%';
+    if (s.subtitle.fontSize != null) subtitleEl.querySelector('.response').style.fontSize = s.subtitle.fontSize + 'vw';
+    if (s.subtitle.maxWidth != null) subtitleEl.style.maxWidth = s.subtitle.maxWidth + '%';
     if (s.subtitle.fadeDuration != null) subtitleEl.dataset.fadeDuration = s.subtitle.fadeDuration;
+    if (s.subtitle.bgOpacity != null) setBgOpacity(subtitleEl, s.subtitle.bgOpacity);
   }
   if (s.todo) {
     todoSettings = s.todo;
-    if (s.todo.width != null) todoPanelEl.style.width = s.todo.width + 'px';
-    if (s.todo.height) {
-      todoPanelEl.style.height = s.todo.height + 'px';
-      todoPanelEl.style.overflowY = 'hidden';
-    } else {
-      todoPanelEl.style.height = '';
-      todoPanelEl.style.overflowY = '';
+    if (s.todo.width != null) todoPanelEl.style.width = s.todo.width + '%';
+    if (s.todo.height != null) {
+      todoPanelEl.style.height = s.todo.height + '%';
+      todoPanelEl.style.maxHeight = 'none';
+      todoPanelEl.style.overflow = 'hidden';
     }
-    if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'px';
-    if (s.todo.positionX != null || s.todo.positionY != null) {
-      const x = s.todo.positionX ?? 960;
-      const y = s.todo.positionY ?? 540;
-      todoPanelEl.style.left = x + 'px';
-      todoPanelEl.style.top = y + 'px';
-      todoPanelEl.style.transform = 'none';
+    if (s.todo.positionX != null) {
+      todoPanelEl.style.left = s.todo.positionX + '%';
+      todoPanelEl.style.transform = 'translateX(-50%)';
+    }
+    if (s.todo.positionY != null) {
+      todoPanelEl.style.top = s.todo.positionY + '%';
     }
     if (s.todo.fontSize != null) {
-      todoPanelEl.querySelectorAll('.todo-item').forEach(el => el.style.fontSize = s.todo.fontSize + 'px');
+      todoPanelEl.querySelectorAll('.todo-item').forEach(el => el.style.fontSize = s.todo.fontSize + 'vw');
     }
+    if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'vw';
+    if (s.todo.bgOpacity != null) setBgOpacity(todoPanelEl, s.todo.bgOpacity);
     loadTodo();
   }
   if (s.topic) {
-    if (s.topic.positionX != null || s.topic.positionY != null) {
-      topicPanelEl.style.left = (s.topic.positionX ?? 20) + 'px';
-      topicPanelEl.style.top = (s.topic.positionY ?? 20) + 'px';
-    }
-    if (s.topic.width != null) topicPanelEl.style.width = s.topic.width + 'px';
+    if (s.topic.positionX != null) topicPanelEl.style.left = s.topic.positionX + '%';
+    if (s.topic.positionY != null) topicPanelEl.style.top = s.topic.positionY + '%';
+    if (s.topic.maxWidth != null) topicPanelEl.style.maxWidth = s.topic.maxWidth + '%';
     if (s.topic.titleFontSize != null) {
-      document.getElementById('topic-title-text').style.fontSize = s.topic.titleFontSize + 'px';
+      document.getElementById('topic-title-text').style.fontSize = s.topic.titleFontSize + 'vw';
     }
+    if (s.topic.bgOpacity != null) setBgOpacity(topicPanelEl, s.topic.bgOpacity);
   }
 }
 
