@@ -274,9 +274,9 @@ def _deploy_to_windows():
         if not dst_asar.exists():
             raise RuntimeError(f"デプロイ後にasarが見つかりません: {dst_asar}")
         logger.info("初回デプロイ完了: %s", win_deploy_dir)
-    elif src_asar.exists() and (not dst_asar.exists() or src_asar.stat().st_mtime > dst_asar.stat().st_mtime):
-        # 更新: asarファイルのみコピー（exe/dllはロック中でもOK）
-        logger.info("asarのみデプロイ中...")
+    elif src_asar.exists():
+        # 更新: asarファイルを毎回コピー（mtime比較なし＝確実にデプロイ）
+        logger.info("asarデプロイ中...")
         dst_asar.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(src_asar), str(dst_asar))
         logger.info("asarデプロイ完了 (size=%d)", dst_asar.stat().st_size)
@@ -445,20 +445,21 @@ def _run_preview_oneclick():
             skipped.append("build")
         done.append("check_build")
 
-        # ---- Stage: check_asar ----
-        _update_oneclick("check_asar", "ソース更新を確認中...", 50, done, skipped)
-        if _needs_asar_update():
-            _update_oneclick("update_asar", "asar更新中...", 55, done, skipped)
-            _update_asar()
-            if _build_state["status"] == "error":
-                _oneclick_state = {"status": "error", "stage": "update_asar",
-                    "message": _build_state["message"],
-                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
-                return
-            done.append("update_asar")
-        else:
-            skipped.append("update_asar")
-        done.append("check_asar")
+        # ---- Stage: update_asar（毎回実行） ----
+        _update_oneclick("update_asar", "asar更新中...", 50, done, skipped)
+        _update_asar()
+        if _build_state["status"] == "error":
+            _oneclick_state = {"status": "error", "stage": "update_asar",
+                "message": _build_state["message"],
+                "progress": 0, "stages_done": done, "stages_skipped": skipped}
+            return
+        if _build_state["status"] != "done":
+            # ロック競合等でasar更新がスキップされた場合
+            _oneclick_state = {"status": "error", "stage": "update_asar",
+                "message": "asar更新がスキップされました（別プロセスがビルド中の可能性）",
+                "progress": 0, "stages_done": done, "stages_skipped": skipped}
+            return
+        done.append("update_asar")
 
         if not _EXE_PATH.exists():
             _oneclick_state = {"status": "error", "stage": "check_build",
@@ -466,7 +467,7 @@ def _run_preview_oneclick():
                 "progress": 0, "stages_done": done, "stages_skipped": skipped}
             return
 
-        # ---- サーバー起動チェック（deploy/launch判定に使用） ----
+        # ---- Stage: stop（起動中なら停止） ----
         import httpx
         server_running = False
         try:
@@ -475,105 +476,81 @@ def _run_preview_oneclick():
         except Exception:
             pass
 
-        asar_updated = "update_asar" in done
-
-        # デプロイ先のasarが古いかチェック
-        deploy_needed = False
-        if is_wsl():
-            src_asar = _EXE_PATH.parent / "resources" / "app.asar"
-            win_deploy_dir = Path("/mnt/c/Users") / os.environ.get("WIN_USER", "akira") / "AppData" / "Local" / "ai-twitch-cast-capture"
-            dst_asar = win_deploy_dir / "resources" / "app.asar"
-            if src_asar.exists():
-                if not dst_asar.exists() or src_asar.stat().st_mtime > dst_asar.stat().st_mtime:
-                    deploy_needed = True
-                    logger.info("デプロイ先asarが古い: src=%s, dst=%s",
-                                src_asar.stat().st_mtime,
-                                dst_asar.stat().st_mtime if dst_asar.exists() else "N/A")
-
-        needs_restart = asar_updated or deploy_needed
-
-        if server_running and not needs_restart:
-            # 起動中かつ更新不要ならdeploy/launch/wait全スキップ
-            skipped.append("deploy")
-            skipped.append("launch")
-            skipped.append("wait_server")
-        else:
-            # 更新時は起動中でも停止→再デプロイ→再起動
-            if server_running and needs_restart:
-                _update_oneclick("restart", "アプリ停止中...", 62, done, skipped)
-                # /quit APIで終了を試みる
+        if server_running:
+            _update_oneclick("stop", "アプリ停止中...", 58, done, skipped)
+            try:
+                httpx.post(f"{_capture_base_url()}/quit", timeout=3.0)
+                time.sleep(2)
+            except Exception:
+                pass
+            global _capture_proc
+            if _capture_proc:
                 try:
-                    httpx.post(f"{_capture_base_url()}/quit", timeout=3.0)
-                    time.sleep(2)  # quit処理待ち
+                    _capture_proc.terminate()
                 except Exception:
                     pass
-                # 確実に停止: プロセスを直接kill
-                global _capture_proc
-                if _capture_proc:
-                    try:
-                        _capture_proc.terminate()
-                    except Exception:
-                        pass
-                    _capture_proc = None
-                if is_wsl():
-                    subprocess.run(
-                        ["powershell.exe", "-NoProfile", "-Command",
-                         "Stop-Process -Name 'win-capture-app' -Force -ErrorAction SilentlyContinue"],
-                        capture_output=True, timeout=5,
-                    )
-                # プロセス終了を待つ
-                for _ in range(10):
-                    time.sleep(0.5)
-                    try:
-                        httpx.get(f"{_capture_base_url()}/status", timeout=1.0)
-                    except Exception:
-                        break
-                server_running = False
-                done.append("restart")
-            # ---- Stage: deploy ----
-            _update_oneclick("deploy", "Windowsにデプロイ中...", 65, done, skipped)
-            try:
-                if is_wsl():
-                    _deploy_to_windows()
-                else:
-                    skipped.append("deploy")
-                done.append("deploy")
-            except Exception as e:
-                _oneclick_state = {"status": "error", "stage": "deploy",
-                    "message": f"デプロイ失敗: {e}",
-                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
-                return
-
-            # ---- Stage: launch ----
-            _update_oneclick("launch", "Electronアプリ起動中...", 75, done, skipped)
-            try:
-                _launch_electron()
-                done.append("launch")
-            except Exception as e:
-                _oneclick_state = {"status": "error", "stage": "launch",
-                    "message": f"起動失敗: {e}",
-                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
-                return
-
-            # ---- Stage: wait_server ----
-            _update_oneclick("wait_server", "サーバー応答待ち...", 80, done, skipped)
-            for i in range(30):  # 15秒
+                _capture_proc = None
+            if is_wsl():
+                subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-Command",
+                     "Stop-Process -Name 'win-capture-app' -Force -ErrorAction SilentlyContinue"],
+                    capture_output=True, timeout=5,
+                )
+            for _ in range(10):
                 time.sleep(0.5)
                 try:
-                    resp = httpx.get(f"{_capture_base_url()}/status", timeout=2.0)
-                    if resp.status_code == 200:
-                        server_running = True
-                        break
+                    httpx.get(f"{_capture_base_url()}/status", timeout=1.0)
                 except Exception:
-                    pass
-                _update_oneclick("wait_server", f"サーバー応答待ち... ({i+1}/30)", 80 + i * 0.3, done, skipped)
+                    break
+            done.append("stop")
+        else:
+            skipped.append("stop")
 
-            if not server_running:
-                _oneclick_state = {"status": "error", "stage": "wait_server",
-                    "message": "サーバー起動タイムアウト",
-                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
-                return
-            done.append("wait_server")
+        # ---- Stage: deploy（毎回実行） ----
+        _update_oneclick("deploy", "Windowsにデプロイ中...", 65, done, skipped)
+        try:
+            if is_wsl():
+                _deploy_to_windows()
+            else:
+                skipped.append("deploy")
+            done.append("deploy")
+        except Exception as e:
+            _oneclick_state = {"status": "error", "stage": "deploy",
+                "message": f"デプロイ失敗: {e}",
+                "progress": 0, "stages_done": done, "stages_skipped": skipped}
+            return
+
+        # ---- Stage: launch ----
+        _update_oneclick("launch", "Electronアプリ起動中...", 75, done, skipped)
+        try:
+            _launch_electron()
+            done.append("launch")
+        except Exception as e:
+            _oneclick_state = {"status": "error", "stage": "launch",
+                "message": f"起動失敗: {e}",
+                "progress": 0, "stages_done": done, "stages_skipped": skipped}
+            return
+
+        # ---- Stage: wait_server ----
+        _update_oneclick("wait_server", "サーバー応答待ち...", 80, done, skipped)
+        server_running = False
+        for i in range(30):  # 15秒
+            time.sleep(0.5)
+            try:
+                resp = httpx.get(f"{_capture_base_url()}/status", timeout=2.0)
+                if resp.status_code == 200:
+                    server_running = True
+                    break
+            except Exception:
+                pass
+            _update_oneclick("wait_server", f"サーバー応答待ち... ({i+1}/30)", 80 + i * 0.3, done, skipped)
+
+        if not server_running:
+            _oneclick_state = {"status": "error", "stage": "wait_server",
+                "message": "サーバー起動タイムアウト",
+                "progress": 0, "stages_done": done, "stages_skipped": skipped}
+            return
+        done.append("wait_server")
 
         # ---- Stage: open_preview ----
         _update_oneclick("open_preview", "プレビューを開いています...", 92, done, skipped)
