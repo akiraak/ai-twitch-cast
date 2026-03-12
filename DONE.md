@@ -126,6 +126,7 @@
 - [x] パネル背景透明度をCSS変数化（--bg-opacity、字幕/TODO/トピック個別制御）
 - [x] broadcast-ui.htmlをルート（/）に変更
 - [x] サーバー再起動ボタン+更新検知ダイアログ（server_started_atポーリング、コミット再起動も検知）
+- [x] DB名をcomments.db→app.dbにリネーム（実態に合わせて改名）
 
 ## Phase 0: 環境構築・基盤
 

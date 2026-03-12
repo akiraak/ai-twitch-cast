@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _PROJECT_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = _PROJECT_DIR / "data" / "comments.db"
+DB_PATH = _PROJECT_DIR / "data" / "app.db"
 
 _conn = None
 
