@@ -75,6 +75,15 @@ async def broadcast_page(request: Request):
     return HTMLResponse((STATIC_DIR / "broadcast.html").read_text(encoding="utf-8"))
 
 
+@router.get("/preview")
+async def preview_page(request: Request):
+    """preview.htmlを返す（トークン認証必須、Electronプレビュー用）"""
+    token = request.query_params.get("token")
+    if token != BROADCAST_TOKEN:
+        return PlainTextResponse("認証エラー", status_code=403)
+    return HTMLResponse((STATIC_DIR / "preview.html").read_text(encoding="utf-8"))
+
+
 @router.get("/api/broadcast/token")
 async def broadcast_token():
     """broadcast.htmlアクセス用トークンを返す（レイアウト編集用）"""

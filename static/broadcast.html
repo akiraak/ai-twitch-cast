@@ -172,6 +172,7 @@
 
   /* === 編集モード === */
   body.edit-mode .edit-toolbar { display: flex; }
+  body.edit-mode.embedded .edit-toolbar { display: none; }
   .edit-toolbar {
     display: none;
     position: fixed; top: 0; left: 0; right: 0;
@@ -1071,6 +1072,8 @@ function applyLayoutToEl(el, layout) {
 
 // === 編集モード ===
 const isEditMode = new URLSearchParams(location.search).has('edit');
+const isEmbedded = new URLSearchParams(location.search).has('embedded') || window.parent !== window;
+if (isEmbedded) document.body.classList.add('embedded');
 let _saveTimer = null;
 let _selectedEditable = null;
 const _ctxMenu = document.getElementById('edit-context-menu');

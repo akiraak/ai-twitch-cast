@@ -472,12 +472,45 @@ def _run_preview_oneclick():
         except Exception:
             pass
 
-        if server_running:
-            # 起動中ならdeploy/launch/wait全スキップ
+        asar_updated = "update_asar" in done
+
+        if server_running and not asar_updated:
+            # 起動中かつasar未更新ならdeploy/launch/wait全スキップ
             skipped.append("deploy")
             skipped.append("launch")
             skipped.append("wait_server")
         else:
+            # asar更新時は起動中でも停止→再デプロイ→再起動
+            if server_running and asar_updated:
+                _update_oneclick("restart", "アプリ再起動中...", 62, done, skipped)
+                # /quit APIで終了を試みる（なければプロセス終了）
+                try:
+                    httpx.post(f"{_capture_base_url()}/quit", timeout=3.0)
+                except Exception:
+                    # /quitが無い場合はプロセスを直接終了
+                    global _capture_proc
+                    if _capture_proc:
+                        try:
+                            _capture_proc.terminate()
+                        except Exception:
+                            pass
+                        _capture_proc = None
+                    # Windows側プロセスも停止
+                    if is_wsl():
+                        subprocess.run(
+                            ["powershell.exe", "-NoProfile", "-Command",
+                             "Stop-Process -Name 'win-capture-app' -Force -ErrorAction SilentlyContinue"],
+                            capture_output=True, timeout=5,
+                        )
+                # プロセス終了を待つ
+                for _ in range(10):
+                    time.sleep(0.5)
+                    try:
+                        httpx.get(f"{_capture_base_url()}/status", timeout=1.0)
+                    except Exception:
+                        break
+                server_running = False
+                done.append("restart")
             # ---- Stage: deploy ----
             _update_oneclick("deploy", "Windowsにデプロイ中...", 65, done, skipped)
             try:

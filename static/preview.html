@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>AI Twitch Cast - Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    display: flex;
+    width: 100vw; height: 100vh;
+    background: #0d0d1a;
+    font-family: system-ui, "Noto Sans JP", sans-serif;
+    color: #eee;
+    overflow: hidden;
+  }
+
+  /* === 配信プレビュー（左） === */
+  #preview-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    position: relative;
+  }
+  #broadcast-frame {
+    border: none;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* === コントロールパネル（右） === */
+  #control-panel {
+    width: 280px;
+    min-width: 280px;
+    background: #111122;
+    border-left: 2px solid #7c4dff;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .panel-section {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(124, 77, 255, 0.15);
+  }
+  .panel-section h3 {
+    font-size: 11px;
+    color: #b388ff;
+    font-weight: bold;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .panel-btn {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border: 1px solid #7c4dff;
+    border-radius: 5px;
+    background: transparent;
+    color: #b388ff;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .panel-btn:hover { background: rgba(124, 77, 255, 0.15); }
+  .panel-btn.primary { background: #7c4dff; color: #fff; }
+  .panel-btn.primary:hover { background: #651fff; }
+  .panel-btn.go-live { background: #4caf50; color: #fff; border-color: #4caf50; font-weight: bold; }
+  .panel-btn.go-live:hover { background: #43a047; }
+  .panel-btn.stop { background: #f44336; color: #fff; border-color: #f44336; }
+  .panel-btn.stop:hover { background: #e53935; }
+  .panel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #666;
+  }
+  .status-dot.live {
+    background: #f44336;
+    animation: pulse 2s infinite;
+  }
+  .status-dot.preview { background: #4caf50; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .stream-info {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 6px;
+  }
+
+  select {
+    width: 100%;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #1a1a2e;
+    color: #eee;
+    font-size: 12px;
+  }
+
+  #chat-section {
+    flex: 1;
+  }
+</style>
+</head>
+<body>
+
+<!-- 配信プレビュー -->
+<div id="preview-area">
+  <iframe id="broadcast-frame"></iframe>
+</div>
+
+<!-- コントロールパネル -->
+<div id="control-panel">
+  <!-- 配信状態 -->
+  <div class="panel-section">
+    <h3>配信</h3>
+    <div class="status-indicator">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-label">PREVIEW</span>
+    </div>
+    <div class="stream-info" id="stream-info"></div>
+    <button class="panel-btn go-live" id="go-live-btn" onclick="goLive()">Go Live</button>
+    <button class="panel-btn stop" id="stop-btn" style="display:none;" onclick="stopLive()">配信停止</button>
+  </div>
+
+  <!-- ウィンドウキャプチャ -->
+  <div class="panel-section">
+    <h3>ウィンドウキャプチャ</h3>
+    <select id="window-list"><option value="">-- ウィンドウ選択 --</option></select>
+    <button class="panel-btn" onclick="addCapture()">追加</button>
+  </div>
+
+  <!-- レイアウト -->
+  <div class="panel-section">
+    <h3>レイアウト</h3>
+    <button class="panel-btn primary" onclick="saveLayout()">保存</button>
+  </div>
+
+  <!-- チャット（将来用） -->
+  <div class="panel-section" id="chat-section">
+    <h3>チャット</h3>
+    <div style="color:#666; font-size:12px;">（準備中）</div>
+  </div>
+</div>
+
+<script>
+const frame = document.getElementById('broadcast-frame');
+const params = new URLSearchParams(location.search);
+const token = params.get('token');
+
+// iframe にbroadcast.htmlを読み込み（edit+embedded）
+frame.src = `/broadcast?token=${token}&edit&embedded`;
+
+// === iframe内の関数呼び出し ===
+function getFrameWindow() {
+  try { return frame.contentWindow; } catch (e) { return null; }
+}
+
+function saveLayout() {
+  const fw = getFrameWindow();
+  if (fw && fw.editSave) fw.editSave();
+}
+
+// === 配信制御 ===
+async function goLive() {
+  const btn = document.getElementById('go-live-btn');
+  btn.textContent = '起動中...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/broadcast/go-live', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) alert('配信開始失敗: ' + (data.detail || ''));
+  } catch (e) {
+    alert('配信開始失敗: ' + e.message);
+  } finally {
+    btn.textContent = 'Go Live';
+    btn.disabled = false;
+    updateStatus();
+  }
+}
+
+async function stopLive() {
+  if (!confirm('配信を停止しますか？')) return;
+  try {
+    await fetch('/api/broadcast/stop', { method: 'POST' });
+  } catch (e) {
+    alert('配信停止失敗: ' + e.message);
+  }
+  updateStatus();
+}
+
+async function updateStatus() {
+  try {
+    const res = await fetch('/api/broadcast/status');
+    const st = await res.json();
+    const dot = document.getElementById('status-dot');
+    const label = document.getElementById('status-label');
+    const goBtn = document.getElementById('go-live-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const info = document.getElementById('stream-info');
+
+    if (st.streaming) {
+      dot.className = 'status-dot live';
+      label.textContent = 'LIVE';
+      label.style.color = '#f44336';
+      goBtn.style.display = 'none';
+      stopBtn.style.display = '';
+      const mins = Math.floor((st.uptime_seconds || 0) / 60);
+      const secs = Math.floor((st.uptime_seconds || 0) % 60);
+      info.textContent = `${st.resolution} ${st.framerate}fps | ${mins}:${String(secs).padStart(2,'0')}`;
+    } else {
+      dot.className = 'status-dot preview';
+      label.textContent = 'PREVIEW';
+      label.style.color = '#eee';
+      goBtn.style.display = '';
+      stopBtn.style.display = 'none';
+      info.textContent = '';
+    }
+  } catch (e) {}
+}
+
+// === ウィンドウキャプチャ ===
+async function loadWindows() {
+  const sel = document.getElementById('window-list');
+  sel.innerHTML = '<option value="">-- ウィンドウ選択 --</option>';
+  try {
+    const res = await fetch('/api/capture/windows');
+    const windows = await res.json();
+    for (const w of windows) {
+      const opt = document.createElement('option');
+      opt.value = w.sourceId;
+      opt.textContent = w.name.substring(0, 40);
+      sel.appendChild(opt);
+    }
+  } catch (e) {}
+}
+
+async function addCapture() {
+  const sel = document.getElementById('window-list');
+  const sourceId = sel.value;
+  if (!sourceId) return;
+  const label = sel.selectedOptions[0]?.textContent || '';
+  try {
+    await fetch('/api/capture/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceId, label }),
+    });
+  } catch (e) {}
+}
+
+// === 初期化 ===
+updateStatus();
+setInterval(updateStatus, 3000);
+loadWindows();
+setInterval(loadWindows, 10000);
+</script>
+</body>
+</html>

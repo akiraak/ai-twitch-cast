@@ -260,14 +260,14 @@ ${captureList.join('') || '<p>なし</p>'}
       // WSLサーバーからbroadcastトークンを取得
       const tokenResp = await fetch(`${serverUrl}/api/broadcast/token`);
       const { token } = await tokenResp.json();
-      const broadcastUrl = `${serverUrl}/broadcast?token=${token}&edit`;
+      const previewUrl = `${serverUrl}/preview?token=${token}`;
 
       if (previewWindow && !previewWindow.isDestroyed()) {
-        previewWindow.loadURL(broadcastUrl);
+        previewWindow.loadURL(previewUrl);
         previewWindow.focus();
       } else {
         previewWindow = new BrowserWindow({
-          width: 1280,
+          width: 1580,
           height: 720,
           title: 'AI Twitch Cast - Preview',
           autoHideMenuBar: true,
@@ -278,7 +278,7 @@ ${captureList.join('') || '<p>なし</p>'}
         });
         previewWindow.setMenu(null);
         previewWindow.setMenuBarVisibility(false);
-        previewWindow.loadURL(broadcastUrl);
+        previewWindow.loadURL(previewUrl);
         previewWindow.on('closed', () => { previewWindow = null; });
       }
 
@@ -299,6 +299,12 @@ ${captureList.join('') || '<p>なし</p>'}
   // GET /preview/status - プレビュー状態
   server.get('/preview/status', (req, res) => {
     res.json({ open: previewWindow !== null && !previewWindow.isDestroyed() });
+  });
+
+  // POST /quit - アプリ終了（asar更新後の再起動用）
+  server.post('/quit', (req, res) => {
+    res.json({ ok: true });
+    setTimeout(() => app.quit(), 500);
   });
 
   server.listen(PORT, '0.0.0.0', () => {

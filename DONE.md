@@ -16,6 +16,9 @@
 - [x] Electronプレビューウィンドウのメニューバー削除（Menu.setApplicationMenu(null) + setMenu(null)）
 - [x] asar再パックのサイレント失敗を修正（権限修正+mtime検証+デプロイ検証）
 - [x] 各要素のZ順序変更機能（右クリックメニュー→Z値ダイアログ、WEB UIレイアウトタブにも追加）
+- [x] preview.html: iframe+コントロールパネル方式でツールバーとコンテンツの重なり解消
+- [x] broadcast.htmlのembeddedモード（iframe内でツールバー非表示）
+- [x] ワンクリックプレビューでasar更新時にElectronアプリを自動再起動（/quit API + フォールバック）
 
 ## 設定DB移行
 
