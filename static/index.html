@@ -1706,6 +1706,16 @@ setInterval(checkServerUpdate, 3000);
 captureRefreshStatus();
 captureRefreshSources();
 setInterval(captureRefreshStatus, 10000);
+
+// プレビュー自動起動（Electronアプリが未起動の場合のみ）
+(async () => {
+  try {
+    const st = await (await fetch('/api/capture/status')).json();
+    if (!st.running) {
+      previewOneClick();
+    }
+  } catch (e) {}
+})();
 </script>
 </body>
 </html>

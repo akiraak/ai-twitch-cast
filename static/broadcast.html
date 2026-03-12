@@ -309,7 +309,9 @@
 
 <!-- 編集ツールバー -->
 <div class="edit-toolbar">
-  <span>Layout Editor</span>
+  <span id="broadcast-status-label" style="font-weight:bold;">PREVIEW</span>
+  <button id="go-live-btn" style="background:#4caf50; color:#fff; border-color:#4caf50; font-weight:bold;" onclick="goLive()">Go Live</button>
+  <button id="stop-btn" style="background:#f44336; color:#fff; border-color:#f44336; display:none;" onclick="stopLive()">配信停止</button>
   <div class="spacer"></div>
   <select id="edit-window-list"><option value="">-- ウィンドウ追加 --</option></select>
   <button onclick="editAddCapture()">追加</button>
@@ -1161,6 +1163,62 @@ async function init() {
   connectWS();
 
   if (isEditMode) initEditMode();
+
+  // 編集モード時: 配信状態ポーリング
+  if (isEditMode) {
+    updateBroadcastStatus();
+    setInterval(updateBroadcastStatus, 3000);
+  }
+}
+
+// === 配信制御（編集モード用） ===
+async function updateBroadcastStatus() {
+  try {
+    const res = await fetch('/api/broadcast/status');
+    const st = await res.json();
+    const label = document.getElementById('broadcast-status-label');
+    const goBtn = document.getElementById('go-live-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    if (!label) return;
+    if (st.streaming) {
+      label.textContent = 'LIVE';
+      label.style.color = '#f44336';
+      goBtn.style.display = 'none';
+      stopBtn.style.display = '';
+    } else {
+      label.textContent = 'PREVIEW';
+      label.style.color = '#eee';
+      goBtn.style.display = '';
+      stopBtn.style.display = 'none';
+    }
+  } catch (e) {}
+}
+
+async function goLive() {
+  const btn = document.getElementById('go-live-btn');
+  btn.textContent = '起動中...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/broadcast/go-live', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) alert('配信開始失敗: ' + (data.detail || ''));
+    updateBroadcastStatus();
+  } catch (e) {
+    alert('配信開始失敗: ' + e.message);
+  } finally {
+    btn.textContent = 'Go Live';
+    btn.disabled = false;
+  }
+}
+
+async function stopLive() {
+  if (!confirm('配信を停止しますか？')) return;
+  try {
+    await fetch('/api/broadcast/stop', { method: 'POST' });
+    updateBroadcastStatus();
+  } catch (e) {
+    alert('配信停止失敗: ' + e.message);
+  }
 }
 
 init();

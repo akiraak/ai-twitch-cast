@@ -49,6 +49,23 @@ async def broadcast_start():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/broadcast/go-live")
+async def broadcast_go_live():
+    """Setup + 配信開始をワンステップで実行"""
+    try:
+        status = state.stream.get_stream_status()
+        if not status["setup"]:
+            await state.stream.setup()
+        if not status["streaming"]:
+            await state.stream.start_stream()
+            await state.ensure_reader()
+            await state.git_watcher.start()
+        return {"ok": True}
+    except Exception as e:
+        logger.error("Go Live失敗: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/broadcast/stop")
 async def broadcast_stop():
     """FFmpeg RTMP配信を停止"""
