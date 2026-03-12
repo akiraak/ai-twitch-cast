@@ -177,6 +177,10 @@ async def startup():
     except Exception:
         pass
 
+    # TODO.mdファイル監視を開始
+    from scripts.routes.overlay import start_todo_watcher
+    start_todo_watcher()
+
     # Setup済みの状態ファイルがなければ復旧しない
     if not STATE_FILE.exists():
         return

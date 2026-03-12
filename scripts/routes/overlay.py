@@ -1,5 +1,6 @@
 """オーバーレイルート（WebSocket + 設定 + TODO表示）"""
 
+import asyncio
 import logging
 import re
 import secrets
@@ -21,6 +22,42 @@ BROADCAST_TOKEN = secrets.token_urlsafe(16)
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
 TODO_PATH = PROJECT_DIR / "TODO.md"
+
+# TODO.mdファイル監視用
+_todo_last_mtime: float = 0.0
+_todo_watch_task: asyncio.Task | None = None
+
+
+async def broadcast_todo():
+    """TODO.mdを読み込み、todo_updateイベントをブロードキャストする"""
+    todo_data = await get_todo()
+    await state.broadcast_overlay({"type": "todo_update", "items": todo_data["items"]})
+
+
+async def _watch_todo_file():
+    """TODO.mdのmtimeを監視し、変更があればブロードキャストする"""
+    global _todo_last_mtime
+    if TODO_PATH.exists():
+        _todo_last_mtime = TODO_PATH.stat().st_mtime
+    while True:
+        await asyncio.sleep(2)
+        try:
+            if not TODO_PATH.exists():
+                continue
+            mtime = TODO_PATH.stat().st_mtime
+            if mtime != _todo_last_mtime:
+                _todo_last_mtime = mtime
+                await broadcast_todo()
+        except Exception:
+            pass
+
+
+def start_todo_watcher():
+    """TODO.mdファイル監視タスクを開始する"""
+    global _todo_watch_task
+    if _todo_watch_task is None or _todo_watch_task.done():
+        _todo_watch_task = asyncio.create_task(_watch_todo_file())
+        logger.info("TODO.mdファイル監視を開始")
 
 
 @router.websocket("/ws/broadcast")
@@ -168,7 +205,6 @@ async def get_todo():
 @router.post("/api/todo/start")
 async def start_todo(request: Request):
     """TODOを作業中にマークし、アバターに読み上げさせる"""
-    import asyncio
     body = await request.json()
     task_text = body.get("text", "").strip()
     if not task_text or not TODO_PATH.exists():
@@ -203,6 +239,9 @@ async def start_todo(request: Request):
         "type": "current_task",
         "task": task_text,
     })
+
+    # TODOリストを即座にブロードキャスト
+    await broadcast_todo()
 
     # アバターに読み上げさせる
     if state.reader:
