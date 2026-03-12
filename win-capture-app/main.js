@@ -17,6 +17,9 @@ const DEFAULT_QUALITY = parseFloat(process.env.WIN_CAPTURE_QUALITY || '0.7');
 const captures = new Map(); // id -> CaptureSession
 let nextId = 0;
 
+// プレビューウィンドウ
+let previewWindow = null;
+
 /**
  * @typedef {Object} CaptureSession
  * @property {string} id
@@ -244,6 +247,57 @@ ${captureList.join('') || '<p>なし</p>'}
 </body></html>`);
   });
 
+  // === プレビューウィンドウ管理 ===
+
+  // POST /preview/open - プレビューウィンドウを開く
+  server.post('/preview/open', async (req, res) => {
+    const { serverUrl } = req.body;
+    if (!serverUrl) {
+      return res.status(400).json({ error: 'serverUrl required' });
+    }
+
+    try {
+      // WSLサーバーからbroadcastトークンを取得
+      const tokenResp = await fetch(`${serverUrl}/api/broadcast/token`);
+      const { token } = await tokenResp.json();
+      const broadcastUrl = `${serverUrl}/broadcast?token=${token}&edit`;
+
+      if (previewWindow && !previewWindow.isDestroyed()) {
+        previewWindow.loadURL(broadcastUrl);
+        previewWindow.focus();
+      } else {
+        previewWindow = new BrowserWindow({
+          width: 1280,
+          height: 720,
+          title: 'AI Twitch Cast - Preview',
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+          },
+        });
+        previewWindow.loadURL(broadcastUrl);
+        previewWindow.on('closed', () => { previewWindow = null; });
+      }
+
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /preview/close - プレビューウィンドウを閉じる
+  server.post('/preview/close', (req, res) => {
+    if (previewWindow && !previewWindow.isDestroyed()) {
+      previewWindow.close();
+    }
+    res.json({ ok: true });
+  });
+
+  // GET /preview/status - プレビュー状態
+  server.get('/preview/status', (req, res) => {
+    res.json({ open: previewWindow !== null && !previewWindow.isDestroyed() });
+  });
+
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`=== Window Capture Server ===`);
     console.log(`ポート: ${PORT}`);
@@ -273,6 +327,12 @@ function stopCapture(id) {
 }
 
 // === Electron App Lifecycle ===
+// UNCパス（\\wsl.localhost\...）から起動時のみGPUを無効化
+if (app.getPath('exe').startsWith('\\\\')) {
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-software-rasterizer');
+}
+
 app.whenReady().then(() => {
   startServer();
 });

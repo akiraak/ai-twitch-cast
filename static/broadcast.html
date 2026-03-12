@@ -315,7 +315,7 @@
   <button onclick="editAddCapture()">追加</button>
   <span class="spacer"></span>
   <button class="primary" onclick="editSave()">保存</button>
-  <button onclick="location.href='/broadcast'">編集終了</button>
+  <button onclick="exitEditMode()">編集終了</button>
 </div>
 
 <!-- 背景画像 -->
@@ -1106,6 +1106,13 @@ function initEditMode() {
   document.querySelectorAll('[data-editable]').forEach(setupEditable);
   editLoadWindows();
   setInterval(editLoadWindows, 10000);
+}
+
+function exitEditMode() {
+  editSave();
+  document.body.classList.remove('edit-mode');
+  // リサイズハンドル・編集ラベルを除去
+  document.querySelectorAll('.resize-handle, .edit-label').forEach(el => el.remove());
 }
 
 // === 初期化 ===

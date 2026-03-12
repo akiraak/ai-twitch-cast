@@ -180,7 +180,6 @@
     <button onclick="doSetup()">Setup</button>
     <button class="success" onclick="doStart()">配信開始</button>
     <button class="danger" onclick="doStop()">配信停止</button>
-    <button class="secondary" onclick="openPreview()">プレビュー</button>
     <button class="secondary" onclick="doRestart()">再起動</button>
   </div>
 </div>
@@ -324,7 +323,6 @@
         </div>
         <div class="btn-row" style="margin-top:12px;">
           <button class="secondary" onclick="loadDiag()">診断</button>
-          <button class="secondary" onclick="openPreview()">プレビュー</button>
         </div>
         <div class="status" id="diag-status"></div>
       </div>
@@ -355,7 +353,8 @@
           <div id="capture-list" style="font-size:0.85rem;"></div>
         </div>
         <div class="btn-row" style="margin-top:12px;">
-          <button class="secondary" onclick="window.open('/broadcast?edit','_blank')">レイアウト編集</button>
+          <button onclick="capturePreviewOpen()">プレビュー / レイアウト編集</button>
+          <button class="secondary" onclick="capturePreviewClose()">プレビュー閉じる</button>
         </div>
       </div>
     </div>
@@ -585,8 +584,6 @@ topics      1──N  topic_scripts (topic_id)</div>
 const logEl = document.getElementById('log');
 let currentScene = 'main';
 let _volTimer = null;
-let _previewWin = null;
-
 const TAB_NAMES = ['dashboard', 'broadcast', 'layout', 'character', 'sound', 'topic', 'db'];
 
 function switchTab(name, el) {
@@ -605,13 +602,6 @@ function switchTab(name, el) {
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
 }
 
-function openPreview() {
-  if (_previewWin && !_previewWin.closed) {
-    _previewWin.focus();
-    return;
-  }
-  _previewWin = window.open('/broadcast', 'broadcast-preview', 'width=960,height=540');
-}
 
 function log(msg) {
   const t = new Date().toLocaleTimeString();
@@ -903,6 +893,17 @@ async function captureRefreshSources() {
       </div>`
     ).join('');
   } catch (e) {}
+}
+
+async function capturePreviewOpen() {
+  const data = await api('POST', '/api/capture/preview');
+  if (data && !data.ok) {
+    log(data.detail || 'プレビューを開けません。サーバーが起動しているか確認してください。');
+  }
+}
+
+async function capturePreviewClose() {
+  await api('POST', '/api/capture/preview/close');
 }
 
 async function captureRemove(id) {
@@ -1627,7 +1628,6 @@ function showUpdateDialog() {
 const initTab = location.hash.slice(1);
 if (TAB_NAMES.includes(initTab)) switchTab(initTab);
 
-openPreview();
 loadEnv();
 loadTodoUI();
 setInterval(loadTodoUI, 30000);

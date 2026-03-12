@@ -26,8 +26,9 @@ _capture_proc = None
 _APP_DIR = Path(__file__).resolve().parent.parent.parent / "win-capture-app"
 _EXE_PATH = _APP_DIR / "dist" / "win-unpacked" / "win-capture-app.exe"
 
-# ソースファイル（これらが更新されたらリビルド）
+# ソースファイル（これらが更新されたらasar再パック）
 _SOURCE_FILES = ["main.js", "preload.js", "capture.html", "capture-renderer.js", "package.json"]
+_ASAR_PATH = _EXE_PATH.parent / "resources" / "app.asar" if _EXE_PATH.parent.exists() else _APP_DIR / "dist" / "win-unpacked" / "resources" / "app.asar"
 
 # ビルド状態
 _build_state = {
@@ -39,34 +40,90 @@ _build_lock = threading.Lock()
 
 
 def _needs_build():
-    """ソースファイルがexeより新しいかチェック"""
-    if not _EXE_PATH.exists():
-        return True
-    exe_mtime = _EXE_PATH.stat().st_mtime
+    """exeが存在しない場合はフルビルドが必要"""
+    return not _EXE_PATH.exists()
+
+
+def _needs_asar_update():
+    """ソースファイルがasarより新しいかチェック"""
+    asar = _EXE_PATH.parent / "resources" / "app.asar"
+    if not asar.exists():
+        return _EXE_PATH.exists()  # exeはあるがasarがない
+    asar_mtime = asar.stat().st_mtime
     for name in _SOURCE_FILES:
         src = _APP_DIR / name
-        if src.exists() and src.stat().st_mtime > exe_mtime:
+        if src.exists() and src.stat().st_mtime > asar_mtime:
             logger.info("ソース更新検知: %s", name)
             return True
     return False
 
 
-def _run_build():
-    """バックグラウンドでElectronアプリをビルド"""
+def _update_asar():
+    """ソースファイルをasarに再パックする（フルビルド不要）"""
     global _build_state
     if not _build_lock.acquire(blocking=False):
-        return  # 既にビルド中
+        return
+    try:
+        _build_state = {"status": "building", "message": "asar更新中...", "progress": 30}
+        logger.info("asar再パック開始")
+
+        # 既存asarを展開
+        import tempfile
+        asar_path = _EXE_PATH.parent / "resources" / "app.asar"
+        with tempfile.TemporaryDirectory() as tmp:
+            # 展開
+            result = subprocess.run(
+                ["npx", "asar", "extract", str(asar_path), tmp],
+                cwd=str(_APP_DIR),
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode != 0:
+                _build_state = {"status": "error", "message": f"asar展開失敗: {result.stderr[:200]}", "progress": 0}
+                return
+
+            _build_state = {"status": "building", "message": "ソース更新中...", "progress": 60}
+
+            # ソースファイルを上書き
+            import shutil
+            for name in _SOURCE_FILES:
+                src = _APP_DIR / name
+                if src.exists():
+                    shutil.copy2(str(src), os.path.join(tmp, name))
+
+            _build_state = {"status": "building", "message": "asar再パック中...", "progress": 80}
+
+            # 再パック
+            result = subprocess.run(
+                ["npx", "asar", "pack", tmp, str(asar_path)],
+                cwd=str(_APP_DIR),
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode != 0:
+                _build_state = {"status": "error", "message": f"asarパック失敗: {result.stderr[:200]}", "progress": 0}
+                return
+
+        _build_state = {"status": "done", "message": "更新完了", "progress": 100}
+        logger.info("asar再パック完了")
+    except Exception as e:
+        _build_state = {"status": "error", "message": str(e)[:200], "progress": 0}
+        logger.error("asar更新エラー: %s", e)
+    finally:
+        _build_lock.release()
+
+
+def _run_build():
+    """バックグラウンドでElectronアプリをフルビルド"""
+    global _build_state
+    if not _build_lock.acquire(blocking=False):
+        return
     try:
         _build_state = {"status": "building", "message": "npm install ...", "progress": 10}
-        logger.info("Electronアプリビルド開始")
+        logger.info("Electronアプリフルビルド開始")
 
-        # npm install
         result = subprocess.run(
             ["npm", "install"],
             cwd=str(_APP_DIR),
-            capture_output=True,
-            text=True,
-            timeout=120,
+            capture_output=True, text=True, timeout=120,
         )
         if result.returncode != 0:
             _build_state = {"status": "error", "message": f"npm install失敗: {result.stderr[:200]}", "progress": 0}
@@ -75,13 +132,10 @@ def _run_build():
 
         _build_state = {"status": "building", "message": "electron-builder ...", "progress": 50}
 
-        # npm run build
         result = subprocess.run(
             ["npm", "run", "build"],
             cwd=str(_APP_DIR),
-            capture_output=True,
-            text=True,
-            timeout=300,
+            capture_output=True, text=True, timeout=300,
         )
         if result.returncode != 0:
             _build_state = {"status": "error", "message": f"ビルド失敗: {result.stderr[:200]}", "progress": 0}
@@ -92,7 +146,6 @@ def _run_build():
         logger.info("Electronアプリビルド完了")
     except subprocess.TimeoutExpired:
         _build_state = {"status": "error", "message": "ビルドタイムアウト", "progress": 0}
-        logger.error("ビルドタイムアウト")
     except Exception as e:
         _build_state = {"status": "error", "message": str(e)[:200], "progress": 0}
         logger.error("ビルドエラー: %s", e)
@@ -164,13 +217,18 @@ async def capture_launch():
     if st.get("running"):
         return {"ok": True, "message": "既に起動中"}
 
-    # ビルドが必要か確認
+    # フルビルドが必要か確認（exeが存在しない）
     if _needs_build():
         if _build_state["status"] == "building":
             return {"ok": False, "error": "ビルド中です。完了後に再度起動してください。", "build": dict(_build_state)}
-        # バックグラウンドでビルド開始
         threading.Thread(target=_run_build, daemon=True).start()
         return {"ok": False, "error": "ビルドを開始しました。完了後に再度起動してください。", "build": dict(_build_state)}
+
+    # ソース更新時はasar再パック（高速なので同期実行）
+    if _needs_asar_update():
+        _update_asar()
+        if _build_state["status"] == "error":
+            return {"ok": False, "error": _build_state["message"], "build": dict(_build_state)}
 
     if not _EXE_PATH.exists():
         raise HTTPException(
@@ -180,9 +238,27 @@ async def capture_launch():
 
     try:
         if is_wsl():
-            win_path = to_windows_path(str(_EXE_PATH))
+            # Windowsローカルディスクにデプロイして起動（UNCパスではGPUクラッシュするため）
+            import shutil
+            win_deploy_dir = Path("/mnt/c/Users") / os.environ.get("WIN_USER", "akira") / "AppData" / "Local" / "ai-twitch-cast-capture"
+            dst_exe = win_deploy_dir / "win-capture-app.exe"
+            src_asar = _EXE_PATH.parent / "resources" / "app.asar"
+            dst_asar = win_deploy_dir / "resources" / "app.asar"
+
+            # 初回またはasar更新時にコピー
+            needs_copy = not dst_exe.exists()
+            if not needs_copy and src_asar.exists() and dst_asar.exists():
+                needs_copy = src_asar.stat().st_mtime > dst_asar.stat().st_mtime
+
+            if needs_copy:
+                logger.info("Electronアプリをローカルディスクにデプロイ中...")
+                win_deploy_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(str(_EXE_PATH.parent), str(win_deploy_dir), dirs_exist_ok=True)
+                logger.info("デプロイ完了: %s", win_deploy_dir)
+
+            win_exe = to_windows_path(str(dst_exe))
             _capture_proc = subprocess.Popen(
-                ["cmd.exe", "/C", "start", "", win_path],
+                ["powershell.exe", "-NoProfile", "-Command", f"Start-Process '{win_exe}'"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -218,6 +294,35 @@ async def capture_shutdown():
             pass
         _capture_proc = None
     return {"ok": True}
+
+
+# =====================================================
+# プレビューウィンドウ
+# =====================================================
+
+
+@router.post("/api/capture/preview")
+async def capture_preview_open():
+    """Electronアプリで配信プレビュー+レイアウト編集ウィンドウを開く"""
+    from src.wsl_path import get_wsl_ip
+    web_port = os.environ.get("WEB_PORT", "8080")
+    wsl_ip = get_wsl_ip()
+    server_url = f"http://{wsl_ip}:{web_port}"
+    try:
+        data = await _proxy_request("POST", "/preview/open", {"serverUrl": server_url})
+        return {"ok": True, **data}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Electronアプリに接続できません: {e}")
+
+
+@router.post("/api/capture/preview/close")
+async def capture_preview_close():
+    """プレビューウィンドウを閉じる"""
+    try:
+        await _proxy_request("POST", "/preview/close")
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 # =====================================================

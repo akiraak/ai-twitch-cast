@@ -290,7 +290,9 @@ class StreamController:
             pass
 
         web_port = os.environ.get("WEB_PORT", "8080")
-        broadcast_url = f"http://localhost:{web_port}/broadcast"
+        # トークン付きURLでアクセス（overlay.pyのBROADCAST_TOKEN）
+        from scripts.routes.overlay import BROADCAST_TOKEN
+        broadcast_url = f"http://localhost:{web_port}/broadcast?token={BROADCAST_TOKEN}"
         width, height = self._resolution.split("x")
 
         cmd = [

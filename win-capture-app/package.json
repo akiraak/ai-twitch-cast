@@ -18,7 +18,8 @@
     "appId": "com.atc.wincapture",
     "productName": "win-capture-app",
     "win": {
-      "target": "dir"
+      "target": "dir",
+      "sign": false
     },
     "files": [
       "main.js",
