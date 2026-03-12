@@ -11,6 +11,7 @@
 - [x] POST /api/broadcast/go-live（Setup+配信開始をワンステップ化）
 - [x] broadcast-ui.htmlをindex.htmlにリネーム、/broadcast-uiルート削除
 - [x] xvfb ChromiumでVRMアバター表示（--use-gl=angle --use-angle=swiftshaderで解決）
+- [x] Electron環境での配信テスト（プレビュー確認→Go Live→Twitch配信成功）
 
 ## プロジェクト整理
 
