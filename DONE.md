@@ -10,6 +10,7 @@
 - [x] broadcast.htmlの編集モードにGo Live/配信停止ボタン+状態表示を追加
 - [x] POST /api/broadcast/go-live（Setup+配信開始をワンステップ化）
 - [x] broadcast-ui.htmlをindex.htmlにリネーム、/broadcast-uiルート削除
+- [x] xvfb ChromiumでVRMアバター表示（--use-gl=angle --use-angle=swiftshaderで解決）
 
 ## プロジェクト整理
 
