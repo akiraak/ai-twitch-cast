@@ -26,10 +26,6 @@ theme:
 
 nav:
   - ホーム: index.md
-  - OBS:
-    - OBS自動制御でできること: obs-automation-guide.md
-    - OBS Studio 機能調査: obs-research.md
-    - OBS オーディオ機能調査: obs-audio-research.md
   - アバター:
     - アバター表示・アニメーション調査: avatar-research.md
     - 3Dモデル調査: 3d-model-research.md
@@ -38,6 +34,9 @@ nav:
     - VRM変換 作業ログ: vrm-conversion-log.md
   - 音声:
     - ボイスサンプル比較: voice-samples.md
+  - 配信:
+    - 配信パイプライン: obs-free-streaming.md
+    - ウィンドウキャプチャ: window-capture.md
   - Web UI:
     - デザイン改善提案: webui-design-proposal.md
   - 運用:

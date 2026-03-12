@@ -1,4 +1,4 @@
-"""OBS・VTube Studio対話式コンソール"""
+"""アバター対話式コンソール"""
 
 import asyncio
 import logging
@@ -17,27 +17,11 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
-from src.obs_controller import OBSController
-from src.scene_config import MAIN_SCENE, SCENES
 from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
 
 HELP_TEXT = """
 コマンド一覧:
-  obs connect          OBSに接続
-  obs disconnect       OBSから切断
-  obs status           OBS接続状態・配信状態を表示
-  obs scenes           シーン一覧を表示
-  obs scene <名前>     シーンを切り替え
-  obs sources          現在のシーンのソース一覧を表示
-  obs setup            シーン・ソースを一括作成
-  obs teardown         シーン・ソースを一括削除
-  obs add scene <名前>           シーンを追加
-  obs add image <名前> <パス>     画像ソースを追加
-  obs add text <名前> <テキスト>  テキストソースを追加
-  obs add capture <名前>         ゲームキャプチャを追加
-  obs remove <名前>              ソースを削除
-
   vts connect          VTube Studioに接続
   vts disconnect       VTube Studioから切断
   vts status           VTS接続状態・モデル情報を表示
@@ -58,12 +42,6 @@ HELP_TEXT = """
   vsf bone <名前> <qx> <qy> <qz> <qw>  ボーン回転を設定
   vsf demo             デモ動作（リップシンク・表情・体の動き）
 
-  stream start         配信を開始
-  stream stop          配信を停止
-  stream status        配信状態を表示
-
-  init                 初期化（OBS・VTS接続 → シーン構築）
-
   help                 このヘルプを表示
   quit / exit          終了
 """.strip()
@@ -71,85 +49,10 @@ HELP_TEXT = """
 
 class Console:
     def __init__(self):
-        self.obs = OBSController()
         self.vts = VTSController()
         self.vsf = VSFController()
-        self._obs_connected = False
         self._vts_connected = False
         self._vsf_connected = False
-
-    # --- OBSコマンド ---
-
-    def cmd_obs_connect(self):
-        self.obs.connect()
-        self._obs_connected = True
-
-    def cmd_obs_disconnect(self):
-        self.obs.disconnect()
-        self._obs_connected = False
-
-    def cmd_obs_status(self):
-        if not self._obs_connected:
-            print("OBS: 未接続")
-            return
-        print("OBS: 接続中")
-        status = self.obs.get_stream_status()
-        state = "配信中" if status["active"] else "停止中"
-        print(f"  配信: {state}")
-        if status["active"]:
-            print(f"  経過時間: {status['timecode']}")
-
-    def cmd_obs_scenes(self):
-        self._require_obs()
-        data = self.obs.get_scenes()
-        print("シーン一覧:")
-        for name in data["scenes"]:
-            marker = " *" if name == data["current"] else ""
-            print(f"  {name}{marker}")
-
-    def cmd_obs_scene(self, name):
-        self._require_obs()
-        self.obs.set_scene(name)
-
-    def cmd_obs_sources(self):
-        self._require_obs()
-        current = self.obs.get_scenes()["current"]
-        items = self.obs.get_scene_items(current)
-        print(f"ソース一覧 ({current}):")
-        for item in items:
-            enabled = "ON" if item["enabled"] else "OFF"
-            print(f"  [{enabled}] {item['name']} ({item['kind']})")
-
-    def cmd_obs_setup(self):
-        self._require_obs()
-        self.obs.setup_scenes(SCENES, MAIN_SCENE)
-
-    def cmd_obs_teardown(self):
-        self._require_obs()
-        self.obs.teardown_scenes(SCENES)
-
-    def cmd_obs_add_scene(self, name):
-        self._require_obs()
-        self.obs.create_scene(name)
-
-    def cmd_obs_add_image(self, name, path):
-        self._require_obs()
-        current = self.obs.get_scenes()["current"]
-        self.obs.add_image_source(current, name, path)
-
-    def cmd_obs_add_text(self, name, text):
-        self._require_obs()
-        current = self.obs.get_scenes()["current"]
-        self.obs.add_text_source(current, name, text)
-
-    def cmd_obs_add_capture(self, name):
-        self._require_obs()
-        current = self.obs.get_scenes()["current"]
-        self.obs.add_game_capture(current, name)
-
-    def cmd_obs_remove(self, name):
-        self._require_obs()
-        self.obs.remove_input(name)
 
     # --- VTSコマンド ---
 
@@ -351,44 +254,7 @@ class Console:
 
         print("デモ完了")
 
-    # --- 配信コマンド ---
-
-    def cmd_stream_start(self):
-        self._require_obs()
-        self.obs.start_stream()
-
-    def cmd_stream_stop(self):
-        self._require_obs()
-        self.obs.stop_stream()
-
-    def cmd_stream_status(self):
-        self._require_obs()
-        status = self.obs.get_stream_status()
-        state = "配信中" if status["active"] else "停止中"
-        print(f"配信: {state}")
-        if status["active"]:
-            print(f"経過時間: {status['timecode']}")
-            print(f"送信バイト数: {status['bytes']}")
-
-    # --- 初期化 ---
-
-    async def cmd_init(self):
-        """OBS・アバターアプリ接続 → シーン構築を一括実行"""
-        from src.scene_config import AVATAR_APP
-        print("初期化開始...")
-        self.cmd_obs_connect()
-        if AVATAR_APP == "vsf":
-            self.cmd_vsf_connect()
-        else:
-            await self.cmd_vts_connect()
-        self.cmd_obs_setup()
-        print("\n初期化完了")
-
     # --- ユーティリティ ---
-
-    def _require_obs(self):
-        if not self._obs_connected:
-            self.cmd_obs_connect()
 
     async def _require_vts(self):
         if not self._vts_connected:
@@ -410,16 +276,10 @@ class Console:
         try:
             if cmd == "help":
                 print(HELP_TEXT)
-            elif cmd == "obs" and args:
-                await self._dispatch_obs(args)
             elif cmd == "vts" and args:
                 await self._dispatch_vts(args)
             elif cmd == "vsf" and args:
                 await self._dispatch_vsf(args)
-            elif cmd == "stream" and args:
-                self._dispatch_stream(args)
-            elif cmd == "init":
-                await self.cmd_init()
             elif cmd in ("quit", "exit"):
                 raise SystemExit
             else:
@@ -429,65 +289,6 @@ class Console:
             print(f"エラー: {e}")
         except Exception as e:
             print(f"エラー: {type(e).__name__}: {e}")
-
-    async def _dispatch_obs(self, args):
-        sub = args[0]
-        if sub == "connect":
-            self.cmd_obs_connect()
-        elif sub == "disconnect":
-            self.cmd_obs_disconnect()
-        elif sub == "status":
-            self.cmd_obs_status()
-        elif sub == "scenes":
-            self.cmd_obs_scenes()
-        elif sub == "scene":
-            if len(args) >= 2:
-                self.cmd_obs_scene(" ".join(args[1:]))
-            else:
-                print("使い方: obs scene <名前>")
-        elif sub == "sources":
-            self.cmd_obs_sources()
-        elif sub == "setup":
-            self.cmd_obs_setup()
-        elif sub == "teardown":
-            self.cmd_obs_teardown()
-        elif sub == "add":
-            if len(args) >= 2:
-                self._dispatch_obs_add(args[1:])
-            else:
-                print("使い方: obs add scene|image|text|capture <名前> [引数...]")
-        elif sub == "remove":
-            if len(args) >= 2:
-                self.cmd_obs_remove(" ".join(args[1:]))
-            else:
-                print("使い方: obs remove <名前>")
-        else:
-            print(f"不明なOBSコマンド: {' '.join(args)}")
-
-    def _dispatch_obs_add(self, args):
-        kind = args[0]
-        if kind == "scene":
-            if len(args) >= 2:
-                self.cmd_obs_add_scene(" ".join(args[1:]))
-            else:
-                print("使い方: obs add scene <名前>")
-        elif kind == "image":
-            if len(args) >= 3:
-                self.cmd_obs_add_image(args[1], args[2])
-            else:
-                print("使い方: obs add image <名前> <パス>")
-        elif kind == "text":
-            if len(args) >= 3:
-                self.cmd_obs_add_text(args[1], " ".join(args[2:]))
-            else:
-                print("使い方: obs add text <名前> <テキスト>")
-        elif kind == "capture":
-            if len(args) >= 2:
-                self.cmd_obs_add_capture(" ".join(args[1:]))
-            else:
-                print("使い方: obs add capture <名前>")
-        else:
-            print(f"不明なaddコマンド: {' '.join(args)}")
 
     async def _dispatch_vts(self, args):
         sub = args[0]
@@ -548,17 +349,6 @@ class Console:
         else:
             print(f"不明なVSFコマンド: {' '.join(args)}")
 
-    def _dispatch_stream(self, args):
-        sub = args[0]
-        if sub == "start":
-            self.cmd_stream_start()
-        elif sub == "stop":
-            self.cmd_stream_stop()
-        elif sub == "status":
-            self.cmd_stream_status()
-        else:
-            print(f"不明な配信コマンド: {' '.join(args)}")
-
     async def cleanup(self):
         """終了時のクリーンアップ"""
         if self._vsf_connected:
@@ -566,21 +356,13 @@ class Console:
             self.vsf.disconnect()
         if self._vts_connected:
             await self.vts.disconnect()
-        if self._obs_connected:
-            self.obs.disconnect()
 
 
 async def main():
     console = Console()
     print("AI Twitch Cast コンソール (helpでコマンド一覧)\n")
 
-    # 起動時に自動接続を試行
     from src.scene_config import AVATAR_APP
-
-    try:
-        console.cmd_obs_connect()
-    except Exception as e:
-        print(f"OBS: 接続失敗 ({e})")
 
     if AVATAR_APP == "vsf":
         try:
@@ -599,8 +381,6 @@ async def main():
     try:
         while True:
             try:
-                # input()をスレッドで実行し、イベントループをブロックしない
-                # これによりバックグラウンドタスク（idle等）が動き続ける
                 line = await loop.run_in_executor(None, input, "> ")
             except EOFError:
                 break

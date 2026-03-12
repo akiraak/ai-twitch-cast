@@ -24,51 +24,6 @@ STATIC_DIR = PROJECT_DIR / "static"
 TODO_PATH = PROJECT_DIR / "TODO.md"
 
 
-@router.websocket("/ws/overlay")
-async def overlay_ws(websocket: WebSocket):
-    await websocket.accept()
-    state.overlay_clients.add(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        state.overlay_clients.discard(websocket)
-
-
-@router.websocket("/ws/tts")
-async def tts_ws(websocket: WebSocket):
-    await websocket.accept()
-    state.tts_clients.add(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        state.tts_clients.discard(websocket)
-
-
-@router.websocket("/ws/bgm")
-async def bgm_ws(websocket: WebSocket):
-    await websocket.accept()
-    state.bgm_clients.add(websocket)
-    # 保存済みBGMがあれば自動再生
-    try:
-        from scripts.routes.bgm import load_bgm_settings
-        bgm = load_bgm_settings()
-        track = bgm.get("track", "")
-        if track:
-            await websocket.send_json({
-                "type": "bgm_play",
-                "url": f"/bgm/{track}",
-            })
-    except Exception:
-        pass
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        state.bgm_clients.discard(websocket)
-
-
 @router.websocket("/ws/broadcast")
 async def broadcast_ws(websocket: WebSocket):
     """broadcast.html用WebSocket（overlay+tts+bgm統合）"""
@@ -147,26 +102,6 @@ async def get_broadcast_volumes():
         val = db.get_setting(f"volume.{key}")
         result[key] = float(val) if val is not None else defaults.get(key, fallback)
     return result
-
-
-@router.get("/overlay", response_class=HTMLResponse)
-async def overlay_page():
-    return (STATIC_DIR / "overlay.html").read_text(encoding="utf-8")
-
-
-@router.get("/audio/tts", response_class=HTMLResponse)
-async def audio_tts_page():
-    return (STATIC_DIR / "audio-tts.html").read_text(encoding="utf-8")
-
-
-@router.get("/audio/bgm", response_class=HTMLResponse)
-async def audio_bgm_page():
-    return (STATIC_DIR / "audio-bgm.html").read_text(encoding="utf-8")
-
-
-@router.get("/design-proposal", response_class=HTMLResponse)
-async def design_proposal_page():
-    return (STATIC_DIR / "design-proposal.html").read_text(encoding="utf-8")
 
 
 def _get_overlay_defaults():

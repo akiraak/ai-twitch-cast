@@ -34,7 +34,6 @@ from scripts.routes.bgm import router as bgm_router
 from scripts.routes.character import router as character_router
 from scripts.routes.db_viewer import router as db_viewer_router
 from scripts.routes.overlay import router as overlay_router
-from scripts.routes.stream import router as stream_router
 from scripts.routes.stream_control import router as stream_control_router
 from scripts.routes.topic import router as topic_router
 from scripts.routes.twitch import router as twitch_router
@@ -57,7 +56,6 @@ app.mount("/resources", StaticFiles(directory=str(RESOURCES_DIR)), name="resourc
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ルーターを登録
-app.include_router(stream_router)
 app.include_router(stream_control_router)
 app.include_router(capture_router)
 app.include_router(avatar_router)
@@ -231,7 +229,7 @@ async def _restore_session():
 
 
 async def _speak_pending_commits(pending_file):
-    """TTSブラウザソースの接続を待ってからコミットを読み上げる"""
+    """broadcast.htmlの接続を待ってからコミットを読み上げる"""
     try:
         text = pending_file.read_text(encoding="utf-8").strip()
         if not text or not state.reader:
@@ -247,13 +245,13 @@ async def _speak_pending_commits(pending_file):
             pending_file.unlink(missing_ok=True)
             return
 
-        # TTSクライアントの接続を待つ（最大30秒）
+        # broadcast クライアントの接続を待つ（最大30秒）
         for i in range(60):
-            if state.tts_clients:
+            if state.broadcast_clients:
                 break
             await asyncio.sleep(0.5)
         else:
-            logger.warning("TTSクライアント未接続のためコミット読み上げを保留")
+            logger.warning("broadcastクライアント未接続のためコミット読み上げを保留")
             return  # ファイルを残して次回再トライ
 
         # 少し待ってから発話（接続直後の安定化）

@@ -43,14 +43,6 @@ def _save_bgm(track: str | None = None):
         f.write("\n")
 
 
-def _apply_bgm_volume():
-    """BGMの実効音量をOBSに反映する（曲音量含む）"""
-    from scripts.routes.obs import _apply_effective_volume
-    try:
-        _apply_effective_volume("bgm")
-    except Exception as e:
-        logger.warning("BGM音量適用失敗: %s", e)
-
 
 @router.get("/api/bgm/list")
 async def bgm_list():
@@ -83,8 +75,6 @@ async def bgm_control(body: BGMControl):
             "type": "bgm_play",
             "url": f"/bgm/{body.track}",
         })
-        # 曲音量を含めた実効音量をOBSに反映
-        _apply_bgm_volume()
         return {"ok": True}
     elif body.action == "stop":
         _save_bgm(track="")
@@ -102,10 +92,6 @@ class BGMTrackVolume(BaseModel):
 async def bgm_track_volume(body: BGMTrackVolume):
     """曲別音量を設定する（DBに保存、再生中ならOBSに即反映）"""
     db.set_bgm_track_volume(body.file, body.volume)
-    # 再生中の曲なら実効音量を再計算してOBSに反映
-    settings = load_bgm_settings()
-    if settings.get("track") == body.file:
-        _apply_bgm_volume()
     return {"ok": True}
 
 

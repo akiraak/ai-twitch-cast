@@ -1,5 +1,17 @@
 # DONE
 
+## プロジェクト整理
+
+- [x] OBS関連ファイル・コード完全削除（obs_controller.py, routes/obs.py, routes/stream.py, start_stream.py, stop_stream.py, overlay.html, audio-tts.html, audio-bgm.html, index.html, design-proposal.html, OBS関連ドキュメント3件, tests/test_scene_config.py）
+- [x] state.py: OBSController/overlay_clients/tts_clients/bgm_clients削除、broadcast_clientsのみに統合
+- [x] overlay.py: /ws/overlay, /ws/tts, /ws/bgm WebSocket削除、OBS用ページルート削除
+- [x] bgm.py: _apply_bgm_volume()（OBS音量反映）削除
+- [x] console.py: OBSコマンド・stream・init全削除、アバター専用に簡素化
+- [x] scene_config.py: PREFIX/SCENES/MAIN_SCENE/_load_config()/_resolve_browser_url()削除、設定値のみに簡素化
+- [x] scenes.json: avatar/main_scene/scenes OBS専用キー削除
+- [x] requirements.txt: obsws-python削除
+- [x] CLAUDE.md/mkdocs.yml/console-commands.md/メモリファイル全更新
+
 ## 調査タスク
 
 - [x] OBSの機能調査（WebSocket API、シーン管理、ソース操作、フィルタ、配信制御等）
