@@ -79,6 +79,126 @@ ipcMain.on('capture-error', (event, { id, error }) => {
   console.error(`[${id}] キャプチャエラー:`, error);
 });
 
+// === コア機能（HTTP/WebSocket共用） ===
+
+async function getWindowsList() {
+  const sources = await desktopCapturer.getSources({
+    types: ['window'],
+    thumbnailSize: { width: 320, height: 240 },
+  });
+  return sources
+    .filter(s => s.name && s.name.trim() !== '')
+    .map(s => ({
+      sourceId: s.id,
+      name: s.name,
+      thumbnailDataUrl: s.thumbnail.toDataURL(),
+    }));
+}
+
+async function startCaptureSession({ sourceId, id: customId, fps, quality }) {
+  if (!sourceId) throw new Error('sourceId is required');
+
+  let sourceName = 'Unknown';
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1, height: 1 } });
+    const found = sources.find(s => s.id === sourceId);
+    if (found) sourceName = found.name;
+  } catch (e) {}
+
+  const captureId = customId || `cap_${nextId++}`;
+
+  if (captures.has(captureId)) stopCapture(captureId);
+
+  const win = new BrowserWindow({
+    show: false,
+    width: 1920,
+    height: 1080,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  const session = {
+    id: captureId,
+    sourceId,
+    name: sourceName,
+    window: win,
+    latestFrame: null,
+    clients: new Set(),
+    fps: fps || DEFAULT_FPS,
+  };
+
+  captures.set(captureId, session);
+
+  captureIndexMap.set(captureId, nextCaptureIndex++);
+
+  if (wss) {
+    const msg = JSON.stringify({
+      type: 'capture_add',
+      id: captureId,
+      index: captureIndexMap.get(captureId),
+      name: sourceName,
+    });
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) client.send(msg);
+    });
+  }
+
+  win.loadFile('capture.html');
+  win.webContents.on('did-finish-load', () => {
+    win.webContents.send('start-capture', {
+      id: captureId,
+      sourceId,
+      fps: session.fps,
+      quality: quality || DEFAULT_QUALITY,
+    });
+  });
+
+  return { ok: true, id: captureId, name: sourceName, stream_url: `/stream/${captureId}` };
+}
+
+function getCapturesList() {
+  const list = [];
+  for (const [id, session] of captures) {
+    list.push({
+      id,
+      sourceId: session.sourceId,
+      name: session.name,
+      fps: session.fps,
+      has_frame: session.latestFrame !== null,
+      clients: session.clients.size,
+    });
+  }
+  return list;
+}
+
+async function openPreview(serverUrl) {
+  if (!serverUrl) throw new Error('serverUrl required');
+  const tokenResp = await fetch(`${serverUrl}/api/broadcast/token`);
+  const { token } = await tokenResp.json();
+  const previewUrl = `${serverUrl}/preview?token=${token}`;
+
+  if (previewWindow && !previewWindow.isDestroyed()) {
+    previewWindow.loadURL(previewUrl);
+    previewWindow.focus();
+  } else {
+    previewWindow = new BrowserWindow({
+      width: 1580,
+      height: 720,
+      title: 'AI Twitch Cast - Preview',
+      autoHideMenuBar: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false },
+    });
+    previewWindow.setMenu(null);
+    previewWindow.setMenuBarVisibility(false);
+    previewWindow.loadURL(previewUrl);
+    previewWindow.on('closed', () => { previewWindow = null; });
+  }
+  return { ok: true };
+}
+
 // === Express HTTPサーバー ===
 function startServer() {
   const server = express();
@@ -102,18 +222,7 @@ function startServer() {
   // GET /windows - ウィンドウ一覧
   server.get('/windows', async (req, res) => {
     try {
-      const sources = await desktopCapturer.getSources({
-        types: ['window'],
-        thumbnailSize: { width: 320, height: 240 },
-      });
-      const windows = sources
-        .filter(s => s.name && s.name.trim() !== '')
-        .map(s => ({
-          sourceId: s.id,
-          name: s.name,
-          thumbnailDataUrl: s.thumbnail.toDataURL(),
-        }));
-      res.json(windows);
+      res.json(await getWindowsList());
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -121,82 +230,11 @@ function startServer() {
 
   // POST /capture - キャプチャ開始
   server.post('/capture', async (req, res) => {
-    const { sourceId, id: customId, fps, quality } = req.body;
-    if (!sourceId) {
-      return res.status(400).json({ ok: false, error: 'sourceId is required' });
-    }
-
-    // ソース名を取得
-    let sourceName = 'Unknown';
     try {
-      const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1, height: 1 } });
-      const found = sources.find(s => s.id === sourceId);
-      if (found) sourceName = found.name;
-    } catch (e) {}
-
-    const captureId = customId || `cap_${nextId++}`;
-
-    // 既存セッションがあれば停止
-    if (captures.has(captureId)) {
-      stopCapture(captureId);
+      res.json(await startCaptureSession(req.body));
+    } catch (e) {
+      res.status(400).json({ ok: false, error: e.message });
     }
-
-    // 非表示BrowserWindowを作成
-    const win = new BrowserWindow({
-      show: false,
-      width: 1920,
-      height: 1080,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
-    });
-
-    const session = {
-      id: captureId,
-      sourceId,
-      name: sourceName,
-      window: win,
-      latestFrame: null,
-      clients: new Set(),
-      fps: fps || DEFAULT_FPS,
-    };
-
-    captures.set(captureId, session);
-
-    // WebSocket用インデックスを割り当て
-    captureIndexMap.set(captureId, nextCaptureIndex++);
-
-    // WebSocketクライアントにキャプチャ追加を通知
-    if (wss) {
-      const msg = JSON.stringify({
-        type: 'capture_add',
-        id: captureId,
-        index: captureIndexMap.get(captureId),
-        name: sourceName,
-      });
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) client.send(msg);
-      });
-    }
-
-    win.loadFile('capture.html');
-    win.webContents.on('did-finish-load', () => {
-      win.webContents.send('start-capture', {
-        id: captureId,
-        sourceId,
-        fps: session.fps,
-        quality: quality || DEFAULT_QUALITY,
-      });
-    });
-
-    res.json({
-      ok: true,
-      id: captureId,
-      name: sourceName,
-      stream_url: `/stream/${captureId}`,
-    });
   });
 
   // DELETE /capture/:id - キャプチャ停止
@@ -207,18 +245,7 @@ function startServer() {
 
   // GET /captures - アクティブキャプチャ一覧
   server.get('/captures', (req, res) => {
-    const list = [];
-    for (const [id, session] of captures) {
-      list.push({
-        id,
-        sourceId: session.sourceId,
-        name: session.name,
-        fps: session.fps,
-        has_frame: session.latestFrame !== null,
-        clients: session.clients.size,
-      });
-    }
-    res.json(list);
+    res.json(getCapturesList());
   });
 
   // GET /stream/:id - MJPEGストリーム
@@ -287,38 +314,8 @@ ${captureList.join('') || '<p>なし</p>'}
 
   // POST /preview/open - プレビューウィンドウを開く
   server.post('/preview/open', async (req, res) => {
-    const { serverUrl } = req.body;
-    if (!serverUrl) {
-      return res.status(400).json({ error: 'serverUrl required' });
-    }
-
     try {
-      // WSLサーバーからbroadcastトークンを取得
-      const tokenResp = await fetch(`${serverUrl}/api/broadcast/token`);
-      const { token } = await tokenResp.json();
-      const previewUrl = `${serverUrl}/preview?token=${token}`;
-
-      if (previewWindow && !previewWindow.isDestroyed()) {
-        previewWindow.loadURL(previewUrl);
-        previewWindow.focus();
-      } else {
-        previewWindow = new BrowserWindow({
-          width: 1580,
-          height: 720,
-          title: 'AI Twitch Cast - Preview',
-          autoHideMenuBar: true,
-          webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-          },
-        });
-        previewWindow.setMenu(null);
-        previewWindow.setMenuBarVisibility(false);
-        previewWindow.loadURL(previewUrl);
-        previewWindow.on('closed', () => { previewWindow = null; });
-      }
-
-      res.json({ ok: true });
+      res.json(await openPreview(req.body.serverUrl));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -326,9 +323,7 @@ ${captureList.join('') || '<p>なし</p>'}
 
   // POST /preview/close - プレビューウィンドウを閉じる
   server.post('/preview/close', (req, res) => {
-    if (previewWindow && !previewWindow.isDestroyed()) {
-      previewWindow.close();
-    }
+    if (previewWindow && !previewWindow.isDestroyed()) previewWindow.close();
     res.json({ ok: true });
   });
 
@@ -366,6 +361,65 @@ ${captureList.join('') || '<p>なし</p>'}
     ws.on('close', () => {
       console.log(`WebSocketクライアント切断 (残${wss.clients.size})`);
     });
+  });
+
+  // WebSocket制御サーバー（WSL2↔Electron コマンド制御用）
+  const controlWss = new WebSocket.Server({ server: httpServer, path: '/ws/control' });
+
+  controlWss.on('connection', (ws) => {
+    console.log('制御WebSocket接続');
+
+    ws.on('message', async (raw) => {
+      let msg;
+      try {
+        msg = JSON.parse(raw);
+      } catch (e) {
+        return;
+      }
+      const { requestId, action } = msg;
+
+      try {
+        let result;
+        switch (action) {
+          case 'status':
+            result = { ok: true, captures: captures.size };
+            break;
+          case 'windows':
+            result = await getWindowsList();
+            break;
+          case 'start_capture':
+            result = await startCaptureSession(msg);
+            break;
+          case 'stop_capture':
+            result = { ok: stopCapture(msg.id) };
+            break;
+          case 'captures':
+            result = getCapturesList();
+            break;
+          case 'preview_open':
+            result = await openPreview(msg.serverUrl);
+            break;
+          case 'preview_close':
+            if (previewWindow && !previewWindow.isDestroyed()) previewWindow.close();
+            result = { ok: true };
+            break;
+          case 'preview_status':
+            result = { open: previewWindow !== null && !previewWindow.isDestroyed() };
+            break;
+          case 'quit':
+            result = { ok: true };
+            setTimeout(() => app.quit(), 500);
+            break;
+          default:
+            result = { ok: false, error: `unknown action: ${action}` };
+        }
+        ws.send(JSON.stringify({ requestId, ...(Array.isArray(result) ? { data: result } : result) }));
+      } catch (e) {
+        ws.send(JSON.stringify({ requestId, ok: false, error: e.message }));
+      }
+    });
+
+    ws.on('close', () => console.log('制御WebSocket切断'));
   });
 }
 

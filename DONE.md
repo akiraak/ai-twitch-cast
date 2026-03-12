@@ -1,9 +1,10 @@
 # DONE
 
-## WebSocket統合（Step 1-2）
+## WebSocket統合（Step 1-3）
 
 - [x] TODO表示をWebSocket push化（30秒ポーリング廃止、mtime監視+API変更時に即座ブロードキャスト）
 - [x] キャプチャ映像をMJPEG→WebSocketバイナリ送信に変更（1byte index+JPEG、バックプレッシャー制御、MJPEG互換維持）
+- [x] Electron↔WSL2間の制御をWebSocket常時接続に変更（HTTPフォールバック維持、リクエスト-レスポンスマッチング）
 - [x] ビルドログをbuild.logに出力＋API（`/api/capture/build-log`）追加
 - [x] dist権限エラー時にPowerShellでdist削除するフォールバック追加
 

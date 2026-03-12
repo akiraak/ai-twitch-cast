@@ -262,8 +262,106 @@ def _capture_base_url():
     return f"http://{host}:{CAPTURE_PORT}"
 
 
+def _capture_ws_url():
+    """キャプチャサーバーの制御WebSocket URLを返す"""
+    try:
+        host = get_windows_host_ip()
+    except Exception:
+        host = "localhost"
+    return f"ws://{host}:{CAPTURE_PORT}/ws/control"
+
+
+# WebSocketクライアント（Electron制御用）
+_capture_ws = None
+_capture_ws_lock = asyncio.Lock()
+_pending_requests: dict[str, asyncio.Future] = {}
+_ws_reader_task = None
+
+
+async def _ensure_capture_ws():
+    """Electronへの制御WebSocket接続を確保する"""
+    global _capture_ws, _ws_reader_task
+    import websockets
+
+    if _capture_ws is not None:
+        try:
+            await _capture_ws.ping()
+            return _capture_ws
+        except Exception:
+            _capture_ws = None
+
+    url = _capture_ws_url()
+    _capture_ws = await websockets.connect(url, close_timeout=2)
+    _ws_reader_task = asyncio.create_task(_read_capture_ws())
+    logger.info("Electron制御WebSocket接続: %s", url)
+    return _capture_ws
+
+
+async def _read_capture_ws():
+    """WebSocketからのレスポンスを読み取り、pendingリクエストを解決する"""
+    global _capture_ws
+    try:
+        async for msg in _capture_ws:
+            data = json.loads(msg)
+            rid = data.get("requestId")
+            if rid and rid in _pending_requests:
+                _pending_requests[rid].set_result(data)
+    except Exception:
+        pass
+    finally:
+        _capture_ws = None
+        for fut in _pending_requests.values():
+            if not fut.done():
+                fut.set_exception(ConnectionError("WebSocket closed"))
+        _pending_requests.clear()
+
+
+async def _ws_request(action, **params):
+    """WebSocket経由でElectronにコマンドを送信し、レスポンスを待つ"""
+    async with _capture_ws_lock:
+        ws = await _ensure_capture_ws()
+    rid = hashlib.md5(f"{action}{time.time()}".encode()).hexdigest()[:8]
+    fut = asyncio.get_event_loop().create_future()
+    _pending_requests[rid] = fut
+    try:
+        await ws.send(json.dumps({"requestId": rid, "action": action, **params}))
+        result = await asyncio.wait_for(fut, timeout=5.0)
+        # 配列レスポンスは data フィールドに入る
+        return result.get("data", result)
+    finally:
+        _pending_requests.pop(rid, None)
+
+
+# HTTP method+path → WebSocket action マッピング
+_PATH_TO_ACTION = {
+    ("GET", "/status"): ("status", {}),
+    ("GET", "/windows"): ("windows", {}),
+    ("GET", "/captures"): ("captures", {}),
+    ("GET", "/preview/status"): ("preview_status", {}),
+    ("POST", "/preview/close"): ("preview_close", {}),
+    ("POST", "/quit"): ("quit", {}),
+}
+
+
 async def _proxy_request(method, path, body=None):
-    """キャプチャサーバーへHTTPリクエストをプロキシする"""
+    """キャプチャサーバーへリクエスト（WebSocket優先→HTTPフォールバック）"""
+    # WebSocket経由を試行
+    try:
+        key = (method, path)
+        if key in _PATH_TO_ACTION:
+            action, _ = _PATH_TO_ACTION[key]
+            return await _ws_request(action, **(body or {}))
+        elif method == "POST" and path == "/capture":
+            return await _ws_request("start_capture", **(body or {}))
+        elif method == "DELETE" and path.startswith("/capture/"):
+            cap_id = path.split("/capture/")[1]
+            return await _ws_request("stop_capture", id=cap_id)
+        elif method == "POST" and path == "/preview/open":
+            return await _ws_request("preview_open", **(body or {}))
+    except Exception as e:
+        logger.debug("WebSocket制御失敗、HTTPフォールバック: %s", e)
+
+    # HTTPフォールバック
     import httpx
 
     url = f"{_capture_base_url()}{path}"
