@@ -144,12 +144,6 @@
     <button class="panel-btn" onclick="addCapture()">追加</button>
   </div>
 
-  <!-- レイアウト -->
-  <div class="panel-section">
-    <h3>レイアウト</h3>
-    <button class="panel-btn primary" onclick="saveLayout()">保存</button>
-  </div>
-
   <!-- チャット（将来用） -->
   <div class="panel-section" id="chat-section">
     <h3>チャット</h3>
@@ -164,16 +158,6 @@ const token = params.get('token');
 
 // iframe にbroadcast.htmlを読み込み（embedded）
 frame.src = `/broadcast?token=${token}&embedded`;
-
-// === iframe内の関数呼び出し ===
-function getFrameWindow() {
-  try { return frame.contentWindow; } catch (e) { return null; }
-}
-
-function saveLayout() {
-  const fw = getFrameWindow();
-  if (fw && fw.editSave) fw.editSave();
-}
 
 // === 配信制御 ===
 async function goLive() {

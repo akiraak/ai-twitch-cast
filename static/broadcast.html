@@ -24,10 +24,8 @@
   #avatar-area {
     position: absolute;
     z-index: 5;
-    left: 73.25%; top: 62.15%;
+    left: 46.5%; top: 24.3%;
     width: 53.5%; height: 75.7%;
-    transform: translate(-50%, -50%);
-    transform-origin: center center;
   }
   #avatar-area img, #avatar-area canvas {
     width: 100%; height: 100%;
@@ -76,8 +74,7 @@
   /* === TODOパネル（中央） === */
   #todo-panel {
     position: absolute;
-    top: 2%; left: 50%;
-    transform: translateX(-50%);
+    top: 2%; left: 36%;
     z-index: 20;
     width: 28%;
     overflow: hidden;
@@ -752,9 +749,8 @@ function applySettings(s) {
   if (s.avatar) {
     if (s.avatar.positionX != null) avatarArea.style.left = s.avatar.positionX + '%';
     if (s.avatar.positionY != null) avatarArea.style.top = s.avatar.positionY + '%';
-    if (s.avatar.scale != null) {
-      avatarArea.style.transform = `translate(-50%, -50%) scale(${s.avatar.scale})`;
-    }
+    if (s.avatar.width != null) avatarArea.style.width = s.avatar.width + '%';
+    if (s.avatar.height != null) avatarArea.style.height = s.avatar.height + '%';
     if (s.avatar.zIndex != null) avatarArea.style.zIndex = s.avatar.zIndex;
     if (window.dispatchEvent) window.dispatchEvent(new Event('resize'));
   }
@@ -795,7 +791,7 @@ function applySettings(s) {
     }
     if (s.todo.positionX != null) {
       todoPanelEl.style.left = s.todo.positionX + '%';
-      todoPanelEl.style.transform = 'translateX(-50%)';
+      todoPanelEl.style.transform = 'none';
     }
     if (s.todo.positionY != null) {
       todoPanelEl.style.top = s.todo.positionY + '%';
@@ -1282,20 +1278,22 @@ document.addEventListener('mousedown', (e) => {
 function startDrag(el, e) {
   el.classList.add('dragging');
   const startX = e.clientX, startY = e.clientY;
-  const origLeft = el.offsetLeft, origTop = el.offsetTop;
+  // getBoundingClientRect()はtransform適用後の実際の表示位置を返す
+  const rect = el.getBoundingClientRect();
+  const origVisualLeft = rect.left, origVisualTop = rect.top;
   let didDrag = false;
 
   function onMove(e) {
     didDrag = true;
-    el.style.left = ((origLeft + e.clientX - startX) / window.innerWidth * 100) + '%';
-    el.style.top = ((origTop + e.clientY - startY) / window.innerHeight * 100) + '%';
+    el.style.left = ((origVisualLeft + e.clientX - startX) / window.innerWidth * 100) + '%';
+    el.style.top = ((origVisualTop + e.clientY - startY) / window.innerHeight * 100) + '%';
     el.style.transform = 'none';
   }
   function onUp() {
     el.classList.remove('dragging');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
-    if (didDrag) scheduleSave();
+    if (didDrag) editSave();
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
@@ -1363,7 +1361,7 @@ function setupEditable(el) {
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
-        scheduleSave();
+        editSave();
       }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
@@ -1379,7 +1377,9 @@ function scheduleSave() {
 function getRealZIndex(el, fallback) {
   // 編集中はz-index=9000なので、保存した元の値を返す
   if (el._savedZIndex != null) return parseInt(el._savedZIndex) || fallback;
-  return parseInt(el.style.zIndex) || fallback;
+  const z = parseInt(el.style.zIndex) || fallback;
+  // 編集用の一時z-index(9000)は保存しない
+  return z >= 9000 ? fallback : z;
 }
 
 async function editSave() {
@@ -1387,16 +1387,18 @@ async function editSave() {
   const overlaySettings = {};
   const avatarArea = document.getElementById('avatar-area');
   overlaySettings.avatar = {
-    positionX: parseFloat(avatarArea.style.left) || 73.25,
-    positionY: parseFloat(avatarArea.style.top) || 62.15,
+    positionX: parseFloat(avatarArea.style.left) || 46.5,
+    positionY: parseFloat(avatarArea.style.top) || 24.3,
+    width: parseFloat(avatarArea.style.width) || 53.5,
+    height: parseFloat(avatarArea.style.height) || 75.7,
     zIndex: getRealZIndex(avatarArea, 5),
   };
   overlaySettings.subtitle = {
     zIndex: getRealZIndex(subtitleEl, 20),
   };
   overlaySettings.todo = {
-    positionX: parseFloat(todoPanelEl.style.left) || 50,
-    positionY: parseFloat(todoPanelEl.style.top) || 16,
+    positionX: parseFloat(todoPanelEl.style.left) || 36,
+    positionY: parseFloat(todoPanelEl.style.top) || 2,
     width: parseFloat(todoPanelEl.style.width) || 28,
     zIndex: getRealZIndex(todoPanelEl, 20),
   };
