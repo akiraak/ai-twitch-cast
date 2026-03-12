@@ -556,6 +556,16 @@ async def capture_preview_oneclick_status():
 # =====================================================
 
 
+@router.get("/api/capture/preview/status")
+async def capture_preview_status():
+    """プレビューウィンドウの開閉状態を返す"""
+    try:
+        data = await _proxy_request("GET", "/preview/status")
+        return data
+    except Exception:
+        return {"open": False}
+
+
 @router.post("/api/capture/preview")
 async def capture_preview_open():
     """Electronアプリで配信プレビュー+レイアウト編集ウィンドウを開く"""

@@ -1707,14 +1707,17 @@ captureRefreshStatus();
 captureRefreshSources();
 setInterval(captureRefreshStatus, 10000);
 
-// プレビュー自動起動（Electronアプリが未起動の場合のみ）
+// プレビュー自動起動（プレビューウィンドウが開いていない場合）
 (async () => {
   try {
-    const st = await (await fetch('/api/capture/status')).json();
-    if (!st.running) {
+    const ps = await (await fetch('/api/capture/preview/status')).json();
+    if (!ps.open) {
       previewOneClick();
     }
-  } catch (e) {}
+  } catch (e) {
+    // Electronアプリ未起動 → ワンクリックで起動から
+    previewOneClick();
+  }
 })();
 </script>
 </body>
