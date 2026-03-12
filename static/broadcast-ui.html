@@ -336,6 +336,14 @@
           <button class="danger" onclick="captureShutdown()">サーバー停止</button>
         </div>
         <div class="status" id="capture-server-status"></div>
+        <div id="capture-build-status" style="display:none; margin-top:8px; padding:8px 12px; background:#f0e8ff; border-radius:6px; font-size:0.85rem;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="capture-build-msg"></span>
+          </div>
+          <div style="margin-top:6px; background:#d0c0e8; border-radius:3px; height:6px; overflow:hidden;">
+            <div id="capture-build-bar" style="height:100%; background:#7b1fa2; width:0%; transition:width 0.3s;"></div>
+          </div>
+        </div>
         <div style="margin-top:12px;">
           <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
             <select id="capture-window-list" style="flex:1; padding:6px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.85rem;">
@@ -790,9 +798,13 @@ async function loadDiag() {
 async function captureLaunch() {
   const data = await api('POST', '/api/capture/launch');
   if (data) {
-    document.getElementById('capture-server-status').textContent = data.ok ? '起動中' : (data.error || 'エラー');
+    if (data.ok) {
+      document.getElementById('capture-server-status').textContent = '起動中';
+      captureRefreshWindows();
+    } else if (data.error) {
+      document.getElementById('capture-server-status').textContent = data.error;
+    }
     captureRefreshStatus();
-    captureRefreshWindows();
   }
 }
 
@@ -801,6 +813,8 @@ async function captureShutdown() {
   document.getElementById('capture-server-status').textContent = '停止';
   document.getElementById('capture-dot').className = 'status-dot off';
 }
+
+let _captureBuildPolling = null;
 
 async function captureRefreshStatus() {
   try {
@@ -813,6 +827,38 @@ async function captureRefreshStatus() {
     } else {
       dot.className = 'status-dot off';
       status.textContent = '停止';
+    }
+
+    // ビルド状態表示
+    const buildEl = document.getElementById('capture-build-status');
+    const buildMsg = document.getElementById('capture-build-msg');
+    const buildBar = document.getElementById('capture-build-bar');
+    const build = data.build;
+    if (build && build.status === 'building') {
+      buildEl.style.display = 'block';
+      buildMsg.textContent = build.message || 'ビルド中...';
+      buildBar.style.width = build.progress + '%';
+      // ビルド中は高速ポーリング
+      if (!_captureBuildPolling) {
+        _captureBuildPolling = setInterval(captureRefreshStatus, 2000);
+      }
+    } else if (build && build.status === 'error') {
+      buildEl.style.display = 'block';
+      buildEl.style.background = '#fff0f0';
+      buildMsg.textContent = build.message || 'ビルドエラー';
+      buildBar.style.width = '0%';
+      if (_captureBuildPolling) { clearInterval(_captureBuildPolling); _captureBuildPolling = null; }
+    } else if (build && build.status === 'done') {
+      buildEl.style.display = 'block';
+      buildEl.style.background = '#f0fff0';
+      buildMsg.textContent = 'ビルド完了';
+      buildBar.style.width = '100%';
+      if (_captureBuildPolling) { clearInterval(_captureBuildPolling); _captureBuildPolling = null; }
+      setTimeout(() => { buildEl.style.display = 'none'; buildEl.style.background = '#f0e8ff'; }, 5000);
+    } else {
+      buildEl.style.display = 'none';
+      buildEl.style.background = '#f0e8ff';
+      if (_captureBuildPolling) { clearInterval(_captureBuildPolling); _captureBuildPolling = null; }
     }
   } catch (e) {}
 }

@@ -3,7 +3,10 @@
 import asyncio
 import json
 import logging
+import os
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -22,6 +25,79 @@ _capture_proc = None
 # Electronアプリのパス
 _APP_DIR = Path(__file__).resolve().parent.parent.parent / "win-capture-app"
 _EXE_PATH = _APP_DIR / "dist" / "win-unpacked" / "win-capture-app.exe"
+
+# ソースファイル（これらが更新されたらリビルド）
+_SOURCE_FILES = ["main.js", "preload.js", "capture.html", "capture-renderer.js", "package.json"]
+
+# ビルド状態
+_build_state = {
+    "status": "idle",  # idle, building, done, error
+    "message": "",
+    "progress": 0,  # 0-100
+}
+_build_lock = threading.Lock()
+
+
+def _needs_build():
+    """ソースファイルがexeより新しいかチェック"""
+    if not _EXE_PATH.exists():
+        return True
+    exe_mtime = _EXE_PATH.stat().st_mtime
+    for name in _SOURCE_FILES:
+        src = _APP_DIR / name
+        if src.exists() and src.stat().st_mtime > exe_mtime:
+            logger.info("ソース更新検知: %s", name)
+            return True
+    return False
+
+
+def _run_build():
+    """バックグラウンドでElectronアプリをビルド"""
+    global _build_state
+    if not _build_lock.acquire(blocking=False):
+        return  # 既にビルド中
+    try:
+        _build_state = {"status": "building", "message": "npm install ...", "progress": 10}
+        logger.info("Electronアプリビルド開始")
+
+        # npm install
+        result = subprocess.run(
+            ["npm", "install"],
+            cwd=str(_APP_DIR),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            _build_state = {"status": "error", "message": f"npm install失敗: {result.stderr[:200]}", "progress": 0}
+            logger.error("npm install失敗: %s", result.stderr[:500])
+            return
+
+        _build_state = {"status": "building", "message": "electron-builder ...", "progress": 50}
+
+        # npm run build
+        result = subprocess.run(
+            ["npm", "run", "build"],
+            cwd=str(_APP_DIR),
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode != 0:
+            _build_state = {"status": "error", "message": f"ビルド失敗: {result.stderr[:200]}", "progress": 0}
+            logger.error("electron-builder失敗: %s", result.stderr[:500])
+            return
+
+        _build_state = {"status": "done", "message": "ビルド完了", "progress": 100}
+        logger.info("Electronアプリビルド完了")
+    except subprocess.TimeoutExpired:
+        _build_state = {"status": "error", "message": "ビルドタイムアウト", "progress": 0}
+        logger.error("ビルドタイムアウト")
+    except Exception as e:
+        _build_state = {"status": "error", "message": str(e)[:200], "progress": 0}
+        logger.error("ビルドエラー: %s", e)
+    finally:
+        _build_lock.release()
 
 
 def _capture_base_url():
@@ -57,17 +133,30 @@ async def _proxy_request(method, path, body=None):
 
 @router.get("/api/capture/status")
 async def capture_status():
-    """キャプチャサーバーの状態を返す"""
+    """キャプチャサーバーの状態を返す（ビルド状態含む）"""
+    result = {"build": dict(_build_state)}
     try:
         data = await _proxy_request("GET", "/status")
-        return {"running": True, **data}
+        result.update({"running": True, **data})
     except Exception:
-        return {"running": False}
+        result["running"] = False
+    return result
+
+
+@router.post("/api/capture/build")
+async def capture_build():
+    """Electronアプリのビルドを手動トリガー"""
+    if _build_state["status"] == "building":
+        return {"ok": True, "message": "既にビルド中", "build": dict(_build_state)}
+    if not _APP_DIR.exists():
+        raise HTTPException(status_code=404, detail=f"win-capture-appディレクトリが見つかりません: {_APP_DIR}")
+    threading.Thread(target=_run_build, daemon=True).start()
+    return {"ok": True, "message": "ビルド開始", "build": dict(_build_state)}
 
 
 @router.post("/api/capture/launch")
 async def capture_launch():
-    """Electronキャプチャアプリを起動する"""
+    """Electronキャプチャアプリを起動する（必要ならビルドも実行）"""
     global _capture_proc
 
     # 既に起動中か確認
@@ -75,10 +164,18 @@ async def capture_launch():
     if st.get("running"):
         return {"ok": True, "message": "既に起動中"}
 
+    # ビルドが必要か確認
+    if _needs_build():
+        if _build_state["status"] == "building":
+            return {"ok": False, "error": "ビルド中です。完了後に再度起動してください。", "build": dict(_build_state)}
+        # バックグラウンドでビルド開始
+        threading.Thread(target=_run_build, daemon=True).start()
+        return {"ok": False, "error": "ビルドを開始しました。完了後に再度起動してください。", "build": dict(_build_state)}
+
     if not _EXE_PATH.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"ビルド済みexeが見つかりません: {_EXE_PATH}。win-capture-app/build.sh を実行してください。",
+            detail=f"ビルド済みexeが見つかりません: {_EXE_PATH}",
         )
 
     try:
