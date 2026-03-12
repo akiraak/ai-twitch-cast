@@ -65,17 +65,6 @@ async def set_language(request: Request):
     if mode not in LANGUAGE_MODES:
         return {"ok": False, "error": f"不明なモード: {mode}"}
     set_language_mode(mode)
-    # scenes.jsonに保存して永続化
-    try:
-        config = {}
-        try:
-            with open(scene_config.CONFIG_PATH, encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception:
-            pass
-        config["language_mode"] = mode
-        with open(scene_config.CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    # DBに保存して永続化
+    scene_config.save_config_value("language_mode", mode)
     return {"ok": True, "mode": mode}

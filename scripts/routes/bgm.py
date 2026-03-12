@@ -1,7 +1,6 @@
 """BGMルート（トラック一覧・再生制御・YouTube取得）"""
 
 import asyncio
-import json
 import logging
 import re
 import subprocess
@@ -12,7 +11,7 @@ from pydantic import BaseModel
 
 from scripts import state
 from src import db
-from src.scene_config import CONFIG_PATH
+from src.scene_config import load_config_value, save_config_value
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -21,26 +20,15 @@ BGM_DIR = Path(__file__).resolve().parent.parent.parent / "resources" / "audio" 
 
 
 def load_bgm_settings() -> dict:
-    """scenes.jsonからBGM設定を読み込む"""
-    try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
-        return config.get("bgm", {})
-    except Exception:
-        return {}
+    """BGM設定を読み込む（DB優先 → scenes.json）"""
+    track = load_config_value("bgm.track", "")
+    return {"track": track}
 
 
 def _save_bgm(track: str | None = None):
-    """scenes.jsonにBGM再生状態を保存する"""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    if "bgm" not in config:
-        config["bgm"] = {}
+    """BGM再生状態をDBに保存する"""
     if track is not None:
-        config["bgm"]["track"] = track  # "" で停止状態
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+        save_config_value("bgm.track", track)
 
 
 

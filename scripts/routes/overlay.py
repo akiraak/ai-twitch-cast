@@ -1,6 +1,5 @@
 """オーバーレイルート（WebSocket + 設定 + TODO表示）"""
 
-import json
 import logging
 import re
 import secrets
@@ -11,7 +10,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from scripts import state
 from src import db
-from src.scene_config import CONFIG_PATH
+from src.scene_config import load_config_value, load_config_json
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -41,16 +40,15 @@ async def broadcast_ws(websocket: WebSocket):
             })
     except Exception:
         pass
-    # 音量設定を送信（DB優先、なければscenes.jsonのデフォルト）
+    # 音量設定を送信（DB優先 → scenes.json → デフォルト）
     try:
-        try:
-            with open(CONFIG_PATH, encoding="utf-8") as f:
-                defaults = json.load(f).get("audio_volumes", {})
-        except Exception:
-            defaults = {}
         for source, fallback in [("master", 0.8), ("tts", 0.8), ("bgm", 1.0)]:
             val = db.get_setting(f"volume.{source}")
-            vol = float(val) if val is not None else defaults.get(source, fallback)
+            if val is not None:
+                vol = float(val)
+            else:
+                cfg_val = load_config_value(f"audio_volumes.{source}")
+                vol = float(cfg_val) if cfg_val is not None else fallback
             await websocket.send_json({
                 "type": "volume",
                 "source": source,
@@ -86,28 +84,21 @@ async def broadcast_token():
 
 @router.get("/api/broadcast/volumes")
 async def get_broadcast_volumes():
-    """broadcast.html用の音量設定を返す（DB優先、なければscenes.jsonのデフォルト）"""
-    try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
-        defaults = config.get("audio_volumes", {})
-    except Exception:
-        defaults = {}
+    """broadcast.html用の音量設定を返す（DB優先 → scenes.json → デフォルト）"""
     result = {}
     for key, fallback in [("master", 0.8), ("tts", 0.8), ("bgm", 1.0)]:
         val = db.get_setting(f"volume.{key}")
-        result[key] = float(val) if val is not None else defaults.get(key, fallback)
+        if val is not None:
+            result[key] = float(val)
+        else:
+            cfg_val = load_config_value(f"audio_volumes.{key}")
+            result[key] = float(cfg_val) if cfg_val is not None else fallback
     return result
 
 
 def _get_overlay_defaults():
-    """scenes.jsonからオーバーレイのデフォルト値を読み込む"""
-    try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
-        return config.get("overlay", {})
-    except Exception:
-        return {}
+    """オーバーレイのデフォルト値を読み込む（DB優先 → scenes.json）"""
+    return load_config_json("overlay", {})
 
 
 _OVERLAY_DEFAULTS = {

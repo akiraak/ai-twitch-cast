@@ -13,6 +13,17 @@
 - [x] xvfb ChromiumでVRMアバター表示（--use-gl=angle --use-angle=swiftshaderで解決）
 - [x] Electron環境での配信テスト（プレビュー確認→Go Live→Twitch配信成功）
 
+## 設定DB移行
+
+- [x] scenes.json設定をDB優先に移行（scene_config.pyにload_config_value/load_config_json/save_config_value/save_config_json追加）
+- [x] bgm.py: BGMトラック設定のDB化
+- [x] avatar.py: vsf_defaults設定のDB化
+- [x] character.py: language_mode保存のDB化
+- [x] stream_control.py: avatar_capture_url・音量設定のDB化
+- [x] overlay.py: 音量・オーバーレイデフォルト設定のDB化
+- [x] state.py: load_vsf_defaults()のDB化
+- [x] web.py: startup言語モード復元のDB化
+
 ## プロジェクト整理
 
 - [x] OBS関連ファイル・コード完全削除（obs_controller.py, routes/obs.py, routes/stream.py, start_stream.py, stop_stream.py, overlay.html, audio-tts.html, audio-bgm.html, index.html, design-proposal.html, OBS関連ドキュメント3件, tests/test_scene_config.py）

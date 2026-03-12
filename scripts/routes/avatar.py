@@ -1,14 +1,13 @@
 """アバター制御ルート（VTS + VSF + 発話）"""
 
 import asyncio
-import json
 
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from scripts import state
-from src.scene_config import CONFIG_PATH
+from src.scene_config import load_config_json, save_config_json
 
 router = APIRouter()
 
@@ -157,9 +156,7 @@ async def vsf_blend(body: BlendShape):
 
 @router.get("/api/vsf/defaults")
 async def vsf_defaults_get():
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    return config.get("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})
+    return load_config_json("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})
 
 
 class VSFDefaults(BaseModel):
@@ -169,10 +166,5 @@ class VSFDefaults(BaseModel):
 
 @router.post("/api/vsf/defaults/save")
 async def vsf_defaults_save(body: VSFDefaults):
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    config["vsf_defaults"] = body.model_dump()
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    save_config_json("vsf_defaults", body.model_dump())
     return {"ok": True}

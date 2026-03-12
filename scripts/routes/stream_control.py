@@ -1,6 +1,5 @@
 """配信制御ルート（OBS不要版） - StreamController管理"""
 
-import json
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -8,7 +7,7 @@ from pydantic import BaseModel
 
 from scripts import state
 from src import db
-from src.scene_config import CONFIG_PATH
+from src.scene_config import load_config_value, save_config_value
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -112,23 +111,17 @@ class VolumeRequest(BaseModel):
     volume: float
 
 
-def _get_default_volumes():
-    """scenes.jsonからデフォルト音量を読み込む"""
-    try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
-        return config.get("audio_volumes", {})
-    except Exception:
-        return {}
-
-
 def _get_volume(source):
-    """DBから音量を取得（なければscenes.jsonのデフォルト値）"""
+    """音量を取得（DB volume.* → scenes.json audio_volumes.* → デフォルト）"""
+    # DBにvolume.*キーで保存されている
     val = db.get_setting(f"volume.{source}")
     if val is not None:
         return float(val)
-    defaults = _get_default_volumes()
-    return defaults.get(source, {"master": 0.8, "tts": 0.8, "bgm": 1.0}.get(source, 1.0))
+    # scenes.jsonフォールバック
+    val = load_config_value(f"audio_volumes.{source}")
+    if val is not None:
+        return float(val)
+    return {"master": 0.8, "tts": 0.8, "bgm": 1.0}.get(source, 1.0)
 
 
 @router.get("/api/broadcast/volume")
@@ -161,23 +154,13 @@ class AvatarStreamRequest(BaseModel):
 
 
 def _load_avatar_capture_url():
-    """scenes.jsonからavatar_capture_urlを読み込む"""
-    try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
-        return config.get("avatar_capture_url", "")
-    except Exception:
-        return ""
+    """avatar_capture_urlを読み込む（DB優先 → scenes.json）"""
+    return load_config_value("avatar_capture_url", "")
 
 
 def _save_avatar_capture_url(url: str):
-    """avatar_capture_urlをscenes.jsonに保存する"""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    config["avatar_capture_url"] = url
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    """avatar_capture_urlをDBに保存する"""
+    save_config_value("avatar_capture_url", url)
 
 
 @router.get("/api/broadcast/avatar")

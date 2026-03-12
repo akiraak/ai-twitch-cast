@@ -1,7 +1,6 @@
 """Web インターフェース（console.py相当）"""
 
 import asyncio
-import json
 import logging
 import os
 import signal
@@ -170,12 +169,11 @@ async def startup():
 
     # 言語モードを復元
     try:
-        with open(scene_config.CONFIG_PATH, encoding="utf-8") as f:
-            cfg = json.load(f)
-        if cfg.get("language_mode"):
+        lang = scene_config.load_config_value("language_mode")
+        if lang:
             from src.ai_responder import set_language_mode
-            set_language_mode(cfg["language_mode"])
-            logger.info("言語モード復元: %s", cfg["language_mode"])
+            set_language_mode(lang)
+            logger.info("言語モード復元: %s", lang)
     except Exception:
         pass
 

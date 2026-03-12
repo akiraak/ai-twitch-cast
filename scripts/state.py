@@ -1,6 +1,5 @@
 """共有状態 - コントローラー・接続フラグ・ブロードキャスト"""
 
-import json
 import os
 
 from fastapi import WebSocket
@@ -11,7 +10,7 @@ from src.comment_reader import CommentReader
 from src.git_watcher import GitWatcher
 from src.topic_talker import TopicTalker
 from src.stream_controller import StreamController
-from src.scene_config import CONFIG_PATH
+from src.scene_config import load_config_json
 from src.twitch_api import TwitchAPI
 from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
@@ -110,7 +109,5 @@ async def ensure_reader():
 
 
 def load_vsf_defaults():
-    """VSeeFaceデフォルト設定を読み込む"""
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    return config.get("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})
+    """VSeeFaceデフォルト設定を読み込む（DB優先 → scenes.json）"""
+    return load_config_json("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})
