@@ -154,10 +154,13 @@ def _run_build():
             cwd=str(_APP_DIR),
             capture_output=True, text=True, timeout=300,
         )
-        if result.returncode != 0:
-            _build_state = {"status": "error", "message": f"ビルド失敗: {result.stderr[:200]}", "progress": 0}
-            logger.error("electron-builder失敗: %s", result.stderr[:500])
+        if result.returncode != 0 and not _EXE_PATH.exists():
+            err_detail = (result.stderr or result.stdout or "")[:200]
+            _build_state = {"status": "error", "message": f"ビルド失敗: {err_detail}", "progress": 0}
+            logger.error("electron-builder失敗: %s", err_detail)
             return
+        if result.returncode != 0:
+            logger.warning("electron-builder警告（exe生成済み）: %s", (result.stderr or result.stdout or "")[:200])
 
         _save_build_hash()
         _build_state = {"status": "done", "message": "ビルド完了", "progress": 100}
@@ -390,11 +393,14 @@ def _run_preview_oneclick():
                 ["npm", "run", "build"], cwd=str(_APP_DIR),
                 capture_output=True, text=True, timeout=300,
             )
-            if result.returncode != 0:
+            if result.returncode != 0 and not _EXE_PATH.exists():
+                err_detail = (result.stderr or result.stdout or "")[:200]
                 _oneclick_state = {"status": "error", "stage": "build",
-                    "message": f"ビルド失敗: {result.stderr[:200]}",
+                    "message": f"ビルド失敗: {err_detail}",
                     "progress": 0, "stages_done": done, "stages_skipped": skipped}
                 return
+            if result.returncode != 0:
+                logger.warning("electron-builder警告（exe生成済み）: %s", (result.stderr or result.stdout or "")[:200])
             _save_build_hash()
             done.append("build")
         else:
