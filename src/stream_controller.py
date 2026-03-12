@@ -298,7 +298,8 @@ class StreamController:
         cmd = [
             "chromium-browser",
             "--no-sandbox",
-            "--use-gl=swiftshader",
+            "--use-gl=angle",
+            "--use-angle=swiftshader",
             "--disable-dev-shm-usage",
             f"--window-size={width},{height}",
             "--start-fullscreen",
