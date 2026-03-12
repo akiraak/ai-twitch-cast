@@ -102,11 +102,11 @@ def _get_overlay_defaults():
 
 
 _OVERLAY_DEFAULTS = {
-    "avatar": {"positionX": 73.25, "positionY": 62.15, "scale": 1.0},
+    "avatar": {"positionX": 73.25, "positionY": 62.15, "scale": 1.0, "zIndex": 5},
     "lighting": {"brightness": 1.0, "contrast": 1.0, "temperature": 0, "saturation": 1.0},
-    "subtitle": {"bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3, "bgOpacity": 0.85},
-    "todo": {"positionX": 50, "positionY": 50, "width": 28, "height": 70, "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95},
-    "topic": {"positionX": 1.04, "positionY": 1.85, "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95},
+    "subtitle": {"bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3, "bgOpacity": 0.85, "zIndex": 20},
+    "todo": {"positionX": 50, "positionY": 50, "width": 28, "height": 70, "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20},
+    "topic": {"positionX": 1.04, "positionY": 1.85, "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95, "zIndex": 20},
 }
 
 
