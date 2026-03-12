@@ -139,7 +139,7 @@ DBに `capture.sources` キーでJSON保存:
 - 変更は自動保存（500ms debounce）
 - 配信用のChromiumは `?edit` なしで開くため、編集モードは影響しない
 
-## broadcast-ui.html
+## Web UI (index.html)
 
 「配信」タブに「ウィンドウキャプチャ」カードを追加:
 

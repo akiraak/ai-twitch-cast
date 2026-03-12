@@ -101,7 +101,7 @@ async def get_env():
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return (STATIC_DIR / "broadcast-ui.html").read_text(encoding="utf-8")
+    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
 # --- ステータス ---

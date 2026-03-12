@@ -91,7 +91,7 @@ ai-twitch-cast/
 │   └── comment_reader.py     # Twitchコメント読み上げ
 ├── static/                   # Webインターフェース静的ファイル
 │   ├── broadcast.html        # 配信合成ページ（overlay+audio+VRMアバター+キャプチャ統合、?editで編集モード）
-│   └── broadcast-ui.html     # 配信制御UI（キャプチャ管理含む）
+│   └── index.html            # 配信制御UI（キャプチャ管理含む）
 ├── resources/                # リソース（画像・モデル・音声・動画）
 │   ├── images/
 │   ├── live2d/

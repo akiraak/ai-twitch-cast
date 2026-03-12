@@ -83,10 +83,6 @@ async def broadcast_token():
     return {"token": BROADCAST_TOKEN}
 
 
-@router.get("/broadcast-ui", response_class=HTMLResponse)
-async def broadcast_ui_page():
-    return (STATIC_DIR / "broadcast-ui.html").read_text(encoding="utf-8")
-
 
 @router.get("/api/broadcast/volumes")
 async def get_broadcast_volumes():
