@@ -397,7 +397,7 @@ async function loadTodo() {
       cb.className = 'todo-checkbox';
       const text = document.createElement('span');
       text.textContent = text_val;
-      if (fs) text.style.fontSize = fs + 'px';
+      if (fs) text.style.fontSize = fs + 'vw';
       div.appendChild(cb);
       div.appendChild(text);
       todoListEl.appendChild(div);

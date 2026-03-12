@@ -343,13 +343,6 @@
           <div class="layout-row"><span class="layout-label">スケール</span><input type="range" class="vol-slider layout-slider" min="0.1" max="3" step="0.05" data-key="avatar.scale" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-avatar-scale" min="0.1" max="3" step="0.05" data-key="avatar.scale" oninput="onLayoutNum(this)"></div>
         </fieldset>
         <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
-          <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">ライティング</legend>
-          <div class="layout-row"><span class="layout-label">明るさ</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-brightness" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">コントラスト</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-contrast" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">色温度</span><input type="range" class="vol-slider layout-slider" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-temperature" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">彩度</span><input type="range" class="vol-slider layout-slider" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-saturation" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutNum(this)"></div>
-        </fieldset>
-        <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
           <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">字幕</legend>
           <div class="layout-row"><span class="layout-label">下端 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-bottom" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">文字 (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="4" step="0.05" data-key="subtitle.fontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-fontSize" min="0.5" max="4" step="0.05" data-key="subtitle.fontSize" oninput="onLayoutNum(this)"></div>
@@ -382,6 +375,15 @@
 
   <!-- ===== キャラクター ===== -->
   <div class="tab-content" id="tab-character">
+    <div class="card">
+      <h2>ライティング</h2>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div class="layout-row"><span class="layout-label">明るさ</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-brightness" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">コントラスト</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-contrast" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">色温度</span><input type="range" class="vol-slider layout-slider" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-temperature" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">彩度</span><input type="range" class="vol-slider layout-slider" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-saturation" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutNum(this)"></div>
+      </div>
+    </div>
     <div class="card">
       <h2>言語モード</h2>
       <div id="language-modes" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
