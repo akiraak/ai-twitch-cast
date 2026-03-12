@@ -429,22 +429,7 @@ def _run_preview_oneclick():
                 "progress": 0, "stages_done": done, "stages_skipped": skipped}
             return
 
-        # ---- Stage: deploy ----
-        _update_oneclick("deploy", "Windowsにデプロイ中...", 65, done, skipped)
-        try:
-            if is_wsl():
-                _deploy_to_windows()
-            else:
-                skipped.append("deploy")
-            done.append("deploy")
-        except Exception as e:
-            _oneclick_state = {"status": "error", "stage": "deploy",
-                "message": f"デプロイ失敗: {e}",
-                "progress": 0, "stages_done": done, "stages_skipped": skipped}
-            return
-
-        # ---- Stage: launch ----
-        # サーバーが既に起動中ならスキップ
+        # ---- サーバー起動チェック（deploy/launch判定に使用） ----
         import httpx
         server_running = False
         try:
@@ -454,9 +439,26 @@ def _run_preview_oneclick():
             pass
 
         if server_running:
+            # 起動中ならdeploy/launch/wait全スキップ
+            skipped.append("deploy")
             skipped.append("launch")
             skipped.append("wait_server")
         else:
+            # ---- Stage: deploy ----
+            _update_oneclick("deploy", "Windowsにデプロイ中...", 65, done, skipped)
+            try:
+                if is_wsl():
+                    _deploy_to_windows()
+                else:
+                    skipped.append("deploy")
+                done.append("deploy")
+            except Exception as e:
+                _oneclick_state = {"status": "error", "stage": "deploy",
+                    "message": f"デプロイ失敗: {e}",
+                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
+                return
+
+            # ---- Stage: launch ----
             _update_oneclick("launch", "Electronアプリ起動中...", 75, done, skipped)
             try:
                 _launch_electron()
