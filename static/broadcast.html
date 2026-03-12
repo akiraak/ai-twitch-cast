@@ -171,10 +171,9 @@
   }
 
   /* === 編集モード === */
-  body.edit-mode .edit-toolbar { display: flex; }
-  body.edit-mode.embedded .edit-toolbar { display: none; }
+  .edit-toolbar { display: flex; }
+  body.embedded .edit-toolbar { display: none; }
   .edit-toolbar {
-    display: none;
     position: fixed; top: 0; left: 0; right: 0;
     height: 44px;
     background: rgba(0, 0, 0, 0.9);
@@ -208,15 +207,15 @@
   }
   .edit-toolbar .spacer { flex: 1; }
 
-  body.edit-mode [data-editable] {
+  [data-editable] {
     cursor: move;
     pointer-events: auto !important;
   }
-  body.edit-mode [data-editable]:hover {
+  [data-editable]:hover {
     outline: 2px solid #7c4dff;
     outline-offset: 2px;
   }
-  body.edit-mode [data-editable].selected {
+  [data-editable].selected {
     outline: 2px dashed #4caf50;
     outline-offset: 2px;
   }
@@ -300,13 +299,12 @@
     font-size: 11px;
     padding: 4px 6px;
   }
-  body.edit-mode [data-editable].dragging {
+  [data-editable].dragging {
     outline: 2px solid #ff4081;
     outline-offset: 2px;
     opacity: 0.85;
   }
   .edit-label {
-    display: none;
     position: absolute; top: -20px; left: 0;
     background: #7c4dff;
     color: #fff;
@@ -317,10 +315,8 @@
     pointer-events: none;
     z-index: 9998;
   }
-  body.edit-mode .edit-label { display: block; }
 
   .resize-handle {
-    display: none;
     position: absolute;
     width: 12px; height: 12px;
     background: #7c4dff;
@@ -328,8 +324,10 @@
     border-radius: 2px;
     z-index: 9998;
   }
-  body.edit-mode .resize-handle { display: block; }
   .resize-handle.se { bottom: -6px; right: -6px; cursor: se-resize; }
+  .resize-handle.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+  .resize-handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
+  .resize-handle.nw { top: -6px; left: -6px; cursor: nw-resize; }
 
   /* === トピックパネル（左上） === */
   #topic-panel {
@@ -394,16 +392,10 @@
 
 <!-- 編集ツールバー -->
 <div class="edit-toolbar">
-  <span id="broadcast-status-label" style="font-weight:bold;">PREVIEW</span>
-  <button id="go-live-btn" style="background:#4caf50; color:#fff; border-color:#4caf50; font-weight:bold;" onclick="goLive()">Go Live</button>
-  <button id="stop-btn" style="background:#f44336; color:#fff; border-color:#f44336; display:none;" onclick="stopLive()">配信停止</button>
-  <span id="stream-info" style="font-size:11px; color:#999; margin-left:8px;"></span>
-  <div class="spacer"></div>
   <select id="edit-window-list"><option value="">-- ウィンドウ追加 --</option></select>
   <button onclick="editAddCapture()">追加</button>
   <span class="spacer"></span>
   <button class="primary" onclick="editSave()">保存</button>
-  <button onclick="exitEditMode()">編集終了</button>
 </div>
 
 <!-- 右クリックメニュー -->
@@ -510,6 +502,7 @@ function resizeRenderer() {
 }
 resizeRenderer();
 window.addEventListener('resize', resizeRenderer);
+new ResizeObserver(resizeRenderer).observe(avatarArea);
 
 // ライティング
 const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
@@ -934,7 +927,7 @@ function connectWS() {
         updateTopicPanel(data);
         break;
       case 'settings_update':
-        applySettings(data);
+        if (!_saving) applySettings(data);
         break;
 
       // TTS音声
@@ -1117,7 +1110,7 @@ function addCaptureLayer(id, streamUrl, label, layout) {
     img.src = streamUrl;
   }
 
-  if (isEditMode) setupEditable(div);
+  setupEditable(div);
 }
 
 function removeCaptureLayer(id) {
@@ -1146,11 +1139,11 @@ function applyLayoutToEl(el, layout) {
   else el.style.display = '';
 }
 
-// === 編集モード ===
-const isEditMode = new URLSearchParams(location.search).has('edit');
+// === 編集モード（常時有効） ===
 const isEmbedded = new URLSearchParams(location.search).has('embedded') || window.parent !== window;
 if (isEmbedded) document.body.classList.add('embedded');
 let _saveTimer = null;
+let _saving = false;  // editSave中はsettings_updateを無視
 let _selectedEditable = null;
 const _ctxMenu = document.getElementById('edit-context-menu');
 const _zDialog = document.getElementById('zindex-dialog');
@@ -1219,9 +1212,11 @@ function setupEditable(el) {
     el.appendChild(label);
   }
   if (!el.querySelector('.resize-handle')) {
-    const handle = document.createElement('div');
-    handle.className = 'resize-handle se';
-    el.appendChild(handle);
+    for (const corner of ['se', 'sw', 'ne', 'nw']) {
+      const handle = document.createElement('div');
+      handle.className = 'resize-handle ' + corner;
+      el.appendChild(handle);
+    }
   }
 
   el.addEventListener('contextmenu', (e) => {
@@ -1254,16 +1249,32 @@ function setupEditable(el) {
     document.addEventListener('mouseup', onUp);
   });
 
-  const handle = el.querySelector('.resize-handle.se');
-  if (handle) {
+  el.querySelectorAll('.resize-handle').forEach(handle => {
     handle.addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation();
       const startX = e.clientX, startY = e.clientY;
       const origW = el.offsetWidth, origH = el.offsetHeight;
+      const origLeft = el.offsetLeft, origTop = el.offsetTop;
+      const isLeft = handle.classList.contains('sw') || handle.classList.contains('nw');
+      const isTop = handle.classList.contains('ne') || handle.classList.contains('nw');
 
       function onMove(e) {
-        el.style.width = ((origW + e.clientX - startX) / window.innerWidth * 100) + '%';
-        el.style.height = ((origH + e.clientY - startY) / window.innerHeight * 100) + '%';
+        const dx = e.clientX - startX, dy = e.clientY - startY;
+        const ww = window.innerWidth, wh = window.innerHeight;
+        if (isLeft) {
+          el.style.width = ((origW - dx) / ww * 100) + '%';
+          el.style.left = ((origLeft + dx) / ww * 100) + '%';
+          el.style.transform = 'none';
+        } else {
+          el.style.width = ((origW + dx) / ww * 100) + '%';
+        }
+        if (isTop) {
+          el.style.height = ((origH - dy) / wh * 100) + '%';
+          el.style.top = ((origTop + dy) / wh * 100) + '%';
+          el.style.transform = 'none';
+        } else {
+          el.style.height = ((origH + dy) / wh * 100) + '%';
+        }
       }
       function onUp() {
         document.removeEventListener('mousemove', onMove);
@@ -1273,7 +1284,7 @@ function setupEditable(el) {
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
-  }
+  });
 }
 
 function scheduleSave() {
@@ -1282,6 +1293,7 @@ function scheduleSave() {
 }
 
 async function editSave() {
+  _saving = true;
   const overlaySettings = {};
   const avatarArea = document.getElementById('avatar-area');
   overlaySettings.avatar = {
@@ -1331,6 +1343,7 @@ async function editSave() {
       });
     } catch (e) {}
   }
+  _saving = false;
 }
 
 async function editLoadWindows() {
@@ -1363,17 +1376,9 @@ async function editAddCapture() {
 }
 
 function initEditMode() {
-  document.body.classList.add('edit-mode');
   document.querySelectorAll('[data-editable]').forEach(setupEditable);
   editLoadWindows();
   setInterval(editLoadWindows, 10000);
-}
-
-function exitEditMode() {
-  editSave();
-  document.body.classList.remove('edit-mode');
-  // リサイズハンドル・編集ラベルを除去
-  document.querySelectorAll('.resize-handle, .edit-label').forEach(el => el.remove());
 }
 
 // === 初期化 ===
@@ -1421,68 +1426,7 @@ async function init() {
   setInterval(loadTopicPanel, 15000);
   connectWS();
 
-  if (isEditMode) initEditMode();
-
-  // 編集モード時: 配信状態ポーリング
-  if (isEditMode) {
-    updateBroadcastStatus();
-    setInterval(updateBroadcastStatus, 3000);
-  }
-}
-
-// === 配信制御（編集モード用） ===
-async function updateBroadcastStatus() {
-  try {
-    const res = await fetch('/api/broadcast/status');
-    const st = await res.json();
-    const label = document.getElementById('broadcast-status-label');
-    const goBtn = document.getElementById('go-live-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    if (!label) return;
-    const info = document.getElementById('stream-info');
-    if (st.streaming) {
-      label.textContent = 'LIVE';
-      label.style.color = '#f44336';
-      goBtn.style.display = 'none';
-      stopBtn.style.display = '';
-      const mins = Math.floor((st.uptime_seconds || 0) / 60);
-      const secs = Math.floor((st.uptime_seconds || 0) % 60);
-      info.textContent = `${st.resolution} ${st.framerate}fps | ${mins}:${String(secs).padStart(2,'0')}`;
-    } else {
-      label.textContent = 'PREVIEW';
-      label.style.color = '#eee';
-      goBtn.style.display = '';
-      stopBtn.style.display = 'none';
-      info.textContent = '';
-    }
-  } catch (e) {}
-}
-
-async function goLive() {
-  const btn = document.getElementById('go-live-btn');
-  btn.textContent = '起動中...';
-  btn.disabled = true;
-  try {
-    const res = await fetch('/api/broadcast/go-live', { method: 'POST' });
-    const data = await res.json();
-    if (!data.ok) alert('配信開始失敗: ' + (data.detail || ''));
-    updateBroadcastStatus();
-  } catch (e) {
-    alert('配信開始失敗: ' + e.message);
-  } finally {
-    btn.textContent = 'Go Live';
-    btn.disabled = false;
-  }
-}
-
-async function stopLive() {
-  if (!confirm('配信を停止しますか？')) return;
-  try {
-    await fetch('/api/broadcast/stop', { method: 'POST' });
-    updateBroadcastStatus();
-  } catch (e) {
-    alert('配信停止失敗: ' + e.message);
-  }
+  initEditMode();
 }
 
 init();

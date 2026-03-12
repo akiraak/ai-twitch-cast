@@ -29,6 +29,11 @@
 - [x] broadcast.htmlのembeddedモード（iframe内でツールバー非表示）
 - [x] ワンクリックプレビューでasar更新時にElectronアプリを自動再起動（/quit API + フォールバック）
 
+## Electronプレビューウィンドウ改善
+
+- [x] プレビューウィンドウの位置・サイズを永続化（preview-bounds.json、move/resize時に自動保存）
+- [x] 編集モードを常時有効化（?editパラメータ廃止、ツールバー常時表示、編集終了ボタン削除）
+
 ## 設定DB移行
 
 - [x] scenes.json設定をDB優先に移行（scene_config.pyにload_config_value/load_config_json/save_config_value/save_config_json追加）

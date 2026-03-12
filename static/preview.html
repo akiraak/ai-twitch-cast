@@ -162,8 +162,8 @@ const frame = document.getElementById('broadcast-frame');
 const params = new URLSearchParams(location.search);
 const token = params.get('token');
 
-// iframe にbroadcast.htmlを読み込み（edit+embedded）
-frame.src = `/broadcast?token=${token}&edit&embedded`;
+// iframe にbroadcast.htmlを読み込み（embedded）
+frame.src = `/broadcast?token=${token}&embedded`;
 
 // === iframe内の関数呼び出し ===
 function getFrameWindow() {

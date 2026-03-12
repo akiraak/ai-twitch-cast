@@ -7,6 +7,7 @@
 
 const { app, BrowserWindow, Menu, desktopCapturer, ipcMain } = require('electron');
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
 
@@ -26,6 +27,31 @@ let wss = null; // WebSocket.Server
 
 // プレビューウィンドウ
 let previewWindow = null;
+
+// ウィンドウ位置の永続化
+const BOUNDS_FILE = path.join(app.getPath('userData'), 'preview-bounds.json');
+let _saveBoundsTimer = null;
+
+function saveBounds() {
+  if (!previewWindow || previewWindow.isDestroyed()) return;
+  const bounds = previewWindow.getBounds();
+  try {
+    fs.writeFileSync(BOUNDS_FILE, JSON.stringify(bounds));
+  } catch (e) {}
+}
+
+function loadBounds() {
+  try {
+    return JSON.parse(fs.readFileSync(BOUNDS_FILE, 'utf-8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+function debouncedSaveBounds() {
+  if (_saveBoundsTimer) clearTimeout(_saveBoundsTimer);
+  _saveBoundsTimer = setTimeout(saveBounds, 300);
+}
 
 /**
  * @typedef {Object} CaptureSession
@@ -184,9 +210,12 @@ async function openPreview(serverUrl) {
     previewWindow.loadURL(previewUrl);
     previewWindow.focus();
   } else {
+    const saved = loadBounds();
     previewWindow = new BrowserWindow({
-      width: 1580,
-      height: 720,
+      width: saved?.width || 1580,
+      height: saved?.height || 720,
+      x: saved?.x,
+      y: saved?.y,
       title: 'AI Twitch Cast - Preview',
       autoHideMenuBar: true,
       webPreferences: { contextIsolation: true, nodeIntegration: false },
@@ -194,6 +223,8 @@ async function openPreview(serverUrl) {
     previewWindow.setMenu(null);
     previewWindow.setMenuBarVisibility(false);
     previewWindow.loadURL(previewUrl);
+    previewWindow.on('move', debouncedSaveBounds);
+    previewWindow.on('resize', debouncedSaveBounds);
     previewWindow.on('closed', () => { previewWindow = null; });
   }
   return { ok: true };

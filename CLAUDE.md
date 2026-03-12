@@ -13,7 +13,7 @@ AIを活用し、プログラムで全自動Twitch配信を行うプロジェク
 - **Twitch API** - チャット読み取り・配信管理・視聴者インタラクション
 - **テキスト生成** - LLMによる台本・コメント・ナレーション生成
 - **音声合成** - TTS（Text-to-Speech）によるナレーション音声生成
-- **レイアウト編集** - `/broadcast?edit` でドラッグ＆リサイズによる配信画面レイアウト調整
+- **レイアウト編集** - `/broadcast` でドラッグ＆リサイズによる配信画面レイアウト調整（常時編集可能）
 
 ## 開発ルール
 
@@ -90,7 +90,7 @@ ai-twitch-cast/
 │   ├── avatar_capture.py     # Windows側VSeeFaceキャプチャ（MJPEGストリーム、非推奨）
 │   └── comment_reader.py     # Twitchコメント読み上げ
 ├── static/                   # Webインターフェース静的ファイル
-│   ├── broadcast.html        # 配信合成ページ（overlay+audio+VRMアバター+キャプチャ統合、?editで編集モード）
+│   ├── broadcast.html        # 配信合成ページ（overlay+audio+VRMアバター+キャプチャ統合、常時編集モード）
 │   └── index.html            # 配信制御UI（キャプチャ管理含む）
 ├── resources/                # リソース（画像・モデル・音声・動画）
 │   ├── images/
@@ -106,11 +106,23 @@ ai-twitch-cast/
 ├── CLAUDE.md                 # このファイル
 ├── DONE.md                   # 完了タスク
 ├── TODO.md                   # タスク一覧
+├── plans/                    # 作業プラン（詳細な実装計画）
+│   ├── electron-streaming.md  # Electron配信移行プラン
+│   └── websocket-optimization.md # サーバ↔Electron WebSocket統合プラン
 ├── LICENSE
 └── README.md
 ```
 
 ※ プロジェクト進行に応じて更新する
+
+## 作業プラン（plans/）
+
+- 詳細な実装計画は `plans/` ディレクトリにMarkdownで保存する
+- TODO.mdには1行サマリ + plansへのリンクを書く
+- プランファイルには背景・方針・実装ステップ・リスク・ステータスを含める
+- 完了したプランは `ステータス: 完了` に更新し、DONE.mdにも記録する
+
+```
 
 ## WSL2環境について
 
@@ -155,7 +167,7 @@ curl -s http://localhost:$WEB_PORT/api/todo    # TODOが返るか
 | TTS音声 | コメント応答時にbroadcast.html経由で音声が再生される |
 | アバター表示 | 配信画面にアバターが表示される |
 | ウィンドウキャプチャ | Electronアプリ起動→ウィンドウ選択→broadcast.htmlにMJPEGストリーム表示 |
-| レイアウト編集 | `/broadcast?edit` でドラッグ＆リサイズ→保存→配信画面に反映 |
+| レイアウト編集 | `/broadcast` でドラッグ＆リサイズ→保存→配信画面に反映（常時編集可能） |
 | WebSocket接続 | broadcast.htmlがWebSocketで接続している |
 | Web UI Setup | Setupボタンでトースト通知が出る（成功=緑、エラー=赤） |
 
