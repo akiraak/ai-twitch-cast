@@ -474,14 +474,29 @@ def _run_preview_oneclick():
 
         asar_updated = "update_asar" in done
 
-        if server_running and not asar_updated:
-            # 起動中かつasar未更新ならdeploy/launch/wait全スキップ
+        # デプロイ先のasarが古いかチェック
+        deploy_needed = False
+        if is_wsl():
+            src_asar = _EXE_PATH.parent / "resources" / "app.asar"
+            win_deploy_dir = Path("/mnt/c/Users") / os.environ.get("WIN_USER", "akira") / "AppData" / "Local" / "ai-twitch-cast-capture"
+            dst_asar = win_deploy_dir / "resources" / "app.asar"
+            if src_asar.exists():
+                if not dst_asar.exists() or src_asar.stat().st_mtime > dst_asar.stat().st_mtime:
+                    deploy_needed = True
+                    logger.info("デプロイ先asarが古い: src=%s, dst=%s",
+                                src_asar.stat().st_mtime,
+                                dst_asar.stat().st_mtime if dst_asar.exists() else "N/A")
+
+        needs_restart = asar_updated or deploy_needed
+
+        if server_running and not needs_restart:
+            # 起動中かつ更新不要ならdeploy/launch/wait全スキップ
             skipped.append("deploy")
             skipped.append("launch")
             skipped.append("wait_server")
         else:
-            # asar更新時は起動中でも停止→再デプロイ→再起動
-            if server_running and asar_updated:
+            # 更新時は起動中でも停止→再デプロイ→再起動
+            if server_running and needs_restart:
                 _update_oneclick("restart", "アプリ再起動中...", 62, done, skipped)
                 # /quit APIで終了を試みる（なければプロセス終了）
                 try:
