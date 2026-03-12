@@ -798,7 +798,12 @@ function applySettings(s) {
     document.getElementById('avatar-canvas').style.filter = sat !== 1.0 ? `saturate(${sat})` : '';
   }
   if (s.subtitle) {
-    if (s.subtitle.bottom != null) subtitleEl.style.bottom = s.subtitle.bottom + '%';
+    if (s.subtitle.bottom != null) {
+      subtitleEl.style.bottom = s.subtitle.bottom + '%';
+      subtitleEl.style.top = '';  // ドラッグで設定されたtopをクリア（bottomと競合するため）
+      subtitleEl.style.left = '50%';
+      subtitleEl.style.transform = 'translateX(-50%)';
+    }
     if (s.subtitle.fontSize != null) subtitleEl.querySelector('.response').style.fontSize = s.subtitle.fontSize + 'vw';
     if (s.subtitle.maxWidth != null) subtitleEl.style.maxWidth = s.subtitle.maxWidth + '%';
     if (s.subtitle.fadeDuration != null) subtitleEl.dataset.fadeDuration = s.subtitle.fadeDuration;

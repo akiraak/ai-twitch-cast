@@ -1,5 +1,10 @@
 # DONE
 
+## 字幕デバッグ・レイアウト修正
+
+- [x] Web UIに字幕テスト表示/非表示ボタンを追加（デバッグ用API: POST /api/debug/subtitle, /api/debug/subtitle/hide）
+- [x] 字幕のbottomパラメータがドラッグ後にリアルタイム反映されないバグ修正（style.topとbottomの競合解消）
+
 ## WebSocket統合（Step 1-3）
 
 - [x] TODO表示をWebSocket push化（30秒ポーリング廃止、mtime監視+API変更時に即座ブロードキャスト）

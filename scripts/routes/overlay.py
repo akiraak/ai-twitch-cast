@@ -128,6 +128,25 @@ async def broadcast_token():
 
 
 
+@router.post("/api/debug/subtitle")
+async def debug_subtitle():
+    """デバッグ用：字幕を仮表示する"""
+    await state.broadcast_overlay({
+        "type": "comment",
+        "message": "こんにちは！テスト表示です",
+        "response": "これはデバッグ用の字幕サンプルです。位置やサイズを調整してください！",
+        "english": "This is a debug subtitle sample.",
+    })
+    return {"ok": True}
+
+
+@router.post("/api/debug/subtitle/hide")
+async def debug_subtitle_hide():
+    """デバッグ用：字幕をフェードアウトする"""
+    await state.broadcast_overlay({"type": "speaking_end"})
+    return {"ok": True}
+
+
 @router.get("/api/broadcast/volumes")
 async def get_broadcast_volumes():
     """broadcast.html用の音量設定を返す（DB優先 → scenes.json → デフォルト）"""

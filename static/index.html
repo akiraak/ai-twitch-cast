@@ -403,6 +403,10 @@
           <div class="layout-row"><span class="layout-label">フェード (秒)</span><input type="range" class="vol-slider layout-slider" min="1" max="10" step="0.5" data-key="subtitle.fadeDuration" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-fadeDuration" min="1" max="10" step="0.5" data-key="subtitle.fadeDuration" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">背景透明度</span><input type="range" class="vol-slider layout-slider" min="0" max="1" step="0.05" data-key="subtitle.bgOpacity" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-bgOpacity" min="0" max="1" step="0.05" data-key="subtitle.bgOpacity" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">Z順序</span><input type="range" class="vol-slider layout-slider" min="0" max="100" step="1" data-key="subtitle.zIndex" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-zIndex" min="0" max="100" step="1" data-key="subtitle.zIndex" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row" style="margin-top:6px;">
+            <button onclick="fetch('/api/debug/subtitle',{method:'POST'})" style="flex:1; padding:4px 8px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">字幕テスト表示</button>
+            <button onclick="fetch('/api/debug/subtitle/hide',{method:'POST'})" style="flex:1; padding:4px 8px; background:#666; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; margin-left:4px;">非表示</button>
+          </div>
         </fieldset>
         <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
           <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">TODOパネル</legend>
