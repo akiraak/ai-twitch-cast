@@ -278,11 +278,20 @@ def _deploy_to_windows():
         # 更新: asarファイルを毎回コピー（mtime比較なし＝確実にデプロイ）
         logger.info("asarデプロイ中...")
         dst_asar.parent.mkdir(parents=True, exist_ok=True)
-        # WSL2→Windowsでは既存ファイルへの上書きがPermissionErrorになる場合がある
-        # 削除してからコピーすることで回避
-        if dst_asar.exists():
-            dst_asar.unlink()
-        shutil.copy(str(src_asar), str(dst_asar))
+        # WSL2→WindowsではPythonのshutil.copy/copy2/unlinkが
+        # Operation not permittedになるため、PowerShellでコピーする
+        if is_wsl():
+            win_src = to_windows_path(str(src_asar))
+            win_dst = to_windows_path(str(dst_asar))
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command",
+                 f"Copy-Item -Path '{win_src}' -Destination '{win_dst}' -Force"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"PowerShellコピー失敗: {result.stderr[:200]}")
+        else:
+            shutil.copy(str(src_asar), str(dst_asar))
         logger.info("asarデプロイ完了 (size=%d)", dst_asar.stat().st_size)
 
     return dst_exe
