@@ -157,6 +157,95 @@
     50% { transform: translateX(0.15vw); }
   }
 
+  /* === キャプチャレイヤー === */
+  .capture-layer {
+    position: absolute;
+    z-index: 10;
+    overflow: hidden;
+    border-radius: 0.3vw;
+  }
+  .capture-layer img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+  }
+
+  /* === 編集モード === */
+  body.edit-mode .edit-toolbar { display: flex; }
+  .edit-toolbar {
+    display: none;
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 44px;
+    background: rgba(0, 0, 0, 0.9);
+    border-bottom: 2px solid #7c4dff;
+    z-index: 9999;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    font-family: system-ui, sans-serif;
+    font-size: 13px;
+    color: #eee;
+  }
+  .edit-toolbar button {
+    padding: 4px 14px;
+    border: 1px solid #7c4dff;
+    border-radius: 4px;
+    background: transparent;
+    color: #b388ff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .edit-toolbar button:hover { background: #7c4dff33; }
+  .edit-toolbar button.primary { background: #7c4dff; color: #fff; }
+  .edit-toolbar select {
+    padding: 4px 8px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #222;
+    color: #eee;
+    font-size: 13px;
+  }
+  .edit-toolbar .spacer { flex: 1; }
+
+  body.edit-mode [data-editable] {
+    cursor: move;
+    pointer-events: auto !important;
+  }
+  body.edit-mode [data-editable]:hover {
+    outline: 2px solid #7c4dff;
+    outline-offset: 2px;
+  }
+  body.edit-mode [data-editable].dragging {
+    outline: 2px solid #ff4081;
+    outline-offset: 2px;
+    opacity: 0.85;
+  }
+  .edit-label {
+    display: none;
+    position: absolute; top: -20px; left: 0;
+    background: #7c4dff;
+    color: #fff;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 9998;
+  }
+  body.edit-mode .edit-label { display: block; }
+
+  .resize-handle {
+    display: none;
+    position: absolute;
+    width: 12px; height: 12px;
+    background: #7c4dff;
+    border: 1px solid #fff;
+    border-radius: 2px;
+    z-index: 9998;
+  }
+  body.edit-mode .resize-handle { display: block; }
+  .resize-handle.se { bottom: -6px; right: -6px; cursor: se-resize; }
+
   /* === トピックパネル（左上） === */
   #topic-panel {
     position: absolute;
@@ -218,32 +307,46 @@
 </head>
 <body>
 
+<!-- 編集ツールバー -->
+<div class="edit-toolbar">
+  <span>Layout Editor</span>
+  <div class="spacer"></div>
+  <select id="edit-window-list"><option value="">-- ウィンドウ追加 --</option></select>
+  <button onclick="editAddCapture()">追加</button>
+  <span class="spacer"></span>
+  <button class="primary" onclick="editSave()">保存</button>
+  <button onclick="location.href='/broadcast'">編集終了</button>
+</div>
+
 <!-- 背景画像 -->
 <img id="background" src="/resources/images/background.png" alt="">
+
+<!-- キャプチャレイヤーコンテナ -->
+<div id="capture-container"></div>
 
 <!-- メインシーン -->
 <div>
   <!-- アバター（Three.js VRMレンダリング） -->
-  <div id="avatar-area">
+  <div id="avatar-area" data-editable="avatar">
     <canvas id="avatar-canvas"></canvas>
     <img id="avatar-stream" style="display:none;" alt="">
   </div>
 
   <!-- 字幕 -->
-  <div id="subtitle">
+  <div id="subtitle" data-editable="subtitle">
     <div class="comment"><span class="author"></span><span class="message"></span></div>
     <div class="response"></div>
     <div class="english"></div>
   </div>
 
   <!-- TODOパネル -->
-  <div id="todo-panel">
+  <div id="todo-panel" data-editable="todo">
     <div class="todo-title">TODO</div>
     <div id="todo-list"></div>
   </div>
 
   <!-- トピックパネル -->
-  <div id="topic-panel">
+  <div id="topic-panel" data-editable="topic">
     <div class="topic-header">
       <span class="topic-dot" id="topic-dot"></span>
       <span class="topic-label">TOPIC</span>
@@ -770,6 +873,17 @@ function connectWS() {
       case 'avatar_stop':
         stopAvatarStream();
         break;
+
+      // ウィンドウキャプチャ
+      case 'capture_add':
+        addCaptureLayer(data.id, data.stream_url, data.label, data.layout);
+        break;
+      case 'capture_remove':
+        removeCaptureLayer(data.id);
+        break;
+      case 'capture_layout':
+        updateCaptureLayout(data.id, data.layout);
+        break;
     }
   };
 
@@ -792,6 +906,206 @@ function setAvatarStream(url) {
 function stopAvatarStream() {
   avatarImg.src = '';
   avatarImg.style.display = 'none';
+}
+
+// === ウィンドウキャプチャ ===
+const captureContainer = document.getElementById('capture-container');
+const captureLayers = {};
+
+function addCaptureLayer(id, streamUrl, label, layout) {
+  if (captureLayers[id]) removeCaptureLayer(id);
+  const div = document.createElement('div');
+  div.className = 'capture-layer';
+  div.dataset.editable = `capture:${id}`;
+  div.dataset.captureId = id;
+  applyLayoutToEl(div, layout);
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'edit-label';
+  labelEl.textContent = label || id;
+  div.appendChild(labelEl);
+
+  const handle = document.createElement('div');
+  handle.className = 'resize-handle se';
+  div.appendChild(handle);
+
+  const img = document.createElement('img');
+  img.src = streamUrl;
+  img.alt = label || id;
+  div.appendChild(img);
+
+  captureContainer.appendChild(div);
+  captureLayers[id] = div;
+
+  if (isEditMode) setupEditable(div);
+}
+
+function removeCaptureLayer(id) {
+  const el = captureLayers[id];
+  if (el) { el.remove(); delete captureLayers[id]; }
+}
+
+function updateCaptureLayout(id, layout) {
+  const el = captureLayers[id];
+  if (el) applyLayoutToEl(el, layout);
+}
+
+function applyLayoutToEl(el, layout) {
+  if (layout.x != null) el.style.left = layout.x + '%';
+  if (layout.y != null) el.style.top = layout.y + '%';
+  if (layout.width != null) el.style.width = layout.width + '%';
+  if (layout.height != null) el.style.height = layout.height + '%';
+  if (layout.zIndex != null) el.style.zIndex = layout.zIndex;
+  if (layout.visible === false) el.style.display = 'none';
+  else el.style.display = '';
+}
+
+// === 編集モード ===
+const isEditMode = new URLSearchParams(location.search).has('edit');
+let _saveTimer = null;
+
+function setupEditable(el) {
+  if (!el.querySelector('.edit-label')) {
+    const label = document.createElement('div');
+    label.className = 'edit-label';
+    label.textContent = el.dataset.editable;
+    el.appendChild(label);
+  }
+  if (!el.querySelector('.resize-handle')) {
+    const handle = document.createElement('div');
+    handle.className = 'resize-handle se';
+    el.appendChild(handle);
+  }
+
+  el.addEventListener('mousedown', (e) => {
+    if (e.target.classList.contains('resize-handle')) return;
+    e.preventDefault();
+    el.classList.add('dragging');
+    const startX = e.clientX, startY = e.clientY;
+    const origLeft = el.offsetLeft, origTop = el.offsetTop;
+
+    function onMove(e) {
+      el.style.left = ((origLeft + e.clientX - startX) / window.innerWidth * 100) + '%';
+      el.style.top = ((origTop + e.clientY - startY) / window.innerHeight * 100) + '%';
+      el.style.transform = 'none';
+    }
+    function onUp() {
+      el.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      scheduleSave();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  const handle = el.querySelector('.resize-handle.se');
+  if (handle) {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const startX = e.clientX, startY = e.clientY;
+      const origW = el.offsetWidth, origH = el.offsetHeight;
+
+      function onMove(e) {
+        el.style.width = ((origW + e.clientX - startX) / window.innerWidth * 100) + '%';
+        el.style.height = ((origH + e.clientY - startY) / window.innerHeight * 100) + '%';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        scheduleSave();
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+}
+
+function scheduleSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(editSave, 500);
+}
+
+async function editSave() {
+  const overlaySettings = {};
+  const avatarArea = document.getElementById('avatar-area');
+  overlaySettings.avatar = {
+    positionX: parseFloat(avatarArea.style.left) || 73.25,
+    positionY: parseFloat(avatarArea.style.top) || 62.15,
+  };
+  overlaySettings.todo = {
+    positionX: parseFloat(todoPanelEl.style.left) || 50,
+    positionY: parseFloat(todoPanelEl.style.top) || 16,
+    width: parseFloat(todoPanelEl.style.width) || 28,
+  };
+  if (todoPanelEl.style.height && todoPanelEl.style.height !== 'auto') {
+    overlaySettings.todo.height = parseFloat(todoPanelEl.style.height);
+  }
+  overlaySettings.topic = {
+    positionX: parseFloat(topicPanelEl.style.left) || 1.04,
+    positionY: parseFloat(topicPanelEl.style.top) || 1.85,
+  };
+
+  try {
+    await fetch('/api/overlay/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(overlaySettings),
+    });
+  } catch (e) { console.log('レイアウト保存エラー:', e.message); }
+
+  for (const [id, el] of Object.entries(captureLayers)) {
+    const layout = {
+      x: parseFloat(el.style.left) || 0,
+      y: parseFloat(el.style.top) || 0,
+      width: parseFloat(el.style.width) || 40,
+      height: parseFloat(el.style.height) || 50,
+      zIndex: parseInt(el.style.zIndex) || 10,
+    };
+    try {
+      await fetch(`/api/capture/${id}/layout`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(layout),
+      });
+    } catch (e) {}
+  }
+}
+
+async function editLoadWindows() {
+  const sel = document.getElementById('edit-window-list');
+  sel.innerHTML = '<option value="">-- ウィンドウ追加 --</option>';
+  try {
+    const res = await fetch('/api/capture/windows');
+    const windows = await res.json();
+    for (const w of windows) {
+      const opt = document.createElement('option');
+      opt.value = w.sourceId;
+      opt.textContent = w.name.substring(0, 50);
+      sel.appendChild(opt);
+    }
+  } catch (e) { console.log('ウィンドウ一覧取得エラー:', e.message); }
+}
+
+async function editAddCapture() {
+  const sel = document.getElementById('edit-window-list');
+  const sourceId = sel.value;
+  if (!sourceId) return;
+  const label = sel.selectedOptions[0]?.textContent || '';
+  try {
+    await fetch('/api/capture/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ sourceId, label }),
+    });
+  } catch (e) { console.log('キャプチャ開始エラー:', e.message); }
+}
+
+function initEditMode() {
+  document.body.classList.add('edit-mode');
+  document.querySelectorAll('[data-editable]').forEach(setupEditable);
+  editLoadWindows();
+  setInterval(editLoadWindows, 10000);
 }
 
 // === 初期化 ===
@@ -824,11 +1138,22 @@ async function init() {
     if (av.url) setAvatarStream(av.url);
   } catch (e) {}
 
+  // キャプチャソース読み込み
+  try {
+    const res = await fetch('/api/capture/sources');
+    const sources = await res.json();
+    for (const s of sources) {
+      addCaptureLayer(s.id, s.stream_url, s.label || s.name || s.id, s.layout);
+    }
+  } catch (e) { console.log('キャプチャ読み込みスキップ:', e.message); }
+
   await loadTodo();
   await loadTopicPanel();
   setInterval(loadTodo, 30000);
   setInterval(loadTopicPanel, 15000);
   connectWS();
+
+  if (isEditMode) initEditMode();
 }
 
 init();

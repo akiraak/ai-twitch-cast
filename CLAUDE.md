@@ -6,13 +6,14 @@ AIを活用し、プログラムで全自動Twitch配信を行うプロジェク
 
 OBS制御、Twitch API連携、画像生成・収集、テキスト生成、音声合成など、配信に必要な要素をすべてプログラムで生成・制御する。
 
-## 主要コンポーネント（予定）
+## 主要コンポーネント
 
-- **OBS制御** - OBS WebSocket経由でシーン切替・ソース操作を自動化
+- **独自配信パイプライン** - xvfb + Chromium + PulseAudio + FFmpegでOBS不要の配信
+- **ウィンドウキャプチャ** - Windows側Electronアプリ（`win-capture-app/`）でウィンドウをキャプチャ→MJPEGストリーム配信→broadcast.htmlで表示
 - **Twitch API** - チャット読み取り・配信管理・視聴者インタラクション
-- **画像生成/収集** - AI画像生成やWebからの素材収集
 - **テキスト生成** - LLMによる台本・コメント・ナレーション生成
 - **音声合成** - TTS（Text-to-Speech）によるナレーション音声生成
+- **レイアウト編集** - `/broadcast?edit` でドラッグ＆リサイズによる配信画面レイアウト調整
 
 ## 開発ルール
 
@@ -59,7 +60,15 @@ ai-twitch-cast/
 │   ├── avatar-research.md   # アバター表示・アニメーション調査
 │   ├── 3d-model-research.md # 3Dモデル調査
 │   ├── vrm-conversion-log.md # VRM変換作業ログ
-│   └── obs-free-streaming.md # OBS不要配信ガイド
+│   ├── obs-free-streaming.md # OBS不要配信ガイド
+│   └── window-capture.md   # ウィンドウキャプチャシステム設計
+├── win-capture-app/          # Windows側Electronキャプチャアプリ
+│   ├── main.js              # メインプロセス（HTTPサーバー+キャプチャ管理）
+│   ├── preload.js           # IPC bridge
+│   ├── capture.html         # 非表示レンダラーページ
+│   ├── capture-renderer.js  # レンダラー（getUserMedia+canvas+JPEG書き出し）
+│   ├── package.json         # Electron+electron-builder設定
+│   └── build.sh             # ビルドスクリプト
 ├── src/                      # ソースコード
 │   ├── obs_controller.py     # OBS WebSocket制御
 │   ├── stream_controller.py  # OBS不要配信プロセス管理（xvfb/Chromium/PulseAudio/FFmpeg）
@@ -80,7 +89,7 @@ ai-twitch-cast/
 │   ├── console.py            # 対話式コンソール
 │   ├── web.py                # Webインターフェース（startup自動復旧・shutdownハンドラ付き）
 │   ├── state.py              # 共有状態（コントローラー・WebSocket・GitWatcher・StreamController）
-│   ├── routes/               # ルートモジュール（obs/stream/avatar/character/overlay/twitch/topic/bgm/db_viewer/stream_control）
+│   ├── routes/               # ルートモジュール（obs/stream/avatar/capture/character/overlay/twitch/topic/bgm/db_viewer/stream_control）
 │   ├── deploy_model.py       # Live2Dモデルデプロイ
 │   ├── convert_to_vrm.py     # FBX→VRM変換（Blenderスクリプト）
 │   ├── fix_vrm_mtoon.py      # VRM MToonシェーダ修正
@@ -89,8 +98,8 @@ ai-twitch-cast/
 ├── static/                   # Webインターフェース静的ファイル
 │   ├── index.html            # Web UI（Lavenderテーマ、タブ構成）
 │   ├── overlay.html          # OBSオーバーレイ（TODO・情報パネル・字幕、表示専用）
-│   ├── broadcast.html        # OBS不要版合成ページ（overlay+audio+VRMアバター統合）
-│   ├── broadcast-ui.html     # OBS不要版配信制御UI
+│   ├── broadcast.html        # OBS不要版合成ページ（overlay+audio+VRMアバター+キャプチャ統合、?editで編集モード）
+│   ├── broadcast-ui.html     # OBS不要版配信制御UI（キャプチャ管理含む）
 │   ├── audio-tts.html        # TTS音声再生用ブラウザソース（WebSocket /ws/tts）
 │   └── audio-bgm.html        # BGM音声再生用ブラウザソース（WebSocket /ws/bgm）
 ├── resources/                # リソース（画像・モデル・音声・動画）
@@ -189,6 +198,8 @@ curl -s http://localhost:$WEB_PORT/api/obs/diag | python -m json.tool
 | TTS音声 | コメント応答時に `[ATC]TTS音声` ブラウザソース経由で音声が再生される |
 | アバター表示 | OBS画面にアバターが表示される |
 | ターミナル表示 | OBS画面にターミナルが表示される |
+| ウィンドウキャプチャ | Electronアプリ起動→ウィンドウ選択→broadcast.htmlにMJPEGストリーム表示 |
+| レイアウト編集 | `/broadcast?edit` でドラッグ＆リサイズ→保存→配信画面に反映 |
 | WebSocket接続 | overlay.htmlがWebSocketで接続している（ブラウザDevToolsで確認） |
 | Web UI Setup | Setupボタンでトースト通知が出る（成功=緑、エラー=赤） |
 

@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 from scripts import state
 from scripts.routes.avatar import router as avatar_router
+from scripts.routes.capture import router as capture_router
 from scripts.routes.bgm import router as bgm_router
 from scripts.routes.character import router as character_router
 from scripts.routes.db_viewer import router as db_viewer_router
@@ -58,6 +59,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # ルーターを登録
 app.include_router(stream_router)
 app.include_router(stream_control_router)
+app.include_router(capture_router)
 app.include_router(avatar_router)
 app.include_router(bgm_router)
 app.include_router(character_router)

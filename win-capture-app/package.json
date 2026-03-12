@@ -1,0 +1,31 @@
+{
+  "name": "win-capture-app",
+  "version": "1.0.0",
+  "description": "AI Twitch Cast - Windows Window Capture Server",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --dir"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0"
+  },
+  "build": {
+    "appId": "com.atc.wincapture",
+    "productName": "win-capture-app",
+    "win": {
+      "target": "dir"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "capture.html",
+      "capture-renderer.js",
+      "node_modules/**/*"
+    ]
+  }
+}

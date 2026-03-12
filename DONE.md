@@ -128,6 +128,7 @@
 - [x] サーバー再起動ボタン+更新検知ダイアログ（server_started_atポーリング、コミット再起動も検知）
 - [x] DB名をcomments.db→app.dbにリネーム（実態に合わせて改名）
 - [x] WEBUI全機能移植（OBS版→broadcast-ui統合：タブ化、TODO表示、Twitch配信情報、トピック管理、キャラクター設定、サウンド詳細、DB閲覧、環境変数表示、リンクバー整理）
+- [x] Windowsウィンドウキャプチャシステム（Electronアプリ: desktopCapturer+MJPEGサーバー、WSL2側API+WebSocket連携、broadcast.htmlドラッグ&リサイズ編集モード、broadcast-ui.htmlキャプチャ管理UI）
 
 ## Phase 0: 環境構築・基盤
 

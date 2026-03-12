@@ -328,6 +328,28 @@
         </div>
         <div class="status" id="diag-status"></div>
       </div>
+
+      <div class="card">
+        <h2><span class="status-dot off" id="capture-dot"></span> ウィンドウキャプチャ</h2>
+        <div class="btn-row">
+          <button onclick="captureLaunch()">サーバー起動</button>
+          <button class="danger" onclick="captureShutdown()">サーバー停止</button>
+        </div>
+        <div class="status" id="capture-server-status"></div>
+        <div style="margin-top:12px;">
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+            <select id="capture-window-list" style="flex:1; padding:6px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.85rem;">
+              <option value="">-- ウィンドウ選択 --</option>
+            </select>
+            <button class="secondary" onclick="captureRefreshWindows()">更新</button>
+            <button onclick="captureStartWindow()">キャプチャ</button>
+          </div>
+          <div id="capture-list" style="font-size:0.85rem;"></div>
+        </div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="secondary" onclick="window.open('/broadcast?edit','_blank')">レイアウト編集</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -762,6 +784,85 @@ async function loadDiag() {
     el.textContent = data.errors.join(', ');
     el.style.color = '#c62828';
   }
+}
+
+// --- ウィンドウキャプチャ ---
+async function captureLaunch() {
+  const data = await api('POST', '/api/capture/launch');
+  if (data) {
+    document.getElementById('capture-server-status').textContent = data.ok ? '起動中' : (data.error || 'エラー');
+    captureRefreshStatus();
+    captureRefreshWindows();
+  }
+}
+
+async function captureShutdown() {
+  await api('POST', '/api/capture/shutdown');
+  document.getElementById('capture-server-status').textContent = '停止';
+  document.getElementById('capture-dot').className = 'status-dot off';
+}
+
+async function captureRefreshStatus() {
+  try {
+    const data = await (await fetch('/api/capture/status')).json();
+    const dot = document.getElementById('capture-dot');
+    const status = document.getElementById('capture-server-status');
+    if (data.running) {
+      dot.className = 'status-dot on';
+      status.textContent = `稼働中 (キャプチャ: ${data.captures || 0})`;
+    } else {
+      dot.className = 'status-dot off';
+      status.textContent = '停止';
+    }
+  } catch (e) {}
+}
+
+async function captureRefreshWindows() {
+  const sel = document.getElementById('capture-window-list');
+  sel.innerHTML = '<option value="">-- ウィンドウ選択 --</option>';
+  try {
+    const data = await (await fetch('/api/capture/windows')).json();
+    for (const w of data) {
+      const opt = document.createElement('option');
+      opt.value = w.sourceId;
+      opt.textContent = w.name.substring(0, 60);
+      opt.dataset.name = w.name;
+      sel.appendChild(opt);
+    }
+  } catch (e) {}
+}
+
+async function captureStartWindow() {
+  const sel = document.getElementById('capture-window-list');
+  const sourceId = sel.value;
+  if (!sourceId) return;
+  const label = sel.selectedOptions[0]?.dataset.name?.substring(0, 30) || '';
+  await api('POST', '/api/capture/start', { sourceId, label });
+  captureRefreshSources();
+  captureRefreshStatus();
+}
+
+async function captureRefreshSources() {
+  try {
+    const data = await (await fetch('/api/capture/sources')).json();
+    const el = document.getElementById('capture-list');
+    if (!data.length) {
+      el.innerHTML = '<span style="color:#9a88b5;">キャプチャなし</span>';
+      return;
+    }
+    el.innerHTML = data.map(c =>
+      `<div style="display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid #e8e0f0;">
+        <span style="flex:1;">${c.label || c.name || c.id}</span>
+        <button class="danger" style="padding:2px 10px; font-size:0.75rem;" onclick="captureRemove('${c.id}')">停止</button>
+      </div>`
+    ).join('');
+  } catch (e) {}
+}
+
+async function captureRemove(id) {
+  await fetch(`/api/capture/${id}`, { method: 'DELETE' });
+  captureRefreshSources();
+  captureRefreshStatus();
 }
 
 // --- 環境変数 ---
@@ -1494,6 +1595,9 @@ refreshStatus();
 setInterval(refreshStatus, 5000);
 checkServerUpdate();
 setInterval(checkServerUpdate, 3000);
+captureRefreshStatus();
+captureRefreshSources();
+setInterval(captureRefreshStatus, 10000);
 </script>
 </body>
 </html>
