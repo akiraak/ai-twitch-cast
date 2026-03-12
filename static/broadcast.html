@@ -208,11 +208,19 @@
   .edit-toolbar .spacer { flex: 1; }
 
   [data-editable] {
-    cursor: move;
+    cursor: pointer;
     pointer-events: auto !important;
   }
+  [data-editable].edit-inactive {
+    pointer-events: none !important;
+  }
   [data-editable]:hover {
-    outline: 2px solid #7c4dff;
+    outline: 2px solid rgba(124, 77, 255, 0.4);
+    outline-offset: 2px;
+  }
+  [data-editable].editing {
+    cursor: move;
+    outline: 2px solid #4caf50;
     outline-offset: 2px;
   }
   [data-editable].selected {
@@ -305,6 +313,7 @@
     opacity: 0.85;
   }
   .edit-label {
+    display: none;
     position: absolute; top: -20px; left: 0;
     background: #7c4dff;
     color: #fff;
@@ -315,8 +324,11 @@
     pointer-events: none;
     z-index: 9998;
   }
+  [data-editable]:hover .edit-label,
+  [data-editable].editing .edit-label { display: block; }
 
   .resize-handle {
+    display: none;
     position: absolute;
     width: 12px; height: 12px;
     background: #7c4dff;
@@ -324,6 +336,7 @@
     border-radius: 2px;
     z-index: 9998;
   }
+  [data-editable].editing .resize-handle { display: block; }
   .resize-handle.se { bottom: -6px; right: -6px; cursor: se-resize; }
   .resize-handle.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
   .resize-handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
@@ -1155,6 +1168,7 @@ function getElZIndex(el) {
 
 function showContextMenu(el, x, y) {
   hideAll();
+  selectEditable(el);
   _selectedEditable = el;
   el.classList.add('selected');
   _ctxMenu.style.left = x + 'px';
@@ -1170,6 +1184,42 @@ function openZIndexDialog() {
   _zDialog.style.left = _ctxMenu.style.left;
   _zDialog.style.top = _ctxMenu.style.top;
   _zDialog.style.display = 'block';
+}
+
+let _editingEl = null;
+
+function selectEditable(el) {
+  if (_editingEl && _editingEl !== el) {
+    _editingEl.classList.remove('editing');
+    if (_editingEl._savedZIndex != null) {
+      _editingEl.style.zIndex = _editingEl._savedZIndex;
+      delete _editingEl._savedZIndex;
+    }
+  }
+  _editingEl = el;
+  el.classList.add('editing');
+  el._savedZIndex = el.style.zIndex || getComputedStyle(el).zIndex || '0';
+  el.style.zIndex = 9000;
+  // 他パーツをイベント透過にして、重なっていても操作可能にする
+  document.querySelectorAll('[data-editable]').forEach(other => {
+    if (other !== el) other.classList.add('edit-inactive');
+    else other.classList.remove('edit-inactive');
+  });
+}
+
+function deselectEditable() {
+  if (_editingEl) {
+    _editingEl.classList.remove('editing');
+    if (_editingEl._savedZIndex != null) {
+      _editingEl.style.zIndex = _editingEl._savedZIndex;
+      delete _editingEl._savedZIndex;
+    }
+    _editingEl = null;
+  }
+  // 全パーツのedit-inactiveを解除
+  document.querySelectorAll('[data-editable]').forEach(el => {
+    el.classList.remove('edit-inactive');
+  });
 }
 
 function hideAll() {
@@ -1197,12 +1247,59 @@ function setZIndexDirect(val) {
   scheduleSave();
 }
 
-// メニュー/ダイアログ外クリックで閉じる
+// メニュー/ダイアログ外・パーツ外クリックで閉じる
 document.addEventListener('mousedown', (e) => {
   if (!_ctxMenu.contains(e.target) && !_zDialog.contains(e.target)) {
     hideAll();
+    const clickedEditable = e.target.closest('[data-editable]');
+    // 編集中パーツ自身のクリックはsetupEditableに任せる
+    if (clickedEditable && clickedEditable === _editingEl) return;
+    // 編集中パーツの外をクリックした → 一旦解除してから下のパーツを探す
+    deselectEditable();
+    let target = clickedEditable;
+    if (!target) {
+      // 他のパーツがクリック位置にあるか探す（z-index順で最前面）
+      const candidates = [];
+      document.querySelectorAll('[data-editable]').forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+          candidates.push(el);
+        }
+      });
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => (parseInt(getComputedStyle(b).zIndex) || 0) - (parseInt(getComputedStyle(a).zIndex) || 0));
+        target = candidates[0];
+      }
+    }
+    if (target) {
+      selectEditable(target);
+      // 選択と同時にドラッグ開始できるようにする
+      startDrag(target, e);
+    }
   }
 });
+
+function startDrag(el, e) {
+  el.classList.add('dragging');
+  const startX = e.clientX, startY = e.clientY;
+  const origLeft = el.offsetLeft, origTop = el.offsetTop;
+  let didDrag = false;
+
+  function onMove(e) {
+    didDrag = true;
+    el.style.left = ((origLeft + e.clientX - startX) / window.innerWidth * 100) + '%';
+    el.style.top = ((origTop + e.clientY - startY) / window.innerHeight * 100) + '%';
+    el.style.transform = 'none';
+  }
+  function onUp() {
+    el.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if (didDrag) scheduleSave();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
 
 function setupEditable(el) {
   if (!el.querySelector('.edit-label')) {
@@ -1228,25 +1325,12 @@ function setupEditable(el) {
     if (e.target.classList.contains('resize-handle')) return;
     if (e.button !== 0) return;
     e.preventDefault();
-    el.classList.add('dragging');
-    const startX = e.clientX, startY = e.clientY;
-    const origLeft = el.offsetLeft, origTop = el.offsetTop;
-    let didDrag = false;
+    e.stopPropagation();
 
-    function onMove(e) {
-      didDrag = true;
-      el.style.left = ((origLeft + e.clientX - startX) / window.innerWidth * 100) + '%';
-      el.style.top = ((origTop + e.clientY - startY) / window.innerHeight * 100) + '%';
-      el.style.transform = 'none';
+    if (!el.classList.contains('editing')) {
+      selectEditable(el);
     }
-    function onUp() {
-      el.classList.remove('dragging');
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      if (didDrag) scheduleSave();
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    startDrag(el, e);
   });
 
   el.querySelectorAll('.resize-handle').forEach(handle => {
@@ -1292,6 +1376,12 @@ function scheduleSave() {
   _saveTimer = setTimeout(editSave, 500);
 }
 
+function getRealZIndex(el, fallback) {
+  // 編集中はz-index=9000なので、保存した元の値を返す
+  if (el._savedZIndex != null) return parseInt(el._savedZIndex) || fallback;
+  return parseInt(el.style.zIndex) || fallback;
+}
+
 async function editSave() {
   _saving = true;
   const overlaySettings = {};
@@ -1299,16 +1389,16 @@ async function editSave() {
   overlaySettings.avatar = {
     positionX: parseFloat(avatarArea.style.left) || 73.25,
     positionY: parseFloat(avatarArea.style.top) || 62.15,
-    zIndex: parseInt(avatarArea.style.zIndex) || 5,
+    zIndex: getRealZIndex(avatarArea, 5),
   };
   overlaySettings.subtitle = {
-    zIndex: parseInt(subtitleEl.style.zIndex) || 20,
+    zIndex: getRealZIndex(subtitleEl, 20),
   };
   overlaySettings.todo = {
     positionX: parseFloat(todoPanelEl.style.left) || 50,
     positionY: parseFloat(todoPanelEl.style.top) || 16,
     width: parseFloat(todoPanelEl.style.width) || 28,
-    zIndex: parseInt(todoPanelEl.style.zIndex) || 20,
+    zIndex: getRealZIndex(todoPanelEl, 20),
   };
   if (todoPanelEl.style.height && todoPanelEl.style.height !== 'auto') {
     overlaySettings.todo.height = parseFloat(todoPanelEl.style.height);
@@ -1316,7 +1406,7 @@ async function editSave() {
   overlaySettings.topic = {
     positionX: parseFloat(topicPanelEl.style.left) || 1.04,
     positionY: parseFloat(topicPanelEl.style.top) || 1.85,
-    zIndex: parseInt(topicPanelEl.style.zIndex) || 20,
+    zIndex: getRealZIndex(topicPanelEl, 20),
   };
 
   try {
@@ -1333,7 +1423,7 @@ async function editSave() {
       y: parseFloat(el.style.top) || 0,
       width: parseFloat(el.style.width) || 40,
       height: parseFloat(el.style.height) || 50,
-      zIndex: parseInt(el.style.zIndex) || 10,
+      zIndex: getRealZIndex(el, 10),
     };
     try {
       await fetch(`/api/capture/${id}/layout`, {
