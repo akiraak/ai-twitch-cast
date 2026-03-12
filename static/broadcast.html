@@ -339,6 +339,30 @@
   .resize-handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
   .resize-handle.nw { top: -6px; left: -6px; cursor: nw-resize; }
 
+  /* === スナップガイド線 === */
+  .snap-guide {
+    position: absolute;
+    z-index: 9999;
+    pointer-events: none;
+    display: none;
+  }
+  .snap-guide.vertical {
+    width: 3px;
+    top: 0; bottom: 0;
+    background: rgba(0, 200, 255, 0.9);
+    box-shadow: 0 0 8px 2px rgba(0, 200, 255, 0.6), 0 0 20px 4px rgba(0, 200, 255, 0.3);
+  }
+  .snap-guide.horizontal {
+    height: 3px;
+    left: 0; right: 0;
+    background: rgba(0, 200, 255, 0.9);
+    box-shadow: 0 0 8px 2px rgba(0, 200, 255, 0.6), 0 0 20px 4px rgba(0, 200, 255, 0.3);
+  }
+  .snap-guide.center {
+    background: rgba(255, 60, 60, 0.9);
+    box-shadow: 0 0 8px 2px rgba(255, 60, 60, 0.6), 0 0 20px 4px rgba(255, 60, 60, 0.3);
+  }
+
   /* === トピックパネル（左上） === */
   #topic-panel {
     position: absolute;
@@ -1275,24 +1299,127 @@ document.addEventListener('mousedown', (e) => {
   }
 });
 
+// === スナップガイドシステム ===
+const SNAP_THRESHOLD_PX = 6; // スナップ距離（ピクセル）
+const _snapGuides = []; // DOM要素のプール
+
+function ensureSnapGuides(count) {
+  while (_snapGuides.length < count) {
+    const g = document.createElement('div');
+    g.className = 'snap-guide';
+    document.body.appendChild(g);
+    _snapGuides.push(g);
+  }
+}
+ensureSnapGuides(10);
+
+function hideSnapGuides() {
+  _snapGuides.forEach(g => g.style.display = 'none');
+}
+
+function getOtherEditableRects(el) {
+  const rects = [];
+  document.querySelectorAll('[data-editable]').forEach(other => {
+    if (other === el || other.style.display === 'none') return;
+    const r = other.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return;
+    rects.push({
+      left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+      centerX: (r.left + r.right) / 2, centerY: (r.top + r.bottom) / 2,
+      label: other.dataset.editable,
+    });
+  });
+  return rects;
+}
+
+function calcSnapPoints(otherRects, ww, wh) {
+  // 画面中央
+  const vLines = [{ px: ww / 2, isCenter: true }];
+  const hLines = [{ px: wh / 2, isCenter: true }];
+  // 他パーツの端と中央
+  for (const r of otherRects) {
+    vLines.push({ px: r.left }, { px: r.right }, { px: r.centerX });
+    hLines.push({ px: r.top }, { px: r.bottom }, { px: r.centerY });
+  }
+  return { vLines, hLines };
+}
+
+function applySnap(edges, lines, threshold) {
+  // edges: パーツ側のスナップ候補（左端, 右端, 中央など）のpx配列
+  // lines: スナップ先のpx配列（{px, isCenter?}）
+  // 最も近い一致を探す
+  let bestDelta = Infinity, bestLine = null;
+  for (const edge of edges) {
+    for (const line of lines) {
+      const d = Math.abs(edge - line.px);
+      if (d < threshold && d < Math.abs(bestDelta)) {
+        bestDelta = edge - line.px;
+        bestLine = line;
+      }
+    }
+  }
+  return bestLine ? { delta: bestDelta, line: bestLine } : null;
+}
+
+function showActiveGuides(snappedV, snappedH) {
+  let idx = 0;
+  if (snappedV) {
+    ensureSnapGuides(idx + 1);
+    const g = _snapGuides[idx++];
+    g.className = 'snap-guide vertical' + (snappedV.line.isCenter ? ' center' : '');
+    g.style.left = snappedV.line.px + 'px';
+    g.style.display = 'block';
+  }
+  if (snappedH) {
+    ensureSnapGuides(idx + 1);
+    const g = _snapGuides[idx++];
+    g.className = 'snap-guide horizontal' + (snappedH.line.isCenter ? ' center' : '');
+    g.style.top = snappedH.line.px + 'px';
+    g.style.display = 'block';
+  }
+  for (let i = idx; i < _snapGuides.length; i++) {
+    _snapGuides[i].style.display = 'none';
+  }
+}
+
 function startDrag(el, e) {
   el.classList.add('dragging');
   const startX = e.clientX, startY = e.clientY;
   // getBoundingClientRect()はtransform適用後の実際の表示位置を返す
   const rect = el.getBoundingClientRect();
   const origVisualLeft = rect.left, origVisualTop = rect.top;
+  const elW = rect.width, elH = rect.height;
   let didDrag = false;
+  const otherRects = getOtherEditableRects(el);
 
   function onMove(e) {
     didDrag = true;
-    el.style.left = ((origVisualLeft + e.clientX - startX) / window.innerWidth * 100) + '%';
-    el.style.top = ((origVisualTop + e.clientY - startY) / window.innerHeight * 100) + '%';
+    const ww = window.innerWidth, wh = window.innerHeight;
+    let newLeft = origVisualLeft + e.clientX - startX;
+    let newTop = origVisualTop + e.clientY - startY;
+
+    const { vLines, hLines } = calcSnapPoints(otherRects, ww, wh);
+    // パーツの左端、右端、中央をスナップ候補に
+    const vEdges = [newLeft, newLeft + elW, newLeft + elW / 2];
+    const hEdges = [newTop, newTop + elH, newTop + elH / 2];
+
+    const snappedV = applySnap(vEdges, vLines, SNAP_THRESHOLD_PX);
+    const snappedH = applySnap(hEdges, hLines, SNAP_THRESHOLD_PX);
+
+    if (snappedV) newLeft -= snappedV.delta;
+    if (snappedH) newTop -= snappedH.delta;
+
+    el.style.left = (newLeft / ww * 100) + '%';
+    el.style.top = (newTop / wh * 100) + '%';
     el.style.transform = 'none';
+
+    showActiveGuides(snappedV, snappedH);
   }
   function onUp() {
     el.classList.remove('dragging');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    hideSnapGuides();
     if (didDrag) editSave();
   }
   document.addEventListener('mousemove', onMove);
@@ -1339,28 +1466,57 @@ function setupEditable(el) {
       const origLeft = el.offsetLeft, origTop = el.offsetTop;
       const isLeft = handle.classList.contains('sw') || handle.classList.contains('nw');
       const isTop = handle.classList.contains('ne') || handle.classList.contains('nw');
+      const otherRects = getOtherEditableRects(el);
 
       function onMove(e) {
         const dx = e.clientX - startX, dy = e.clientY - startY;
         const ww = window.innerWidth, wh = window.innerHeight;
+        let newLeft = origLeft, newTop = origTop;
+        let newW = origW, newH = origH;
+
         if (isLeft) {
-          el.style.width = ((origW - dx) / ww * 100) + '%';
-          el.style.left = ((origLeft + dx) / ww * 100) + '%';
-          el.style.transform = 'none';
+          newW = origW - dx; newLeft = origLeft + dx;
         } else {
-          el.style.width = ((origW + dx) / ww * 100) + '%';
+          newW = origW + dx;
         }
         if (isTop) {
-          el.style.height = ((origH - dy) / wh * 100) + '%';
-          el.style.top = ((origTop + dy) / wh * 100) + '%';
-          el.style.transform = 'none';
+          newH = origH - dy; newTop = origTop + dy;
         } else {
-          el.style.height = ((origH + dy) / wh * 100) + '%';
+          newH = origH + dy;
         }
+
+        // リサイズ中の端をスナップ
+        const { vLines, hLines } = calcSnapPoints(otherRects, ww, wh);
+        // 動く辺をスナップ候補に
+        const vEdges = isLeft ? [newLeft] : [newLeft + newW];
+        // 中央もスナップ候補
+        vEdges.push(newLeft + newW / 2);
+        const hEdges = isTop ? [newTop] : [newTop + newH];
+        hEdges.push(newTop + newH / 2);
+
+        const snappedV = applySnap(vEdges, vLines, SNAP_THRESHOLD_PX);
+        const snappedH = applySnap(hEdges, hLines, SNAP_THRESHOLD_PX);
+
+        if (snappedV) {
+          if (isLeft) { newLeft -= snappedV.delta; newW += snappedV.delta; }
+          else { newW -= snappedV.delta; }
+        }
+        if (snappedH) {
+          if (isTop) { newTop -= snappedH.delta; newH += snappedH.delta; }
+          else { newH -= snappedH.delta; }
+        }
+
+        el.style.width = (newW / ww * 100) + '%';
+        el.style.height = (newH / wh * 100) + '%';
+        if (isLeft) { el.style.left = (newLeft / ww * 100) + '%'; el.style.transform = 'none'; }
+        if (isTop) { el.style.top = (newTop / wh * 100) + '%'; el.style.transform = 'none'; }
+
+        showActiveGuides(snappedV, snappedH);
       }
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        hideSnapGuides();
         editSave();
       }
       document.addEventListener('mousemove', onMove);
