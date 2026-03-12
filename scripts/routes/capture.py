@@ -266,17 +266,20 @@ def _deploy_to_windows():
     src_asar = _EXE_PATH.parent / "resources" / "app.asar"
     dst_asar = win_deploy_dir / "resources" / "app.asar"
 
-    needs_copy = not dst_exe.exists()
-    if not needs_copy and src_asar.exists() and dst_asar.exists():
-        needs_copy = src_asar.stat().st_mtime > dst_asar.stat().st_mtime
-
-    if needs_copy:
-        logger.info("Electronアプリをローカルディスクにデプロイ中...")
+    if not dst_exe.exists():
+        # 初回: 全ファイルコピー
+        logger.info("Electronアプリを初回デプロイ中...")
         win_deploy_dir.mkdir(parents=True, exist_ok=True)
         shutil.copytree(str(_EXE_PATH.parent), str(win_deploy_dir), dirs_exist_ok=True)
         if not dst_asar.exists():
             raise RuntimeError(f"デプロイ後にasarが見つかりません: {dst_asar}")
-        logger.info("デプロイ完了: %s (asar size=%d)", win_deploy_dir, dst_asar.stat().st_size)
+        logger.info("初回デプロイ完了: %s", win_deploy_dir)
+    elif src_asar.exists() and (not dst_asar.exists() or src_asar.stat().st_mtime > dst_asar.stat().st_mtime):
+        # 更新: asarファイルのみコピー（exe/dllはロック中でもOK）
+        logger.info("asarのみデプロイ中...")
+        dst_asar.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(src_asar), str(dst_asar))
+        logger.info("asarデプロイ完了 (size=%d)", dst_asar.stat().st_size)
 
     return dst_exe
 
@@ -497,26 +500,27 @@ def _run_preview_oneclick():
         else:
             # 更新時は起動中でも停止→再デプロイ→再起動
             if server_running and needs_restart:
-                _update_oneclick("restart", "アプリ再起動中...", 62, done, skipped)
-                # /quit APIで終了を試みる（なければプロセス終了）
+                _update_oneclick("restart", "アプリ停止中...", 62, done, skipped)
+                # /quit APIで終了を試みる
                 try:
                     httpx.post(f"{_capture_base_url()}/quit", timeout=3.0)
+                    time.sleep(2)  # quit処理待ち
                 except Exception:
-                    # /quitが無い場合はプロセスを直接終了
-                    global _capture_proc
-                    if _capture_proc:
-                        try:
-                            _capture_proc.terminate()
-                        except Exception:
-                            pass
-                        _capture_proc = None
-                    # Windows側プロセスも停止
-                    if is_wsl():
-                        subprocess.run(
-                            ["powershell.exe", "-NoProfile", "-Command",
-                             "Stop-Process -Name 'win-capture-app' -Force -ErrorAction SilentlyContinue"],
-                            capture_output=True, timeout=5,
-                        )
+                    pass
+                # 確実に停止: プロセスを直接kill
+                global _capture_proc
+                if _capture_proc:
+                    try:
+                        _capture_proc.terminate()
+                    except Exception:
+                        pass
+                    _capture_proc = None
+                if is_wsl():
+                    subprocess.run(
+                        ["powershell.exe", "-NoProfile", "-Command",
+                         "Stop-Process -Name 'win-capture-app' -Force -ErrorAction SilentlyContinue"],
+                        capture_output=True, timeout=5,
+                    )
                 # プロセス終了を待つ
                 for _ in range(10):
                     time.sleep(0.5)
