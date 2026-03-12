@@ -17,11 +17,13 @@
   /* === 配信プレビュー（左） === */
   #preview-area {
     flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #000;
     position: relative;
+    overflow: hidden;
   }
   #broadcast-frame {
     border: none;
@@ -31,6 +33,7 @@
   #control-panel {
     width: 280px;
     min-width: 280px;
+    flex-shrink: 0;
     background: #111122;
     border-left: 2px solid #7c4dff;
     display: flex;
