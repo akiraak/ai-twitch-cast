@@ -1707,17 +1707,24 @@ captureRefreshStatus();
 captureRefreshSources();
 setInterval(captureRefreshStatus, 10000);
 
-// プレビュー自動起動（プレビューウィンドウが開いていない場合）
+// プレビュー自動起動 + 配信環境の事前Setup
 (async () => {
+  // プレビューウィンドウが開いていなければ起動
   try {
     const ps = await (await fetch('/api/capture/preview/status')).json();
     if (!ps.open) {
       previewOneClick();
     }
   } catch (e) {
-    // Electronアプリ未起動 → ワンクリックで起動から
     previewOneClick();
   }
+  // 配信環境を事前にSetup（Go Live時のFFmpeg起動だけで済むように）
+  try {
+    const st = await (await fetch('/api/broadcast/status')).json();
+    if (!st.setup) {
+      fetch('/api/broadcast/setup', { method: 'POST' });
+    }
+  } catch (e) {}
 })();
 </script>
 </body>
