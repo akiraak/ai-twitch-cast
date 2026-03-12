@@ -27,7 +27,7 @@ class StreamController:
         self._framerate = int(os.environ.get("BROADCAST_FRAMERATE", "30"))
         self._video_bitrate = os.environ.get("BROADCAST_VIDEO_BITRATE", "3500k")
         self._audio_bitrate = os.environ.get("BROADCAST_AUDIO_BITRATE", "128k")
-        self._preset = os.environ.get("BROADCAST_PRESET", "veryfast")
+        self._preset = os.environ.get("BROADCAST_PRESET", "ultrafast")
         self._pulse_sink = "broadcast"
         # WSLg PulseAudioサーバー対応
         self._pulse_server = os.environ.get("PULSE_SERVER", "")
@@ -120,9 +120,9 @@ class StreamController:
             "-tune", "zerolatency",
             "-b:v", self._video_bitrate,
             "-maxrate", self._video_bitrate,
-            "-bufsize", str(int(self._video_bitrate.replace("k", "")) * 2) + "k",
+            "-bufsize", self._video_bitrate,
             "-pix_fmt", "yuv420p",
-            "-g", str(self._framerate * 2),
+            "-g", str(self._framerate),
             "-c:a", "aac",
             "-b:a", self._audio_bitrate,
             "-ar", "44100",

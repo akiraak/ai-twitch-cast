@@ -312,6 +312,7 @@
   <span id="broadcast-status-label" style="font-weight:bold;">PREVIEW</span>
   <button id="go-live-btn" style="background:#4caf50; color:#fff; border-color:#4caf50; font-weight:bold;" onclick="goLive()">Go Live</button>
   <button id="stop-btn" style="background:#f44336; color:#fff; border-color:#f44336; display:none;" onclick="stopLive()">配信停止</button>
+  <span id="stream-info" style="font-size:11px; color:#999; margin-left:8px;"></span>
   <div class="spacer"></div>
   <select id="edit-window-list"><option value="">-- ウィンドウ追加 --</option></select>
   <button onclick="editAddCapture()">追加</button>
@@ -1180,16 +1181,21 @@ async function updateBroadcastStatus() {
     const goBtn = document.getElementById('go-live-btn');
     const stopBtn = document.getElementById('stop-btn');
     if (!label) return;
+    const info = document.getElementById('stream-info');
     if (st.streaming) {
       label.textContent = 'LIVE';
       label.style.color = '#f44336';
       goBtn.style.display = 'none';
       stopBtn.style.display = '';
+      const mins = Math.floor((st.uptime_seconds || 0) / 60);
+      const secs = Math.floor((st.uptime_seconds || 0) % 60);
+      info.textContent = `${st.resolution} ${st.framerate}fps | ${mins}:${String(secs).padStart(2,'0')}`;
     } else {
       label.textContent = 'PREVIEW';
       label.style.color = '#eee';
       goBtn.style.display = '';
       stopBtn.style.display = 'none';
+      info.textContent = '';
     }
   } catch (e) {}
 }
