@@ -352,6 +352,18 @@
           </div>
           <div id="capture-list" style="font-size:0.85rem;"></div>
         </div>
+        <div style="margin-top:12px;">
+          <button onclick="previewOneClick()" style="width:100%; background:#7b1fa2; color:white; font-weight:bold; padding:10px;">ワンクリックプレビュー</button>
+        </div>
+        <div id="oneclick-status" style="display:none; margin-top:8px; padding:8px 12px; background:#f0e8ff; border-radius:6px; font-size:0.85rem;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="oneclick-msg"></span>
+          </div>
+          <div style="margin-top:6px; background:#d0c0e8; border-radius:3px; height:6px; overflow:hidden;">
+            <div id="oneclick-bar" style="height:100%; background:#7b1fa2; width:0%; transition:width 0.3s;"></div>
+          </div>
+          <div id="oneclick-stages" style="margin-top:6px; font-size:0.75rem; color:#666;"></div>
+        </div>
         <div class="btn-row" style="margin-top:12px;">
           <button onclick="capturePreviewOpen()">プレビュー / レイアウト編集</button>
           <button class="secondary" onclick="capturePreviewClose()">プレビュー閉じる</button>
@@ -904,6 +916,56 @@ async function capturePreviewOpen() {
 
 async function capturePreviewClose() {
   await api('POST', '/api/capture/preview/close');
+}
+
+// ワンクリックプレビュー
+let _oneclickPolling = null;
+const _stageLabels = {
+  check_build: 'ビルド確認', npm_install: 'npm install', build: 'electron-builder',
+  check_asar: 'ソース確認', update_asar: 'asar更新', deploy: 'デプロイ',
+  launch: '起動', wait_server: 'サーバー待ち', open_preview: 'プレビュー表示',
+};
+
+async function previewOneClick() {
+  const data = await api('POST', '/api/capture/preview-oneclick');
+  if (!data || !data.ok) {
+    log(data?.message || 'ワンクリックプレビュー開始失敗');
+    return;
+  }
+  document.getElementById('oneclick-status').style.display = 'block';
+  if (_oneclickPolling) clearInterval(_oneclickPolling);
+  _oneclickPolling = setInterval(pollOneClick, 1000);
+  pollOneClick();
+}
+
+async function pollOneClick() {
+  try {
+    const s = await (await fetch('/api/capture/preview-oneclick/status')).json();
+    const msgEl = document.getElementById('oneclick-msg');
+    const barEl = document.getElementById('oneclick-bar');
+    const stagesEl = document.getElementById('oneclick-stages');
+    msgEl.textContent = s.message;
+    barEl.style.width = s.progress + '%';
+    const parts = [];
+    for (const d of (s.stages_done || [])) parts.push(`✓ ${_stageLabels[d] || d}`);
+    for (const sk of (s.stages_skipped || [])) parts.push(`⏭ ${_stageLabels[sk] || sk}`);
+    stagesEl.textContent = parts.join('  ');
+    if (s.status === 'done') {
+      barEl.style.background = '#4caf50';
+      if (_oneclickPolling) { clearInterval(_oneclickPolling); _oneclickPolling = null; }
+      captureRefreshStatus();
+      captureRefreshSources();
+      log('プレビュー起動完了');
+    } else if (s.status === 'error') {
+      barEl.style.background = '#f44336';
+      msgEl.style.color = '#f44336';
+      if (_oneclickPolling) { clearInterval(_oneclickPolling); _oneclickPolling = null; }
+      log('プレビュー起動エラー: ' + s.message);
+    } else if (s.status === 'idle') {
+      if (_oneclickPolling) { clearInterval(_oneclickPolling); _oneclickPolling = null; }
+      document.getElementById('oneclick-status').style.display = 'none';
+    }
+  } catch (e) {}
 }
 
 async function captureRemove(id) {

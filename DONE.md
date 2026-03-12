@@ -1,5 +1,11 @@
 # DONE
 
+## ワンクリックプレビュー
+
+- [x] プレビュー起動ワンクリック化（ビルド確認→ビルド→デプロイ→起動→プレビュー表示を自動実行、進捗バー付き）
+- [x] package.jsonハッシュをDBに保存し、古いexeの再ビルドを自動検知
+- [x] capture_launch()をヘルパー関数にリファクタ（_deploy_to_windows, _launch_electron, _wait_for_server）
+
 ## プロジェクト整理
 
 - [x] OBS関連ファイル・コード完全削除（obs_controller.py, routes/obs.py, routes/stream.py, start_stream.py, stop_stream.py, overlay.html, audio-tts.html, audio-bgm.html, index.html, design-proposal.html, OBS関連ドキュメント3件, tests/test_scene_config.py）

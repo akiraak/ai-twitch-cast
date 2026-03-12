@@ -1,9 +1,11 @@
 """ウィンドウキャプチャルート - Windows側Electronアプリの管理"""
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -40,8 +42,23 @@ _build_lock = threading.Lock()
 
 
 def _needs_build():
-    """exeが存在しない場合はフルビルドが必要"""
-    return not _EXE_PATH.exists()
+    """exeが存在しない、またはpackage.jsonが変更された場合はフルビルドが必要"""
+    if not _EXE_PATH.exists():
+        return True
+    pkg = _APP_DIR / "package.json"
+    if not pkg.exists():
+        return False
+    current_hash = hashlib.md5(pkg.read_bytes()).hexdigest()
+    saved_hash = db.get_setting("capture_build_hash")
+    return saved_hash != current_hash
+
+
+def _save_build_hash():
+    """ビルド成功時にpackage.jsonのハッシュをDBに保存"""
+    pkg = _APP_DIR / "package.json"
+    if pkg.exists():
+        current_hash = hashlib.md5(pkg.read_bytes()).hexdigest()
+        db.set_setting("capture_build_hash", current_hash)
 
 
 def _needs_asar_update():
@@ -142,6 +159,7 @@ def _run_build():
             logger.error("electron-builder失敗: %s", result.stderr[:500])
             return
 
+        _save_build_hash()
         _build_state = {"status": "done", "message": "ビルド完了", "progress": 100}
         logger.info("Electronアプリビルド完了")
     except subprocess.TimeoutExpired:
@@ -207,17 +225,68 @@ async def capture_build():
     return {"ok": True, "message": "ビルド開始", "build": dict(_build_state)}
 
 
+def _deploy_to_windows():
+    """Windowsローカルディスクにデプロイ（WSL環境用）。デプロイしたexeのパスを返す"""
+    win_deploy_dir = Path("/mnt/c/Users") / os.environ.get("WIN_USER", "akira") / "AppData" / "Local" / "ai-twitch-cast-capture"
+    dst_exe = win_deploy_dir / "win-capture-app.exe"
+    src_asar = _EXE_PATH.parent / "resources" / "app.asar"
+    dst_asar = win_deploy_dir / "resources" / "app.asar"
+
+    needs_copy = not dst_exe.exists()
+    if not needs_copy and src_asar.exists() and dst_asar.exists():
+        needs_copy = src_asar.stat().st_mtime > dst_asar.stat().st_mtime
+
+    if needs_copy:
+        logger.info("Electronアプリをローカルディスクにデプロイ中...")
+        win_deploy_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(str(_EXE_PATH.parent), str(win_deploy_dir), dirs_exist_ok=True)
+        logger.info("デプロイ完了: %s", win_deploy_dir)
+
+    return dst_exe
+
+
+def _launch_electron():
+    """Electronアプリを起動してプロセスを返す"""
+    global _capture_proc
+    if is_wsl():
+        dst_exe = _deploy_to_windows()
+        win_exe = to_windows_path(str(dst_exe))
+        _capture_proc = subprocess.Popen(
+            ["powershell.exe", "-NoProfile", "-Command", f"Start-Process '{win_exe}'"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        _capture_proc = subprocess.Popen(
+            [str(_EXE_PATH)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    return _capture_proc
+
+
+async def _wait_for_server(timeout=10):
+    """キャプチャサーバーの応答を待つ。成功ならTrue"""
+    for _ in range(timeout * 2):
+        await asyncio.sleep(0.5)
+        try:
+            st = await capture_status()
+            if st.get("running"):
+                return True
+        except Exception:
+            pass
+    return False
+
+
 @router.post("/api/capture/launch")
 async def capture_launch():
     """Electronキャプチャアプリを起動する（必要ならビルドも実行）"""
-    global _capture_proc
-
     # 既に起動中か確認
     st = await capture_status()
     if st.get("running"):
         return {"ok": True, "message": "既に起動中"}
 
-    # フルビルドが必要か確認（exeが存在しない）
+    # フルビルドが必要か確認
     if _needs_build():
         if _build_state["status"] == "building":
             return {"ok": False, "error": "ビルド中です。完了後に再度起動してください。", "build": dict(_build_state)}
@@ -237,45 +306,11 @@ async def capture_launch():
         )
 
     try:
-        if is_wsl():
-            # Windowsローカルディスクにデプロイして起動（UNCパスではGPUクラッシュするため）
-            import shutil
-            win_deploy_dir = Path("/mnt/c/Users") / os.environ.get("WIN_USER", "akira") / "AppData" / "Local" / "ai-twitch-cast-capture"
-            dst_exe = win_deploy_dir / "win-capture-app.exe"
-            src_asar = _EXE_PATH.parent / "resources" / "app.asar"
-            dst_asar = win_deploy_dir / "resources" / "app.asar"
+        _launch_electron()
 
-            # 初回またはasar更新時にコピー
-            needs_copy = not dst_exe.exists()
-            if not needs_copy and src_asar.exists() and dst_asar.exists():
-                needs_copy = src_asar.stat().st_mtime > dst_asar.stat().st_mtime
-
-            if needs_copy:
-                logger.info("Electronアプリをローカルディスクにデプロイ中...")
-                win_deploy_dir.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(str(_EXE_PATH.parent), str(win_deploy_dir), dirs_exist_ok=True)
-                logger.info("デプロイ完了: %s", win_deploy_dir)
-
-            win_exe = to_windows_path(str(dst_exe))
-            _capture_proc = subprocess.Popen(
-                ["powershell.exe", "-NoProfile", "-Command", f"Start-Process '{win_exe}'"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        else:
-            _capture_proc = subprocess.Popen(
-                [str(_EXE_PATH)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-
-        # 起動待ち
-        for _ in range(10):
-            await asyncio.sleep(0.5)
-            st = await capture_status()
-            if st.get("running"):
-                logger.info("キャプチャサーバー起動成功")
-                return {"ok": True}
+        if await _wait_for_server(timeout=10):
+            logger.info("キャプチャサーバー起動成功")
+            return {"ok": True}
 
         return {"ok": False, "error": "起動タイムアウト"}
     except Exception as e:
@@ -294,6 +329,218 @@ async def capture_shutdown():
             pass
         _capture_proc = None
     return {"ok": True}
+
+
+# =====================================================
+# ワンクリックプレビュー
+# =====================================================
+
+_oneclick_state = {
+    "status": "idle",       # idle | running | done | error
+    "stage": "",
+    "message": "",
+    "progress": 0,
+    "stages_done": [],
+    "stages_skipped": [],
+}
+_oneclick_lock = threading.Lock()
+
+
+def _update_oneclick(stage, message, progress, done=None, skipped=None):
+    """ワンクリック状態を更新"""
+    global _oneclick_state
+    _oneclick_state = {
+        "status": "running",
+        "stage": stage,
+        "message": message,
+        "progress": progress,
+        "stages_done": (done or [])[:],
+        "stages_skipped": (skipped or [])[:],
+    }
+
+
+def _run_preview_oneclick():
+    """ワンクリックプレビューをバックグラウンドで実行"""
+    global _oneclick_state
+    if not _oneclick_lock.acquire(blocking=False):
+        return
+    try:
+        done = []
+        skipped = []
+
+        # ---- Stage: check_build ----
+        _update_oneclick("check_build", "ビルド状態を確認中...", 5, done, skipped)
+        if _needs_build():
+            # ---- Stage: npm_install ----
+            _update_oneclick("npm_install", "npm install ...", 10, done, skipped)
+            result = subprocess.run(
+                ["npm", "install"], cwd=str(_APP_DIR),
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode != 0:
+                _oneclick_state = {"status": "error", "stage": "npm_install",
+                    "message": f"npm install失敗: {result.stderr[:200]}",
+                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
+                return
+            done.append("npm_install")
+
+            # ---- Stage: build ----
+            _update_oneclick("build", "electron-builder ...", 20, done, skipped)
+            result = subprocess.run(
+                ["npm", "run", "build"], cwd=str(_APP_DIR),
+                capture_output=True, text=True, timeout=300,
+            )
+            if result.returncode != 0:
+                _oneclick_state = {"status": "error", "stage": "build",
+                    "message": f"ビルド失敗: {result.stderr[:200]}",
+                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
+                return
+            _save_build_hash()
+            done.append("build")
+        else:
+            skipped.append("npm_install")
+            skipped.append("build")
+        done.append("check_build")
+
+        # ---- Stage: check_asar ----
+        _update_oneclick("check_asar", "ソース更新を確認中...", 50, done, skipped)
+        if _needs_asar_update():
+            _update_oneclick("update_asar", "asar更新中...", 55, done, skipped)
+            _update_asar()
+            if _build_state["status"] == "error":
+                _oneclick_state = {"status": "error", "stage": "update_asar",
+                    "message": _build_state["message"],
+                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
+                return
+            done.append("update_asar")
+        else:
+            skipped.append("update_asar")
+        done.append("check_asar")
+
+        if not _EXE_PATH.exists():
+            _oneclick_state = {"status": "error", "stage": "check_build",
+                "message": f"exeが見つかりません: {_EXE_PATH}",
+                "progress": 0, "stages_done": done, "stages_skipped": skipped}
+            return
+
+        # ---- Stage: deploy ----
+        _update_oneclick("deploy", "Windowsにデプロイ中...", 65, done, skipped)
+        try:
+            if is_wsl():
+                _deploy_to_windows()
+            else:
+                skipped.append("deploy")
+            done.append("deploy")
+        except Exception as e:
+            _oneclick_state = {"status": "error", "stage": "deploy",
+                "message": f"デプロイ失敗: {e}",
+                "progress": 0, "stages_done": done, "stages_skipped": skipped}
+            return
+
+        # ---- Stage: launch ----
+        # サーバーが既に起動中ならスキップ
+        import httpx
+        server_running = False
+        try:
+            resp = httpx.get(f"{_capture_base_url()}/status", timeout=2.0)
+            server_running = resp.status_code == 200
+        except Exception:
+            pass
+
+        if server_running:
+            skipped.append("launch")
+            skipped.append("wait_server")
+        else:
+            _update_oneclick("launch", "Electronアプリ起動中...", 75, done, skipped)
+            try:
+                _launch_electron()
+                done.append("launch")
+            except Exception as e:
+                _oneclick_state = {"status": "error", "stage": "launch",
+                    "message": f"起動失敗: {e}",
+                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
+                return
+
+            # ---- Stage: wait_server ----
+            _update_oneclick("wait_server", "サーバー応答待ち...", 80, done, skipped)
+            for i in range(30):  # 15秒
+                time.sleep(0.5)
+                try:
+                    resp = httpx.get(f"{_capture_base_url()}/status", timeout=2.0)
+                    if resp.status_code == 200:
+                        server_running = True
+                        break
+                except Exception:
+                    pass
+                _update_oneclick("wait_server", f"サーバー応答待ち... ({i+1}/30)", 80 + i * 0.3, done, skipped)
+
+            if not server_running:
+                _oneclick_state = {"status": "error", "stage": "wait_server",
+                    "message": "サーバー起動タイムアウト",
+                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
+                return
+            done.append("wait_server")
+
+        # ---- Stage: open_preview ----
+        _update_oneclick("open_preview", "プレビューを開いています...", 92, done, skipped)
+        try:
+            web_port = os.environ.get("WEB_PORT", "8080")
+            from src.wsl_path import get_wsl_ip
+            wsl_ip = get_wsl_ip()
+            server_url = f"http://{wsl_ip}:{web_port}"
+            resp = httpx.post(
+                f"{_capture_base_url()}/preview/open",
+                json={"serverUrl": server_url},
+                timeout=5.0,
+            )
+            if resp.status_code != 200:
+                _oneclick_state = {"status": "error", "stage": "open_preview",
+                    "message": f"プレビューを開けません: HTTP {resp.status_code}",
+                    "progress": 0, "stages_done": done, "stages_skipped": skipped}
+                return
+            done.append("open_preview")
+        except Exception as e:
+            _oneclick_state = {"status": "error", "stage": "open_preview",
+                "message": f"プレビューを開けません: {e}",
+                "progress": 0, "stages_done": done, "stages_skipped": skipped}
+            return
+
+        # ---- 完了 ----
+        _oneclick_state = {
+            "status": "done",
+            "stage": "done",
+            "message": "プレビュー起動完了",
+            "progress": 100,
+            "stages_done": done,
+            "stages_skipped": skipped,
+        }
+        logger.info("ワンクリックプレビュー完了: done=%s, skipped=%s", done, skipped)
+
+    except Exception as e:
+        _oneclick_state = {"status": "error", "stage": _oneclick_state.get("stage", ""),
+            "message": str(e)[:200], "progress": 0,
+            "stages_done": _oneclick_state.get("stages_done", []),
+            "stages_skipped": _oneclick_state.get("stages_skipped", [])}
+        logger.error("ワンクリックプレビューエラー: %s", e)
+    finally:
+        _oneclick_lock.release()
+
+
+@router.post("/api/capture/preview-oneclick")
+async def capture_preview_oneclick():
+    """ワンクリックでビルド→デプロイ→起動→プレビューを実行"""
+    global _oneclick_state
+    if _oneclick_state.get("status") == "running":
+        return {"ok": False, "message": "既に実行中", "state": dict(_oneclick_state)}
+    _oneclick_state = {"status": "running", "stage": "", "message": "開始...", "progress": 0, "stages_done": [], "stages_skipped": []}
+    threading.Thread(target=_run_preview_oneclick, daemon=True).start()
+    return {"ok": True, "message": "プレビュー起動開始"}
+
+
+@router.get("/api/capture/preview-oneclick/status")
+async def capture_preview_oneclick_status():
+    """ワンクリックプレビューの進捗状態を返す"""
+    return dict(_oneclick_state)
 
 
 # =====================================================
