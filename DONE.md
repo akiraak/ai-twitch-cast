@@ -1,11 +1,15 @@
 # DONE
 
-## ワンクリックプレビュー
+## プレビュー確認→配信開始UX
 
 - [x] プレビュー起動ワンクリック化（ビルド確認→ビルド→デプロイ→起動→プレビュー表示を自動実行、進捗バー付き）
 - [x] package.jsonハッシュをDBに保存し、古いexeの再ビルドを自動検知
 - [x] capture_launch()をヘルパー関数にリファクタ（_deploy_to_windows, _launch_electron, _wait_for_server）
 - [x] Electronキャプチャアプリのビルドテスト（ワンクリックプレビューでビルド→起動確認済み）
+- [x] WEB UI読み込み時にElectronプレビューを自動起動
+- [x] broadcast.htmlの編集モードにGo Live/配信停止ボタン+状態表示を追加
+- [x] POST /api/broadcast/go-live（Setup+配信開始をワンステップ化）
+- [x] broadcast-ui.htmlをindex.htmlにリネーム、/broadcast-uiルート削除
 
 ## プロジェクト整理
 

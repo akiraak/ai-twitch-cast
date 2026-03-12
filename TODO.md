@@ -2,6 +2,7 @@
 
 ## バグ・問題
 - [ ] xvfb Chromium上でVRMアバターが表示されない（WebGL/SwiftShaderの問題の可能性）
+- [ ] 配信まで遅いので画質設定を確認。アプリに表示も
 
 ## 機能追加
 - [ ] ウィンドウキャプチャの動作テスト（Electronアプリ起動→キャプチャ→broadcast.html表示確認）
