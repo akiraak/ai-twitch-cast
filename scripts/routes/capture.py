@@ -40,6 +40,25 @@ _build_state = {
 }
 _build_lock = threading.Lock()
 
+# ビルドログファイル
+_BUILD_LOG_PATH = Path(__file__).resolve().parent.parent.parent / "build.log"
+
+
+def _log_build(label, result):
+    """subprocessの結果をビルドログファイルに追記する"""
+    try:
+        with open(_BUILD_LOG_PATH, "a", encoding="utf-8") as f:
+            import datetime
+            f.write(f"\n{'='*60}\n")
+            f.write(f"[{datetime.datetime.now().isoformat()}] {label}\n")
+            f.write(f"returncode: {result.returncode}\n")
+            if result.stdout:
+                f.write(f"--- stdout ---\n{result.stdout}\n")
+            if result.stderr:
+                f.write(f"--- stderr ---\n{result.stderr}\n")
+    except Exception:
+        pass
+
 
 def _needs_build():
     """exeが存在しない、またはpackage.jsonが変更された場合はフルビルドが必要"""
@@ -62,19 +81,41 @@ def _save_build_hash():
 
 
 def _fix_dist_permissions():
-    """dist/内のroot所有ファイルをubuntu:ubuntuに修正"""
+    """dist/内のroot所有ファイルを修正。chown不可ならPowerShellでdist削除"""
     dist_dir = _APP_DIR / "dist"
     if not dist_dir.exists():
         return
     try:
+        # root所有ファイルがあるか確認
+        result = subprocess.run(
+            ["find", str(dist_dir), "-user", "root", "-maxdepth", "3", "-print", "-quit"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if not result.stdout.strip():
+            return  # root所有ファイルなし
+
+        # まずchownを試す
         result = subprocess.run(
             ["find", str(dist_dir), "-user", "root", "-exec", "chown", "ubuntu:ubuntu", "{}", "+"],
             capture_output=True, text=True, timeout=10,
         )
-        if result.returncode != 0:
-            logger.warning("dist権限修正失敗: %s", result.stderr[:200])
-        else:
-            logger.info("dist権限修正完了")
+        if result.returncode == 0:
+            logger.info("dist権限修正完了（chown）")
+            return
+
+        # chown失敗 → WSL2ではPowerShellでdist削除
+        logger.warning("chown失敗、PowerShellでdist削除を試行")
+        if is_wsl():
+            win_path = to_windows_path(str(dist_dir))
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command",
+                 f"Remove-Item -Path '{win_path}' -Recurse -Force"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode == 0:
+                logger.info("dist削除完了（PowerShell）")
+            else:
+                logger.error("dist削除失敗: %s", result.stderr[:200])
     except Exception as e:
         logger.warning("dist権限修正エラー: %s", e)
 
@@ -118,6 +159,7 @@ def _update_asar():
                 cwd=str(_APP_DIR),
                 capture_output=True, text=True, timeout=30,
             )
+            _log_build("asar extract", result)
             if result.returncode != 0:
                 _build_state = {"status": "error", "message": f"asar展開失敗: {result.stderr[:200]}", "progress": 0}
                 return
@@ -138,6 +180,7 @@ def _update_asar():
                 cwd=str(_APP_DIR),
                 capture_output=True, text=True, timeout=30,
             )
+            _log_build("asar pack", result)
             if result.returncode != 0:
                 _build_state = {"status": "error", "message": f"asarパック失敗: {result.stderr[:200]}", "progress": 0}
                 return
@@ -167,11 +210,15 @@ def _run_build():
         _build_state = {"status": "building", "message": "npm install ...", "progress": 10}
         logger.info("Electronアプリフルビルド開始")
 
+        # 権限修正（前回ビルドのroot所有ファイルを修正）
+        _fix_dist_permissions()
+
         result = subprocess.run(
             ["npm", "install"],
             cwd=str(_APP_DIR),
             capture_output=True, text=True, timeout=120,
         )
+        _log_build("npm install", result)
         if result.returncode != 0:
             _build_state = {"status": "error", "message": f"npm install失敗: {result.stderr[:200]}", "progress": 0}
             logger.error("npm install失敗: %s", result.stderr[:500])
@@ -184,6 +231,7 @@ def _run_build():
             cwd=str(_APP_DIR),
             capture_output=True, text=True, timeout=300,
         )
+        _log_build("npm run build", result)
         if result.returncode != 0 and not _EXE_PATH.exists():
             err_detail = (result.stderr or result.stdout or "")[:200]
             _build_state = {"status": "error", "message": f"ビルド失敗: {err_detail}", "progress": 0}
@@ -246,6 +294,16 @@ async def capture_status():
     except Exception:
         result["running"] = False
     return result
+
+
+@router.get("/api/capture/build-log")
+async def capture_build_log():
+    """ビルドログの末尾を返す（デバッグ用）"""
+    if not _BUILD_LOG_PATH.exists():
+        return {"log": "(ログなし)"}
+    text = _BUILD_LOG_PATH.read_text(encoding="utf-8", errors="replace")
+    # 末尾5000文字を返す
+    return {"log": text[-5000:] if len(text) > 5000 else text}
 
 
 @router.post("/api/capture/build")
@@ -423,12 +481,16 @@ def _run_preview_oneclick():
         # ---- Stage: check_build ----
         _update_oneclick("check_build", "ビルド状態を確認中...", 5, done, skipped)
         if _needs_build():
+            # 権限修正（前回ビルドのroot所有ファイルを修正）
+            _fix_dist_permissions()
+
             # ---- Stage: npm_install ----
             _update_oneclick("npm_install", "npm install ...", 10, done, skipped)
             result = subprocess.run(
                 ["npm", "install"], cwd=str(_APP_DIR),
                 capture_output=True, text=True, timeout=120,
             )
+            _log_build("oneclick: npm install", result)
             if result.returncode != 0:
                 _oneclick_state = {"status": "error", "stage": "npm_install",
                     "message": f"npm install失敗: {result.stderr[:200]}",
@@ -442,6 +504,7 @@ def _run_preview_oneclick():
                 ["npm", "run", "build"], cwd=str(_APP_DIR),
                 capture_output=True, text=True, timeout=300,
             )
+            _log_build("oneclick: npm run build", result)
             if result.returncode != 0 and not _EXE_PATH.exists():
                 err_detail = (result.stderr or result.stdout or "")[:200]
                 _oneclick_state = {"status": "error", "stage": "build",

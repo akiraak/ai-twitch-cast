@@ -8,14 +8,21 @@
 const { app, BrowserWindow, Menu, desktopCapturer, ipcMain } = require('electron');
 const express = require('express');
 const path = require('path');
+const WebSocket = require('ws');
 
 const PORT = parseInt(process.env.WIN_CAPTURE_PORT || '9090');
 const DEFAULT_FPS = parseInt(process.env.WIN_CAPTURE_FPS || '15');
 const DEFAULT_QUALITY = parseFloat(process.env.WIN_CAPTURE_QUALITY || '0.7');
+const WS_BACKPRESSURE_LIMIT = 1024 * 1024; // 1MB: これ以上バッファが溜まったらフレームを間引く
 
 // キャプチャセッション管理
 const captures = new Map(); // id -> CaptureSession
 let nextId = 0;
+
+// WebSocket: キャプチャインデックス管理
+const captureIndexMap = new Map(); // id -> index (0-255)
+let nextCaptureIndex = 0;
+let wss = null; // WebSocket.Server
 
 // プレビューウィンドウ
 let previewWindow = null;
@@ -39,7 +46,7 @@ ipcMain.on('capture-frame', (event, { id, jpeg }) => {
   const buf = Buffer.from(jpeg);
   session.latestFrame = buf;
 
-  // 全MJPEGクライアントにプッシュ
+  // 全MJPEGクライアントにプッシュ（互換性維持）
   const dead = [];
   for (const res of session.clients) {
     try {
@@ -52,6 +59,19 @@ ipcMain.on('capture-frame', (event, { id, jpeg }) => {
   }
   for (const res of dead) {
     session.clients.delete(res);
+  }
+
+  // WebSocketクライアントにバイナリ送信（1byte index + JPEG）
+  const captureIdx = captureIndexMap.get(id);
+  if (captureIdx !== undefined && wss) {
+    const header = Buffer.alloc(1);
+    header[0] = captureIdx;
+    const frame = Buffer.concat([header, buf]);
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN && client.bufferedAmount < WS_BACKPRESSURE_LIMIT) {
+        client.send(frame);
+      }
+    });
   }
 });
 
@@ -144,6 +164,22 @@ function startServer() {
     };
 
     captures.set(captureId, session);
+
+    // WebSocket用インデックスを割り当て
+    captureIndexMap.set(captureId, nextCaptureIndex++);
+
+    // WebSocketクライアントにキャプチャ追加を通知
+    if (wss) {
+      const msg = JSON.stringify({
+        type: 'capture_add',
+        id: captureId,
+        index: captureIndexMap.get(captureId),
+        name: sourceName,
+      });
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) client.send(msg);
+      });
+    }
 
     win.loadFile('capture.html');
     win.webContents.on('did-finish-load', () => {
@@ -307,10 +343,29 @@ ${captureList.join('') || '<p>なし</p>'}
     setTimeout(() => app.quit(), 500);
   });
 
-  server.listen(PORT, '0.0.0.0', () => {
+  const httpServer = server.listen(PORT, '0.0.0.0', () => {
     console.log(`=== Window Capture Server ===`);
     console.log(`ポート: ${PORT}`);
     console.log(`http://localhost:${PORT}/`);
+  });
+
+  // WebSocketサーバー（キャプチャフレーム配信用）
+  wss = new WebSocket.Server({ server: httpServer, path: '/ws/capture' });
+
+  wss.on('connection', (ws) => {
+    console.log(`WebSocketクライアント接続 (計${wss.clients.size})`);
+    // 現在のキャプチャ一覧を送信
+    ws.send(JSON.stringify({
+      type: 'captures',
+      list: Array.from(captures.entries()).map(([id, session]) => ({
+        id,
+        index: captureIndexMap.get(id),
+        name: session.name,
+      })),
+    }));
+    ws.on('close', () => {
+      console.log(`WebSocketクライアント切断 (残${wss.clients.size})`);
+    });
   });
 }
 
@@ -331,6 +386,16 @@ function stopCapture(id) {
   } catch (e) {}
 
   captures.delete(id);
+  captureIndexMap.delete(id);
+
+  // WebSocketクライアントにキャプチャ削除を通知
+  if (wss) {
+    const msg = JSON.stringify({ type: 'capture_remove', id });
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) client.send(msg);
+    });
+  }
+
   console.log(`キャプチャ停止: ${id} (${session.name})`);
   return true;
 }

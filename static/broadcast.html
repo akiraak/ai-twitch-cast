@@ -1031,6 +1031,57 @@ function stopAvatarStream() {
 const captureContainer = document.getElementById('capture-container');
 const captureLayers = {};
 
+// WebSocketキャプチャ接続
+let captureWs = null;
+let captureWsUrl = null;
+const captureImgMap = {};      // capture_id -> img element
+const captureIndexToId = {};   // index -> capture_id
+
+function connectCaptureWs(wsUrl) {
+  if (captureWs && captureWs.readyState <= 1) return; // 接続中 or 接続済み
+  captureWsUrl = wsUrl;
+  captureWs = new WebSocket(wsUrl);
+  captureWs.binaryType = 'arraybuffer';
+
+  captureWs.onmessage = (e) => {
+    if (typeof e.data === 'string') {
+      // JSON: キャプチャ一覧/更新
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'captures') {
+        for (const c of msg.list) {
+          captureIndexToId[c.index] = c.id;
+        }
+      } else if (msg.type === 'capture_add') {
+        captureIndexToId[msg.index] = msg.id;
+      } else if (msg.type === 'capture_remove') {
+        for (const [idx, cid] of Object.entries(captureIndexToId)) {
+          if (cid === msg.id) { delete captureIndexToId[idx]; break; }
+        }
+      }
+    } else {
+      // バイナリ: index(1byte) + JPEG
+      const data = new Uint8Array(e.data);
+      const index = data[0];
+      const captureId = captureIndexToId[index];
+      const img = captureId && captureImgMap[captureId];
+      if (img) {
+        const blob = new Blob([data.subarray(1)], { type: 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+        const prevUrl = img._blobUrl;
+        img.src = url;
+        img._blobUrl = url;
+        if (prevUrl) URL.revokeObjectURL(prevUrl);
+      }
+    }
+  };
+
+  captureWs.onclose = () => {
+    captureWs = null;
+    if (captureWsUrl) setTimeout(() => connectCaptureWs(captureWsUrl), 3000);
+  };
+  captureWs.onerror = () => captureWs.close();
+}
+
 function addCaptureLayer(id, streamUrl, label, layout) {
   if (captureLayers[id]) removeCaptureLayer(id);
   const div = document.createElement('div');
@@ -1049,19 +1100,35 @@ function addCaptureLayer(id, streamUrl, label, layout) {
   div.appendChild(handle);
 
   const img = document.createElement('img');
-  img.src = streamUrl;
   img.alt = label || id;
   div.appendChild(img);
 
   captureContainer.appendChild(div);
   captureLayers[id] = div;
+  captureImgMap[id] = img;
+
+  // ElectronのWebSocketに接続（stream_urlからws://を導出）
+  try {
+    const httpUrl = new URL(streamUrl);
+    const wsUrl = `ws://${httpUrl.host}/ws/capture`;
+    connectCaptureWs(wsUrl);
+  } catch (e) {
+    // WebSocket接続失敗時はMJPEGフォールバック
+    img.src = streamUrl;
+  }
 
   if (isEditMode) setupEditable(div);
 }
 
 function removeCaptureLayer(id) {
   const el = captureLayers[id];
-  if (el) { el.remove(); delete captureLayers[id]; }
+  if (el) {
+    const img = captureImgMap[id];
+    if (img && img._blobUrl) URL.revokeObjectURL(img._blobUrl);
+    el.remove();
+    delete captureLayers[id];
+    delete captureImgMap[id];
+  }
 }
 
 function updateCaptureLayout(id, layout) {

@@ -1,8 +1,11 @@
 # DONE
 
-## WebSocket統合（Step 1）
+## WebSocket統合（Step 1-2）
 
 - [x] TODO表示をWebSocket push化（30秒ポーリング廃止、mtime監視+API変更時に即座ブロードキャスト）
+- [x] キャプチャ映像をMJPEG→WebSocketバイナリ送信に変更（1byte index+JPEG、バックプレッシャー制御、MJPEG互換維持）
+- [x] ビルドログをbuild.logに出力＋API（`/api/capture/build-log`）追加
+- [x] dist権限エラー時にPowerShellでdist削除するフォールバック追加
 
 ## プレビュー確認→配信開始UX
 
