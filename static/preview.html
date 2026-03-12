@@ -25,8 +25,6 @@
   }
   #broadcast-frame {
     border: none;
-    width: 100%;
-    height: 100%;
   }
 
   /* === コントロールパネル（右） === */
@@ -158,6 +156,26 @@ const token = params.get('token');
 
 // iframe にbroadcast.htmlを読み込み（embedded）
 frame.src = `/broadcast?token=${token}&embedded`;
+
+// プレビューエリアに合わせてiframeを16:9レターボックス表示
+function resizeFrame() {
+  const area = document.getElementById('preview-area');
+  const areaW = area.clientWidth;
+  const areaH = area.clientHeight;
+  const aspect = 16 / 9;
+  let w, h;
+  if (areaW / areaH > aspect) {
+    h = areaH;
+    w = Math.floor(h * aspect);
+  } else {
+    w = areaW;
+    h = Math.floor(w / aspect);
+  }
+  frame.style.width = w + 'px';
+  frame.style.height = h + 'px';
+}
+resizeFrame();
+window.addEventListener('resize', resizeFrame);
 
 // === 配信制御 ===
 async function goLive() {
