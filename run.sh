@@ -11,6 +11,7 @@ fi
 WEB_PORT="${WEB_PORT:-8080}"
 
 PID_FILE=".server.pid"
+STOP_FLAG=""
 
 # 既存プロセスが動いていたら停止する（二重起動防止）
 if [ -f "$PID_FILE" ]; then
@@ -29,9 +30,11 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 cleanup() {
+    STOP_FLAG=1
     echo "サーバーを停止します..."
     if [ -f "$PID_FILE" ]; then
         kill "$(cat "$PID_FILE")" 2>/dev/null
+        wait "$(cat "$PID_FILE")" 2>/dev/null
         rm -f "$PID_FILE"
     fi
     exit 0
@@ -49,13 +52,17 @@ fi
 
 echo "Starting server on port $WEB_PORT..."
 
-while true; do
+while [ -z "$STOP_FLAG" ]; do
     uvicorn scripts.web:app --host 0.0.0.0 --port "$WEB_PORT" &
     PID=$!
     echo $PID > "$PID_FILE"
     echo "サーバー起動 (PID: $PID)"
     wait $PID
     EXIT_CODE=$?
+    # cleanup によるシグナル停止の場合はループを抜ける
+    if [ -n "$STOP_FLAG" ]; then
+        break
+    fi
     echo "サーバー終了 (code: $EXIT_CODE)、1秒後に再起動..."
     sleep 1
 done

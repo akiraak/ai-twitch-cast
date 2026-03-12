@@ -32,7 +32,6 @@ from scripts.routes.avatar import router as avatar_router
 from scripts.routes.bgm import router as bgm_router
 from scripts.routes.character import router as character_router
 from scripts.routes.db_viewer import router as db_viewer_router
-from scripts.routes.obs import router as obs_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream import router as stream_router
 from scripts.routes.stream_control import router as stream_control_router
@@ -57,7 +56,6 @@ app.mount("/resources", StaticFiles(directory=str(RESOURCES_DIR)), name="resourc
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ルーターを登録
-app.include_router(obs_router)
 app.include_router(stream_router)
 app.include_router(stream_control_router)
 app.include_router(avatar_router)
@@ -72,9 +70,6 @@ app.include_router(twitch_router)
 # --- 環境設定 ---
 
 ENV_KEYS = [
-    ("OBS_WS_HOST", "OBS WebSocket ホスト"),
-    ("OBS_WS_PORT", "OBS WebSocket ポート"),
-    ("OBS_WS_PASSWORD", "OBS WebSocket パスワード"),
     ("AVATAR_APP", "アバターアプリ (vts/vsf)"),
     ("VTS_HOST", "VTube Studio ホスト"),
     ("VTS_PORT", "VTube Studio ポート"),
@@ -85,9 +80,10 @@ ENV_KEYS = [
     ("TWITCH_CHANNEL", "Twitch チャンネル"),
     ("GEMINI_API_KEY", "Gemini API キー"),
     ("TTS_VOICE", "TTS 音声"),
+    ("WEB_PORT", "Webサーバー ポート"),
 ]
 
-MASK_KEYS = {"OBS_WS_PASSWORD", "TWITCH_TOKEN", "GEMINI_API_KEY"}
+MASK_KEYS = {"TWITCH_TOKEN", "GEMINI_API_KEY"}
 
 
 @app.get("/api/env")
@@ -115,10 +111,6 @@ async def get_status():
     return {
         "server_started_at": SERVER_STARTED_AT,
         "avatar_app": AVATAR_APP,
-        "obs": {
-            "connected": state.obs_connected,
-            "stream": state.obs.get_stream_status() if state.obs_connected else None,
-        },
         "vts": {"connected": state.vts_connected},
         "vsf": {
             "connected": state.vsf_connected,
@@ -144,59 +136,10 @@ async def restart_server():
     return {"ok": True}
 
 
-def _apply_audio_settings(result=None):
-    """音声ソースのモニタリング設定と保存済みボリュームを適用する"""
-    prefix = scene_config.PREFIX
-    audio_sources = {
-        "tts": f"{prefix}TTS音声",
-        "bgm": f"{prefix}BGM",
-    }
-    # scenes.jsonから保存済みボリュームを読み込む
-    config = {}
-    try:
-        with open(scene_config.CONFIG_PATH, encoding="utf-8") as f:
-            config = json.load(f)
-        saved_volumes = config.get("audio_volumes", {})
-    except Exception:
-        saved_volumes = {}
-
-    master = saved_volumes.get("master", 1.0)
-    # BGMの曲別音量を取得
-    try:
-        from src import db
-        bgm_track = config.get("bgm", {}).get("track", "")
-        track_vol = (db.get_bgm_track_volume(bgm_track) or 1.0) if bgm_track else 1.0
-    except Exception:
-        track_vol = 1.0
-
-    for key, src_name in audio_sources.items():
-        try:
-            state.obs._client.set_input_audio_monitor_type(
-                src_name, "OBS_MONITORING_TYPE_NONE"
-            )
-            vol = master * saved_volumes.get(key, 1.0)
-            if key == "bgm":
-                vol *= track_vol
-            vol = min(vol, 2.0)
-            state.obs.set_input_volume(src_name, vol)
-        except Exception as e:
-            if result is not None:
-                result.setdefault("errors", []).append(f"音声設定 {src_name}: {e}")
-            logger.warning("音声設定失敗 %s: %s", src_name, e)
-
-    # オーバーレイのキャッシュクリア
-    try:
-        state.obs.refresh_browser_source(f"{prefix}オーバーレイ")
-    except Exception:
-        pass
-
-
 # --- セットアップ & 配信開始 ---
 
 @app.post("/api/start")
 async def start():
-    state.obs.connect()
-    state.obs_connected = True
     if AVATAR_APP == "vsf":
         state.vsf.connect()
         state.vsf_connected = True
@@ -208,17 +151,13 @@ async def start():
     else:
         await state.vts.connect()
         state.vts_connected = True
-    scene_config.reload()
-    setup_result = state.obs.setup_scenes(scene_config.SCENES, scene_config.MAIN_SCENE)
-    # 音声ソースの設定 & 保存済みボリューム適用
-    _apply_audio_settings(setup_result)
     await state.ensure_reader()
     await state.git_watcher.start()
 
     # 状態ファイルを作成（再起動時の自動復旧用）
     STATE_FILE.touch()
 
-    return {"ok": True, **setup_result}
+    return {"ok": True}
 
 
 @app.on_event("startup")
@@ -251,13 +190,6 @@ async def startup():
 async def _restore_session():
     """前回のセッションをバックグラウンドで自動復旧する"""
     logger.info("前回のセッションを自動復旧中...")
-    try:
-        await asyncio.to_thread(state.obs.connect)
-        state.obs_connected = True
-        await asyncio.to_thread(_apply_audio_settings)
-        logger.info("OBS接続復旧OK")
-    except Exception as e:
-        logger.warning("OBS接続復旧失敗: %s", e)
 
     try:
         if AVATAR_APP == "vsf":
