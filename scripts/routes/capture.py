@@ -278,7 +278,7 @@ def _deploy_to_windows():
         # 更新: asarファイルを毎回コピー（mtime比較なし＝確実にデプロイ）
         logger.info("asarデプロイ中...")
         dst_asar.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(src_asar), str(dst_asar))
+        shutil.copy(str(src_asar), str(dst_asar))  # copy2はWSL→Windowsでメタデータ権限エラーになる
         logger.info("asarデプロイ完了 (size=%d)", dst_asar.stat().st_size)
 
     return dst_exe
