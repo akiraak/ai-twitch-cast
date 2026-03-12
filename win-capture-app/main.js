@@ -5,7 +5,7 @@
  * WSL2側のbroadcast.htmlがこのストリームを<img>で表示する。
  */
 
-const { app, BrowserWindow, desktopCapturer, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, desktopCapturer, ipcMain } = require('electron');
 const express = require('express');
 const path = require('path');
 
@@ -270,11 +270,14 @@ ${captureList.join('') || '<p>なし</p>'}
           width: 1280,
           height: 720,
           title: 'AI Twitch Cast - Preview',
+          autoHideMenuBar: true,
           webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
           },
         });
+        previewWindow.setMenu(null);
+        previewWindow.setMenuBarVisibility(false);
         previewWindow.loadURL(broadcastUrl);
         previewWindow.on('closed', () => { previewWindow = null; });
       }
@@ -334,6 +337,7 @@ if (app.getPath('exe').startsWith('\\\\')) {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   startServer();
 });
 

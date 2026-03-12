@@ -13,6 +13,8 @@
 - [x] xvfb ChromiumでVRMアバター表示（--use-gl=angle --use-angle=swiftshaderで解決）
 - [x] Electron環境での配信テスト（プレビュー確認→Go Live→Twitch配信成功）
 - [x] ウィンドウキャプチャの動作テスト（Electronアプリ起動→キャプチャ→broadcast.html表示確認）
+- [x] Electronプレビューウィンドウのメニューバー削除（Menu.setApplicationMenu(null) + setMenu(null)）
+- [x] asar再パックのサイレント失敗を修正（権限修正+mtime検証+デプロイ検証）
 
 ## 設定DB移行
 

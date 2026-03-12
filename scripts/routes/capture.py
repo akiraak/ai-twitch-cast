@@ -61,6 +61,24 @@ def _save_build_hash():
         db.set_setting("capture_build_hash", current_hash)
 
 
+def _fix_dist_permissions():
+    """dist/内のroot所有ファイルをubuntu:ubuntuに修正"""
+    dist_dir = _APP_DIR / "dist"
+    if not dist_dir.exists():
+        return
+    try:
+        result = subprocess.run(
+            ["find", str(dist_dir), "-user", "root", "-exec", "chown", "ubuntu:ubuntu", "{}", "+"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            logger.warning("dist権限修正失敗: %s", result.stderr[:200])
+        else:
+            logger.info("dist権限修正完了")
+    except Exception as e:
+        logger.warning("dist権限修正エラー: %s", e)
+
+
 def _needs_asar_update():
     """ソースファイルがasarより新しいかチェック"""
     asar = _EXE_PATH.parent / "resources" / "app.asar"
@@ -84,9 +102,15 @@ def _update_asar():
         _build_state = {"status": "building", "message": "asar更新中...", "progress": 30}
         logger.info("asar再パック開始")
 
-        # 既存asarを展開
+        # 権限修正: root所有ならubuntuに変更
+        _fix_dist_permissions()
+
         import tempfile
         asar_path = _EXE_PATH.parent / "resources" / "app.asar"
+
+        # 更新前のmtimeを記録
+        old_mtime = asar_path.stat().st_mtime if asar_path.exists() else 0
+
         with tempfile.TemporaryDirectory() as tmp:
             # 展開
             result = subprocess.run(
@@ -101,7 +125,6 @@ def _update_asar():
             _build_state = {"status": "building", "message": "ソース更新中...", "progress": 60}
 
             # ソースファイルを上書き
-            import shutil
             for name in _SOURCE_FILES:
                 src = _APP_DIR / name
                 if src.exists():
@@ -119,8 +142,15 @@ def _update_asar():
                 _build_state = {"status": "error", "message": f"asarパック失敗: {result.stderr[:200]}", "progress": 0}
                 return
 
+        # 検証: ファイルが実際に更新されたか
+        new_mtime = asar_path.stat().st_mtime if asar_path.exists() else 0
+        if new_mtime <= old_mtime:
+            _build_state = {"status": "error", "message": "asar再パック失敗: ファイルが更新されませんでした（権限問題の可能性）", "progress": 0}
+            logger.error("asar再パック失敗: mtime未変更 (old=%s, new=%s)", old_mtime, new_mtime)
+            return
+
         _build_state = {"status": "done", "message": "更新完了", "progress": 100}
-        logger.info("asar再パック完了")
+        logger.info("asar再パック完了 (size=%d)", asar_path.stat().st_size)
     except Exception as e:
         _build_state = {"status": "error", "message": str(e)[:200], "progress": 0}
         logger.error("asar更新エラー: %s", e)
@@ -162,6 +192,7 @@ def _run_build():
         if result.returncode != 0:
             logger.warning("electron-builder警告（exe生成済み）: %s", (result.stderr or result.stdout or "")[:200])
 
+        _fix_dist_permissions()
         _save_build_hash()
         _build_state = {"status": "done", "message": "ビルド完了", "progress": 100}
         logger.info("Electronアプリビルド完了")
@@ -243,7 +274,9 @@ def _deploy_to_windows():
         logger.info("Electronアプリをローカルディスクにデプロイ中...")
         win_deploy_dir.mkdir(parents=True, exist_ok=True)
         shutil.copytree(str(_EXE_PATH.parent), str(win_deploy_dir), dirs_exist_ok=True)
-        logger.info("デプロイ完了: %s", win_deploy_dir)
+        if not dst_asar.exists():
+            raise RuntimeError(f"デプロイ後にasarが見つかりません: {dst_asar}")
+        logger.info("デプロイ完了: %s (asar size=%d)", win_deploy_dir, dst_asar.stat().st_size)
 
     return dst_exe
 
@@ -401,6 +434,7 @@ def _run_preview_oneclick():
                 return
             if result.returncode != 0:
                 logger.warning("electron-builder警告（exe生成済み）: %s", (result.stderr or result.stdout or "")[:200])
+            _fix_dist_permissions()
             _save_build_hash()
             done.append("build")
         else:
