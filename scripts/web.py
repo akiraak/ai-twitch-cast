@@ -4,7 +4,9 @@ import asyncio
 import json
 import logging
 import os
+import signal
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -41,6 +43,8 @@ from src import scene_config
 from src.scene_config import AVATAR_APP
 
 app = FastAPI()
+
+SERVER_STARTED_AT = time.time()
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
@@ -101,7 +105,7 @@ async def get_env():
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    return (STATIC_DIR / "broadcast-ui.html").read_text(encoding="utf-8")
 
 
 # --- ステータス ---
@@ -109,6 +113,7 @@ async def index():
 @app.get("/api/status")
 async def get_status():
     return {
+        "server_started_at": SERVER_STARTED_AT,
         "avatar_app": AVATAR_APP,
         "obs": {
             "connected": state.obs_connected,
@@ -124,6 +129,19 @@ async def get_status():
             "queue": state.reader.queue_size,
         },
     }
+
+
+@app.post("/api/restart")
+async def restart_server():
+    """サーバーを再起動する（run.shのループが自動的に再起動する）"""
+    logger.info("再起動リクエスト受信")
+
+    async def _kill():
+        await asyncio.sleep(0.5)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    asyncio.ensure_future(_kill())
+    return {"ok": True}
 
 
 def _apply_audio_settings(result=None):

@@ -93,6 +93,21 @@
   .link-bar a { color: #7b1fa2; text-decoration: none; }
   .link-bar a:hover { text-decoration: underline; }
 
+  .update-dialog {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .update-dialog-inner {
+    background: #fff; border-radius: 12px; padding: 32px 40px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    text-align: center; max-width: 400px;
+  }
+  .update-dialog-inner h3 { color: #7b1fa2; margin-bottom: 12px; font-size: 1.1rem; }
+  .update-dialog-inner p { color: #6a5590; font-size: 0.9rem; margin-bottom: 20px; }
+  .update-dialog-inner .btn-group { display: flex; gap: 10px; justify-content: center; }
+  .update-dialog-inner .btn-group button { padding: 8px 24px; font-size: 0.9rem; }
+
   .uptime { font-size: 1.2rem; font-weight: bold; color: #c62828; font-family: monospace; }
 
   .layout-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
@@ -110,6 +125,7 @@
     <button onclick="doSetup()">Setup</button>
     <button class="success" onclick="doStart()" id="btn-start">配信開始</button>
     <button class="danger" onclick="doStop()" id="btn-stop">配信停止</button>
+    <button class="secondary" onclick="doRestart()">再起動</button>
   </div>
 </div>
 
@@ -603,12 +619,78 @@ async function loadLayout() {
   } catch (e) {}
 }
 
+// --- 再起動 ---
+async function doRestart() {
+  if (!confirm('サーバーを再起動しますか？')) return;
+  log('再起動リクエスト送信...');
+  try {
+    await fetch('/api/restart', { method: 'POST' });
+  } catch (e) {}
+  showToast('再起動中...', 'success', 3000);
+  // サーバーが落ちてから復帰するのを待つ
+  setTimeout(() => waitForRestart(), 2000);
+}
+
+function waitForRestart() {
+  const check = async () => {
+    try {
+      const r = await fetch('/api/status', { signal: AbortSignal.timeout(2000) });
+      if (r.ok) {
+        location.reload();
+        return;
+      }
+    } catch (e) {}
+    setTimeout(check, 1000);
+  };
+  check();
+}
+
+// --- サーバー更新検知 ---
+let _knownStartedAt = null;
+
+async function checkServerUpdate() {
+  try {
+    const r = await fetch('/api/status', { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) return;
+    const data = await r.json();
+    const startedAt = data.server_started_at;
+    if (_knownStartedAt === null) {
+      _knownStartedAt = startedAt;
+      return;
+    }
+    if (startedAt !== _knownStartedAt) {
+      _knownStartedAt = startedAt;
+      showUpdateDialog();
+    }
+  } catch (e) {}
+}
+
+function showUpdateDialog() {
+  if (document.getElementById('update-dialog')) return;
+  const div = document.createElement('div');
+  div.id = 'update-dialog';
+  div.className = 'update-dialog';
+  div.innerHTML = `
+    <div class="update-dialog-inner">
+      <h3>サーバーが更新されました</h3>
+      <p>新しいバージョンが起動しています。ページをリロードしますか？</p>
+      <div class="btn-group">
+        <button onclick="location.reload()">リロード</button>
+        <button class="secondary" onclick="this.closest('.update-dialog').remove()">あとで</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(div);
+}
+
 // --- 初期化 ---
 loadVolumes();
 loadAvatarUrl();
 loadLayout();
 refreshStatus();
 setInterval(refreshStatus, 5000);
+checkServerUpdate();
+setInterval(checkServerUpdate, 3000);
 </script>
 </body>
 </html>

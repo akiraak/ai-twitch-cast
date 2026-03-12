@@ -124,6 +124,8 @@
 - [x] VRMレンダリング画質改善（pixelRatio最低2倍、SRGBColorSpace、ACESFilmicToneMapping）
 - [x] 配信プレビューを別ウィンドウ化（iframe埋め込み廃止、ポップアップウィンドウ+別タブリンク）
 - [x] パネル背景透明度をCSS変数化（--bg-opacity、字幕/TODO/トピック個別制御）
+- [x] broadcast-ui.htmlをルート（/）に変更
+- [x] サーバー再起動ボタン+更新検知ダイアログ（server_started_atポーリング、コミット再起動も検知）
 
 ## Phase 0: 環境構築・基盤
 
