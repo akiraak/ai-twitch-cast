@@ -1,10 +1,12 @@
 {
   "name": "win-capture-app",
   "version": "1.0.0",
-  "description": "AI Twitch Cast - Windows Window Capture Server",
+  "description": "AI Twitch Cast - Windows Window Capture & Streaming Server",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "download-ffmpeg": "bash scripts/download-ffmpeg.sh",
+    "prebuild": "bash scripts/download-ffmpeg.sh",
     "build": "electron-builder --win --dir"
   },
   "dependencies": {
@@ -25,9 +27,16 @@
     "files": [
       "main.js",
       "preload.js",
+      "broadcast-preload.js",
       "capture.html",
       "capture-renderer.js",
       "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "ffmpeg/ffmpeg.exe",
+        "to": "ffmpeg/ffmpeg.exe"
+      }
     ]
   }
 }

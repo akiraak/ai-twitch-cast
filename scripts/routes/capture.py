@@ -29,7 +29,7 @@ _APP_DIR = Path(__file__).resolve().parent.parent.parent / "win-capture-app"
 _EXE_PATH = _APP_DIR / "dist" / "win-unpacked" / "win-capture-app.exe"
 
 # ソースファイル（これらが更新されたらasar再パック）
-_SOURCE_FILES = ["main.js", "preload.js", "capture.html", "capture-renderer.js", "package.json"]
+_SOURCE_FILES = ["main.js", "preload.js", "broadcast-preload.js", "capture.html", "capture-renderer.js", "package.json"]
 _ASAR_PATH = _EXE_PATH.parent / "resources" / "app.asar" if _EXE_PATH.parent.exists() else _APP_DIR / "dist" / "win-unpacked" / "resources" / "app.asar"
 
 # ビルド状態
@@ -224,6 +224,16 @@ def _run_build():
             logger.error("npm install失敗: %s", result.stderr[:500])
             return
 
+        _build_state = {"status": "building", "message": "FFmpegダウンロード中...", "progress": 30}
+        result = subprocess.run(
+            ["bash", "scripts/download-ffmpeg.sh"],
+            cwd=str(_APP_DIR),
+            capture_output=True, text=True, timeout=300,
+        )
+        _log_build("download-ffmpeg", result)
+        if result.returncode != 0:
+            logger.warning("FFmpegダウンロード失敗（配信機能なしで続行）: %s", result.stderr[:200])
+
         _build_state = {"status": "building", "message": "electron-builder ...", "progress": 50}
 
         result = subprocess.run(
@@ -340,6 +350,10 @@ _PATH_TO_ACTION = {
     ("GET", "/preview/status"): ("preview_status", {}),
     ("POST", "/preview/close"): ("preview_close", {}),
     ("POST", "/quit"): ("quit", {}),
+    ("POST", "/stream/stop"): ("stop_stream", {}),
+    ("GET", "/stream/status"): ("stream_status", {}),
+    ("POST", "/broadcast/close"): ("broadcast_close", {}),
+    ("GET", "/broadcast/status"): ("broadcast_status", {}),
 }
 
 
@@ -595,6 +609,17 @@ def _run_preview_oneclick():
                     "progress": 0, "stages_done": done, "stages_skipped": skipped}
                 return
             done.append("npm_install")
+
+            # ---- Stage: download_ffmpeg ----
+            _update_oneclick("download_ffmpeg", "FFmpegダウンロード中...", 15, done, skipped)
+            result = subprocess.run(
+                ["bash", "scripts/download-ffmpeg.sh"], cwd=str(_APP_DIR),
+                capture_output=True, text=True, timeout=300,
+            )
+            _log_build("oneclick: download-ffmpeg", result)
+            if result.returncode != 0:
+                logger.warning("FFmpegダウンロード失敗（配信機能なしで続行）: %s", result.stderr[:200])
+            done.append("download_ffmpeg")
 
             # ---- Stage: build ----
             _update_oneclick("build", "electron-builder ...", 20, done, skipped)
@@ -1023,3 +1048,65 @@ def _remove_capture_layout(capture_id):
     sources = _load_capture_sources()
     sources = [s for s in sources if s["id"] != capture_id]
     _save_capture_sources(sources)
+
+
+# =====================================================
+# Electron配信ストリーミング制御
+# =====================================================
+
+
+class StreamStartRequest(BaseModel):
+    stream_key: str | None = None
+    resolution: str = "1920x1080"
+    framerate: int = 30
+    video_bitrate: str = "3500k"
+    audio_bitrate: str = "128k"
+    preset: str = "ultrafast"
+
+
+@router.post("/api/capture/stream/start")
+async def capture_stream_start(body: StreamStartRequest):
+    """Electron経由でTwitch配信を開始"""
+    stream_key = body.stream_key or os.environ.get("TWITCH_STREAM_KEY", "")
+    if not stream_key:
+        raise HTTPException(
+            status_code=400,
+            detail="TWITCH_STREAM_KEY が設定されていません",
+        )
+
+    web_port = os.environ.get("WEB_PORT", "8080")
+    server_url = f"http://{get_windows_host_ip()}:{web_port}"
+
+    try:
+        result = await _ws_request(
+            "start_stream",
+            streamKey=stream_key,
+            serverUrl=server_url,
+            resolution=body.resolution,
+            framerate=body.framerate,
+            videoBitrate=body.video_bitrate,
+            audioBitrate=body.audio_bitrate,
+            preset=body.preset,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/api/capture/stream/stop")
+async def capture_stream_stop():
+    """Electron経由の配信を停止"""
+    try:
+        result = await _ws_request("stop_stream")
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/api/capture/stream/status")
+async def capture_stream_status():
+    """Electron配信の状態を取得"""
+    try:
+        return await _ws_request("stream_status")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))

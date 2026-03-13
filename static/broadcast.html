@@ -762,6 +762,51 @@ function applyVolume() {
   bgmAudio.volume = volumes.master * volumes.bgm;
 }
 
+// === Electron音声キャプチャ（オフスクリーン配信用） ===
+function setupElectronAudioCapture() {
+  if (!window.audioCapture || !window.audioCapture.isAvailable) return;
+
+  const audioCtx = new AudioContext({ sampleRate: 44100 });
+
+  // TTS/BGMの<audio>をAudioContext経由にルーティング
+  const ttsSource = audioCtx.createMediaElementSource(ttsAudio);
+  const bgmSource = audioCtx.createMediaElementSource(bgmAudio);
+
+  // ミキサー
+  const mixer = audioCtx.createGain();
+  mixer.gain.value = 1.0;
+  ttsSource.connect(mixer);
+  bgmSource.connect(mixer);
+
+  // PCMキャプチャ（ScriptProcessorNode）
+  const processor = audioCtx.createScriptProcessorNode(4096, 2, 2);
+  mixer.connect(processor);
+
+  // スピーカー出力は不要（オフスクリーン）→ 無音でdestinationに接続してグラフを維持
+  const silentOut = audioCtx.createGain();
+  silentOut.gain.value = 0;
+  processor.connect(silentOut);
+  silentOut.connect(audioCtx.destination);
+
+  processor.onaudioprocess = (e) => {
+    const left = e.inputBuffer.getChannelData(0);
+    const right = e.inputBuffer.getChannelData(1);
+
+    // Float32 stereo → Int16 interleaved (s16le)
+    const pcm = new Int16Array(left.length * 2);
+    for (let i = 0; i < left.length; i++) {
+      pcm[i * 2]     = (Math.max(-1, Math.min(1, left[i]))  * 0x7FFF) | 0;
+      pcm[i * 2 + 1] = (Math.max(-1, Math.min(1, right[i])) * 0x7FFF) | 0;
+    }
+    window.audioCapture.sendPCM(pcm.buffer);
+  };
+
+  // AudioContextがsuspendしないよう維持
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  console.log('[AudioCapture] Electron音声キャプチャ有効');
+}
+
 // === 背景透明度の適用（CSS変数で制御） ===
 function setBgOpacity(el, opacity) {
   el.style.setProperty('--bg-opacity', opacity);
@@ -1672,6 +1717,9 @@ async function init() {
       addCaptureLayer(s.id, s.stream_url, s.label || s.name || s.id, s.layout);
     }
   } catch (e) { console.log('キャプチャ読み込みスキップ:', e.message); }
+
+  // Electron音声キャプチャ（オフスクリーン配信ウィンドウ時のみ有効）
+  setupElectronAudioCapture();
 
   await loadTodo();
   await loadTopicPanel();

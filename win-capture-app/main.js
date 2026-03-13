@@ -1,11 +1,14 @@
 /**
- * AI Twitch Cast - Window Capture Server (Electron Main Process)
+ * AI Twitch Cast - Window Capture & Streaming Server (Electron Main Process)
  *
- * Windowsウィンドウをキャプチャし、MJPEGストリームとして配信する。
- * WSL2側のbroadcast.htmlがこのストリームを<img>で表示する。
+ * 1. Windowsウィンドウをキャプチャし、MJPEGストリームとして配信する
+ * 2. broadcast.htmlをオフスクリーンレンダリングし、FFmpegでTwitchに直接配信する
+ *    (xvfb/PulseAudioなしでWindows上で配信パイプラインを完結)
  */
 
 const { app, BrowserWindow, Menu, desktopCapturer, ipcMain } = require('electron');
+const { spawn } = require('child_process');
+const net = require('net');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -27,6 +30,82 @@ let wss = null; // WebSocket.Server
 
 // プレビューウィンドウ
 let previewWindow = null;
+
+// === 配信ストリーミング状態 ===
+let broadcastWindow = null;    // オフスクリーンBrowserWindow（broadcast.html）
+let ffmpegProcess = null;      // FFmpeg child_process
+let streamStartTime = null;    // 配信開始時刻（ms）
+let streamConfig = null;       // 現在の配信設定
+let frameCount = 0;            // 送信フレーム数
+let frameDropCount = 0;        // ドロップフレーム数
+
+// === 音声パイプ（Windows Named Pipe） ===
+const AUDIO_PIPE_NAME = process.platform === 'win32'
+  ? `\\\\.\\pipe\\atc_audio_${process.pid}`
+  : null;
+let audioPipeServer = null;
+let audioPipeConnection = null;
+
+const STREAM_DEFAULTS = {
+  resolution: '1920x1080',
+  framerate: 30,
+  videoBitrate: '3500k',
+  audioBitrate: '128k',
+  preset: 'ultrafast',
+};
+
+function getFfmpegPath() {
+  // 1. ビルド済みアプリ: resources/ffmpeg/ffmpeg.exe
+  const bundled = path.join(process.resourcesPath, 'ffmpeg', 'ffmpeg.exe');
+  if (fs.existsSync(bundled)) return bundled;
+
+  // 2. 開発時: ./ffmpeg/ffmpeg.exe
+  const dev = path.join(__dirname, 'ffmpeg', 'ffmpeg.exe');
+  if (fs.existsSync(dev)) return dev;
+
+  // 3. フォールバック: PATH上のffmpeg
+  return 'ffmpeg';
+}
+
+function startAudioPipe() {
+  if (!AUDIO_PIPE_NAME) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    audioPipeServer = net.createServer((connection) => {
+      console.log('音声パイプ接続（FFmpeg）');
+      audioPipeConnection = connection;
+      connection.on('close', () => { audioPipeConnection = null; });
+      connection.on('error', () => { audioPipeConnection = null; });
+    });
+    audioPipeServer.on('error', (err) => {
+      console.error('音声パイプエラー:', err.message);
+      reject(err);
+    });
+    audioPipeServer.listen(AUDIO_PIPE_NAME, () => {
+      console.log('音声パイプ作成:', AUDIO_PIPE_NAME);
+      resolve();
+    });
+  });
+}
+
+function stopAudioPipe() {
+  if (audioPipeConnection) {
+    try { audioPipeConnection.end(); } catch (e) {}
+    audioPipeConnection = null;
+  }
+  if (audioPipeServer) {
+    try { audioPipeServer.close(); } catch (e) {}
+    audioPipeServer = null;
+  }
+}
+
+// IPC: broadcast.htmlからPCM音声データ受信
+ipcMain.on('audio-pcm', (event, buffer) => {
+  if (audioPipeConnection && audioPipeConnection.writable) {
+    try {
+      audioPipeConnection.write(buffer);
+    } catch (e) {}
+  }
+});
 
 // ウィンドウ位置の永続化
 const BOUNDS_FILE = path.join(app.getPath('userData'), 'preview-bounds.json');
@@ -230,6 +309,259 @@ async function openPreview(serverUrl) {
   return { ok: true };
 }
 
+// === 配信ストリーミング（Electron→FFmpeg→Twitch） ===
+
+async function openBroadcastWindow(serverUrl) {
+  if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+    return { ok: true, already_open: true };
+  }
+
+  const tokenResp = await fetch(`${serverUrl}/api/broadcast/token`);
+  const { token } = await tokenResp.json();
+  const broadcastUrl = `${serverUrl}/broadcast?token=${token}`;
+
+  const cfg = streamConfig || STREAM_DEFAULTS;
+  const [width, height] = cfg.resolution.split('x').map(Number);
+
+  broadcastWindow = new BrowserWindow({
+    width,
+    height,
+    show: false,
+    webPreferences: {
+      offscreen: true,
+      preload: path.join(__dirname, 'broadcast-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  broadcastWindow.webContents.setFrameRate(cfg.framerate);
+  broadcastWindow.loadURL(broadcastUrl);
+  broadcastWindow.on('closed', () => {
+    broadcastWindow = null;
+    // 配信中にウィンドウが閉じたら配信も停止
+    if (ffmpegProcess) {
+      console.log('配信ウィンドウが閉じたため配信停止');
+      stopStream();
+    }
+  });
+
+  console.log(`配信ウィンドウ作成: ${width}x${height} @ ${cfg.framerate}fps`);
+  return { ok: true };
+}
+
+function closeBroadcastWindow() {
+  if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+    broadcastWindow.close();
+  }
+  broadcastWindow = null;
+  return { ok: true };
+}
+
+function onBroadcastPaint(event, dirty, image) {
+  if (!ffmpegProcess || !ffmpegProcess.stdin || !ffmpegProcess.stdin.writable) return;
+
+  try {
+    const bitmap = image.toBitmap();
+    const canWrite = ffmpegProcess.stdin.write(bitmap);
+    frameCount++;
+    if (!canWrite) {
+      frameDropCount++;
+    }
+  } catch (e) {
+    // FFmpegのstdinが閉じている場合は無視
+  }
+}
+
+async function startStream(config) {
+  if (ffmpegProcess) {
+    return { ok: false, error: '既に配信中です' };
+  }
+
+  const streamKey = config.streamKey;
+  if (!streamKey) {
+    return { ok: false, error: 'streamKey が必要です' };
+  }
+
+  // 設定をマージ
+  streamConfig = { ...STREAM_DEFAULTS };
+  if (config.resolution) streamConfig.resolution = config.resolution;
+  if (config.framerate) streamConfig.framerate = parseInt(config.framerate);
+  if (config.videoBitrate) streamConfig.videoBitrate = config.videoBitrate;
+  if (config.audioBitrate) streamConfig.audioBitrate = config.audioBitrate;
+  if (config.preset) streamConfig.preset = config.preset;
+
+  const { resolution, framerate, videoBitrate, audioBitrate, preset } = streamConfig;
+
+  // 配信ウィンドウを開く（未オープンの場合）
+  if (!broadcastWindow || broadcastWindow.isDestroyed()) {
+    if (!config.serverUrl) {
+      return { ok: false, error: 'serverUrl が必要です（配信ウィンドウ未オープン）' };
+    }
+    await openBroadcastWindow(config.serverUrl);
+    // ページ読み込み完了を待つ
+    await new Promise(resolve => setTimeout(resolve, 3000));
+  }
+
+  const rtmpUrl = `rtmp://live-tyo.twitch.tv/app/${streamKey}`;
+
+  // 音声パイプを起動（Windows Named Pipe経由でbroadcast.htmlのPCMを受信）
+  const useAudioPipe = !!AUDIO_PIPE_NAME;
+  if (useAudioPipe) {
+    try {
+      await startAudioPipe();
+    } catch (e) {
+      console.warn('音声パイプ作成失敗、無音モードで続行:', e.message);
+    }
+  }
+
+  // FFmpegコマンド: rawvideo(stdin) + PCM音声(named pipe or anullsrc) → H.264+AAC → RTMP
+  const ffmpegArgs = [
+    // 映像入力: パイプからBGRA rawvideo
+    '-f', 'rawvideo',
+    '-pixel_format', 'bgra',
+    '-video_size', resolution,
+    '-framerate', String(framerate),
+    '-i', 'pipe:0',
+  ];
+
+  // 音声入力: Named Pipe（Windows）またはanullsrc（フォールバック）
+  if (useAudioPipe && audioPipeServer) {
+    ffmpegArgs.push(
+      '-f', 's16le',
+      '-ar', '44100',
+      '-ac', '2',
+      '-i', AUDIO_PIPE_NAME,
+    );
+  } else {
+    ffmpegArgs.push(
+      '-f', 'lavfi',
+      '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+    );
+  }
+
+  ffmpegArgs.push(
+    // 映像エンコード
+    '-c:v', 'libx264',
+    '-preset', preset,
+    '-tune', 'zerolatency',
+    '-b:v', videoBitrate,
+    '-maxrate', videoBitrate,
+    '-bufsize', videoBitrate,
+    '-pix_fmt', 'yuv420p',
+    '-g', String(framerate * 2),
+    // 音声エンコード
+    '-c:a', 'aac',
+    '-b:a', audioBitrate,
+    '-ar', '44100',
+    // 出力
+    '-f', 'flv',
+    rtmpUrl,
+  );
+
+  const ffmpegBin = getFfmpegPath();
+  console.log('FFmpeg起動:', ffmpegBin, ffmpegArgs.join(' '));
+
+  try {
+    ffmpegProcess = spawn(ffmpegBin, ffmpegArgs, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (e) {
+    return { ok: false, error: `FFmpeg起動失敗: ${e.message}。ffmpegが見つかりません（検索パス: ${ffmpegBin}）` };
+  }
+
+  ffmpegProcess.stderr.on('data', (data) => {
+    const line = data.toString().trim();
+    if (line) console.log('[FFmpeg]', line);
+  });
+
+  ffmpegProcess.on('close', (code) => {
+    console.log(`FFmpeg終了 (code: ${code})`);
+    // paintリスナーを解除
+    if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+      broadcastWindow.webContents.removeListener('paint', onBroadcastPaint);
+    }
+    stopAudioPipe();
+    ffmpegProcess = null;
+    streamStartTime = null;
+  });
+
+  ffmpegProcess.on('error', (err) => {
+    console.error('FFmpegエラー:', err.message);
+    stopAudioPipe();
+    ffmpegProcess = null;
+    streamStartTime = null;
+  });
+
+  // フレーム送信開始
+  frameCount = 0;
+  frameDropCount = 0;
+  broadcastWindow.webContents.on('paint', onBroadcastPaint);
+
+  streamStartTime = Date.now();
+  console.log(`配信開始: ${resolution} @ ${framerate}fps → Twitch`);
+
+  return { ok: true };
+}
+
+function stopStream() {
+  if (!ffmpegProcess) {
+    return { ok: false, error: '配信中ではありません' };
+  }
+
+  // paintリスナーを解除
+  if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+    broadcastWindow.webContents.removeListener('paint', onBroadcastPaint);
+  }
+
+  const result = {
+    ok: true,
+    uptime_seconds: streamStartTime ? Math.floor((Date.now() - streamStartTime) / 1000) : 0,
+    frames_sent: frameCount,
+    frames_dropped: frameDropCount,
+  };
+
+  // FFmpegを安全に停止: stdin閉じる → SIGTERM → SIGKILL
+  const proc = ffmpegProcess;
+  try {
+    proc.stdin.end();
+  } catch (e) {}
+
+  setTimeout(() => {
+    if (proc && proc.exitCode === null) {
+      try { proc.kill('SIGTERM'); } catch (e) {}
+      setTimeout(() => {
+        if (proc && proc.exitCode === null) {
+          try { proc.kill('SIGKILL'); } catch (e) {}
+        }
+      }, 5000);
+    }
+  }, 2000);
+
+  // 音声パイプを停止
+  stopAudioPipe();
+
+  console.log(`配信停止: ${result.uptime_seconds}秒, ${frameCount}フレーム送信, ${frameDropCount}フレームドロップ`);
+
+  return result;
+}
+
+function getStreamStatus() {
+  const ffmpegBin = getFfmpegPath();
+  return {
+    streaming: ffmpegProcess !== null && ffmpegProcess.exitCode === null,
+    broadcast_window_open: broadcastWindow !== null && !broadcastWindow.isDestroyed(),
+    uptime_seconds: streamStartTime ? Math.floor((Date.now() - streamStartTime) / 1000) : null,
+    frames_sent: frameCount,
+    frames_dropped: frameDropCount,
+    config: streamConfig,
+    ffmpeg_path: ffmpegBin,
+    ffmpeg_bundled: ffmpegBin !== 'ffmpeg',
+    audio_pipe: AUDIO_PIPE_NAME,
+    audio_pipe_connected: audioPipeConnection !== null,
+  };
+}
+
 // === Express HTTPサーバー ===
 function startServer() {
   const server = express();
@@ -247,7 +579,12 @@ function startServer() {
 
   // GET /status
   server.get('/status', (req, res) => {
-    res.json({ ok: true, captures: captures.size });
+    res.json({
+      ok: true,
+      captures: captures.size,
+      streaming: ffmpegProcess !== null && ffmpegProcess.exitCode === null,
+      broadcast_window: broadcastWindow !== null && !broadcastWindow.isDestroyed(),
+    });
   });
 
   // GET /windows - ウィンドウ一覧
@@ -323,11 +660,12 @@ function startServer() {
         <img src="/stream/${id}" style="max-width:480px;">
       </div>`);
     }
+    const streamStatus = getStreamStatus();
     res.send(`<!DOCTYPE html>
 <html><body style="background:#1a1a2e;color:#eee;font-family:sans-serif;padding:20px;">
-<h1>Window Capture Server</h1>
-<p>Port: ${PORT} | Captures: ${captures.size}</p>
-<h2>API</h2>
+<h1>Window Capture & Streaming Server</h1>
+<p>Port: ${PORT} | Captures: ${captures.size} | Streaming: ${streamStatus.streaming ? '配信中' : '停止'}</p>
+<h2>Capture API</h2>
 <ul>
 <li><a href="/windows" style="color:#b388ff;">GET /windows</a></li>
 <li><a href="/captures" style="color:#b388ff;">GET /captures</a></li>
@@ -335,6 +673,15 @@ function startServer() {
 <li>DELETE /capture/:id</li>
 <li>GET /stream/:id</li>
 <li>GET /snapshot/:id</li>
+</ul>
+<h2>Streaming API</h2>
+<ul>
+<li>POST /stream/start - {streamKey, serverUrl, resolution?, framerate?, videoBitrate?}</li>
+<li>POST /stream/stop</li>
+<li><a href="/stream/status" style="color:#b388ff;">GET /stream/status</a></li>
+<li>POST /broadcast/open - {serverUrl}</li>
+<li>POST /broadcast/close</li>
+<li><a href="/broadcast/status" style="color:#b388ff;">GET /broadcast/status</a></li>
 </ul>
 <h2>Active Captures</h2>
 ${captureList.join('') || '<p>なし</p>'}
@@ -361,6 +708,49 @@ ${captureList.join('') || '<p>なし</p>'}
   // GET /preview/status - プレビュー状態
   server.get('/preview/status', (req, res) => {
     res.json({ open: previewWindow !== null && !previewWindow.isDestroyed() });
+  });
+
+  // === 配信ストリーミング ===
+
+  // POST /stream/start - 配信開始
+  server.post('/stream/start', async (req, res) => {
+    try {
+      res.json(await startStream(req.body));
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // POST /stream/stop - 配信停止
+  server.post('/stream/stop', (req, res) => {
+    res.json(stopStream());
+  });
+
+  // GET /stream/status - 配信状態
+  server.get('/stream/status', (req, res) => {
+    res.json(getStreamStatus());
+  });
+
+  // POST /broadcast/open - 配信ウィンドウ（オフスクリーン）を開く
+  server.post('/broadcast/open', async (req, res) => {
+    try {
+      res.json(await openBroadcastWindow(req.body.serverUrl));
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // POST /broadcast/close - 配信ウィンドウを閉じる
+  server.post('/broadcast/close', (req, res) => {
+    res.json(closeBroadcastWindow());
+  });
+
+  // GET /broadcast/status - 配信ウィンドウ状態
+  server.get('/broadcast/status', (req, res) => {
+    res.json({
+      open: broadcastWindow !== null && !broadcastWindow.isDestroyed(),
+      streaming: ffmpegProcess !== null && ffmpegProcess.exitCode === null,
+    });
   });
 
   // POST /quit - アプリ終了（asar更新後の再起動用）
@@ -413,7 +803,12 @@ ${captureList.join('') || '<p>なし</p>'}
         let result;
         switch (action) {
           case 'status':
-            result = { ok: true, captures: captures.size };
+            result = {
+              ok: true,
+              captures: captures.size,
+              streaming: ffmpegProcess !== null && ffmpegProcess.exitCode === null,
+              broadcast_window: broadcastWindow !== null && !broadcastWindow.isDestroyed(),
+            };
             break;
           case 'windows':
             result = await getWindowsList();
@@ -436,6 +831,21 @@ ${captureList.join('') || '<p>なし</p>'}
             break;
           case 'preview_status':
             result = { open: previewWindow !== null && !previewWindow.isDestroyed() };
+            break;
+          case 'broadcast_open':
+            result = await openBroadcastWindow(msg.serverUrl);
+            break;
+          case 'broadcast_close':
+            result = closeBroadcastWindow();
+            break;
+          case 'start_stream':
+            result = await startStream(msg);
+            break;
+          case 'stop_stream':
+            result = stopStream();
+            break;
+          case 'stream_status':
+            result = getStreamStatus();
             break;
           case 'quit':
             result = { ok: true };
@@ -500,4 +910,15 @@ app.whenReady().then(() => {
 app.on('window-all-closed', (e) => {
   // ウィンドウが全て閉じてもアプリを終了しない（サーバーとして動作）
   e.preventDefault();
+});
+
+app.on('before-quit', () => {
+  // 配信中ならFFmpegを停止
+  if (ffmpegProcess) {
+    console.log('アプリ終了: 配信停止');
+    stopStream();
+  }
+  if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+    broadcastWindow.close();
+  }
 });

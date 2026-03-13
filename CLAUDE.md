@@ -59,8 +59,8 @@ ai-twitch-cast/
 │   ├── vrm-conversion-log.md # VRM変換作業ログ
 │   ├── obs-free-streaming.md # 配信パイプラインガイド
 │   └── window-capture.md   # ウィンドウキャプチャシステム設計
-├── win-capture-app/          # Windows側Electronキャプチャアプリ
-│   ├── main.js              # メインプロセス（HTTPサーバー+キャプチャ管理）
+├── win-capture-app/          # Windows側Electronキャプチャ＋配信アプリ
+│   ├── main.js              # メインプロセス（HTTPサーバー+キャプチャ管理+FFmpeg配信）
 │   ├── preload.js           # IPC bridge
 │   ├── capture.html         # 非表示レンダラーページ
 │   ├── capture-renderer.js  # レンダラー（getUserMedia+canvas+JPEG書き出し）

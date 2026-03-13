@@ -1,5 +1,16 @@
 # DONE
 
+## Electron配信パイプライン（Phase 1+2）
+
+- [x] Electronオフスクリーンレンダリング＋FFmpegでTwitch直接配信（xvfb/PulseAudio不要）
+- [x] broadcast.htmlをoffscreen BrowserWindowで描画→paint event→rawvideo→FFmpeg→RTMP
+- [x] Electron側HTTP/WebSocket API追加（stream start/stop/status, broadcast open/close）
+- [x] WSL2側API追加（POST /api/capture/stream/start|stop, GET /api/capture/stream/status）
+- [x] 無音音声（anullsrc）でTwitch音声要件対応
+- [x] Phase 3: TTS/BGM音声キャプチャ（AudioContext+ScriptProcessorNode→PCM→IPC→Named Pipe→FFmpeg）
+- [x] broadcast-preload.js追加（contextBridge経由でaudioCapture API公開）
+- [x] Windows Named Pipe経由のPCMデータ中継（非WindowsはanullsrcフォールバックFFmpeg）
+
 ## 字幕デバッグ・レイアウト修正
 
 - [x] Web UIに字幕テスト表示/非表示ボタンを追加（デバッグ用API: POST /api/debug/subtitle, /api/debug/subtitle/hide）
