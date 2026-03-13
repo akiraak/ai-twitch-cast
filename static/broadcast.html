@@ -158,7 +158,6 @@
   .capture-layer {
     position: absolute;
     z-index: 10;
-    overflow: hidden;
     border-radius: 0.3vw;
   }
   .capture-layer img {
@@ -1181,10 +1180,6 @@ function addCaptureLayer(id, streamUrl, label, layout) {
   labelEl.className = 'edit-label';
   labelEl.textContent = label || id;
   div.appendChild(labelEl);
-
-  const handle = document.createElement('div');
-  handle.className = 'resize-handle se';
-  div.appendChild(handle);
 
   const img = document.createElement('img');
   img.alt = label || id;
