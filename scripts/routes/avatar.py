@@ -46,7 +46,10 @@ async def tts_audio():
     """現在のTTS音声ファイルを返す"""
     audio_path = getattr(state.reader, "_current_audio", None)
     if audio_path and audio_path.exists():
-        return FileResponse(str(audio_path), media_type="audio/wav")
+        return FileResponse(
+            str(audio_path), media_type="audio/wav",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
     return {"error": "no audio"}
 
 

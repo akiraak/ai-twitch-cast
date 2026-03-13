@@ -229,6 +229,7 @@
 - [x] 音声診断ログAPI追加（Electron側 `/audio/log`、WSL2プロキシ `/api/broadcast/audio-log`）
 - [x] 配信遅延改善: FFmpeg低遅延フラグ追加（`-flush_packets 1`, `-flags +low_delay`, `-fflags nobuffer`, bufsize半減, thread_queue_size縮小, バックプレッシャー閾値8MB化）
 - [x] 配信解像度を1920x1080→1280x720に変更（ビットレート2500kに調整、エンコード負荷軽減で遅延改善）
+- [x] 配信BGM音声修正: createScriptProcessorNode→createScriptProcessor修正（WebSocket接続阻害の根本原因）、MP3デコード対応、BGM+TTSミキサー、pendingBgmUrlタイミング問題解決、broadcastWindow embedded修正
 
 ## Phase 0: 環境構築・基盤
 

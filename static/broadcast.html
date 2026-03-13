@@ -781,7 +781,7 @@ function setupElectronAudioCapture() {
   bgmSource.connect(mixer);
 
   // PCMキャプチャ（ScriptProcessorNode）
-  const processor = audioCtx.createScriptProcessorNode(4096, 2, 2);
+  const processor = audioCtx.createScriptProcessor(4096, 2, 2);
   mixer.connect(processor);
 
   // スピーカー出力は不要（オフスクリーン）→ 無音でdestinationに接続してグラフを維持
@@ -1055,34 +1055,49 @@ function connectWS() {
 
       // TTS音声
       case 'play_audio':
-        console.log('[Audio] TTS play_audio:', data.url);
+        console.log('[Audio] TTS play_audio:', data.url, 'audioCapture=', !!window.audioCapture, 'electronCtx=', _electronAudioCtx?.state);
         // メインプロセスバイパス（オフスクリーンAudioContext不要）
         if (window.audioCapture && window.audioCapture.notifyPlayAudio) {
+          console.log('[Audio] TTS → notifyPlayAudio IPC送信');
           window.audioCapture.notifyPlayAudio(data.url);
         }
         // ブラウザ再生も試行（プレビューウィンドウ用）
         if (_electronAudioCtx && _electronAudioCtx.state === 'suspended') {
+          console.log('[Audio] AudioContext suspended → resume');
           _electronAudioCtx.resume();
         }
         ttsAudio.src = data.url;
         ttsAudio.load();
-        ttsAudio.play().catch(e => console.log('[Audio] TTS再生エラー:', e.name, e.message));
+        ttsAudio.oncanplaythrough = () => {
+          ttsAudio.oncanplaythrough = null;
+          console.log('[Audio] TTS canplaythrough → play()');
+          ttsAudio.play().catch(e => console.log('[Audio] TTS再生エラー:', e.name, e.message));
+        };
+        ttsAudio.onerror = () => console.log('[Audio] TTS読み込みエラー:', ttsAudio.error?.message);
         break;
 
       // BGM
       case 'bgm_play':
-        console.log('[Audio] BGM play:', data.url);
+        console.log('[Audio] BGM play:', data.url, 'audioCapture=', !!window.audioCapture, 'electronCtx=', _electronAudioCtx?.state);
         if (window.audioCapture && window.audioCapture.notifyPlayBgm) {
+          console.log('[Audio] BGM → notifyPlayBgm IPC送信');
           window.audioCapture.notifyPlayBgm(data.url);
         }
         if (_electronAudioCtx && _electronAudioCtx.state === 'suspended') {
+          console.log('[Audio] AudioContext suspended → resume');
           _electronAudioCtx.resume();
         }
         bgmAudio.src = data.url;
         bgmAudio.load();
-        bgmAudio.play().catch(e => console.log('[Audio] BGM再生エラー:', e.name, e.message));
+        bgmAudio.oncanplaythrough = () => {
+          bgmAudio.oncanplaythrough = null;
+          console.log('[Audio] BGM canplaythrough → play()');
+          bgmAudio.play().catch(e => console.log('[Audio] BGM再生エラー:', e.name, e.message));
+        };
+        bgmAudio.onerror = () => console.log('[Audio] BGM読み込みエラー:', bgmAudio.error?.message);
         break;
       case 'bgm_stop':
+        console.log('[Audio] BGM stop');
         if (window.audioCapture && window.audioCapture.notifyStopBgm) {
           window.audioCapture.notifyStopBgm();
         }
@@ -1787,7 +1802,11 @@ async function init() {
   } catch (e) { console.log('キャプチャ読み込みスキップ:', e.message); }
 
   // Electron音声キャプチャ（オフスクリーン配信ウィンドウ時のみ有効）
-  setupElectronAudioCapture();
+  try {
+    setupElectronAudioCapture();
+  } catch (e) {
+    console.log('[AudioCapture] セットアップ失敗（WebSocket接続に影響なし）:', e.message);
+  }
 
   await loadTodo();
   await loadTopicPanel();

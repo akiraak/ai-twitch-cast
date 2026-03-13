@@ -326,7 +326,8 @@ class CommentReader:
                     await self._post_to_chat(chat_result)
                 await asyncio.sleep(5.0)
 
-        # クリーンアップ
+        # クリーンアップ（参照クリア→ファイル削除の順でrace condition防止）
+        self._current_audio = None
         wav_path.unlink(missing_ok=True)
         wav_path.parent.rmdir()
 

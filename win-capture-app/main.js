@@ -43,7 +43,16 @@ let ffmpegLastLog = [];        // FFmpeg stderrの最後のログ（診断用）
 let audioSilenceTimer = null;   // サイレンスハートビート
 let lastAudioPcmTime = 0;      // 最後にPCMデータを受信した時刻
 let audioStreamRes = null;      // FFmpegへのHTTPレスポンス（PCMストリーム）
-let currentAudioTimer = null;   // 現在のTTS再生タイマー
+let currentAudioTimer = null;   // 現在のTTS再生タイマー（レガシー、mixer移行中）
+
+// === オーディオミキサー（BGM + TTS同時再生対応） ===
+let bgmPcmData = null;         // BGM PCMバッファ
+let bgmPcmOffset = 0;          // BGM再生位置
+let bgmLoop = true;            // BGMループ
+let ttsPcmData = null;         // TTS PCMバッファ
+let ttsPcmOffset = 0;          // TTS再生位置
+let mixerTimer = null;          // ミキサータイマー
+let pendingBgmUrl = null;      // 配信開始前に受信したBGM URL（audioStreamRes接続後に再生）
 
 // === 診断ログ（APIで公開） ===
 const audioLog = [];            // 最新の音声関連ログ
@@ -51,7 +60,7 @@ function alog(msg) {
   const entry = `${new Date().toISOString().slice(11, 19)} ${msg}`;
   console.log(entry);
   audioLog.push(entry);
-  if (audioLog.length > 50) audioLog.shift();
+  if (audioLog.length > 200) audioLog.shift();
 }
 let broadcastServerUrl = null;  // WSL2サーバーURL（音声取得用）
 
@@ -120,13 +129,135 @@ function monoToStereo16(monoBuffer) {
   return stereoBuffer;
 }
 
+// FFmpegで任意の音声フォーマット（MP3/OGG/M4A等）をraw PCMにデコード
+async function decodeAudioToPcm(audioBuffer) {
+  const ffmpegBin = getFfmpegPath();
+  alog(`FFmpegデコード開始: 入力${(audioBuffer.length / 1024).toFixed(0)}KB, ffmpeg=${ffmpegBin}`);
+  if (!fs.existsSync(ffmpegBin)) {
+    throw new Error(`FFmpegが見つかりません: ${ffmpegBin}`);
+  }
+  return new Promise((resolve, reject) => {
+    const proc = spawn(ffmpegBin, [
+      '-i', 'pipe:0',
+      '-f', 's16le',
+      '-ar', String(AUDIO_TARGET_RATE),
+      '-ac', String(AUDIO_TARGET_CHANNELS),
+      'pipe:1',
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const chunks = [];
+    let stderrMsg = '';
+    proc.stdout.on('data', chunk => chunks.push(chunk));
+    proc.stderr.on('data', (d) => { stderrMsg += d.toString(); });
+    proc.on('close', (code) => {
+      if (code === 0 && chunks.length > 0) {
+        resolve(Buffer.concat(chunks));
+      } else {
+        alog(`FFmpegデコードstderr: ${stderrMsg.slice(-200)}`);
+        reject(new Error(`FFmpegデコード失敗 (code ${code})`));
+      }
+    });
+    proc.on('error', (e) => {
+      alog(`FFmpegプロセス起動失敗: ${e.message}`);
+      reject(e);
+    });
+    proc.stdin.on('error', (e) => {
+      alog(`FFmpegデコードstdinエラー: ${e.message}`);
+    });
+    proc.stdin.write(audioBuffer);
+    proc.stdin.end();
+  });
+}
+
+// === オーディオミキサー ===
+const MIXER_CHUNK_MS = 50;
+const MIXER_BYTES_PER_SEC = AUDIO_TARGET_RATE * AUDIO_TARGET_CHANNELS * 2;
+const MIXER_CHUNK_SIZE = Math.ceil(MIXER_BYTES_PER_SEC * MIXER_CHUNK_MS / 1000);
+
+function startMixer() {
+  if (mixerTimer) return;
+  alog(`ミキサー開始: BGM=${bgmPcmData ? (bgmPcmData.length/1024).toFixed(0)+'KB' : 'なし'}, TTS=${ttsPcmData ? (ttsPcmData.length/1024).toFixed(0)+'KB' : 'なし'}, audioStreamRes=${audioStreamRes ? '接続中' : 'null'}`);
+  let mixerWriteCount = 0;
+  mixerTimer = setInterval(() => {
+    if (!audioStreamRes || audioStreamRes.destroyed) {
+      if (mixerWriteCount === 0) {
+        alog('ミキサー: audioStreamRes未接続、書き込みスキップ');
+      }
+      return;
+    }
+
+    const hasBgm = bgmPcmData && bgmPcmOffset < bgmPcmData.length;
+    const hasTts = ttsPcmData && ttsPcmOffset < ttsPcmData.length;
+    if (!hasBgm && !hasTts) return;
+
+    // 初回書き込みログ
+    if (mixerWriteCount === 0) {
+      alog(`ミキサー初回書き込み: BGM=${hasBgm}, TTS=${hasTts}`);
+    }
+
+    const output = Buffer.alloc(MIXER_CHUNK_SIZE);
+
+    // BGMチャンクを書き込み
+    if (hasBgm) {
+      const end = Math.min(bgmPcmOffset + MIXER_CHUNK_SIZE, bgmPcmData.length);
+      bgmPcmData.copy(output, 0, bgmPcmOffset, end);
+      bgmPcmOffset = end;
+      if (bgmPcmOffset >= bgmPcmData.length) {
+        if (bgmLoop) {
+          bgmPcmOffset = 0;
+          alog('BGMループ');
+        } else {
+          bgmPcmData = null;
+          bgmPcmOffset = 0;
+          alog('BGM再生完了（ループなし）');
+        }
+      }
+    }
+
+    // TTSチャンクをミックス（加算合成）
+    if (hasTts) {
+      const end = Math.min(ttsPcmOffset + MIXER_CHUNK_SIZE, ttsPcmData.length);
+      const len = end - ttsPcmOffset;
+      for (let i = 0; i + 1 < len && i + 1 < MIXER_CHUNK_SIZE; i += 2) {
+        const bg = output.readInt16LE(i);
+        const tts = ttsPcmData.readInt16LE(ttsPcmOffset + i);
+        output.writeInt16LE(Math.max(-32768, Math.min(32767, bg + tts)), i);
+      }
+      ttsPcmOffset = end;
+      if (ttsPcmOffset >= ttsPcmData.length) {
+        ttsPcmData = null;
+        ttsPcmOffset = 0;
+        alog('TTS再生完了');
+      }
+    }
+
+    try {
+      audioStreamRes.write(output);
+      lastAudioPcmTime = Date.now();
+      mixerWriteCount++;
+    } catch (e) {
+      alog(`ミキサー書き込みエラー: ${e.message}`);
+    }
+  }, MIXER_CHUNK_MS);
+}
+
+function stopMixer() {
+  if (mixerTimer) {
+    clearInterval(mixerTimer);
+    mixerTimer = null;
+    alog('ミキサー停止');
+  }
+  bgmPcmData = null;
+  bgmPcmOffset = 0;
+  ttsPcmData = null;
+  ttsPcmOffset = 0;
+}
+
+// レガシー互換（TTS単独再生用、ミキサー未起動時のフォールバック）
 function writeAudioAtRealtime(pcmBuffer) {
   if (currentAudioTimer) clearInterval(currentAudioTimer);
   if (!audioStreamRes || audioStreamRes.destroyed) return;
 
-  const BYTES_PER_SEC = AUDIO_TARGET_RATE * AUDIO_TARGET_CHANNELS * 2;
-  const CHUNK_MS = 50;
-  const CHUNK_SIZE = Math.ceil(BYTES_PER_SEC * CHUNK_MS / 1000);
+  const CHUNK_SIZE = MIXER_CHUNK_SIZE;
   let offset = 0;
 
   currentAudioTimer = setInterval(() => {
@@ -141,47 +272,82 @@ function writeAudioAtRealtime(pcmBuffer) {
       lastAudioPcmTime = Date.now();
     } catch (e) {}
     offset = end;
-  }, CHUNK_MS);
+  }, MIXER_CHUNK_MS);
+}
+
+// 音声ファイルを取得してPCMに変換する共通関数
+async function fetchAndDecodeToPcm(fullUrl) {
+  alog(`音声取得: ${fullUrl}`);
+  const response = await fetch(fullUrl);
+  if (!response.ok) {
+    alog(`取得失敗: ${response.status}`);
+    return null;
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  const audioBuffer = Buffer.from(arrayBuffer);
+  alog(`取得完了: ${(audioBuffer.length / 1024).toFixed(0)}KB`);
+
+  // WAVヘッダー解析を試行
+  const fmt = parseWavHeader(audioBuffer);
+  if (fmt) {
+    alog(`WAV: ${fmt.sampleRate}Hz ${fmt.numChannels}ch ${fmt.bitsPerSample}bit`);
+    let pcmData = getWavPcmData(audioBuffer);
+    if (!pcmData || pcmData.length === 0) {
+      alog('PCMデータなし');
+      return null;
+    }
+    if (fmt.sampleRate !== AUDIO_TARGET_RATE) {
+      pcmData = resample16(pcmData, fmt.sampleRate, AUDIO_TARGET_RATE);
+    }
+    if (fmt.numChannels === 1) {
+      pcmData = monoToStereo16(pcmData);
+    }
+    return pcmData;
+  }
+
+  // WAVでない場合、FFmpegでデコード（MP3/OGG/M4A等）
+  alog('WAVではないためFFmpegでデコード...');
+  try {
+    const pcmData = await decodeAudioToPcm(audioBuffer);
+    alog(`FFmpegデコード完了: ${(pcmData.length / 1024).toFixed(0)}KB`);
+    return pcmData;
+  } catch (e) {
+    alog(`FFmpegデコード失敗: ${e.message}`);
+    return null;
+  }
 }
 
 async function processAudioUrl(fullUrl) {
   try {
-    alog(`音声取得: ${fullUrl}`);
-    const response = await fetch(fullUrl);
-    if (!response.ok) {
-      alog(`取得失敗: ${response.status}`);
-      return;
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const wavBuffer = Buffer.from(arrayBuffer);
+    const pcmData = await fetchAndDecodeToPcm(fullUrl);
+    if (!pcmData) return;
 
-    const fmt = parseWavHeader(wavBuffer);
-    if (!fmt) {
-      alog('WAVヘッダー解析失敗');
-      return;
-    }
-    alog(`WAV: ${fmt.sampleRate}Hz ${fmt.numChannels}ch ${fmt.bitsPerSample}bit`);
+    const durationSec = (pcmData.length / MIXER_BYTES_PER_SEC).toFixed(1);
+    alog(`TTS再生: ${durationSec}秒, ${(pcmData.length / 1024).toFixed(0)}KB`);
 
-    let pcmData = getWavPcmData(wavBuffer);
-    if (!pcmData || pcmData.length === 0) {
-      alog('PCMデータなし');
-      return;
-    }
-
-    // リサンプル（ソースレート→44100Hz）
-    if (fmt.sampleRate !== AUDIO_TARGET_RATE) {
-      pcmData = resample16(pcmData, fmt.sampleRate, AUDIO_TARGET_RATE);
-    }
-    // モノ→ステレオ変換
-    if (fmt.numChannels === 1) {
-      pcmData = monoToStereo16(pcmData);
-    }
-
-    const durationSec = (pcmData.length / (AUDIO_TARGET_RATE * AUDIO_TARGET_CHANNELS * 2)).toFixed(1);
-    alog(`再生: ${durationSec}秒, ${(pcmData.length / 1024).toFixed(0)}KB`);
-    writeAudioAtRealtime(pcmData);
+    // ミキサー経由で再生（BGMとの同時再生対応）
+    ttsPcmData = pcmData;
+    ttsPcmOffset = 0;
+    startMixer();
   } catch (e) {
-    alog(`エラー: ${e.message}`);
+    alog(`TTSエラー: ${e.message}`);
+  }
+}
+
+async function processBgmUrl(fullUrl) {
+  try {
+    const pcmData = await fetchAndDecodeToPcm(fullUrl);
+    if (!pcmData) return;
+
+    const durationSec = (pcmData.length / MIXER_BYTES_PER_SEC).toFixed(1);
+    alog(`BGM再生: ${durationSec}秒, ${(pcmData.length / 1024).toFixed(0)}KB`);
+
+    bgmPcmData = pcmData;
+    bgmPcmOffset = 0;
+    bgmLoop = true;
+    startMixer();
+  } catch (e) {
+    alog(`BGMエラー: ${e.message}`);
   }
 }
 
@@ -313,29 +479,61 @@ ipcMain.on('capture-receiver-ready', () => {
 });
 
 // IPC: broadcast.htmlからPCM音声データ受信（ブラウザAudioContext経由、フォールバック用）
+let _audioPcmLogCount = 0;
 ipcMain.on('audio-pcm', (event, buffer) => {
-  // メインプロセス直接パスが動作中はスキップ（二重書き込み防止）
-  if (currentAudioTimer) return;
+  // ミキサーまたはレガシータイマーが動作中はスキップ（二重書き込み防止）
+  if (mixerTimer || currentAudioTimer) {
+    if (_audioPcmLogCount < 3) {
+      alog(`audio-pcm IPC スキップ: mixer=${!!mixerTimer}, legacy=${!!currentAudioTimer}`);
+      _audioPcmLogCount++;
+    }
+    return;
+  }
   if (audioStreamRes && !audioStreamRes.destroyed) {
     try {
       lastAudioPcmTime = Date.now();
       audioStreamRes.write(Buffer.from(buffer));
-    } catch (e) {}
+    } catch (e) {
+      alog(`audio-pcm書き込みエラー: ${e.message}`);
+    }
+  } else {
+    if (_audioPcmLogCount < 3) {
+      alog(`audio-pcm IPC: audioStreamRes未接続 (${buffer.byteLength}bytes)`);
+      _audioPcmLogCount++;
+    }
   }
 });
 
 // IPC: broadcast.htmlから音声URL通知 → メインプロセスで直接取得・変換・配信
 ipcMain.on('audio-play-url', (event, { type, url }) => {
-  if (!broadcastServerUrl || !audioStreamRes) return;
-  // 相対URLをフルURLに変換
+  if (!broadcastServerUrl) {
+    alog(`音声URL無視: broadcastServerUrl未設定 (${type}: ${url})`);
+    return;
+  }
   const fullUrl = url.startsWith('http') ? url : broadcastServerUrl + url;
-  processAudioUrl(fullUrl);
+  if (type === 'bgm') {
+    if (!audioStreamRes || audioStreamRes.destroyed) {
+      // 配信開始前: URLを保存して後で再生
+      alog(`BGM URL保存 (配信開始待ち): ${url}`);
+      pendingBgmUrl = fullUrl;
+      return;
+    }
+    processBgmUrl(fullUrl);
+  } else {
+    if (!audioStreamRes || audioStreamRes.destroyed) {
+      alog(`音声URL無視: FFmpeg音声ストリーム未接続 (${type}: ${url})`);
+      return;
+    }
+    processAudioUrl(fullUrl);
+  }
 });
 
 // IPC: BGM停止
 ipcMain.on('audio-stop-bgm', () => {
-  // BGMの停止処理（将来拡張用）
   alog('BGM停止');
+  bgmPcmData = null;
+  bgmPcmOffset = 0;
+  pendingBgmUrl = null;
 });
 
 // ウィンドウ位置の永続化
@@ -546,7 +744,7 @@ async function openBroadcastWindow(serverUrl) {
 
   const tokenResp = await fetch(`${serverUrl}/api/broadcast/token`);
   const { token } = await tokenResp.json();
-  const broadcastUrl = `${serverUrl}/broadcast?token=${token}`;
+  const broadcastUrl = `${serverUrl}/broadcast?token=${token}&embedded`;
 
   const cfg = streamConfig || STREAM_DEFAULTS;
   const [width, height] = cfg.resolution.split('x').map(Number);
@@ -845,6 +1043,7 @@ function stopStream() {
   }, 2000);
 
   // 音声HTTPストリームを閉じる
+  stopMixer();
   if (currentAudioTimer) { clearInterval(currentAudioTimer); currentAudioTimer = null; }
   if (audioStreamRes && !audioStreamRes.destroyed) {
     try { audioStreamRes.end(); } catch (e) {}
@@ -872,6 +1071,9 @@ function getStreamStatus() {
     ffmpeg_log: ffmpegLastLog.slice(-5),
     audio_stream_connected: audioStreamRes !== null && !audioStreamRes.destroyed,
     audio_receiving_pcm: lastAudioPcmTime > 0 && (Date.now() - lastAudioPcmTime) < 1000,
+    mixer_active: mixerTimer !== null,
+    bgm_playing: bgmPcmData !== null,
+    tts_playing: ttsPcmData !== null,
   };
 }
 
@@ -900,7 +1102,14 @@ function startServer() {
     // 初期サイレンス送信（FFmpegの入力初期化ブロックを防止）
     res.write(Buffer.alloc(44100 * 2 * 2));  // 1秒分 s16le stereo
     audioStreamRes = res;
-    alog('FFmpeg音声ストリーム接続');
+    alog(`FFmpeg音声ストリーム接続: pendingBgm=${pendingBgmUrl ? 'あり' : 'なし'}, broadcastServerUrl=${broadcastServerUrl || 'null'}`);
+    // 配信開始前に保存されたBGM URLがあれば再生開始
+    if (pendingBgmUrl) {
+      alog(`保存済みBGM再生開始: ${pendingBgmUrl}`);
+      processBgmUrl(pendingBgmUrl);
+      pendingBgmUrl = null;
+    }
+    _audioPcmLogCount = 0;  // ログカウントリセット
     req.on('close', () => {
       alog('FFmpeg音声ストリーム切断');
       audioStreamRes = null;
@@ -1052,10 +1261,21 @@ ${captureList.join('') || '<p>なし</p>'}
   server.get('/audio/log', (req, res) => {
     res.json({
       log: audioLog,
-      audio_stream_connected: audioStreamRes !== null && !audioStreamRes.destroyed,
-      audio_receiving_pcm: lastAudioPcmTime > 0 && (Date.now() - lastAudioPcmTime) < 1000,
-      broadcast_server_url: broadcastServerUrl,
-      current_audio_playing: currentAudioTimer !== null,
+      state: {
+        audio_stream_connected: audioStreamRes !== null && !audioStreamRes.destroyed,
+        audio_receiving_pcm: lastAudioPcmTime > 0 && (Date.now() - lastAudioPcmTime) < 1000,
+        last_pcm_ago_ms: lastAudioPcmTime > 0 ? Date.now() - lastAudioPcmTime : null,
+        broadcast_server_url: broadcastServerUrl,
+        pending_bgm_url: pendingBgmUrl,
+        mixer_active: mixerTimer !== null,
+        bgm_loaded: bgmPcmData !== null,
+        bgm_size_kb: bgmPcmData ? (bgmPcmData.length / 1024).toFixed(0) : null,
+        bgm_offset: bgmPcmOffset,
+        bgm_loop: bgmLoop,
+        tts_loaded: ttsPcmData !== null,
+        legacy_timer: currentAudioTimer !== null,
+        ffmpeg_running: ffmpegProcess !== null && ffmpegProcess.exitCode === null,
+      },
     });
   });
 
