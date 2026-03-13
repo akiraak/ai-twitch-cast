@@ -20,15 +20,40 @@ _is_streaming = False
 async def _ensure_electron():
     """Electronアプリが起動していなければワンクリックプレビューで自動起動し、接続を待つ"""
     import asyncio
-    from scripts.routes.capture import _ws_request, capture_preview_oneclick, capture_preview_oneclick_status
+    import httpx
+    from scripts.routes.capture import (
+        _capture_base_url, _ws_request,
+        capture_preview_oneclick, capture_preview_oneclick_status,
+    )
 
+    # まずWebSocket接続を試す
     try:
         await _ws_request("stream_status")
         return  # 既に接続済み
     except Exception:
         pass
 
-    # ワンクリックプレビューを起動
+    # ElectronのHTTPサーバーが起動しているか確認
+    electron_http_ok = False
+    try:
+        resp = httpx.get(f"{_capture_base_url()}/status", timeout=2.0)
+        electron_http_ok = resp.status_code == 200
+    except Exception:
+        pass
+
+    if electron_http_ok:
+        # HTTPは応答するがWebSocketが繋がらない → WebSocketリトライ（最大10秒）
+        logger.info("Electron HTTPは応答あり → WebSocket再接続を試行")
+        for i in range(20):
+            await asyncio.sleep(0.5)
+            try:
+                await _ws_request("stream_status")
+                return
+            except Exception:
+                pass
+        raise RuntimeError("ElectronのWebSocket接続に失敗しました。Electronアプリを再起動してください。")
+
+    # Electronが起動していない → ワンクリックプレビューで自動起動
     logger.info("Electronアプリ未起動 → ワンクリックプレビューを自動開始")
     await capture_preview_oneclick()
 
