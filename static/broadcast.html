@@ -762,10 +762,13 @@ function applyVolume() {
 }
 
 // === Electron音声キャプチャ（オフスクリーン配信用） ===
+let _electronAudioCtx = null;
+
 function setupElectronAudioCapture() {
   if (!window.audioCapture || !window.audioCapture.isAvailable) return;
 
   const audioCtx = new AudioContext({ sampleRate: 44100 });
+  _electronAudioCtx = audioCtx;
 
   // TTS/BGMの<audio>をAudioContext経由にルーティング
   const ttsSource = audioCtx.createMediaElementSource(ttsAudio);
@@ -787,6 +790,8 @@ function setupElectronAudioCapture() {
   processor.connect(silentOut);
   silentOut.connect(audioCtx.destination);
 
+  let pcmFrameCount = 0;
+  let hasNonSilence = false;
   processor.onaudioprocess = (e) => {
     const left = e.inputBuffer.getChannelData(0);
     const right = e.inputBuffer.getChannelData(1);
@@ -798,10 +803,46 @@ function setupElectronAudioCapture() {
       pcm[i * 2 + 1] = (Math.max(-1, Math.min(1, right[i])) * 0x7FFF) | 0;
     }
     window.audioCapture.sendPCM(pcm.buffer);
+    pcmFrameCount++;
+
+    // 非サイレンスデータの検出（音が実際に流れているかチェック）
+    if (!hasNonSilence) {
+      for (let i = 0; i < left.length; i += 64) {
+        if (Math.abs(left[i]) > 0.001 || Math.abs(right[i]) > 0.001) {
+          hasNonSilence = true;
+          console.log(`[AudioCapture] 音声データ検出! frame=${pcmFrameCount}`);
+          break;
+        }
+      }
+    }
   };
 
-  // AudioContextがsuspendしないよう維持
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+  // AudioContext状態監視（suspendされたら自動復帰）
+  audioCtx.addEventListener('statechange', () => {
+    console.log(`[AudioCapture] AudioContext state: ${audioCtx.state}`);
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() => {
+        console.log('[AudioCapture] AudioContext resumed');
+      });
+    }
+  });
+
+  // 初期状態チェック＋resume
+  console.log(`[AudioCapture] AudioContext初期state: ${audioCtx.state}`);
+  if (audioCtx.state !== 'running') {
+    audioCtx.resume().then(() => {
+      console.log(`[AudioCapture] AudioContext resume後: ${audioCtx.state}`);
+    });
+  }
+
+  // 定期診断ログ（30秒ごと）
+  setInterval(() => {
+    console.log(`[AudioCapture] 診断: state=${audioCtx.state}, frames=${pcmFrameCount}, hasAudio=${hasNonSilence}`);
+    // suspendされていたら再度resume
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+  }, 30000);
 
   console.log('[AudioCapture] Electron音声キャプチャ有効');
 }
@@ -1014,16 +1055,29 @@ function connectWS() {
 
       // TTS音声
       case 'play_audio':
+        console.log('[Audio] TTS play_audio:', data.url);
+        // AudioContextがsuspendの場合はresumeしてから再生
+        if (_electronAudioCtx && _electronAudioCtx.state === 'suspended') {
+          _electronAudioCtx.resume();
+        }
         ttsAudio.src = data.url;
         ttsAudio.load();
-        ttsAudio.play().catch(e => console.log('TTS再生エラー:', e));
+        ttsAudio.play().then(() => {
+          console.log('[Audio] TTS再生開始');
+        }).catch(e => console.log('[Audio] TTS再生エラー:', e.name, e.message));
         break;
 
       // BGM
       case 'bgm_play':
+        console.log('[Audio] BGM play:', data.url);
+        if (_electronAudioCtx && _electronAudioCtx.state === 'suspended') {
+          _electronAudioCtx.resume();
+        }
         bgmAudio.src = data.url;
         bgmAudio.load();
-        bgmAudio.play().catch(e => console.log('BGM再生エラー:', e));
+        bgmAudio.play().then(() => {
+          console.log('[Audio] BGM再生開始');
+        }).catch(e => console.log('[Audio] BGM再生エラー:', e.name, e.message));
         break;
       case 'bgm_stop':
         bgmAudio.pause();

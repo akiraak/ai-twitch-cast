@@ -399,18 +399,18 @@ async function openBroadcastWindow(serverUrl) {
     show: false,
     webPreferences: {
       offscreen: true,
+      backgroundThrottling: false,  // 音声処理が停止されないようにする
       preload: path.join(__dirname, 'broadcast-preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
+  broadcastWindow.webContents.setAudioMuted(false);  // 明示的に音声ミュート解除
   broadcastWindow.webContents.setFrameRate(cfg.framerate);
   // broadcast.htmlのconsole出力をメインプロセスに転送（音声デバッグ用）
   broadcastWindow.webContents.on('console-message', (_e, level, msg) => {
-    if (msg.includes('Audio') || msg.includes('audio') || msg.includes('PCM') || msg.includes('Error') || msg.includes('error')) {
-      console.log(`[Broadcast] ${msg}`);
-    }
+    console.log(`[Broadcast] ${msg}`);
   });
   broadcastWindow.loadURL(broadcastUrl);
   broadcastWindow.on('closed', () => {

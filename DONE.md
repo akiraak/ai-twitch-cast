@@ -224,7 +224,7 @@
 - [x] レイアウト編集にスナップガイド線追加（ドラッグ・リサイズ時に画面中央・他パーツ端/中央への補助線表示+自動スナップ、グロー付き目立つデザイン）
 - [x] プレビューウィンドウの配信画面を16:9レターボックス表示（ウィンドウ自由リサイズ対応）
 - [x] Electronプレビューウィンドウの検証ウィンドウ（DevTools）自動表示を削除
-- [x] 配信音声: FFmpegの音声入力をanullsrc→ローカルHTTPストリーム（broadcast.htmlのPCM音声）に変更、サイレンスハートビート＋autoplay-policy追加
+- [x] 配信音声: FFmpegの音声入力をanullsrc→ローカルHTTPストリーム（broadcast.htmlのPCM音声）に変更、backgroundThrottling無効化+AudioContext監視+診断ログ追加
 
 ## Phase 0: 環境構築・基盤
 
