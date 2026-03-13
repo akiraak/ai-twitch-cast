@@ -25,4 +25,8 @@ contextBridge.exposeInMainWorld('captureReceiver', {
   onCaptureRemove(callback) {
     ipcRenderer.on('capture-remove-to-broadcast', (_event, data) => callback(data));
   },
+  // broadcast.html側でリスナ登録完了後に呼ぶ → main.jsが既存キャプチャ一覧を送信
+  notifyReady() {
+    ipcRenderer.send('capture-receiver-ready');
+  },
 });

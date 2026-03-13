@@ -98,6 +98,19 @@ function stopAudioPipe() {
   }
 }
 
+// IPC: broadcast.htmlのcaptureReceiver準備完了 → 既存キャプチャ一覧を送信
+ipcMain.on('capture-receiver-ready', () => {
+  if (!broadcastWindow || broadcastWindow.isDestroyed()) return;
+  console.log(`[DirectCapture] 準備完了、既存キャプチャ${captures.size}件を送信`);
+  for (const [id, session] of captures) {
+    broadcastWindow.webContents.send('capture-add-to-broadcast', {
+      id,
+      index: captureIndexMap.get(id),
+      name: session.name,
+    });
+  }
+});
+
 // IPC: broadcast.htmlからPCM音声データ受信
 ipcMain.on('audio-pcm', (event, buffer) => {
   if (audioPipeConnection && audioPipeConnection.writable) {
@@ -332,19 +345,6 @@ async function openBroadcastWindow(serverUrl) {
   });
 
   broadcastWindow.webContents.setFrameRate(cfg.framerate);
-
-  // ページ読み込み完了時に既存キャプチャ一覧をIPC送信
-  broadcastWindow.webContents.on('did-finish-load', () => {
-    if (!broadcastWindow || broadcastWindow.isDestroyed()) return;
-    for (const [id, session] of captures) {
-      broadcastWindow.webContents.send('capture-add-to-broadcast', {
-        id,
-        index: captureIndexMap.get(id),
-        name: session.name,
-      });
-    }
-  });
-
   broadcastWindow.loadURL(broadcastUrl);
   broadcastWindow.on('closed', () => {
     broadcastWindow = null;

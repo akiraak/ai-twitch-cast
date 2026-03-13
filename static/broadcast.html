@@ -1138,6 +1138,8 @@ function setupDirectCapture() {
 
   useDirectCapture = true;
   console.log('[DirectCapture] Electron IPC直接受信モード有効');
+  // main.jsに準備完了を通知 → 既存キャプチャ一覧がIPCで送られてくる
+  window.captureReceiver.notifyReady();
   return true;
 }
 
