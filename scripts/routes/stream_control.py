@@ -75,7 +75,7 @@ async def _ensure_electron():
 async def _electron_stream_start():
     """Electron経由でTwitch配信を開始"""
     from scripts.routes.capture import _ws_request
-    from src.wsl_path import get_windows_host_ip
+    from src.wsl_path import get_wsl_ip
 
     stream_key = os.environ.get("TWITCH_STREAM_KEY", "")
     if not stream_key:
@@ -86,7 +86,7 @@ async def _electron_stream_start():
 
     web_port = os.environ.get("WEB_PORT", "8080")
     try:
-        host = get_windows_host_ip()
+        host = get_wsl_ip()
     except Exception:
         host = "localhost"
     server_url = f"http://{host}:{web_port}"
