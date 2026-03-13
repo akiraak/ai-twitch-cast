@@ -113,6 +113,78 @@
   #chat-section {
     flex: 1;
   }
+
+  /* === 音量メーター === */
+  .meter-container {
+    position: relative;
+    height: 10px;
+    background: #0a0a14;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid #333;
+  }
+  .meter-bar {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    width: 0%;
+    transition: width 0.05s linear;
+    border-radius: 2px;
+  }
+  .meter-bar.level {
+    background: linear-gradient(90deg, #2d6a4f 0%, #52b788 50%, #f4a261 80%, #e76f51 95%);
+    z-index: 1;
+  }
+  .meter-bar.peak {
+    width: 2px;
+    background: #fff;
+    z-index: 2;
+    transition: left 0.05s linear;
+    left: 0%;
+  }
+  .meter-scale {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 3;
+    pointer-events: none;
+  }
+  .meter-scale-mark {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-left: 1px solid rgba(255,255,255,0.08);
+  }
+  .meter-scale-label {
+    display: none;
+  }
+  .meter-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    font-size: 10px;
+    font-family: "Consolas", "Courier New", monospace;
+  }
+  .meter-db { color: #52b788; }
+  .meter-db.hot { color: #f4a261; }
+  .meter-db.clip { color: #e76f51; }
+  .meter-peak { color: #666; }
+  .meter-sources {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .meter-src {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    background: #222;
+    color: #555;
+    transition: all 0.15s;
+  }
+  .meter-src.active { color: #fff; }
+  .meter-src.bgm.active { background: #2d6a4f; }
+  .meter-src.tts.active { background: #5c4d9a; }
 </style>
 </head>
 <body>
@@ -142,6 +214,24 @@
     <select id="window-list"><option value="">-- ウィンドウ選択 --</option></select>
     <button class="panel-btn" onclick="addCapture()">追加</button>
     <span id="capture-msg" style="font-size:0.8rem;margin-left:8px;"></span>
+  </div>
+
+  <!-- 音量メーター -->
+  <div class="panel-section">
+    <h3>音量</h3>
+    <div class="meter-sources">
+      <span class="meter-src bgm" id="meter-bgm">BGM</span>
+      <span class="meter-src tts" id="meter-tts">Voice</span>
+    </div>
+    <div class="meter-container">
+      <div class="meter-bar level" id="meter-level"></div>
+      <div class="meter-bar peak" id="meter-peak"></div>
+      <div class="meter-scale" id="meter-scale"></div>
+    </div>
+    <div class="meter-info">
+      <span class="meter-db" id="meter-db">-∞ dB</span>
+      <span class="meter-peak" id="meter-peak-db">pk -∞</span>
+    </div>
   </div>
 
   <!-- チャット（将来用） -->
@@ -271,6 +361,64 @@ async function addCapture() {
     msg.textContent = data.ok ? `追加: ${data.id}` : `エラー: ${data.detail || data.error}`;
   } catch (e) { msg.textContent = `エラー: ${e.message}`; }
 }
+
+// === 音量メーター ===
+const METER_MIN_DB = -60;
+const meterLevel = document.getElementById('meter-level');
+const meterPeakBar = document.getElementById('meter-peak');
+const meterDbEl = document.getElementById('meter-db');
+const meterPeakDbEl = document.getElementById('meter-peak-db');
+const meterBgm = document.getElementById('meter-bgm');
+const meterTts = document.getElementById('meter-tts');
+
+// dBスケール描画
+(function() {
+  const scaleEl = document.getElementById('meter-scale');
+  [-48, -36, -24, -12, -6, 0].forEach(db => {
+    const pct = meterDbToPct(db);
+    const mark = document.createElement('div');
+    mark.className = 'meter-scale-mark';
+    mark.style.left = pct + '%';
+    scaleEl.appendChild(mark);
+    const lbl = document.createElement('div');
+    lbl.className = 'meter-scale-label';
+    lbl.style.left = pct + '%';
+    lbl.textContent = db;
+    scaleEl.appendChild(lbl);
+  });
+})();
+
+function meterDbToPct(db) {
+  if (db <= METER_MIN_DB) return 0;
+  if (db >= 0) return 100;
+  return ((db - METER_MIN_DB) / (0 - METER_MIN_DB)) * 100;
+}
+
+let meterSmooth = METER_MIN_DB;
+
+function updateMeter(data) {
+  const db = isFinite(data.db) ? Math.max(METER_MIN_DB, data.db) : METER_MIN_DB;
+  const peak = isFinite(data.peak) ? Math.max(METER_MIN_DB, data.peak) : METER_MIN_DB;
+
+  meterSmooth = db > meterSmooth ? db : meterSmooth * 0.85 + db * 0.15;
+
+  meterLevel.style.width = meterDbToPct(meterSmooth) + '%';
+  meterPeakBar.style.left = meterDbToPct(peak) + '%';
+
+  const dbStr = meterSmooth <= METER_MIN_DB ? '-∞ dB' : meterSmooth.toFixed(1) + ' dB';
+  const pkStr = peak <= METER_MIN_DB ? 'pk -∞' : 'pk ' + peak.toFixed(0);
+  meterDbEl.textContent = dbStr;
+  meterPeakDbEl.textContent = pkStr;
+  meterDbEl.className = 'meter-db' + (meterSmooth > -3 ? ' clip' : meterSmooth > -12 ? ' hot' : '');
+
+  meterBgm.classList.toggle('active', !!data.bgm);
+  meterTts.classList.toggle('active', !!data.tts);
+}
+
+// broadcast.html iframe からの postMessage で音量レベルを受信
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'audio_level') updateMeter(e.data);
+});
 
 // === 初期化 ===
 updateStatus();

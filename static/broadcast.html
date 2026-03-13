@@ -877,6 +877,73 @@ function setupElectronAudioCapture() {
   console.log('[AudioCapture] Electron音声キャプチャ有効');
 }
 
+// === 音量メーター（プレビューウィンドウ向け） ===
+let _meterCtx = null;
+let _meterAnalyser = null;
+
+function setupAudioMeter() {
+  if (_meterCtx) return; // 重複防止
+  // Electronオフスクリーン配信時はメインプロセスミキサーが音声処理するためスキップ
+  if (window.audioCapture && window.audioCapture.isAvailable) return;
+  try {
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.3;
+
+    // TTS/BGM両方をAnalyserに接続
+    const ttsSource = ctx.createMediaElementSource(ttsAudio);
+    const bgmSource = ctx.createMediaElementSource(bgmAudio);
+    ttsSource.connect(analyser);
+    bgmSource.connect(analyser);
+    // スピーカー出力も維持
+    analyser.connect(ctx.destination);
+
+    _meterCtx = ctx;
+    _meterAnalyser = analyser;
+
+    const dataArray = new Float32Array(analyser.fftSize);
+    let peakDb = -Infinity;
+    let peakTime = 0;
+
+    setInterval(() => {
+      if (ctx.state === 'suspended') ctx.resume();
+      analyser.getFloatTimeDomainData(dataArray);
+
+      // RMS計算
+      let sumSq = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sumSq += dataArray[i] * dataArray[i];
+      }
+      const rms = Math.sqrt(sumSq / dataArray.length);
+      const db = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+
+      const now = Date.now();
+      if (db > peakDb || now - peakTime > 1500) {
+        peakDb = db;
+        peakTime = now;
+      }
+
+      const msg = {
+        type: 'audio_level',
+        db: db,
+        peak: peakDb,
+        bgm: !bgmAudio.paused && bgmAudio.src !== '',
+        tts: !ttsAudio.paused && ttsAudio.src !== '',
+      };
+
+      // 親ウィンドウ（preview.html iframe）に送信
+      if (window.parent !== window) {
+        window.parent.postMessage(msg, '*');
+      }
+    }, 50);
+
+    console.log('[AudioMeter] 音量メーター初期化完了');
+  } catch (e) {
+    console.log('[AudioMeter] 初期化失敗:', e.message);
+  }
+}
+
 // === 背景透明度の適用（CSS変数で制御） ===
 function setBgOpacity(el, opacity) {
   el.style.setProperty('--bg-opacity', opacity);
@@ -1851,6 +1918,9 @@ async function init() {
   // setupElectronAudioCapture()はAudioContext+ScriptProcessorを生成し、
   // オフスクリーンレンダリングに負荷をかけるため無効化
   console.log('[AudioCapture] スキップ（メインプロセスミキサーが音声処理を担当）');
+
+  // 音量メーター（プレビューウィンドウのiframe内で動作時）
+  setupAudioMeter();
 
   await loadTodo();
   await loadTopicPanel();

@@ -54,6 +54,11 @@ let ttsPcmOffset = 0;          // TTS再生位置
 let mixerTimer = null;          // ミキサータイマー
 let pendingBgmUrl = null;      // 配信開始前に受信したBGM URL（audioStreamRes接続後に再生）
 
+// === 音量メーター ===
+let audioLevelDb = -Infinity;   // 現在の音量レベル (dBFS)
+let audioLevelPeak = -Infinity; // ピークレベル (dBFS)
+let audioLevelPeakTime = 0;    // ピーク検出時刻
+
 // === 診断ログ（APIで公開） ===
 const audioLog = [];            // 最新の音声関連ログ
 function alog(msg) {
@@ -253,6 +258,23 @@ function startMixer() {
         ttsPcmOffset = 0;
         alog('TTS再生完了');
       }
+    }
+
+    // 音量レベル計算（RMS → dBFS）
+    {
+      let sumSq = 0;
+      const sampleCount = bytesToWrite / 2;
+      for (let i = 0; i + 1 < bytesToWrite; i += 2) {
+        const sample = output.readInt16LE(i) / 32768;
+        sumSq += sample * sample;
+      }
+      const rms = Math.sqrt(sumSq / Math.max(1, sampleCount));
+      audioLevelDb = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+      if (audioLevelDb > audioLevelPeak || now - audioLevelPeakTime > 1500) {
+        audioLevelPeak = audioLevelDb;
+        audioLevelPeakTime = now;
+      }
+      // 音量レベルを更新（/audio/levels エンドポイント用）
     }
 
     // 常にデータを書き込み（無音含む）— 音声ストリームにギャップを作らない
@@ -1317,6 +1339,17 @@ ${captureList.join('') || '<p>なし</p>'}
         legacy_timer: currentAudioTimer !== null,
         ffmpeg_running: ffmpegProcess !== null && ffmpegProcess.exitCode === null,
       },
+    });
+  });
+
+  // GET /audio/levels - 音量メーター用レベル
+  server.get('/audio/levels', (req, res) => {
+    res.json({
+      db: audioLevelDb,
+      peak: audioLevelPeak,
+      bgm: !!(bgmPcmData && bgmPcmOffset < bgmPcmData.length),
+      tts: !!(ttsPcmData && ttsPcmOffset < ttsPcmData.length),
+      mixer_active: mixerTimer !== null,
     });
   });
 

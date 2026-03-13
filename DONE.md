@@ -1,5 +1,12 @@
 # DONE
 
+## プレビューウィンドウに音量メーター追加
+
+- [x] broadcast.htmlにAudioContext+AnalyserNodeで音量測定（BGM+Voice合成RMS→dBFS）
+- [x] postMessageでiframe親（preview.html）にリアルタイム送信（50ms間隔）
+- [x] preview.html右パネルに音量セクション追加（グラデーションバー、ピークホールド、BGM/Voiceタグ）
+- [x] Electronオフスクリーン配信時はメインプロセスミキサー用の/audio/levelsエンドポイントも追加
+
 ## Live2D/VTube Studio関連コードの完全削除
 
 - [x] VTSコントローラー・デプロイスクリプト・対話式コンソール削除
