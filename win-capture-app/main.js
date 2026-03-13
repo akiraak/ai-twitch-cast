@@ -177,47 +177,72 @@ function startMixer() {
   if (mixerTimer) return;
   alog(`ミキサー開始: BGM=${bgmPcmData ? (bgmPcmData.length/1024).toFixed(0)+'KB' : 'なし'}, TTS=${ttsPcmData ? (ttsPcmData.length/1024).toFixed(0)+'KB' : 'なし'}, audioStreamRes=${audioStreamRes ? '接続中' : 'null'}`);
   let mixerWriteCount = 0;
-  mixerTimer = setInterval(() => {
+  // 壁時計追従: タイマードリフトを補正して音声レートを正確に維持
+  let mixerStartTime = Date.now();
+  let mixerTotalBytes = 0;
+  let nextTickTime = mixerStartTime + MIXER_CHUNK_MS;
+
+  function mixerTick() {
+    if (!mixerTimer) return;
+
     if (!audioStreamRes || audioStreamRes.destroyed) {
       if (mixerWriteCount === 0) {
         alog('ミキサー: audioStreamRes未接続、書き込みスキップ');
       }
+      nextTickTime += MIXER_CHUNK_MS;
+      mixerTimer = setTimeout(mixerTick, Math.max(1, nextTickTime - Date.now()));
       return;
     }
 
-    const hasBgm = bgmPcmData && bgmPcmOffset < bgmPcmData.length;
-    const hasTts = ttsPcmData && ttsPcmOffset < ttsPcmData.length;
-    if (!hasBgm && !hasTts) return;
+    // 壁時計から必要バイト数を計算（タイマードリフト補正）
+    const now = Date.now();
+    const elapsedSec = (now - mixerStartTime) / 1000;
+    const expectedBytes = Math.floor(elapsedSec * MIXER_BYTES_PER_SEC) & ~3;  // 4byte境界
+    let bytesToWrite = expectedBytes - mixerTotalBytes;
+    if (bytesToWrite <= 0) {
+      nextTickTime += MIXER_CHUNK_MS;
+      mixerTimer = setTimeout(mixerTick, Math.max(1, nextTickTime - Date.now()));
+      return;
+    }
+    // 過大な遅れは最大4チャンク分までキャッチアップ
+    if (bytesToWrite > MIXER_CHUNK_SIZE * 4) bytesToWrite = MIXER_CHUNK_SIZE * 4;
 
     // 初回書き込みログ
     if (mixerWriteCount === 0) {
-      alog(`ミキサー初回書き込み: BGM=${hasBgm}, TTS=${hasTts}`);
+      const hasBgm = !!(bgmPcmData && bgmPcmOffset < bgmPcmData.length);
+      const hasTts = !!(ttsPcmData && ttsPcmOffset < ttsPcmData.length);
+      alog(`ミキサー初回書き込み: BGM=${hasBgm}, TTS=${hasTts}, chunk=${bytesToWrite}bytes`);
     }
 
-    const output = Buffer.alloc(MIXER_CHUNK_SIZE);
+    const output = Buffer.alloc(bytesToWrite);  // デフォルト0=無音
 
-    // BGMチャンクを書き込み
-    if (hasBgm) {
-      const end = Math.min(bgmPcmOffset + MIXER_CHUNK_SIZE, bgmPcmData.length);
-      bgmPcmData.copy(output, 0, bgmPcmOffset, end);
-      bgmPcmOffset = end;
-      if (bgmPcmOffset >= bgmPcmData.length) {
-        if (bgmLoop) {
-          bgmPcmOffset = 0;
-          alog('BGMループ');
-        } else {
-          bgmPcmData = null;
-          bgmPcmOffset = 0;
-          alog('BGM再生完了（ループなし）');
+    // BGMチャンクを書き込み（データがなければ無音のまま）
+    if (bgmPcmData && bgmPcmOffset < bgmPcmData.length) {
+      let outOffset = 0;
+      while (outOffset < bytesToWrite && bgmPcmData) {
+        const remaining = bgmPcmData.length - bgmPcmOffset;
+        const copyLen = Math.min(bytesToWrite - outOffset, remaining);
+        bgmPcmData.copy(output, outOffset, bgmPcmOffset, bgmPcmOffset + copyLen);
+        bgmPcmOffset += copyLen;
+        outOffset += copyLen;
+        if (bgmPcmOffset >= bgmPcmData.length) {
+          if (bgmLoop) {
+            bgmPcmOffset = 0;
+            alog('BGMループ');
+          } else {
+            bgmPcmData = null;
+            bgmPcmOffset = 0;
+            alog('BGM再生完了（ループなし）');
+          }
         }
       }
     }
 
     // TTSチャンクをミックス（加算合成）
-    if (hasTts) {
-      const end = Math.min(ttsPcmOffset + MIXER_CHUNK_SIZE, ttsPcmData.length);
+    if (ttsPcmData && ttsPcmOffset < ttsPcmData.length) {
+      const end = Math.min(ttsPcmOffset + bytesToWrite, ttsPcmData.length);
       const len = end - ttsPcmOffset;
-      for (let i = 0; i + 1 < len && i + 1 < MIXER_CHUNK_SIZE; i += 2) {
+      for (let i = 0; i + 1 < len && i + 1 < bytesToWrite; i += 2) {
         const bg = output.readInt16LE(i);
         const tts = ttsPcmData.readInt16LE(ttsPcmOffset + i);
         output.writeInt16LE(Math.max(-32768, Math.min(32767, bg + tts)), i);
@@ -230,19 +255,27 @@ function startMixer() {
       }
     }
 
+    // 常にデータを書き込み（無音含む）— 音声ストリームにギャップを作らない
     try {
       audioStreamRes.write(output);
-      lastAudioPcmTime = Date.now();
+      lastAudioPcmTime = now;
+      mixerTotalBytes += bytesToWrite;
       mixerWriteCount++;
     } catch (e) {
       alog(`ミキサー書き込みエラー: ${e.message}`);
     }
-  }, MIXER_CHUNK_MS);
+
+    // 自己補正タイマー: 次のtickを期待時刻に基づいてスケジュール
+    nextTickTime += MIXER_CHUNK_MS;
+    mixerTimer = setTimeout(mixerTick, Math.max(1, nextTickTime - Date.now()));
+  }
+
+  mixerTimer = setTimeout(mixerTick, MIXER_CHUNK_MS);
 }
 
 function stopMixer() {
   if (mixerTimer) {
-    clearInterval(mixerTimer);
+    clearTimeout(mixerTimer);
     mixerTimer = null;
     alog('ミキサー停止');
   }
@@ -948,18 +981,19 @@ async function startStream(config) {
     console.warn('FFmpeg stdin エラー（無視）:', err.message);
   });
 
-  // サイレンスハートビート: PCMデータが来ない場合にサイレンスを送り続ける
-  // （AudioContextがsuspendの場合や、broadcast.html未読み込み時の対策）
+  // サイレンスハートビート: ミキサー未起動時のフォールバック
+  // ミキサーが起動すると常時データを書くのでこのタイマーは不要になる
   lastAudioPcmTime = Date.now();
   stopAudioSilenceTimer();
   audioSilenceTimer = setInterval(() => {
-    if (!audioStreamRes || audioStreamRes.destroyed) {
-      return;
-    }
+    if (!audioStreamRes || audioStreamRes.destroyed) return;
+    // ミキサーが動作中は不要（ミキサーが常時データを書く）
+    if (mixerTimer) return;
     if (Date.now() - lastAudioPcmTime > 300) {
       try {
         // 300ms分のサイレンス（s16le, 44100Hz, stereo）
         audioStreamRes.write(Buffer.alloc(Math.floor(44100 * 2 * 2 * 0.3)));
+        lastAudioPcmTime = Date.now();
       } catch (e) {}
     }
   }, 300);
@@ -1094,13 +1128,20 @@ function startServer() {
 
   // GET /audio-pcm-stream - FFmpegが音声PCMを読み取るHTTPストリーム
   server.get('/audio-pcm-stream', (req, res) => {
+    // ソケットタイムアウト無効化 + Nagle無効化（長時間ストリーミング接続のため）
+    req.setTimeout(0);
+    res.setTimeout(0);
+    if (req.socket) {
+      req.socket.setTimeout(0);
+      req.socket.setNoDelay(true);  // TCP Nagle無効化（小パケット遅延防止）
+    }
     res.writeHead(200, {
       'Content-Type': 'application/octet-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
     });
-    // 初期サイレンス送信（FFmpegの入力初期化ブロックを防止）
-    res.write(Buffer.alloc(44100 * 2 * 2));  // 1秒分 s16le stereo
+    // 初期サイレンス送信（FFmpegの入力初期化用、最小限に）
+    res.write(Buffer.alloc(Math.floor(44100 * 2 * 2 * 0.1)));  // 0.1秒分 s16le stereo
     audioStreamRes = res;
     alog(`FFmpeg音声ストリーム接続: pendingBgm=${pendingBgmUrl ? 'あり' : 'なし'}, broadcastServerUrl=${broadcastServerUrl || 'null'}`);
     // 配信開始前に保存されたBGM URLがあれば再生開始

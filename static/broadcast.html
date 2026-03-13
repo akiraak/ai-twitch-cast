@@ -1801,12 +1801,10 @@ async function init() {
     }
   } catch (e) { console.log('キャプチャ読み込みスキップ:', e.message); }
 
-  // Electron音声キャプチャ（オフスクリーン配信ウィンドウ時のみ有効）
-  try {
-    setupElectronAudioCapture();
-  } catch (e) {
-    console.log('[AudioCapture] セットアップ失敗（WebSocket接続に影響なし）:', e.message);
-  }
+  // メインプロセスのミキサーが音声を処理するため、ブラウザ側AudioCaptureは不要
+  // setupElectronAudioCapture()はAudioContext+ScriptProcessorを生成し、
+  // オフスクリーンレンダリングに負荷をかけるため無効化
+  console.log('[AudioCapture] スキップ（メインプロセスミキサーが音声処理を担当）');
 
   await loadTodo();
   await loadTopicPanel();
