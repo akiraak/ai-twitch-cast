@@ -186,9 +186,9 @@ async function processAudioUrl(fullUrl) {
 }
 
 const STREAM_DEFAULTS = {
-  resolution: '1920x1080',
+  resolution: '1280x720',
   framerate: 30,
-  videoBitrate: '3500k',
+  videoBitrate: '2500k',
   audioBitrate: '128k',
   preset: 'ultrafast',
 };
