@@ -449,8 +449,19 @@
   </div>
 </div>
 
-<!-- 背景画像 -->
+<!-- 背景画像（APIから選択済み背景を取得、なければデフォルト） -->
 <img id="background" src="/resources/images/background.png" alt="">
+<script>
+(async () => {
+  try {
+    const res = await fetch('/api/files/background/list');
+    const data = await res.json();
+    if (data.ok && data.active) {
+      document.getElementById('background').src = '/resources/images/backgrounds/' + data.active;
+    }
+  } catch (e) {}
+})();
+</script>
 
 <!-- キャプチャレイヤーコンテナ -->
 <div id="capture-container"></div>
@@ -734,16 +745,23 @@ function animate() {
 
 animate();
 
-// デフォルトでVRMモデルを読み込み
+// デフォルトでVRMモデルを読み込み（素材管理で選択されたVRMを優先）
 async function initAvatar() {
+  try {
+    // 素材管理で選択されたアバターを確認
+    const filesRes = await fetch('/api/files/avatar/list');
+    const filesData = await filesRes.json();
+    if (filesData.ok && filesData.active) {
+      await loadVRM('/resources/vrm/' + filesData.active);
+      return;
+    }
+  } catch (e) {}
   try {
     const res = await fetch('/api/broadcast/avatar');
     const data = await res.json();
-    // VRM URLが設定されていればそれを使う、なければデフォルト
     const vrmUrl = data.vrm_url || '/resources/vrm/Shinano.vrm';
     await loadVRM(vrmUrl);
   } catch (e) {
-    // デフォルトモデル読み込み
     await loadVRM('/resources/vrm/Shinano.vrm');
   }
 }
@@ -1172,6 +1190,14 @@ function connectWS() {
         break;
       case 'capture_layout':
         updateCaptureLayout(data.id, data.layout);
+        break;
+
+      // 素材変更
+      case 'avatar_vrm_change':
+        if (data.url) loadVRM(data.url);
+        break;
+      case 'background_change':
+        if (data.url) document.getElementById('background').src = data.url;
         break;
     }
   };
