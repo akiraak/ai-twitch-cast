@@ -397,9 +397,6 @@ async function openPreview(serverUrl) {
     });
     previewWindow.setMenu(null);
     previewWindow.setMenuBarVisibility(false);
-    previewWindow.webContents.on('did-finish-load', () => {
-      previewWindow.webContents.openDevTools({ mode: 'detach' });
-    });
     previewWindow.loadURL(previewUrl);
     previewWindow.on('move', debouncedSaveBounds);
     previewWindow.on('resize', debouncedSaveBounds);

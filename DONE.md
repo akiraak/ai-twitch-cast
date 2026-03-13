@@ -223,6 +223,7 @@
 - [x] Windowsウィンドウキャプチャシステム（Electronアプリ: desktopCapturer+MJPEGサーバー、WSL2側API+WebSocket連携、broadcast.htmlドラッグ&リサイズ編集モード、broadcast-ui.htmlキャプチャ管理UI）
 - [x] レイアウト編集にスナップガイド線追加（ドラッグ・リサイズ時に画面中央・他パーツ端/中央への補助線表示+自動スナップ、グロー付き目立つデザイン）
 - [x] プレビューウィンドウの配信画面を16:9レターボックス表示（ウィンドウ自由リサイズ対応）
+- [x] Electronプレビューウィンドウの検証ウィンドウ（DevTools）自動表示を削除
 
 ## Phase 0: 環境構築・基盤
 
