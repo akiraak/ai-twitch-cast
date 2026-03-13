@@ -225,6 +225,8 @@
 - [x] プレビューウィンドウの配信画面を16:9レターボックス表示（ウィンドウ自由リサイズ対応）
 - [x] Electronプレビューウィンドウの検証ウィンドウ（DevTools）自動表示を削除
 - [x] 配信音声: FFmpegの音声入力をanullsrc→ローカルHTTPストリーム（broadcast.htmlのPCM音声）に変更、backgroundThrottling無効化+AudioContext監視+診断ログ追加
+- [x] 配信音声: メインプロセス直接WAVバイパス（broadcast.html AudioContext不使用、IPC経由でmain.jsが直接WAV取得→リサンプル→FFmpegストリーム書き込み）
+- [x] 音声診断ログAPI追加（Electron側 `/audio/log`、WSL2プロキシ `/api/broadcast/audio-log`）
 
 ## Phase 0: 環境構築・基盤
 

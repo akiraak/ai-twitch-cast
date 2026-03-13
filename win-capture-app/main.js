@@ -44,6 +44,15 @@ let audioSilenceTimer = null;   // サイレンスハートビート
 let lastAudioPcmTime = 0;      // 最後にPCMデータを受信した時刻
 let audioStreamRes = null;      // FFmpegへのHTTPレスポンス（PCMストリーム）
 let currentAudioTimer = null;   // 現在のTTS再生タイマー
+
+// === 診断ログ（APIで公開） ===
+const audioLog = [];            // 最新の音声関連ログ
+function alog(msg) {
+  const entry = `${new Date().toISOString().slice(11, 19)} ${msg}`;
+  console.log(entry);
+  audioLog.push(entry);
+  if (audioLog.length > 50) audioLog.shift();
+}
 let broadcastServerUrl = null;  // WSL2サーバーURL（音声取得用）
 
 // === WAV処理（メインプロセス直接音声パイプライン） ===
@@ -137,10 +146,10 @@ function writeAudioAtRealtime(pcmBuffer) {
 
 async function processAudioUrl(fullUrl) {
   try {
-    console.log('[AudioDirect] 音声取得:', fullUrl);
+    alog(`音声取得: ${fullUrl}`);
     const response = await fetch(fullUrl);
     if (!response.ok) {
-      console.warn('[AudioDirect] 取得失敗:', response.status);
+      alog(`取得失敗: ${response.status}`);
       return;
     }
     const arrayBuffer = await response.arrayBuffer();
@@ -148,14 +157,14 @@ async function processAudioUrl(fullUrl) {
 
     const fmt = parseWavHeader(wavBuffer);
     if (!fmt) {
-      console.warn('[AudioDirect] WAVヘッダー解析失敗');
+      alog('WAVヘッダー解析失敗');
       return;
     }
-    console.log(`[AudioDirect] WAV: ${fmt.sampleRate}Hz ${fmt.numChannels}ch ${fmt.bitsPerSample}bit`);
+    alog(`WAV: ${fmt.sampleRate}Hz ${fmt.numChannels}ch ${fmt.bitsPerSample}bit`);
 
     let pcmData = getWavPcmData(wavBuffer);
     if (!pcmData || pcmData.length === 0) {
-      console.warn('[AudioDirect] PCMデータなし');
+      alog('PCMデータなし');
       return;
     }
 
@@ -169,10 +178,10 @@ async function processAudioUrl(fullUrl) {
     }
 
     const durationSec = (pcmData.length / (AUDIO_TARGET_RATE * AUDIO_TARGET_CHANNELS * 2)).toFixed(1);
-    console.log(`[AudioDirect] 再生: ${durationSec}秒, ${(pcmData.length / 1024).toFixed(0)}KB`);
+    alog(`再生: ${durationSec}秒, ${(pcmData.length / 1024).toFixed(0)}KB`);
     writeAudioAtRealtime(pcmData);
   } catch (e) {
-    console.error('[AudioDirect] エラー:', e.message);
+    alog(`エラー: ${e.message}`);
   }
 }
 
@@ -326,7 +335,7 @@ ipcMain.on('audio-play-url', (event, { type, url }) => {
 // IPC: BGM停止
 ipcMain.on('audio-stop-bgm', () => {
   // BGMの停止処理（将来拡張用）
-  console.log('[AudioDirect] BGM停止');
+  alog('BGM停止');
 });
 
 // ウィンドウ位置の永続化
@@ -559,7 +568,7 @@ async function openBroadcastWindow(serverUrl) {
   broadcastWindow.webContents.setFrameRate(cfg.framerate);
   // broadcast.htmlのconsole出力をメインプロセスに転送（音声デバッグ用）
   broadcastWindow.webContents.on('console-message', (_e, level, msg) => {
-    console.log(`[Broadcast] ${msg}`);
+    alog(`[Broadcast] ${msg}`);
   });
   broadcastWindow.loadURL(broadcastUrl);
   broadcastWindow.on('closed', () => {
@@ -888,9 +897,9 @@ function startServer() {
     // 初期サイレンス送信（FFmpegの入力初期化ブロックを防止）
     res.write(Buffer.alloc(44100 * 2 * 2));  // 1秒分 s16le stereo
     audioStreamRes = res;
-    console.log('[AudioStream] FFmpeg音声ストリーム接続');
+    alog('FFmpeg音声ストリーム接続');
     req.on('close', () => {
-      console.log('[AudioStream] FFmpeg音声ストリーム切断');
+      alog('FFmpeg音声ストリーム切断');
       audioStreamRes = null;
     });
   });
@@ -1034,6 +1043,17 @@ ${captureList.join('') || '<p>なし</p>'}
   // GET /stream/status - 配信状態
   server.get('/stream/status', (req, res) => {
     res.json(getStreamStatus());
+  });
+
+  // GET /audio/log - 音声診断ログ
+  server.get('/audio/log', (req, res) => {
+    res.json({
+      log: audioLog,
+      audio_stream_connected: audioStreamRes !== null && !audioStreamRes.destroyed,
+      audio_receiving_pcm: lastAudioPcmTime > 0 && (Date.now() - lastAudioPcmTime) < 1000,
+      broadcast_server_url: broadcastServerUrl,
+      current_audio_playing: currentAudioTimer !== null,
+    });
   });
 
   // POST /broadcast/open - 配信ウィンドウ（オフスクリーン）を開く

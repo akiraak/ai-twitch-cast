@@ -344,3 +344,16 @@ async def broadcast_diag():
         "errors": errors,
         "healthy": len(errors) == 0,
     }
+
+
+@router.get("/api/broadcast/audio-log")
+async def broadcast_audio_log():
+    """Electronアプリの音声診断ログを取得"""
+    import httpx
+    from scripts.routes.capture import _capture_base_url
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{_capture_base_url()}/audio/log")
+            return resp.json()
+    except Exception as e:
+        return {"error": str(e), "log": []}
