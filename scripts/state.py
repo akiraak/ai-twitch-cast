@@ -10,14 +10,9 @@ from src.comment_reader import CommentReader
 from src.git_watcher import GitWatcher
 from src.topic_talker import TopicTalker
 from src.twitch_api import TwitchAPI
-from src.vts_controller import VTSController
 
 # コントローラー
-vts = VTSController()
 twitch_api = TwitchAPI()
-
-# 接続状態
-vts_connected = False
 
 # エピソード
 current_episode = None

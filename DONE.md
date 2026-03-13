@@ -1,5 +1,13 @@
 # DONE
 
+## Live2D/VTube Studio関連コードの完全削除
+
+- [x] VTSコントローラー・デプロイスクリプト・対話式コンソール削除
+- [x] VTSエンドポイント・接続ロジック・状態変数をコードから除去
+- [x] pyvts依存・VTS環境変数・AVATAR_APP設定を削除
+- [x] Live2D関連ドキュメント・リソースディレクトリ削除
+- [x] VRM機能は影響なし（broadcast.html内Three.js+three-vrm）
+
 ## アバター色味改善
 
 - [x] ACESFilmicToneMapping → NoToneMapping（トーンマッピングなし）
@@ -247,6 +255,7 @@
 - [x] broadcast.htmlで選択された素材を動的読み込み（起動時API確認＋WebSocketリアルタイム切替）
 - [x] `python-multipart`依存追加（ファイルアップロード対応）
 - [x] 著作権物（アバターVRM・背景画像）は`.gitignore`で既にgit管理から除外済み
+- [x] git履歴にも著作権物が含まれていないことを確認済み（一度もコミットされていない）
 
 ## Phase 0: 環境構築・基盤
 

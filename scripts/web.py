@@ -1,4 +1,4 @@
-"""Web インターフェース（console.py相当）"""
+"""Web インターフェース"""
 
 import asyncio
 import logging
@@ -39,7 +39,6 @@ from scripts.routes.files import router as files_router
 from scripts.routes.twitch import router as twitch_router
 from src.ai_responder import load_character
 from src import scene_config
-from src.scene_config import AVATAR_APP
 
 app = FastAPI()
 
@@ -71,9 +70,6 @@ app.include_router(twitch_router)
 # --- 環境設定 ---
 
 ENV_KEYS = [
-    ("AVATAR_APP", "アバターアプリ"),
-    ("VTS_HOST", "VTube Studio ホスト"),
-    ("VTS_PORT", "VTube Studio ポート"),
     ("TWITCH_TOKEN", "Twitch トークン"),
     ("TWITCH_CLIENT_ID", "Twitch Client ID"),
     ("TWITCH_CHANNEL", "Twitch チャンネル"),
@@ -109,8 +105,6 @@ async def index():
 async def get_status():
     return {
         "server_started_at": SERVER_STARTED_AT,
-        "avatar_app": AVATAR_APP,
-        "vts": {"connected": state.vts_connected},
         "reader": {
             "running": state.reader.is_running,
             "queue": state.reader.queue_size,
@@ -135,9 +129,6 @@ async def restart_server():
 
 @app.post("/api/start")
 async def start():
-    if AVATAR_APP == "vts":
-        await state.vts.connect()
-        state.vts_connected = True
     await state.ensure_reader()
     await state.git_watcher.start()
 
@@ -180,14 +171,6 @@ async def startup():
 async def _restore_session():
     """前回のセッションをバックグラウンドで自動復旧する"""
     logger.info("前回のセッションを自動復旧中...")
-
-    try:
-        if AVATAR_APP == "vts":
-            await state.vts.connect()
-            state.vts_connected = True
-            logger.info("VTS接続復旧OK")
-    except Exception as e:
-        logger.warning("アバター復旧失敗: %s", e)
 
     try:
         await state.ensure_reader()

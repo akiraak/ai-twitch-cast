@@ -1,4 +1,4 @@
-"""アバター制御ルート（VTS + 発話）"""
+"""アバター制御ルート（発話）"""
 
 import asyncio
 
@@ -50,57 +50,4 @@ async def tts_audio():
             headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
         )
     return {"error": "no audio"}
-
-
-# --- VTS ---
-
-@router.post("/api/vts/connect")
-async def vts_connect():
-    await state.vts.connect()
-    state.vts_connected = True
-    return {"ok": True}
-
-
-@router.post("/api/vts/disconnect")
-async def vts_disconnect():
-    await state.vts.disconnect()
-    state.vts_connected = False
-    return {"ok": True}
-
-
-@router.get("/api/vts/model")
-async def vts_model():
-    return await state.vts.get_model_info()
-
-
-@router.get("/api/vts/params")
-async def vts_params():
-    return {"params": await state.vts.get_parameters()}
-
-
-class ParamSet(BaseModel):
-    name: str
-    value: float
-
-
-@router.post("/api/vts/param")
-async def vts_param(body: ParamSet):
-    await state.vts.set_parameter(body.name, body.value)
-    return {"ok": True}
-
-
-@router.get("/api/vts/hotkeys")
-async def vts_hotkeys():
-    return {"hotkeys": await state.vts.get_hotkeys()}
-
-
-class HotkeyTrigger(BaseModel):
-    id: str
-
-
-@router.post("/api/vts/hotkey")
-async def vts_hotkey(body: HotkeyTrigger):
-    await state.vts.trigger_hotkey(body.id)
-    return {"ok": True}
-
 

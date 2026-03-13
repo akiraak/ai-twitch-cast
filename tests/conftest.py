@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 _STUB_MODULES = [
     "twitchio",
     "aiohttp",
-    "pyvts",
 ]
 
 for mod_name in _STUB_MODULES:

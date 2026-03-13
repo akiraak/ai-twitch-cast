@@ -30,13 +30,8 @@ Electron配信パイプライン（Windows側でbroadcast.htmlをオフスクリ
 
 ## リソース管理
 
-- リソース（画像・Live2Dモデル・音声・動画）は `resources/` 配下で一元管理
-- VTube Studioにはデプロイスクリプトでコピー/クリーンアップ
+- リソース（画像・VRMモデル・音声・動画）は `resources/` 配下で一元管理
 - 詳細は [docs/resource-management.md](docs/resource-management.md) を参照
-
-## 対話式コンソール
-
-`python scripts/console.py` で起動。コマンド詳細は [docs/console-commands.md](docs/console-commands.md) を参照。
 
 ## ドキュメント
 
@@ -54,7 +49,7 @@ ai-twitch-cast/
 │   ├── assets/images/        # 画像素材（OGP等）
 │   ├── overrides/            # MkDocsテーマオーバーライド（OGP設定等）
 │   ├── index.md              # トップページ
-│   ├── avatar-research.md   # アバター表示・アニメーション調査
+│   ├── avatar-research.md   # アバター表示調査
 │   ├── 3d-model-research.md # 3Dモデル調査
 │   ├── vrm-conversion-log.md # VRM変換作業ログ
 │   └── window-capture.md   # ウィンドウキャプチャシステム設計
@@ -66,7 +61,6 @@ ai-twitch-cast/
 │   ├── package.json         # Electron+electron-builder設定
 │   └── build.sh             # ビルドスクリプト
 ├── src/                      # ソースコード
-│   ├── vts_controller.py     # VTube Studio API制御（Live2D）
 │   ├── scene_config.py       # 設定の定義（scenes.jsonから読み込み）
 │   ├── tts.py                # TTS音声合成（Gemini 2.5 Flash TTS）
 │   ├── twitch_chat.py        # Twitchチャット受信
@@ -77,11 +71,9 @@ ai-twitch-cast/
 │   ├── db.py                 # データベース管理（SQLite）
 │   └── wsl_path.py           # WSL関連ユーティリティ
 ├── scripts/                  # 実行スクリプト
-│   ├── console.py            # 対話式コンソール（アバター制御）
 │   ├── web.py                # Webインターフェース（startup自動復旧・shutdownハンドラ付き）
 │   ├── state.py              # 共有状態（コントローラー・WebSocket・GitWatcher）
 │   ├── routes/               # ルートモジュール（avatar/capture/character/overlay/twitch/topic/bgm/db_viewer/stream_control）
-│   ├── deploy_model.py       # Live2Dモデルデプロイ
 │   ├── convert_to_vrm.py     # FBX→VRM変換（Blenderスクリプト）
 │   ├── fix_vrm_mtoon.py      # VRM MToonシェーダ修正
 │   └── comment_reader.py     # Twitchコメント読み上げ
@@ -90,7 +82,6 @@ ai-twitch-cast/
 │   └── index.html            # 配信制御UI（キャプチャ管理含む）
 ├── resources/                # リソース（画像・モデル・音声・動画）
 │   ├── images/
-│   ├── live2d/
 │   ├── vrm/                  # VRMモデル
 │   ├── audio/
 │   └── video/
