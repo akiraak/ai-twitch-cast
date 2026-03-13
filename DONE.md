@@ -1,8 +1,8 @@
 # DONE
 
-## アバター色味改善（VSeeFace準拠）
+## アバター色味改善
 
-- [x] ACESFilmicToneMapping → NoToneMapping（VSeeFaceと同じくトーンマッピングなし）
+- [x] ACESFilmicToneMapping → NoToneMapping（トーンマッピングなし）
 - [x] ライティング調整（AmbientLight 2.0→0.75、DirectionalLight 1.5→1.0、方向修正）
 - [x] Web UIにライト直接制御（環境光・指向性光・ライト方向X/Y/Z）追加
 - [x] ライティングプリセット保存・読込・削除機能（DB永続化）
@@ -67,11 +67,11 @@
 
 - [x] scenes.json設定をDB優先に移行（scene_config.pyにload_config_value/load_config_json/save_config_value/save_config_json追加）
 - [x] bgm.py: BGMトラック設定のDB化
-- [x] avatar.py: vsf_defaults設定のDB化
+- [x] avatar.py: アバターデフォルト設定のDB化
 - [x] character.py: language_mode保存のDB化
 - [x] stream_control.py: avatar_capture_url・音量設定のDB化
 - [x] overlay.py: 音量・オーバーレイデフォルト設定のDB化
-- [x] state.py: load_vsf_defaults()のDB化
+- [x] state.py: アバターデフォルト設定読込のDB化
 - [x] web.py: startup言語モード復元のDB化
 
 ## Web UI整理
@@ -121,14 +121,14 @@
 - [x] コードからシーンとソースを追加する（setup/teardown、個別add/remove）
 - [x] ゲームキャプチャでVTube Studioのアバターを透過表示
 - [x] システム作成のシーン・ソースに「[ATC] 」プレフィックスを付与してユーザー作成物と区別
-- [x] VRM形式の3Dキャラ表示に対応（VSFController + VMC Protocol + scene_config切替）
+- [x] VRM形式の3Dキャラ表示に対応（ブラウザVRMビューア + scene_config切替）
 - [x] console.py相当のWebインターフェースを作成（FastAPI + HTML）
 - [x] シーンの設定をJSONで設定できるように（scenes.json）
 - [x] アバターの配置位置を設定可能に（scenes.jsonのavatar.transform）
 - [x] セットアップ後にメインシーンへ自動切替（scenes.jsonのmain_scene設定）
 - [x] シーンごとのアバター位置オーバーライド対応
 - [x] Webインターフェースでアバター位置調整・scenes.jsonへの保存機能
-- [x] Web UIにSetup/配信開始・停止ボタン、.env設定表示、VSeeFace初期値の保存・復元機能を追加
+- [x] Web UIにSetup/配信開始・停止ボタン、.env設定表示を追加
 - [x] Twitchコメント読み上げ機能（Gemini 2.5 Flash TTS + twitchio）
 - [x] AIコメント応答システム（character.jsonでキャラ設定・ルール定義、表情連動）
 - [x] コメント・配信データのDB化（SQLite: チャンネル/キャラクター/番組/エピソード/ユーザー/コメント/アクション）
@@ -195,7 +195,7 @@
 - [x] 視聴者メモ機能（15分バッチでAIがユーザー特徴を自動メモ化、応答時にメモを反映）
 - [x] 視聴者への挨拶を1配信1回に制限（エピソード内コメント数でAIに挨拶済みフラグを渡す）
 - [x] 言語モード切替機能（日本語/英語メイン/英語+日本語混ぜ/マルチリンガルの4プリセット、Web UIから切替、scenes.jsonに永続化）
-- [x] VSeeFace画面左上のUI文字がOBSに表示される問題を修正（cropTop/cropLeftでトリミング）
+- [x] アバター画面のUI文字がOBSに表示される問題を修正（cropTop/cropLeftでトリミング）
 - [x] アバターアイドルモーションのかくつき修正（まばたきをフレームベース化、フレームタイミング安定化）
 - [x] イベント発話（コミット・実装通知）が言語モード設定に従うよう修正
 - [x] Web UIリロード時のタブ復元（location.hashでアクティブタブを永続化）
@@ -214,7 +214,7 @@
 - [x] 配信制御UI broadcast-ui.html（Setup/Start/Stop/Scene/Volume/Diag）
 - [x] StreamController（xvfb/Chromium/PulseAudio/FFmpegプロセス管理、WSLg自動検出）
 - [x] 配信制御API stream_control.py（/api/broadcast/*エンドポイント群）
-- [x] ブラウザVRMアバター（Three.js+three-vrmでVSeeFace不要化、アイドルアニメーション移植）
+- [x] ブラウザVRMアバター（Three.js+three-vrm、アイドルアニメーション移植）
 - [x] VRMアバターWebSocket連携（blendshape/lipsync/lipsync_stopイベントでブラウザ側アバター制御）
 - [x] レイアウトエディタ（broadcast-ui.htmlにアバター/字幕/TODO/トピックの位置・サイズ・透明度をスライダー+数値入力で調整、DB自動保存、リアルタイムプレビュー反映）
 - [x] レイアウト設定をDB移行（scenes.jsonは初期値のみ、overlay.*キーでDB保存）

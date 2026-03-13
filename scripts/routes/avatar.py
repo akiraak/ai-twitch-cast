@@ -1,4 +1,4 @@
-"""アバター制御ルート（VTS + VSF + 発話）"""
+"""アバター制御ルート（VTS + 発話）"""
 
 import asyncio
 
@@ -7,7 +7,6 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from scripts import state
-from src.scene_config import load_config_json, save_config_json
 
 router = APIRouter()
 
@@ -105,69 +104,3 @@ async def vts_hotkey(body: HotkeyTrigger):
     return {"ok": True}
 
 
-# --- VSF ---
-
-@router.post("/api/vsf/connect")
-async def vsf_connect():
-    state.vsf.connect()
-    state.vsf_connected = True
-    state.vsf.apply_default_pose()
-    return {"ok": True}
-
-
-@router.post("/api/vsf/disconnect")
-async def vsf_disconnect():
-    state.vsf.stop_idle()
-    state.vsf.disconnect()
-    state.vsf_connected = False
-    return {"ok": True}
-
-
-@router.post("/api/vsf/pose")
-async def vsf_pose():
-    state.vsf.apply_default_pose()
-    return {"ok": True}
-
-
-class IdleParams(BaseModel):
-    scale: float = 1.0
-
-
-@router.post("/api/vsf/idle")
-async def vsf_idle(body: IdleParams):
-    state.vsf.start_idle(body.scale)
-    return {"ok": True}
-
-
-@router.post("/api/vsf/stop")
-async def vsf_stop():
-    state.vsf.stop_idle()
-    state.vsf.apply_default_pose()
-    return {"ok": True}
-
-
-class BlendShape(BaseModel):
-    name: str
-    value: float
-
-
-@router.post("/api/vsf/blend")
-async def vsf_blend(body: BlendShape):
-    state.vsf.set_blendshape(body.name, body.value)
-    return {"ok": True}
-
-
-@router.get("/api/vsf/defaults")
-async def vsf_defaults_get():
-    return load_config_json("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})
-
-
-class VSFDefaults(BaseModel):
-    idle_scale: float
-    blendshapes: dict[str, float]
-
-
-@router.post("/api/vsf/defaults/save")
-async def vsf_defaults_save(body: VSFDefaults):
-    save_config_json("vsf_defaults", body.model_dump())
-    return {"ok": True}

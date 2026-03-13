@@ -17,7 +17,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
-from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
 
 HELP_TEXT = """
@@ -32,16 +31,6 @@ HELP_TEXT = """
   vts hotkey <ID>      ホットキーを実行
   vts demo             デモ動作（口パク・まばたき・体の動き）
 
-  vsf connect          VSeeFace (VMC Protocol) に接続
-  vsf disconnect       VSeeFaceから切断
-  vsf status           VSF接続状態を表示
-  vsf pose             デフォルトポーズを適用（腕を下ろす）
-  vsf idle [倍率]      待機モーション開始（倍率省略時1.0）
-  vsf stop             待機モーション停止
-  vsf blend <名前> <値> BlendShapeを設定（例: vsf blend Joy 1.0）
-  vsf bone <名前> <qx> <qy> <qz> <qw>  ボーン回転を設定
-  vsf demo             デモ動作（リップシンク・表情・体の動き）
-
   help                 このヘルプを表示
   quit / exit          終了
 """.strip()
@@ -50,9 +39,7 @@ HELP_TEXT = """
 class Console:
     def __init__(self):
         self.vts = VTSController()
-        self.vsf = VSFController()
         self._vts_connected = False
-        self._vsf_connected = False
 
     # --- VTSコマンド ---
 
@@ -135,134 +122,11 @@ class Console:
 
         print("デモ完了")
 
-    # --- VSFコマンド ---
-
-    def cmd_vsf_connect(self):
-        self.vsf.connect()
-        self._vsf_connected = True
-        self.vsf.apply_default_pose()
-
-    def cmd_vsf_disconnect(self):
-        self.vsf.disconnect()
-        self._vsf_connected = False
-
-    def cmd_vsf_status(self):
-        if not self._vsf_connected:
-            print("VSeeFace: 未接続")
-        else:
-            print(f"VSeeFace: 接続中 ({self.vsf.host}:{self.vsf.port})")
-
-    def cmd_vsf_pose(self):
-        self._require_vsf()
-        self.vsf.apply_default_pose()
-        print("デフォルトポーズを適用しました")
-
-    def cmd_vsf_idle(self, scale=1.0):
-        self._require_vsf()
-        self.vsf.start_idle(scale)
-        print(f"待機モーション開始 (scale={scale}, vsf stop で停止)")
-
-    def cmd_vsf_stop(self):
-        self._require_vsf()
-        self.vsf.stop_idle()
-        self.vsf.apply_default_pose()
-        print("待機モーション停止")
-
-    def cmd_vsf_blend(self, name, value):
-        self._require_vsf()
-        self.vsf.set_blendshape(name, float(value))
-        print(f"BlendShape {name} = {value}")
-
-    def cmd_vsf_bone(self, bone, qx, qy, qz, qw):
-        self._require_vsf()
-        self.vsf.set_bone(bone, qx=float(qx), qy=float(qy), qz=float(qz), qw=float(qw))
-        print(f"Bone {bone} = ({qx}, {qy}, {qz}, {qw})")
-
-    async def cmd_vsf_demo(self):
-        self._require_vsf()
-        import math
-
-        def quat_from_axis_angle(ax, ay, az, angle_deg):
-            """軸と角度（度）からクォータニオンを生成"""
-            rad = math.radians(angle_deg) / 2
-            s = math.sin(rad)
-            c = math.cos(rad)
-            return (ax * s, ay * s, az * s, c)
-
-        print("デモ開始...")
-
-        print("  リップシンク...")
-        for vowel in ["A", "I", "U", "E", "O"]:
-            self.vsf.set_blendshape(vowel, 0.8)
-            await asyncio.sleep(0.3)
-            self.vsf.set_blendshape(vowel, 0.0)
-            await asyncio.sleep(0.1)
-
-        await asyncio.sleep(0.3)
-
-        print("  表情（Joy）...")
-        self.vsf.set_blendshape("Joy", 1.0)
-        await asyncio.sleep(1.0)
-        self.vsf.set_blendshape("Joy", 0.0)
-
-        await asyncio.sleep(0.3)
-
-        print("  まばたき...")
-        self.vsf.set_blendshape("Blink", 1.0)
-        await asyncio.sleep(0.2)
-        self.vsf.set_blendshape("Blink", 0.0)
-
-        await asyncio.sleep(0.3)
-
-        print("  頷き...")
-        for i in range(20):
-            angle = math.sin(i * 0.6) * 15  # 上下15度
-            qx, qy, qz, qw = quat_from_axis_angle(1, 0, 0, angle)
-            self.vsf.set_bone("Head", qx=qx, qy=qy, qz=qz, qw=qw)
-            await asyncio.sleep(0.05)
-        self.vsf.set_bone("Head")
-
-        await asyncio.sleep(0.3)
-
-        print("  首かしげ...")
-        for i in range(20):
-            angle = math.sin(i * 0.5) * 20  # 左右20度
-            qx, qy, qz, qw = quat_from_axis_angle(0, 0, 1, angle)
-            self.vsf.set_bone("Head", qx=qx, qy=qy, qz=qz, qw=qw)
-            await asyncio.sleep(0.05)
-        self.vsf.set_bone("Head")
-
-        await asyncio.sleep(0.3)
-
-        print("  体の揺れ...")
-        for i in range(30):
-            angle = math.sin(i * 0.4) * 10  # 左右10度
-            qx, qy, qz, qw = quat_from_axis_angle(0, 0, 1, angle)
-            self.vsf.set_bone("Spine", qx=qx, qy=qy, qz=qz, qw=qw)
-            await asyncio.sleep(0.05)
-        self.vsf.set_bone("Spine")
-
-        await asyncio.sleep(0.3)
-
-        print("  手を振る...")
-        for i in range(20):
-            angle = -30 + math.sin(i * 1.0) * 30  # -60〜0度
-            qx, qy, qz, qw = quat_from_axis_angle(0, 0, 1, angle)
-            self.vsf.set_bone("RightUpperArm", qx=qx, qy=qy, qz=qz, qw=qw)
-            await asyncio.sleep(0.05)
-        self.vsf.set_bone("RightUpperArm")
-
-        print("デモ完了")
-
     # --- ユーティリティ ---
 
     async def _require_vts(self):
         if not self._vts_connected:
             await self.cmd_vts_connect()
-
-    def _require_vsf(self):
-        if not self._vsf_connected:
-            self.cmd_vsf_connect()
 
     async def dispatch(self, line):
         """コマンドをパースして実行する"""
@@ -278,8 +142,6 @@ class Console:
                 print(HELP_TEXT)
             elif cmd == "vts" and args:
                 await self._dispatch_vts(args)
-            elif cmd == "vsf" and args:
-                await self._dispatch_vsf(args)
             elif cmd in ("quit", "exit"):
                 raise SystemExit
             else:
@@ -319,41 +181,8 @@ class Console:
         else:
             print(f"不明なVTSコマンド: {' '.join(args)}")
 
-    async def _dispatch_vsf(self, args):
-        sub = args[0]
-        if sub == "connect":
-            self.cmd_vsf_connect()
-        elif sub == "disconnect":
-            self.cmd_vsf_disconnect()
-        elif sub == "status":
-            self.cmd_vsf_status()
-        elif sub == "pose":
-            self.cmd_vsf_pose()
-        elif sub == "idle":
-            scale = float(args[1]) if len(args) >= 2 else 1.0
-            self.cmd_vsf_idle(scale)
-        elif sub == "stop":
-            self.cmd_vsf_stop()
-        elif sub == "blend":
-            if len(args) >= 3:
-                self.cmd_vsf_blend(args[1], args[2])
-            else:
-                print("使い方: vsf blend <名前> <値>  (例: vsf blend Joy 1.0)")
-        elif sub == "bone":
-            if len(args) >= 6:
-                self.cmd_vsf_bone(args[1], args[2], args[3], args[4], args[5])
-            else:
-                print("使い方: vsf bone <名前> <qx> <qy> <qz> <qw>  (例: vsf bone Head 0.1 0 0 1)")
-        elif sub == "demo":
-            await self.cmd_vsf_demo()
-        else:
-            print(f"不明なVSFコマンド: {' '.join(args)}")
-
     async def cleanup(self):
         """終了時のクリーンアップ"""
-        if self._vsf_connected:
-            self.vsf.stop_idle()
-            self.vsf.disconnect()
         if self._vts_connected:
             await self.vts.disconnect()
 
@@ -362,18 +191,10 @@ async def main():
     console = Console()
     print("AI Twitch Cast コンソール (helpでコマンド一覧)\n")
 
-    from src.scene_config import AVATAR_APP
-
-    if AVATAR_APP == "vsf":
-        try:
-            console.cmd_vsf_connect()
-        except Exception as e:
-            print(f"VSF: 接続失敗 ({e})")
-    else:
-        try:
-            await console.cmd_vts_connect()
-        except Exception as e:
-            print(f"VTS: 接続失敗 ({e})")
+    try:
+        await console.cmd_vts_connect()
+    except Exception as e:
+        print(f"VTS: 接続失敗 ({e})")
 
     print()
 

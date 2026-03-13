@@ -20,9 +20,8 @@ from src.twitch_chat import TwitchChat
 class CommentReader:
     """Twitchコメントを読み上げるサービス"""
 
-    def __init__(self, vsf=None, on_overlay=None, topic_talker=None):
+    def __init__(self, on_overlay=None, topic_talker=None):
         self._chat = TwitchChat()
-        self._vsf = vsf
         self._on_overlay = on_overlay
         self._topic_talker = topic_talker
         self._queue = deque()
@@ -288,9 +287,6 @@ class CommentReader:
                     logger.warning("リップシンク解析失敗: %s", e)
 
                 # リップシンク開始（音声再生と同時）
-                if self._vsf and lipsync_frames:
-                    self._vsf.start_lipsync(lipsync_frames)
-                # broadcast.html VRMアバターにもリップシンク送信
                 if lipsync_frames:
                     await self._on_overlay({
                         "type": "lipsync",
@@ -316,8 +312,6 @@ class CommentReader:
                 await asyncio.sleep(duration + 0.5)
 
                 # リップシンク停止
-                if self._vsf and lipsync_frames:
-                    self._vsf.stop_lipsync()
                 if lipsync_frames:
                     await self._on_overlay({"type": "lipsync_stop"})
             else:
@@ -452,11 +446,7 @@ class CommentReader:
                 all_emotions.update(bs.keys())
             blendshapes = {k: 0.0 for k in all_emotions} if all_emotions else {}
 
-        # VSeeFace OSC送信
-        if self._vsf and blendshapes:
-            self._vsf.set_blendshapes(blendshapes)
-
-        # broadcast.html VRMアバターにもWebSocket送信
+        # broadcast.html VRMアバターにWebSocket送信
         if self._on_overlay and blendshapes:
             asyncio.create_task(self._on_overlay({
                 "type": "blendshape",

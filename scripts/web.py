@@ -69,11 +69,9 @@ app.include_router(twitch_router)
 # --- 環境設定 ---
 
 ENV_KEYS = [
-    ("AVATAR_APP", "アバターアプリ (vts/vsf)"),
+    ("AVATAR_APP", "アバターアプリ"),
     ("VTS_HOST", "VTube Studio ホスト"),
     ("VTS_PORT", "VTube Studio ポート"),
-    ("VSF_OSC_HOST", "VSeeFace OSC ホスト"),
-    ("VSF_OSC_PORT", "VSeeFace OSC ポート"),
     ("TWITCH_TOKEN", "Twitch トークン"),
     ("TWITCH_CLIENT_ID", "Twitch Client ID"),
     ("TWITCH_CHANNEL", "Twitch チャンネル"),
@@ -111,10 +109,6 @@ async def get_status():
         "server_started_at": SERVER_STARTED_AT,
         "avatar_app": AVATAR_APP,
         "vts": {"connected": state.vts_connected},
-        "vsf": {
-            "connected": state.vsf_connected,
-            "idle": state.vsf.is_idle_running if state.vsf_connected else False,
-        },
         "reader": {
             "running": state.reader.is_running,
             "queue": state.reader.queue_size,
@@ -139,15 +133,7 @@ async def restart_server():
 
 @app.post("/api/start")
 async def start():
-    if AVATAR_APP == "vsf":
-        state.vsf.connect()
-        state.vsf_connected = True
-        state.vsf.apply_default_pose()
-        defaults = state.load_vsf_defaults()
-        if defaults.get("blendshapes"):
-            state.vsf.set_blendshapes(defaults["blendshapes"])
-        state.vsf.start_idle(defaults.get("idle_scale", 1.0))
-    else:
+    if AVATAR_APP == "vts":
         await state.vts.connect()
         state.vts_connected = True
     await state.ensure_reader()
@@ -194,16 +180,7 @@ async def _restore_session():
     logger.info("前回のセッションを自動復旧中...")
 
     try:
-        if AVATAR_APP == "vsf":
-            await asyncio.to_thread(state.vsf.connect)
-            state.vsf_connected = True
-            await asyncio.to_thread(state.vsf.apply_default_pose)
-            defaults = state.load_vsf_defaults()
-            if defaults.get("blendshapes"):
-                await asyncio.to_thread(state.vsf.set_blendshapes, defaults["blendshapes"])
-            state.vsf.start_idle(defaults.get("idle_scale", 1.0))
-            logger.info("アバター復旧OK")
-        else:
+        if AVATAR_APP == "vts":
             await state.vts.connect()
             state.vts_connected = True
             logger.info("VTS接続復旧OK")
@@ -276,7 +253,6 @@ async def _speak_pending_commits(pending_file):
 @app.on_event("shutdown")
 async def shutdown():
     """終了時にリソースを解放する"""
-    state.vsf.stop_idle()
     try:
         await state.reader.stop()
     except Exception:

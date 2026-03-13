@@ -67,7 +67,6 @@ ai-twitch-cast/
 │   └── build.sh             # ビルドスクリプト
 ├── src/                      # ソースコード
 │   ├── vts_controller.py     # VTube Studio API制御（Live2D）
-│   ├── vsf_controller.py     # VSeeFace VMC Protocol制御（VRM）
 │   ├── scene_config.py       # 設定の定義（scenes.jsonから読み込み）
 │   ├── tts.py                # TTS音声合成（Gemini 2.5 Flash TTS）
 │   ├── twitch_chat.py        # Twitchチャット受信
@@ -85,7 +84,6 @@ ai-twitch-cast/
 │   ├── deploy_model.py       # Live2Dモデルデプロイ
 │   ├── convert_to_vrm.py     # FBX→VRM変換（Blenderスクリプト）
 │   ├── fix_vrm_mtoon.py      # VRM MToonシェーダ修正
-│   ├── avatar_capture.py     # Windows側VSeeFaceキャプチャ（MJPEGストリーム、非推奨）
 │   └── comment_reader.py     # Twitchコメント読み上げ
 ├── static/                   # Webインターフェース静的ファイル
 │   ├── broadcast.html        # 配信合成ページ（overlay+audio+VRMアバター+キャプチャ統合、常時編集モード）

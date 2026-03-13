@@ -9,7 +9,7 @@
         resources/vrm/Shinano.vrm
 
 注意:
-    VSeeFaceはVRM 0.x のみ対応。VRM 1.0では読み込めない。
+    VRM 0.x形式で出力する。
 """
 
 import sys

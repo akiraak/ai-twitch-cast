@@ -1,10 +1,4 @@
 {
-  "vsf_defaults": {
-    "idle_scale": 1.0,
-    "blendshapes": {
-      "A": 0.2
-    }
-  },
   "overlay": {
     "avatar": {
       "positionX": 73.25,

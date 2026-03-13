@@ -22,7 +22,7 @@ FBXモデル（Shinano）をVRM形式に変換する作業の記録。
 ### なぜ2段階か
 
 Blender VRM AddonはMToon 1.0形式でエクスポートするが、VRM 0.xの `materialProperties` には
-`VRM_USE_GLTFSHADER`（glTF標準シェーダ）として書き出される。VSeeFaceはVRM 0.xの `VRM/MToon`
+`VRM_USE_GLTFSHADER`（glTF標準シェーダ）として書き出される。多くのVRMビューアはVRM 0.xの `VRM/MToon`
 シェーダのみ認識するため、エクスポート後にJSONを直接書き換える必要がある。
 
 ```
@@ -30,7 +30,7 @@ FBX → [Blender + VRM Addon] → VRM 0.x (shader=VRM_USE_GLTFSHADER)
                                   ↓
                           [fix_vrm_mtoon.py]
                                   ↓
-                          VRM 0.x (shader=VRM/MToon) ← VSeeFaceで正常表示
+                          VRM 0.x (shader=VRM/MToon) ← ブラウザVRMビューアで正常表示
 ```
 
 ## FBX構造の分析
@@ -186,19 +186,16 @@ resources/vrm/Shinano.vrm
 ### Step 5: 動作確認
 
 ```bash
-# .envを設定
-AVATAR_APP=vsf
-
-# VSeeFaceでモデル読み込み → コンソールで制御テスト
+# ブラウザVRMビューアでモデル読み込み → コンソールで制御テスト
 python scripts/console.py
-> vsf connect
-> vsf demo
+> avatar load
+> avatar demo
 ```
 
 ## 変換結果
 
 - **出力**: `resources/vrm/Shinano.vrm` (178.4 MB)
-- **VRM形式**: 0.x（VSeeFace互換）
+- **VRM形式**: 0.x（VRMビューア互換）
 - **シェーダ**: VRM/MToon（アニメ調トゥーンシェーディング）
 - **ボーンマッピング**: 53/53 成功（全指含む）
 - **BlendShapeGroup**: 12プリセット設定済み
@@ -221,7 +218,7 @@ python scripts/console.py
 
 ### VRM.NotVrm0Exception
 
-VSeeFaceはVRM 0.x のみ対応。`spec_version = "1.0"` で出力するとこのエラーになる。
+VRM 0.x専用のビューアでは `spec_version = "1.0"` で出力するとこのエラーになる。
 スクリプトでは `vrm_ext.spec_version = "0.0"` を指定して回避。
 
 ### テクスチャが表示されない
@@ -237,7 +234,7 @@ FBXインポート時にテクスチャが読み込まれない。
 
 Blender VRM AddonでVRM 0.xエクスポートすると、BlenderでMToon 1.0を設定しても
 `materialProperties` には `shader: "VRM_USE_GLTFSHADER"` と書き出される。
-VSeeFaceはこれをglTF標準シェーダとして解釈し、MToonのトゥーン表示にならない。
+VRMビューアはこれをglTF標準シェーダとして解釈し、MToonのトゥーン表示にならない。
 
 **解決**: `fix_vrm_mtoon.py` でVRMファイルのJSONを直接書き換え、
 `shader: "VRM/MToon"` と適切なfloat/vector/textureプロパティを設定する。
@@ -256,6 +253,6 @@ VSeeFaceはこれをglTF標準シェーダとして解釈し、MToonのトゥー
 
 - 元モデルはlilToonシェーダ前提で作られている（Unity向け）
 - VRM 0.xではMToonシェーダが標準。lilToonの明るいフラットな見た目を再現するため、影を最小限に設定
-- 髪・服・尻尾のSpring Bone（揺れ物）は未設定（VSeeFace側で物理演算を適用する運用）
+- 髪・服・尻尾のSpring Bone（揺れ物）は未設定（ブラウザVRMビューア側で物理演算を適用する運用）
 - テクスチャ埋め込みのためファイルサイズが大きい（178.4 MB）
 - 一部メッシュで4を超えるジョイント影響があるが、上位4つに自動正規化される（動作に支障なし）

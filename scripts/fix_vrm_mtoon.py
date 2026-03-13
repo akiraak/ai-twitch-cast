@@ -1,7 +1,7 @@
 """VRM 0.xファイルのマテリアルをMToonシェーダに書き換え、サムネイルを埋め込む
 
 VRM Addon for BlenderはMToon 1.0でエクスポートするが、
-VSeeFaceはVRM 0.xのMToon（VRM/MToon）しか認識しない。
+VRM 0.xのMToon（VRM/MToon）に変換する必要がある。
 このスクリプトでVRMファイルのJSONを直接書き換える。
 
 使い方:

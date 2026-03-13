@@ -9,19 +9,15 @@ from src.ai_responder import get_character_id, seed_character
 from src.comment_reader import CommentReader
 from src.git_watcher import GitWatcher
 from src.topic_talker import TopicTalker
-from src.scene_config import load_config_json
 from src.twitch_api import TwitchAPI
-from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
 
 # コントローラー
 vts = VTSController()
-vsf = VSFController()
 twitch_api = TwitchAPI()
 
 # 接続状態
 vts_connected = False
-vsf_connected = False
 
 # エピソード
 current_episode = None
@@ -75,7 +71,7 @@ async def _dispatch_event(event: dict):
 topic_talker = TopicTalker()
 
 # Reader（_dispatch_event定義後に作成）
-reader = CommentReader(vsf=vsf, on_overlay=_dispatch_event, topic_talker=topic_talker)
+reader = CommentReader(on_overlay=_dispatch_event, topic_talker=topic_talker)
 
 
 async def _on_git_commit(commit_hash, message):
@@ -101,8 +97,3 @@ async def ensure_reader():
         current_episode = db.start_episode(show["id"], character_id)
     reader.set_episode(current_episode["id"])
     await reader.start()
-
-
-def load_vsf_defaults():
-    """VSeeFaceデフォルト設定を読み込む（DB優先 → scenes.json）"""
-    return load_config_json("vsf_defaults", {"idle_scale": 1.0, "blendshapes": {}})

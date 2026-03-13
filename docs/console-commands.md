@@ -16,21 +16,6 @@
 | `vts hotkey <ID>` | ホットキーを実行 |
 | `vts demo` | デモ動作（口パク・まばたき・体の動き） |
 
-## アバター制御（VSeeFace / VRM）
-
-| コマンド | 説明 |
-|---------|------|
-| `vsf connect` | VSeeFace (VMC Protocol) に接続 |
-| `vsf disconnect` | VSeeFaceから切断 |
-| `vsf status` | VSF接続状態を表示 |
-| `vsf blend <名前> <値>` | BlendShapeを設定（例: `vsf blend Joy 1.0`） |
-| `vsf bone <名前> <qx> <qy> <qz> <qw>` | ボーン回転を設定（クォータニオン） |
-| `vsf demo` | デモ動作（リップシンク・表情・まばたき・頷き） |
-
-BlendShape名の例: `A`, `I`, `U`, `E`, `O`（リップシンク）、`Joy`, `Angry`, `Sorrow`, `Fun`（表情）、`Blink`（まばたき）
-
-ボーン名の例: `Head`, `Neck`, `Spine`, `LeftUpperArm`, `RightUpperArm`
-
 ## その他
 
 | コマンド | 説明 |
