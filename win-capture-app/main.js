@@ -1445,6 +1445,22 @@ ${captureList.join('') || '<p>なし</p>'}
           case 'stream_status':
             result = getStreamStatus();
             break;
+          case 'screenshot':
+            // broadcast画面またはプレビュー画面のスクリーンショットを撮影してBase64で返す
+            {
+              const targetWindow = (broadcastWindow && !broadcastWindow.isDestroyed()) ? broadcastWindow
+                : (previewWindow && !previewWindow.isDestroyed()) ? previewWindow
+                : null;
+              if (!targetWindow) {
+                result = { ok: false, error: 'broadcast画面もプレビュー画面も開いていません' };
+              } else {
+                const image = await targetWindow.webContents.capturePage();
+                const png = image.toPNG();
+                const source = targetWindow === broadcastWindow ? 'broadcast' : 'preview';
+                result = { ok: true, png_base64: png.toString('base64'), format: 'png', size: png.length, source };
+              }
+            }
+            break;
           case 'quit':
             result = { ok: true };
             setTimeout(() => app.quit(), 500);

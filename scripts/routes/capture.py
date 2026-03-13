@@ -1,6 +1,7 @@
 """ウィンドウキャプチャルート - Windows側Electronアプリの管理"""
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -9,9 +10,11 @@ import shutil
 import subprocess
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from scripts import state
@@ -881,6 +884,82 @@ class CaptureStartRequest(BaseModel):
     quality: float | None = None
 
 
+# =====================================================
+# スクリーンショット（デバッグ用）
+# NOTE: /api/capture/{capture_id} より前に定義する必要がある（パス競合防止）
+# =====================================================
+
+SCREENSHOT_DIR = Path("/tmp/screenshots")
+
+
+@router.post("/api/capture/screenshot")
+async def capture_screenshot():
+    """broadcast画面のスクリーンショットを撮影して/tmp/screenshots/に保存"""
+    try:
+        result = await _ws_request("screenshot", timeout=10.0)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Electronに接続できません: {e}")
+
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "スクリーンショット失敗"))
+
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"screenshot_{timestamp}.png"
+    filepath = SCREENSHOT_DIR / filename
+
+    png_data = base64.b64decode(result["png_base64"])
+    filepath.write_bytes(png_data)
+    logger.info("スクリーンショット保存: %s (%d bytes)", filepath, len(png_data))
+
+    return {"ok": True, "file": filename, "path": str(filepath), "size": len(png_data)}
+
+
+@router.get("/api/capture/screenshots")
+async def capture_screenshots_list():
+    """保存済みスクリーンショットの一覧を返す"""
+    if not SCREENSHOT_DIR.exists():
+        return {"files": []}
+
+    files = []
+    for f in sorted(SCREENSHOT_DIR.glob("screenshot_*.png"), reverse=True):
+        stat = f.stat()
+        files.append({
+            "name": f.name,
+            "size": stat.st_size,
+            "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        })
+    return {"files": files}
+
+
+@router.get("/api/capture/screenshots/{filename}")
+async def capture_screenshot_file(filename: str):
+    """スクリーンショット画像を返す"""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="不正なファイル名")
+    filepath = SCREENSHOT_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="ファイルが見つかりません")
+    return FileResponse(filepath, media_type="image/png")
+
+
+@router.delete("/api/capture/screenshots/{filename}")
+async def capture_screenshot_delete(filename: str):
+    """スクリーンショットを削除"""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="不正なファイル名")
+    filepath = SCREENSHOT_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="ファイルが見つかりません")
+    filepath.unlink()
+    return {"ok": True}
+
+
+# =====================================================
+# キャプチャ操作
+# =====================================================
+
+
 @router.post("/api/capture/start")
 async def capture_start(body: CaptureStartRequest):
     """ウィンドウキャプチャを開始"""
@@ -1110,3 +1189,4 @@ async def capture_stream_status():
         return await _ws_request("stream_status")
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
