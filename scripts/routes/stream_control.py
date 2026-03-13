@@ -315,7 +315,8 @@ async def broadcast_status():
         "frames_dropped": electron_st.get("frames_dropped"),
         "resolution": (electron_st.get("config") or {}).get("resolution", "1920x1080"),
         "framerate": (electron_st.get("config") or {}).get("framerate", 30),
-        "audio_pipe_connected": electron_st.get("audio_pipe_connected", False),
+        "audio_stream_connected": electron_st.get("audio_stream_connected", False),
+        "audio_receiving_pcm": electron_st.get("audio_receiving_pcm", False),
         "electron": electron_st,
     }
     return result

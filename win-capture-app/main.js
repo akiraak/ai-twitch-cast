@@ -8,7 +8,6 @@
 
 const { app, BrowserWindow, Menu, desktopCapturer, ipcMain } = require('electron');
 const { spawn, execSync } = require('child_process');
-const net = require('net');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -40,12 +39,10 @@ let frameCount = 0;            // 送信フレーム数
 let frameDropCount = 0;        // ドロップフレーム数
 let ffmpegLastLog = [];        // FFmpeg stderrの最後のログ（診断用）
 
-// === 音声パイプ（Windows Named Pipe） ===
-const AUDIO_PIPE_NAME = process.platform === 'win32'
-  ? `\\\\.\\pipe\\atc_audio_${process.pid}`
-  : null;
-let audioPipeServer = null;
-let audioPipeConnection = null;
+// === 音声ストリーミング（HTTP経由でFFmpegに送信） ===
+let audioSilenceTimer = null;   // サイレンスハートビート
+let lastAudioPcmTime = 0;      // 最後にPCMデータを受信した時刻
+let audioStreamRes = null;      // FFmpegへのHTTPレスポンス（PCMストリーム）
 
 const STREAM_DEFAULTS = {
   resolution: '1920x1080',
@@ -154,34 +151,10 @@ if ($ffmpegExe) {
   });
 }
 
-function startAudioPipe() {
-  if (!AUDIO_PIPE_NAME) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    audioPipeServer = net.createServer((connection) => {
-      console.log('音声パイプ接続（FFmpeg）');
-      audioPipeConnection = connection;
-      connection.on('close', () => { audioPipeConnection = null; });
-      connection.on('error', () => { audioPipeConnection = null; });
-    });
-    audioPipeServer.on('error', (err) => {
-      console.error('音声パイプエラー:', err.message);
-      reject(err);
-    });
-    audioPipeServer.listen(AUDIO_PIPE_NAME, () => {
-      console.log('音声パイプ作成:', AUDIO_PIPE_NAME);
-      resolve();
-    });
-  });
-}
-
-function stopAudioPipe() {
-  if (audioPipeConnection) {
-    try { audioPipeConnection.end(); } catch (e) {}
-    audioPipeConnection = null;
-  }
-  if (audioPipeServer) {
-    try { audioPipeServer.close(); } catch (e) {}
-    audioPipeServer = null;
+function stopAudioSilenceTimer() {
+  if (audioSilenceTimer) {
+    clearInterval(audioSilenceTimer);
+    audioSilenceTimer = null;
   }
 }
 
@@ -198,11 +171,12 @@ ipcMain.on('capture-receiver-ready', () => {
   }
 });
 
-// IPC: broadcast.htmlからPCM音声データ受信
+// IPC: broadcast.htmlからPCM音声データ受信 → HTTP経由でFFmpegに送信
 ipcMain.on('audio-pcm', (event, buffer) => {
-  if (audioPipeConnection && audioPipeConnection.writable) {
+  if (audioStreamRes && !audioStreamRes.destroyed) {
     try {
-      audioPipeConnection.write(buffer);
+      lastAudioPcmTime = Date.now();
+      audioStreamRes.write(Buffer.from(buffer));
     } catch (e) {}
   }
 });
@@ -432,6 +406,12 @@ async function openBroadcastWindow(serverUrl) {
   });
 
   broadcastWindow.webContents.setFrameRate(cfg.framerate);
+  // broadcast.htmlのconsole出力をメインプロセスに転送（音声デバッグ用）
+  broadcastWindow.webContents.on('console-message', (_e, level, msg) => {
+    if (msg.includes('Audio') || msg.includes('audio') || msg.includes('PCM') || msg.includes('Error') || msg.includes('error')) {
+      console.log(`[Broadcast] ${msg}`);
+    }
+  });
   broadcastWindow.loadURL(broadcastUrl);
   broadcastWindow.on('closed', () => {
     broadcastWindow = null;
@@ -505,10 +485,7 @@ async function startStream(config) {
 
   const rtmpUrl = `rtmp://live-tyo.twitch.tv/app/${streamKey}`;
 
-  // 音声: まずanullsrcで確実に配信を開始する
-  // （Named Pipe音声統合は将来の課題）
-
-  // FFmpegコマンド: rawvideo(stdin) + 音声(anullsrc常時 + PCMオプション混合) → H.264+AAC → RTMP
+  // FFmpegコマンド: rawvideo(pipe:0) + 音声(HTTP PCMストリーム) → H.264+AAC → RTMP
   const ffmpegArgs = [
     // 映像入力: パイプからBGRA rawvideo
     '-thread_queue_size', '512',
@@ -517,10 +494,14 @@ async function startStream(config) {
     '-video_size', resolution,
     '-framerate', String(framerate),
     '-i', 'pipe:0',
-    // 音声入力: 常にanullsrcを使用（確実に音声データが流れるようにする）
-    // broadcast.htmlの音声はNamed Pipe経由で別途混合する将来拡張あり
-    '-f', 'lavfi',
-    '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+    // 音声入力: ローカルHTTP経由でbroadcast.htmlのPCM音声を受け取る
+    '-probesize', '32',
+    '-analyzeduration', '0',
+    '-thread_queue_size', '4096',
+    '-f', 's16le',
+    '-ar', '44100',
+    '-ac', '2',
+    '-i', `http://127.0.0.1:${PORT}/audio-pcm-stream`,
   ];
 
   ffmpegArgs.push(
@@ -597,7 +578,7 @@ async function startStream(config) {
   });
 
   if (!spawnResult.ok) {
-    stopAudioPipe();
+    stopAudioSilenceTimer();
     ffmpegProcess = null;
     streamStartTime = null;
     return spawnResult;
@@ -607,6 +588,22 @@ async function startStream(config) {
   ffmpegProcess.stdin.on('error', (err) => {
     console.warn('FFmpeg stdin エラー（無視）:', err.message);
   });
+
+  // サイレンスハートビート: PCMデータが来ない場合にサイレンスを送り続ける
+  // （AudioContextがsuspendの場合や、broadcast.html未読み込み時の対策）
+  lastAudioPcmTime = Date.now();
+  stopAudioSilenceTimer();
+  audioSilenceTimer = setInterval(() => {
+    if (!audioStreamRes || audioStreamRes.destroyed) {
+      return;
+    }
+    if (Date.now() - lastAudioPcmTime > 300) {
+      try {
+        // 300ms分のサイレンス（s16le, 44100Hz, stereo）
+        audioStreamRes.write(Buffer.alloc(Math.floor(44100 * 2 * 2 * 0.3)));
+      } catch (e) {}
+    }
+  }, 300);
 
   ffmpegLastLog = [];
   ffmpegProcess.stderr.on('data', (data) => {
@@ -625,7 +622,7 @@ async function startStream(config) {
     if (broadcastWindow && !broadcastWindow.isDestroyed()) {
       broadcastWindow.webContents.removeListener('paint', onBroadcastPaint);
     }
-    stopAudioPipe();
+    stopAudioSilenceTimer();
     ffmpegProcess = null;
     streamStartTime = null;
   });
@@ -636,7 +633,7 @@ async function startStream(config) {
     if (broadcastWindow && !broadcastWindow.isDestroyed()) {
       broadcastWindow.webContents.removeListener('paint', onBroadcastPaint);
     }
-    stopAudioPipe();
+    stopAudioSilenceTimer();
     ffmpegProcess = null;
     streamStartTime = null;
   });
@@ -686,8 +683,12 @@ function stopStream() {
     }
   }, 2000);
 
-  // 音声パイプを停止
-  stopAudioPipe();
+  // 音声HTTPストリームを閉じる
+  if (audioStreamRes && !audioStreamRes.destroyed) {
+    try { audioStreamRes.end(); } catch (e) {}
+    audioStreamRes = null;
+  }
+  stopAudioSilenceTimer();
 
   console.log(`配信停止: ${result.uptime_seconds}秒, ${frameCount}フレーム送信, ${frameDropCount}フレームドロップ`);
 
@@ -707,8 +708,8 @@ function getStreamStatus() {
     ffmpeg_path: ffmpegBin,
     ffmpeg_exists: ffmpegExists,
     ffmpeg_log: ffmpegLastLog.slice(-5),
-    audio_pipe: AUDIO_PIPE_NAME,
-    audio_pipe_connected: audioPipeConnection !== null,
+    audio_stream_connected: audioStreamRes !== null && !audioStreamRes.destroyed,
+    audio_receiving_pcm: lastAudioPcmTime > 0 && (Date.now() - lastAudioPcmTime) < 1000,
   };
 }
 
@@ -726,6 +727,23 @@ function startServer() {
   });
 
   server.use(express.json());
+
+  // GET /audio-pcm-stream - FFmpegが音声PCMを読み取るHTTPストリーム
+  server.get('/audio-pcm-stream', (req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    // 初期サイレンス送信（FFmpegの入力初期化ブロックを防止）
+    res.write(Buffer.alloc(44100 * 2 * 2));  // 1秒分 s16le stereo
+    audioStreamRes = res;
+    console.log('[AudioStream] FFmpeg音声ストリーム接続');
+    req.on('close', () => {
+      console.log('[AudioStream] FFmpeg音声ストリーム切断');
+      audioStreamRes = null;
+    });
+  });
 
   // GET /status
   server.get('/status', (req, res) => {
@@ -1044,6 +1062,8 @@ function stopCapture(id) {
 // === Electron App Lifecycle ===
 // DPIスケーリングを1に固定（オフスクリーンレンダリングのサイズを正確にする）
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
+// オフスクリーンでAudioContextが動作するようにする（ユーザージェスチャー不要）
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 // UNCパス（\\wsl.localhost\...）から起動時のみGPUを無効化
 if (app.getPath('exe').startsWith('\\\\')) {
