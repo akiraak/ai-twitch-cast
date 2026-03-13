@@ -310,6 +310,9 @@ async function openPreview(serverUrl) {
     });
     previewWindow.setMenu(null);
     previewWindow.setMenuBarVisibility(false);
+    previewWindow.webContents.on('did-finish-load', () => {
+      previewWindow.webContents.openDevTools({ mode: 'detach' });
+    });
     previewWindow.loadURL(previewUrl);
     previewWindow.on('move', debouncedSaveBounds);
     previewWindow.on('resize', debouncedSaveBounds);
@@ -762,7 +765,7 @@ ${captureList.join('') || '<p>なし</p>'}
   });
 
   // WebSocketサーバー（キャプチャフレーム配信用）
-  wss = new WebSocket.Server({ server: httpServer, path: '/ws/capture' });
+  wss = new WebSocket.Server({ server: httpServer, path: '/ws/capture', perMessageDeflate: false });
 
   wss.on('connection', (ws) => {
     console.log(`WebSocketクライアント接続 (計${wss.clients.size})`);
@@ -781,7 +784,7 @@ ${captureList.join('') || '<p>なし</p>'}
   });
 
   // WebSocket制御サーバー（WSL2↔Electron コマンド制御用）
-  const controlWss = new WebSocket.Server({ server: httpServer, path: '/ws/control' });
+  const controlWss = new WebSocket.Server({ server: httpServer, path: '/ws/control', perMessageDeflate: false });
 
   controlWss.on('connection', (ws) => {
     console.log('制御WebSocket接続');

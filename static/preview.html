@@ -141,6 +141,7 @@
     <h3>ウィンドウキャプチャ</h3>
     <select id="window-list"><option value="">-- ウィンドウ選択 --</option></select>
     <button class="panel-btn" onclick="addCapture()">追加</button>
+    <span id="capture-msg" style="font-size:0.8rem;margin-left:8px;"></span>
   </div>
 
   <!-- チャット（将来用） -->
@@ -239,10 +240,12 @@ async function updateStatus() {
 // === ウィンドウキャプチャ ===
 async function loadWindows() {
   const sel = document.getElementById('window-list');
+  const msg = document.getElementById('capture-msg');
   sel.innerHTML = '<option value="">-- ウィンドウ選択 --</option>';
   try {
     const res = await fetch('/api/capture/windows');
     const windows = await res.json();
+    if (msg && !msg.textContent.startsWith('追加')) msg.textContent = `${windows.length}件`;
     for (const w of windows) {
       const opt = document.createElement('option');
       opt.value = w.sourceId;
@@ -254,16 +257,19 @@ async function loadWindows() {
 
 async function addCapture() {
   const sel = document.getElementById('window-list');
+  const msg = document.getElementById('capture-msg');
   const sourceId = sel.value;
-  if (!sourceId) return;
-  const label = sel.selectedOptions[0]?.textContent || '';
+  if (!sourceId) { msg.textContent = 'ウィンドウを選択してください'; return; }
+  msg.textContent = '追加中...';
   try {
-    await fetch('/api/capture/start', {
+    const res = await fetch('/api/capture/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceId, label }),
+      body: JSON.stringify({ sourceId, label: sel.selectedOptions[0]?.textContent || '' }),
     });
-  } catch (e) {}
+    const data = await res.json();
+    msg.textContent = data.ok ? `追加: ${data.id}` : `エラー: ${data.detail || data.error}`;
+  } catch (e) { msg.textContent = `エラー: ${e.message}`; }
 }
 
 // === 初期化 ===
