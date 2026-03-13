@@ -279,6 +279,11 @@
   <div class="tab-content" id="tab-character">
     <div class="card">
       <h2>ライティング</h2>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
+        <button class="secondary" style="font-size:0.75rem; padding:4px 10px;" onclick="applyLightingPreset('vivid_sunset')">夕焼け（基本）</button>
+        <button class="secondary" style="font-size:0.75rem; padding:4px 10px;" onclick="applyLightingPreset('vivid_deep')">深め</button>
+        <button class="secondary" style="font-size:0.75rem; padding:4px 10px;" onclick="applyLightingPreset('warm_vivid')">あったかビビッド</button>
+      </div>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
         <div class="layout-row"><span class="layout-label">明るさ</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-brightness" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutNum(this)"></div>
         <div class="layout-row"><span class="layout-label">コントラスト</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-contrast" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutNum(this)"></div>
@@ -1391,6 +1396,30 @@ async function loadScreenshots() {
 async function deleteScreenshot(name) {
   await fetch('/api/capture/screenshots/' + encodeURIComponent(name), { method: 'DELETE' });
   loadScreenshots();
+}
+
+// --- ライティングプリセット ---
+const LIGHTING_PRESETS = {
+  vivid_sunset: { brightness: 0.8,  contrast: 1.15, temperature: 0.5,  saturation: 1.45 },
+  vivid_deep:   { brightness: 0.75, contrast: 1.3,  temperature: 0.3,  saturation: 1.4 },
+  warm_vivid:   { brightness: 0.85, contrast: 1.15, temperature: 0.3,  saturation: 1.35 },
+};
+
+function applyLightingPreset(name) {
+  const p = LIGHTING_PRESETS[name];
+  if (!p) return;
+  // スライダーと数値入力を更新
+  for (const [key, val] of Object.entries(p)) {
+    const dataKey = 'lighting.' + key;
+    const numEl = document.getElementById('lv-lighting-' + key);
+    if (numEl) numEl.value = val;
+    const slider = document.querySelector(`input[type="range"][data-key="${dataKey}"]`);
+    if (slider) slider.value = val;
+  }
+  // プレビュー（保存なし）で即座に反映
+  api('POST', '/api/overlay/preview', { lighting: p });
+  // 続けてDB保存も実行
+  api('POST', '/api/overlay/settings', { lighting: p });
 }
 
 // --- TODO ---
