@@ -26,13 +26,6 @@ async def _ensure_electron():
         capture_preview_oneclick, capture_preview_oneclick_status,
     )
 
-    # まずWebSocket接続を試す
-    try:
-        await _ws_request("stream_status")
-        return  # 既に接続済み
-    except Exception:
-        pass
-
     # ElectronのHTTPサーバーが起動しているか確認
     electron_http_ok = False
     try:
