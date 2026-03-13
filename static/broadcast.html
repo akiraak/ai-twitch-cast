@@ -1056,30 +1056,36 @@ function connectWS() {
       // TTS音声
       case 'play_audio':
         console.log('[Audio] TTS play_audio:', data.url);
-        // AudioContextがsuspendの場合はresumeしてから再生
+        // メインプロセスバイパス（オフスクリーンAudioContext不要）
+        if (window.audioCapture && window.audioCapture.notifyPlayAudio) {
+          window.audioCapture.notifyPlayAudio(data.url);
+        }
+        // ブラウザ再生も試行（プレビューウィンドウ用）
         if (_electronAudioCtx && _electronAudioCtx.state === 'suspended') {
           _electronAudioCtx.resume();
         }
         ttsAudio.src = data.url;
         ttsAudio.load();
-        ttsAudio.play().then(() => {
-          console.log('[Audio] TTS再生開始');
-        }).catch(e => console.log('[Audio] TTS再生エラー:', e.name, e.message));
+        ttsAudio.play().catch(e => console.log('[Audio] TTS再生エラー:', e.name, e.message));
         break;
 
       // BGM
       case 'bgm_play':
         console.log('[Audio] BGM play:', data.url);
+        if (window.audioCapture && window.audioCapture.notifyPlayBgm) {
+          window.audioCapture.notifyPlayBgm(data.url);
+        }
         if (_electronAudioCtx && _electronAudioCtx.state === 'suspended') {
           _electronAudioCtx.resume();
         }
         bgmAudio.src = data.url;
         bgmAudio.load();
-        bgmAudio.play().then(() => {
-          console.log('[Audio] BGM再生開始');
-        }).catch(e => console.log('[Audio] BGM再生エラー:', e.name, e.message));
+        bgmAudio.play().catch(e => console.log('[Audio] BGM再生エラー:', e.name, e.message));
         break;
       case 'bgm_stop':
+        if (window.audioCapture && window.audioCapture.notifyStopBgm) {
+          window.audioCapture.notifyStopBgm();
+        }
         bgmAudio.pause();
         bgmAudio.src = '';
         break;

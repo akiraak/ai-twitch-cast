@@ -9,6 +9,16 @@ contextBridge.exposeInMainWorld('audioCapture', {
   sendPCM: (buffer) => {
     ipcRenderer.send('audio-pcm', Buffer.from(buffer));
   },
+  // メインプロセスに音声URLを通知（ブラウザAudioContextバイパス）
+  notifyPlayAudio: (url) => {
+    ipcRenderer.send('audio-play-url', { type: 'tts', url });
+  },
+  notifyPlayBgm: (url) => {
+    ipcRenderer.send('audio-play-url', { type: 'bgm', url });
+  },
+  notifyStopBgm: () => {
+    ipcRenderer.send('audio-stop-bgm');
+  },
 });
 
 // Phase 6: キャプチャフレームIPC直接受信（MJPEG/WebSocket不要）

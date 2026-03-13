@@ -43,6 +43,138 @@ let ffmpegLastLog = [];        // FFmpeg stderrの最後のログ（診断用）
 let audioSilenceTimer = null;   // サイレンスハートビート
 let lastAudioPcmTime = 0;      // 最後にPCMデータを受信した時刻
 let audioStreamRes = null;      // FFmpegへのHTTPレスポンス（PCMストリーム）
+let currentAudioTimer = null;   // 現在のTTS再生タイマー
+let broadcastServerUrl = null;  // WSL2サーバーURL（音声取得用）
+
+// === WAV処理（メインプロセス直接音声パイプライン） ===
+const AUDIO_TARGET_RATE = 44100;
+const AUDIO_TARGET_CHANNELS = 2;
+
+function parseWavHeader(buffer) {
+  if (buffer.length < 44) return null;
+  if (buffer.toString('ascii', 0, 4) !== 'RIFF') return null;
+  // fmt チャンクを探す
+  let offset = 12;
+  while (offset < buffer.length - 8) {
+    const chunkId = buffer.toString('ascii', offset, offset + 4);
+    const chunkSize = buffer.readUInt32LE(offset + 4);
+    if (chunkId === 'fmt ') {
+      return {
+        numChannels: buffer.readUInt16LE(offset + 10),
+        sampleRate: buffer.readUInt32LE(offset + 12),
+        bitsPerSample: buffer.readUInt16LE(offset + 22),
+      };
+    }
+    offset += 8 + chunkSize;
+  }
+  return null;
+}
+
+function getWavPcmData(buffer) {
+  let offset = 12;
+  while (offset < buffer.length - 8) {
+    const chunkId = buffer.toString('ascii', offset, offset + 4);
+    const chunkSize = buffer.readUInt32LE(offset + 4);
+    if (chunkId === 'data') {
+      return buffer.slice(offset + 8, offset + 8 + chunkSize);
+    }
+    offset += 8 + chunkSize;
+  }
+  return null;
+}
+
+function resample16(input, fromRate, toRate) {
+  const inputSamples = input.length / 2;
+  const ratio = fromRate / toRate;
+  const outputSamples = Math.ceil(inputSamples / ratio);
+  const output = Buffer.alloc(outputSamples * 2);
+  for (let i = 0; i < outputSamples; i++) {
+    const srcPos = i * ratio;
+    const srcIdx = Math.floor(srcPos);
+    const frac = srcPos - srcIdx;
+    const s1 = srcIdx < inputSamples ? input.readInt16LE(srcIdx * 2) : 0;
+    const s2 = (srcIdx + 1) < inputSamples ? input.readInt16LE((srcIdx + 1) * 2) : s1;
+    const sample = Math.round(s1 * (1 - frac) + s2 * frac);
+    output.writeInt16LE(Math.max(-32768, Math.min(32767, sample)), i * 2);
+  }
+  return output;
+}
+
+function monoToStereo16(monoBuffer) {
+  const samples = monoBuffer.length / 2;
+  const stereoBuffer = Buffer.alloc(samples * 4);
+  for (let i = 0; i < samples; i++) {
+    const sample = monoBuffer.readInt16LE(i * 2);
+    stereoBuffer.writeInt16LE(sample, i * 4);
+    stereoBuffer.writeInt16LE(sample, i * 4 + 2);
+  }
+  return stereoBuffer;
+}
+
+function writeAudioAtRealtime(pcmBuffer) {
+  if (currentAudioTimer) clearInterval(currentAudioTimer);
+  if (!audioStreamRes || audioStreamRes.destroyed) return;
+
+  const BYTES_PER_SEC = AUDIO_TARGET_RATE * AUDIO_TARGET_CHANNELS * 2;
+  const CHUNK_MS = 50;
+  const CHUNK_SIZE = Math.ceil(BYTES_PER_SEC * CHUNK_MS / 1000);
+  let offset = 0;
+
+  currentAudioTimer = setInterval(() => {
+    if (offset >= pcmBuffer.length || !audioStreamRes || audioStreamRes.destroyed) {
+      clearInterval(currentAudioTimer);
+      currentAudioTimer = null;
+      return;
+    }
+    const end = Math.min(offset + CHUNK_SIZE, pcmBuffer.length);
+    try {
+      audioStreamRes.write(pcmBuffer.slice(offset, end));
+      lastAudioPcmTime = Date.now();
+    } catch (e) {}
+    offset = end;
+  }, CHUNK_MS);
+}
+
+async function processAudioUrl(fullUrl) {
+  try {
+    console.log('[AudioDirect] 音声取得:', fullUrl);
+    const response = await fetch(fullUrl);
+    if (!response.ok) {
+      console.warn('[AudioDirect] 取得失敗:', response.status);
+      return;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const wavBuffer = Buffer.from(arrayBuffer);
+
+    const fmt = parseWavHeader(wavBuffer);
+    if (!fmt) {
+      console.warn('[AudioDirect] WAVヘッダー解析失敗');
+      return;
+    }
+    console.log(`[AudioDirect] WAV: ${fmt.sampleRate}Hz ${fmt.numChannels}ch ${fmt.bitsPerSample}bit`);
+
+    let pcmData = getWavPcmData(wavBuffer);
+    if (!pcmData || pcmData.length === 0) {
+      console.warn('[AudioDirect] PCMデータなし');
+      return;
+    }
+
+    // リサンプル（ソースレート→44100Hz）
+    if (fmt.sampleRate !== AUDIO_TARGET_RATE) {
+      pcmData = resample16(pcmData, fmt.sampleRate, AUDIO_TARGET_RATE);
+    }
+    // モノ→ステレオ変換
+    if (fmt.numChannels === 1) {
+      pcmData = monoToStereo16(pcmData);
+    }
+
+    const durationSec = (pcmData.length / (AUDIO_TARGET_RATE * AUDIO_TARGET_CHANNELS * 2)).toFixed(1);
+    console.log(`[AudioDirect] 再生: ${durationSec}秒, ${(pcmData.length / 1024).toFixed(0)}KB`);
+    writeAudioAtRealtime(pcmData);
+  } catch (e) {
+    console.error('[AudioDirect] エラー:', e.message);
+  }
+}
 
 const STREAM_DEFAULTS = {
   resolution: '1920x1080',
@@ -171,14 +303,30 @@ ipcMain.on('capture-receiver-ready', () => {
   }
 });
 
-// IPC: broadcast.htmlからPCM音声データ受信 → HTTP経由でFFmpegに送信
+// IPC: broadcast.htmlからPCM音声データ受信（ブラウザAudioContext経由、フォールバック用）
 ipcMain.on('audio-pcm', (event, buffer) => {
+  // メインプロセス直接パスが動作中はスキップ（二重書き込み防止）
+  if (currentAudioTimer) return;
   if (audioStreamRes && !audioStreamRes.destroyed) {
     try {
       lastAudioPcmTime = Date.now();
       audioStreamRes.write(Buffer.from(buffer));
     } catch (e) {}
   }
+});
+
+// IPC: broadcast.htmlから音声URL通知 → メインプロセスで直接取得・変換・配信
+ipcMain.on('audio-play-url', (event, { type, url }) => {
+  if (!broadcastServerUrl || !audioStreamRes) return;
+  // 相対URLをフルURLに変換
+  const fullUrl = url.startsWith('http') ? url : broadcastServerUrl + url;
+  processAudioUrl(fullUrl);
+});
+
+// IPC: BGM停止
+ipcMain.on('audio-stop-bgm', () => {
+  // BGMの停止処理（将来拡張用）
+  console.log('[AudioDirect] BGM停止');
 });
 
 // ウィンドウ位置の永続化
@@ -382,6 +530,7 @@ async function openPreview(serverUrl) {
 // === 配信ストリーミング（Electron→FFmpeg→Twitch） ===
 
 async function openBroadcastWindow(serverUrl) {
+  broadcastServerUrl = serverUrl;  // 音声取得用にサーバーURLを保存
   if (broadcastWindow && !broadcastWindow.isDestroyed()) {
     return { ok: true, already_open: true };
   }
@@ -684,6 +833,7 @@ function stopStream() {
   }, 2000);
 
   // 音声HTTPストリームを閉じる
+  if (currentAudioTimer) { clearInterval(currentAudioTimer); currentAudioTimer = null; }
   if (audioStreamRes && !audioStreamRes.destroyed) {
     try { audioStreamRes.end(); } catch (e) {}
     audioStreamRes = null;
