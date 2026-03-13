@@ -84,27 +84,11 @@
 
   .status { font-size: 0.8rem; color: #6a5590; margin-top: 8px; min-height: 1.2em; }
 
-  .scene-list { list-style: none; margin-top: 8px; }
-  .scene-list li { padding: 6px 12px; cursor: pointer; border-radius: 6px; font-size: 0.85rem; transition: background 0.1s; }
-  .scene-list li:hover { background: #e8ddf5; }
-  .scene-list li.active { background: #ece5fa; color: #4a148c; font-weight: 600; border: 1px solid #d0c0e8; }
-
   .vol-row { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
   .vol-label { min-width: 56px; font-size: 0.8rem; color: #6a5590; white-space: nowrap; }
   .vol-slider { flex: 1; accent-color: #7b1fa2; }
   .vol-pct { min-width: 40px; text-align: right; font-size: 0.85rem; }
 
-  .process-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .process-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #faf8ff; border: 1px solid #ece5fa; border-radius: 6px; font-size: 0.8rem; }
-  .process-item .label { color: #6a5590; }
-  .process-item .value { color: #2a1f40; font-weight: 500; }
-
-  .log-panel {
-    background: #ece5fa; border: 1px solid #d0c0e8; border-radius: 8px;
-    padding: 12px; font-family: monospace; font-size: 0.75rem;
-    height: 160px; overflow-y: auto; margin-top: 16px;
-    white-space: pre-wrap; color: #4a148c;
-  }
 
   .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9999; padding: 12px 24px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; max-width: 80vw; text-align: center; animation: fadeIn 0.3s; }
   .toast.success { background: #e8f5e9; color: #1b5e20; border: 1px solid #4caf50; }
@@ -140,24 +124,6 @@
   .field-label { font-size: 0.8rem; color: #6a5590; display: block; margin-bottom: 4px; }
   .num-input { width: 60px; background: #ece5fa; color: #2a1f40; border: 1px solid #d0c0e8; border-radius: 4px; text-align: right; font-size: 0.8rem; padding: 2px 6px; }
 
-  .env-card { background: #ffffff; border: 1px solid #d0c0e8; border-radius: 6px; margin-bottom: 16px; }
-  .env-card summary { cursor: pointer; font-size: 0.8rem; color: #7b1fa2; padding: 8px 12px; }
-  #env-table { width: 100%; font-size: 0.75rem; border-collapse: collapse; padding: 0 12px 8px; }
-  #env-table td { padding: 3px 6px; border-bottom: 1px solid #ece5fa; }
-  #env-table td:first-child { color: #6a5590; }
-  #env-table td:nth-child(2) { font-family: monospace; color: #4a148c; }
-
-  .todo-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #ece5fa; transition: background 0.1s; }
-  .todo-item:hover { background: #f5f0ff; }
-  .todo-item:last-child { border-bottom: none; }
-  .todo-checkbox { width: 18px; height: 18px; border: 2px solid #9a88b5; border-radius: 4px; flex-shrink: 0; }
-  .todo-item.in-progress .todo-checkbox { background: #7b1fa2; border-color: #7b1fa2; }
-  .todo-text { flex: 1; font-size: 0.85rem; }
-  .todo-item.in-progress .todo-text { color: #7b1fa2; font-weight: 600; }
-  .todo-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 12px; font-weight: 500; background: #ece5fa; color: #7b1fa2; border: 1px solid #d0c0e8; }
-  .todo-btn { font-size: 0.75rem; padding: 3px 12px; }
-  .todo-footer { padding: 8px 12px; font-size: 0.75rem; color: #9a88b5; border-top: 1px solid #ece5fa; }
-
   #db-data { color: #2a1f40; }
   #db-data th, #db-data td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #d0c0e8; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
   #db-data th { background: #ede7f6; color: #6a5590; font-weight: 600; position: sticky; top: 0; white-space: nowrap; }
@@ -192,9 +158,7 @@
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('dashboard', this)">ダッシュボード</div>
-  <div class="tab" onclick="switchTab('broadcast', this)">配信</div>
-  <div class="tab" onclick="switchTab('layout', this)">レイアウト</div>
+  <div class="tab active" onclick="switchTab('layout', this)">配信画面</div>
   <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
   <div class="tab" onclick="switchTab('topic', this)">トピック</div>
@@ -203,99 +167,10 @@
 
 <div class="main">
 
-  <!-- ===== ダッシュボード ===== -->
-  <div class="tab-content active" id="tab-dashboard">
-    <details class="env-card">
-      <summary>.env 設定</summary>
-      <table id="env-table"></table>
-    </details>
-
+  <!-- ===== 配信画面 ===== -->
+  <div class="tab-content active" id="tab-layout">
     <div class="grid">
-      <div class="card">
-        <h2>TODO</h2>
-        <div id="todo-list-ui"></div>
-        <div class="status" id="todo-status"></div>
-      </div>
-
-      <div class="card">
-        <h2>Twitch 配信情報</h2>
-        <div style="margin-bottom:8px;">
-          <label class="field-label">タイトル</label>
-          <input type="text" id="twitch-title" class="text-input" placeholder="配信タイトル">
-        </div>
-        <div style="margin-bottom:8px;">
-          <label class="field-label">カテゴリ</label>
-          <div style="display:flex; gap:6px; margin-top:4px;">
-            <input type="text" id="twitch-category-search" class="text-input" placeholder="カテゴリを検索..." style="flex:1;">
-            <button class="secondary" onclick="searchCategories()">検索</button>
-          </div>
-          <div id="twitch-category-results" style="margin-top:4px;"></div>
-          <div id="twitch-category-current" style="font-size:0.8rem; color:#4a148c; margin-top:4px;"></div>
-          <input type="hidden" id="twitch-game-id">
-        </div>
-        <div style="margin-bottom:8px;">
-          <label class="field-label">タグ（カンマ区切り）</label>
-          <input type="text" id="twitch-tags" class="text-input" placeholder="日本語, AI, VTuber">
-        </div>
-        <div class="btn-row">
-          <button class="secondary" onclick="loadChannelInfo()">読み込み</button>
-          <button onclick="saveChannelInfo()">保存</button>
-        </div>
-        <div class="status" id="twitch-status"></div>
-      </div>
-    </div>
-
-    <div class="log-panel" id="log"></div>
-  </div>
-
-  <!-- ===== 配信 ===== -->
-  <div class="tab-content" id="tab-broadcast">
-    <div class="grid">
-      <div class="card">
-        <h2><span class="status-dot off" id="stream-dot"></span> 配信制御</h2>
-        <div class="btn-row">
-          <button class="success" onclick="doGoLive()">Go Live</button>
-          <button class="danger" onclick="doStop()">配信停止</button>
-        </div>
-        <div id="uptime-display" style="margin-top:8px; display:none;">
-          <span style="font-size:0.8rem; color:#6a5590;">配信時間: </span>
-          <span class="uptime" id="uptime-text">00:00:00</span>
-        </div>
-        <div class="status" id="stream-status"></div>
-      </div>
-
-      <div class="card">
-        <h2>シーン</h2>
-        <ul class="scene-list" id="scene-list">
-          <li class="active" data-scene="main" onclick="switchScene('main')">メイン</li>
-          <li data-scene="start" onclick="switchScene('start')">開始画面</li>
-          <li data-scene="end" onclick="switchScene('end')">終了画面</li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <h2>配信状態</h2>
-        <div class="process-grid">
-          <div class="process-item">
-            <span class="label">解像度</span>
-            <span class="value" id="proc-resolution">-</span>
-          </div>
-          <div class="process-item">
-            <span class="label">FPS</span>
-            <span class="value" id="proc-fps">-</span>
-          </div>
-          <div class="process-item">
-            <span class="label">音声パイプ</span>
-            <span class="value" id="proc-audio-pipe">-</span>
-          </div>
-        </div>
-        <div class="btn-row" style="margin-top:12px;">
-          <button class="secondary" onclick="loadDiag()">診断</button>
-        </div>
-        <div class="status" id="diag-status"></div>
-      </div>
-
-      <div class="card">
+      <div class="card" style="grid-column: 1 / -1;">
         <h2><span class="status-dot off" id="capture-dot"></span> ウィンドウキャプチャ</h2>
         <div class="btn-row">
           <button onclick="captureLaunch()">サーバー起動</button>
@@ -344,17 +219,13 @@
           <div id="oneclick-stages" style="margin-top:6px; font-size:0.75rem; display:flex; flex-wrap:wrap; gap:2px 8px;"></div>
         </div>
         <div class="btn-row" style="margin-top:12px;">
-          <button onclick="capturePreviewOpen()">プレビュー / レイアウト編集</button>
+          <button onclick="capturePreviewOpen()">プレビュー / 配信画面編集</button>
           <button class="secondary" onclick="capturePreviewClose()">プレビュー閉じる</button>
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- ===== レイアウト ===== -->
-  <div class="tab-content" id="tab-layout">
-    <div class="card">
-      <h2>レイアウト</h2>
+    <div class="card" style="margin-top:16px;">
+      <h2>配信画面</h2>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
         <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
           <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">アバター</legend>
@@ -397,6 +268,7 @@
           <div class="layout-row"><span class="layout-label">Z順序</span><input type="range" class="vol-slider layout-slider" min="0" max="100" step="1" data-key="topic.zIndex" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-zIndex" min="0" max="100" step="1" data-key="topic.zIndex" oninput="onLayoutNum(this)"></div>
         </fieldset>
       </div>
+      <div id="capture-layout-list"></div>
       <div class="status" id="layout-status" style="margin-top:8px; font-size:0.75rem;">変更は自動保存されます</div>
     </div>
   </div>
@@ -580,10 +452,8 @@ topics      1──N  topic_scripts (topic_id)</div>
 </div>
 
 <script>
-const logEl = document.getElementById('log');
-let currentScene = 'main';
 let _volTimer = null;
-const TAB_NAMES = ['dashboard', 'broadcast', 'layout', 'character', 'sound', 'topic', 'db'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'db'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -603,9 +473,7 @@ function switchTab(name, el) {
 
 
 function log(msg) {
-  const t = new Date().toLocaleTimeString();
-  logEl.textContent += `[${t}] ${msg}\n`;
-  logEl.scrollTop = logEl.scrollHeight;
+  console.log(msg);
 }
 
 function showToast(msg, type = 'success', duration = 5000) {
@@ -681,21 +549,6 @@ async function doStop() {
   refreshStatus();
 }
 
-// --- シーン ---
-async function switchScene(name) {
-  const res = await api('POST', '/api/broadcast/scene', { name });
-  if (res?.ok) {
-    currentScene = name;
-    updateSceneUI();
-  }
-}
-
-function updateSceneUI() {
-  document.querySelectorAll('#scene-list li').forEach(li => {
-    li.classList.toggle('active', li.dataset.scene === currentScene);
-  });
-}
-
 // --- 音量 ---
 function onVolume(source, slider) {
   const pct = slider.value;
@@ -723,49 +576,11 @@ async function refreshStatus() {
   try {
     const data = await (await fetch('/api/broadcast/status')).json();
 
-    document.getElementById('proc-resolution').textContent = data.resolution || '-';
-    document.getElementById('proc-fps').textContent = data.framerate || '-';
-    document.getElementById('proc-audio-pipe').textContent = data.audio_pipe_connected ? '接続中' : '未接続';
-
     const streaming = data.streaming;
     document.getElementById('sb-stream').className = 'status-dot ' + (streaming ? 'live' : 'off');
     document.getElementById('sb-stream-text').textContent = streaming ? '配信中' : '停止中';
     document.getElementById('status-bar').classList.toggle('streaming', streaming);
-    setDot('stream-dot', streaming);
-
-    const uptimeEl = document.getElementById('uptime-display');
-    if (data.uptime_seconds != null) {
-      uptimeEl.style.display = '';
-      document.getElementById('uptime-text').textContent = formatUptime(data.uptime_seconds);
-    } else {
-      uptimeEl.style.display = 'none';
-    }
   } catch (e) {}
-}
-
-function setDot(id, on) {
-  document.getElementById(id).className = 'status-dot ' + (on ? 'on' : 'off');
-}
-
-function formatUptime(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-}
-
-// --- 診断 ---
-async function loadDiag() {
-  const data = await api('GET', '/api/broadcast/diag');
-  if (!data) return;
-  const el = document.getElementById('diag-status');
-  if (data.healthy) {
-    el.textContent = '正常';
-    el.style.color = '#2e7d32';
-  } else {
-    el.textContent = data.errors.join(', ');
-    el.style.color = '#c62828';
-  }
 }
 
 // --- ウィンドウキャプチャ ---
@@ -866,8 +681,10 @@ async function captureRefreshSources() {
   try {
     const data = await (await fetch('/api/capture/sources')).json();
     const el = document.getElementById('capture-list');
+    const layoutEl = document.getElementById('capture-layout-list');
     if (!data.length) {
       el.innerHTML = '<span style="color:#9a88b5;">キャプチャなし</span>';
+      layoutEl.innerHTML = '';
       return;
     }
     el.innerHTML = data.map(c =>
@@ -876,7 +693,45 @@ async function captureRefreshSources() {
         <button class="danger" style="padding:2px 10px; font-size:0.75rem;" onclick="captureRemove('${c.id}')">停止</button>
       </div>`
     ).join('');
+    // キャプチャレイアウトコントロール生成
+    layoutEl.innerHTML = data.map(c => {
+      const l = c.layout || {};
+      const id = c.id;
+      const label = escHtml(c.label || c.name || c.id);
+      return `<fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px; margin-top:12px;">
+        <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">キャプチャ: ${label}</legend>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 16px;">
+          <div class="layout-row"><span class="layout-label">X位置 (%)</span><input type="range" class="vol-slider" min="0" max="100" step="0.5" value="${l.x ?? 5}" oninput="onCaptureLayout('${id}','x',this)"><input type="number" class="layout-num" min="0" max="100" step="0.5" value="${l.x ?? 5}" data-cap="${id}" data-prop="x" oninput="onCaptureLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">Y位置 (%)</span><input type="range" class="vol-slider" min="0" max="100" step="0.5" value="${l.y ?? 10}" oninput="onCaptureLayout('${id}','y',this)"><input type="number" class="layout-num" min="0" max="100" step="0.5" value="${l.y ?? 10}" data-cap="${id}" data-prop="y" oninput="onCaptureLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">幅 (%)</span><input type="range" class="vol-slider" min="5" max="100" step="0.5" value="${l.width ?? 40}" oninput="onCaptureLayout('${id}','width',this)"><input type="number" class="layout-num" min="5" max="100" step="0.5" value="${l.width ?? 40}" data-cap="${id}" data-prop="width" oninput="onCaptureLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">高さ (%)</span><input type="range" class="vol-slider" min="5" max="100" step="0.5" value="${l.height ?? 50}" oninput="onCaptureLayout('${id}','height',this)"><input type="number" class="layout-num" min="5" max="100" step="0.5" value="${l.height ?? 50}" data-cap="${id}" data-prop="height" oninput="onCaptureLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">Z順序</span><input type="range" class="vol-slider" min="0" max="100" step="1" value="${l.zIndex ?? 10}" oninput="onCaptureLayout('${id}','zIndex',this)"><input type="number" class="layout-num" min="0" max="100" step="1" value="${l.zIndex ?? 10}" data-cap="${id}" data-prop="zIndex" oninput="onCaptureLayoutNum(this)"></div>
+        </div>
+      </fieldset>`;
+    }).join('');
   } catch (e) {}
+}
+
+let _capLayoutTimers = {};
+function onCaptureLayout(id, prop, slider) {
+  const val = parseFloat(slider.value);
+  const numEl = slider.closest('.layout-row').querySelector('.layout-num');
+  if (numEl) numEl.value = val;
+  clearTimeout(_capLayoutTimers[id]);
+  _capLayoutTimers[id] = setTimeout(() => {
+    api('POST', `/api/capture/${id}/layout`, { [prop]: val });
+  }, 200);
+}
+function onCaptureLayoutNum(input) {
+  const id = input.dataset.cap;
+  const prop = input.dataset.prop;
+  const val = parseFloat(input.value);
+  const slider = input.closest('.layout-row').querySelector('input[type=range]');
+  if (slider) slider.value = val;
+  clearTimeout(_capLayoutTimers[id]);
+  _capLayoutTimers[id] = setTimeout(() => {
+    api('POST', `/api/capture/${id}/layout`, { [prop]: val });
+  }, 200);
 }
 
 async function capturePreviewOpen() {
@@ -969,122 +824,6 @@ async function captureRemove(id) {
   await fetch(`/api/capture/${id}`, { method: 'DELETE' });
   captureRefreshSources();
   captureRefreshStatus();
-}
-
-// --- 環境変数 ---
-async function loadEnv() {
-  try {
-    const data = await (await fetch('/api/env')).json();
-    const table = document.getElementById('env-table');
-    table.innerHTML = '';
-    for (const item of data) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${item.label}</td><td>${item.value || '<span style="color:#9a88b5">未設定</span>'}</td>`;
-      table.appendChild(tr);
-    }
-  } catch (e) {}
-}
-
-// --- TODO ---
-async function loadTodoUI() {
-  try {
-    const data = await (await fetch('/api/todo')).json();
-    const el = document.getElementById('todo-list-ui');
-    el.innerHTML = '';
-    for (const item of data.items) {
-      const text = typeof item === 'string' ? item : item.text;
-      const status = typeof item === 'string' ? 'todo' : item.status;
-      const row = document.createElement('div');
-      row.className = 'todo-item' + (status === 'in_progress' ? ' in-progress' : '');
-      const checkbox = document.createElement('span');
-      checkbox.className = 'todo-checkbox';
-      row.appendChild(checkbox);
-      const label = document.createElement('span');
-      label.className = 'todo-text';
-      label.textContent = text;
-      row.appendChild(label);
-      if (status === 'todo') {
-        const btn = document.createElement('button');
-        btn.textContent = '開始';
-        btn.className = 'secondary todo-btn';
-        btn.onclick = () => startTodo(text);
-        row.appendChild(btn);
-      } else {
-        const badge = document.createElement('span');
-        badge.textContent = '作業中';
-        badge.className = 'todo-badge';
-        row.appendChild(badge);
-      }
-      el.appendChild(row);
-    }
-  } catch (e) {}
-}
-
-async function startTodo(text) {
-  const res = await api('POST', '/api/todo/start', { text });
-  if (res?.ok) {
-    showToast(`作業開始: ${text}`, 'success');
-    loadTodoUI();
-  }
-}
-
-// --- Twitch配信情報 ---
-async function loadChannelInfo() {
-  const st = document.getElementById('twitch-status');
-  try {
-    st.textContent = '読み込み中...';
-    const data = await (await fetch('/api/twitch/channel')).json();
-    document.getElementById('twitch-title').value = data.title || '';
-    document.getElementById('twitch-game-id').value = data.game_id || '';
-    document.getElementById('twitch-category-current').textContent = data.game_name ? 'カテゴリ: ' + data.game_name : '';
-    document.getElementById('twitch-tags').value = (data.tags || []).join(', ');
-    st.textContent = '読み込みました';
-  } catch (e) {
-    st.textContent = 'エラー: ' + e.message;
-  }
-}
-
-async function saveChannelInfo() {
-  const st = document.getElementById('twitch-status');
-  const title = document.getElementById('twitch-title').value.trim();
-  const gameId = document.getElementById('twitch-game-id').value.trim();
-  const tagsStr = document.getElementById('twitch-tags').value.trim();
-  const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : null;
-  const body = {};
-  if (title) body.title = title;
-  if (gameId) body.game_id = gameId;
-  if (tags) body.tags = tags;
-  const res = await api('POST', '/api/twitch/channel', body);
-  if (res?.ok) st.textContent = '保存しました';
-}
-
-async function searchCategories() {
-  const query = document.getElementById('twitch-category-search').value.trim();
-  if (!query) return;
-  const container = document.getElementById('twitch-category-results');
-  container.innerHTML = '<span style="font-size:0.8rem;color:#6a5590;">検索中...</span>';
-  try {
-    const res = await api('POST', '/api/twitch/categories/search', { query });
-    if (!res?.categories?.length) {
-      container.innerHTML = '<span style="font-size:0.8rem;color:#6a5590;">見つかりませんでした</span>';
-      return;
-    }
-    container.innerHTML = '';
-    for (const cat of res.categories) {
-      const btn = document.createElement('button');
-      btn.className = 'secondary';
-      btn.style.cssText = 'margin:2px 4px 2px 0; font-size:0.75rem; padding:3px 10px;';
-      btn.textContent = cat.name;
-      btn.onclick = () => {
-        document.getElementById('twitch-game-id').value = cat.id;
-        document.getElementById('twitch-category-current').textContent = 'カテゴリ: ' + cat.name;
-        container.innerHTML = '';
-      };
-      container.appendChild(btn);
-    }
-  } catch (e) {
-    container.innerHTML = '<span style="font-size:0.8rem;color:#e53935;">エラー: ' + e.message + '</span>';
-  }
 }
 
 // --- キャラクター設定 ---
@@ -1574,7 +1313,7 @@ function dbPage(dir) {
   loadDbData();
 }
 
-// --- レイアウト ---
+// --- 配信画面 ---
 let layoutSettings = {};
 let _layoutTimer = null;
 
@@ -1687,9 +1426,6 @@ function showUpdateDialog() {
 const initTab = location.hash.slice(1);
 if (TAB_NAMES.includes(initTab)) switchTab(initTab);
 
-loadEnv();
-loadTodoUI();
-setInterval(loadTodoUI, 30000);
 loadVolumes();
 loadLayout();
 loadCharacter();

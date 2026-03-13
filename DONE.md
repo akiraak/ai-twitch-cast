@@ -66,6 +66,13 @@
 - [x] state.py: load_vsf_defaults()のDB化
 - [x] web.py: startup言語モード復元のDB化
 
+## Web UI整理
+
+- [x] 「レイアウト」タブを「配信画面」にリネーム（分かりやすい名前に変更）
+- [x] ウィンドウキャプチャのカードを「配信」タブから「配信画面」タブに移動
+- [x] 「ダッシュボード」タブと「配信」タブを削除（TODO/Twitch情報/シーン/診断のUI・JS・CSS含む）
+- [x] キャプチャウィンドウのレイアウト設定（X/Y位置・幅・高さ・Z順序）をWeb UIの配信画面タブに追加
+
 ## プロジェクト整理
 
 - [x] OBS関連ファイル・コード完全削除（obs_controller.py, routes/obs.py, routes/stream.py, start_stream.py, stop_stream.py, overlay.html, audio-tts.html, audio-bgm.html, index.html, design-proposal.html, OBS関連ドキュメント3件, tests/test_scene_config.py）
