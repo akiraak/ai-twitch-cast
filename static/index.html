@@ -95,20 +95,20 @@
   .toast.error { background: #ffebee; color: #b71c1c; border: 1px solid #e53935; }
   @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
-  .update-dialog {
+  .modal-overlay, .update-dialog {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,0.5); z-index: 10000;
     display: flex; align-items: center; justify-content: center;
   }
-  .update-dialog-inner {
+  .modal-box, .update-dialog-inner {
     background: #fff; border-radius: 12px; padding: 32px 40px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.2);
     text-align: center; max-width: 400px;
   }
-  .update-dialog-inner h3 { color: #7b1fa2; margin-bottom: 12px; font-size: 1.1rem; }
-  .update-dialog-inner p { color: #6a5590; font-size: 0.9rem; margin-bottom: 20px; }
-  .update-dialog-inner .btn-group { display: flex; gap: 10px; justify-content: center; }
-  .update-dialog-inner .btn-group button { padding: 8px 24px; font-size: 0.9rem; }
+  .modal-box h3, .update-dialog-inner h3 { color: #7b1fa2; margin-bottom: 12px; font-size: 1.1rem; }
+  .modal-box p, .update-dialog-inner p { color: #6a5590; font-size: 0.9rem; margin-bottom: 20px; }
+  .modal-box .btn-group, .update-dialog-inner .btn-group { display: flex; gap: 10px; justify-content: center; }
+  .modal-box .btn-group button, .update-dialog-inner .btn-group button { padding: 8px 24px; font-size: 0.9rem; }
 
   .uptime { font-size: 1.2rem; font-weight: bold; color: #c62828; font-family: monospace; }
 
@@ -279,16 +279,35 @@
   <div class="tab-content" id="tab-character">
     <div class="card">
       <h2>ライティング</h2>
-      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;">
-        <button class="secondary" style="font-size:0.75rem; padding:4px 10px;" onclick="applyLightingPreset('vivid_sunset')">夕焼け（基本）</button>
-        <button class="secondary" style="font-size:0.75rem; padding:4px 10px;" onclick="applyLightingPreset('vivid_deep')">深め</button>
-        <button class="secondary" style="font-size:0.75rem; padding:4px 10px;" onclick="applyLightingPreset('warm_vivid')">あったかビビッド</button>
+      <div style="margin-bottom:12px;">
+        <button style="font-size:0.7rem; padding:3px 8px; background:#e0e0e0; color:#333; border:none; border-radius:4px; cursor:pointer;" onclick="applyLightingPreset('default')">デフォルトに戻す</button>
       </div>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
         <div class="layout-row"><span class="layout-label">明るさ</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-brightness" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutNum(this)"></div>
         <div class="layout-row"><span class="layout-label">コントラスト</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-contrast" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutNum(this)"></div>
         <div class="layout-row"><span class="layout-label">色温度</span><input type="range" class="vol-slider layout-slider" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-temperature" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutNum(this)"></div>
         <div class="layout-row"><span class="layout-label">彩度</span><input type="range" class="vol-slider layout-slider" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-saturation" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutNum(this)"></div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px;">
+        <div class="layout-row"><span class="layout-label">環境光</span><input type="range" class="vol-slider layout-slider" min="0" max="3.0" step="0.05" data-key="lighting.ambient" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-ambient" min="0" max="3.0" step="0.05" data-key="lighting.ambient" oninput="onLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">指向性光</span><input type="range" class="vol-slider layout-slider" min="0" max="3.0" step="0.05" data-key="lighting.directional" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-directional" min="0" max="3.0" step="0.05" data-key="lighting.directional" oninput="onLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">ライトX</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting.lightX" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightX" min="-5" max="5" step="0.1" data-key="lighting.lightX" oninput="onLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">ライトY</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting.lightY" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightY" min="-5" max="5" step="0.1" data-key="lighting.lightY" oninput="onLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">ライトZ</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting.lightZ" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightZ" min="-5" max="5" step="0.1" data-key="lighting.lightZ" oninput="onLayoutNum(this)"></div>
+      </div>
+      <div style="margin-top:14px; border-top:1px solid #e0d0f0; padding-top:12px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <span style="font-size:0.85rem; font-weight:600;">プリセット</span>
+          <button style="font-size:0.7rem; padding:2px 8px; background:#7c4dff; color:#fff; border:none; border-radius:4px; cursor:pointer;" onclick="showPresetSaveUI()">+ 追加</button>
+        </div>
+        <div id="preset-save-ui" style="display:none; margin-bottom:8px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <input type="text" id="preset-name-input" placeholder="プリセット名" style="font-size:0.8rem; padding:3px 8px; border:1px solid #ccc; border-radius:4px; width:140px;">
+            <button style="font-size:0.7rem; padding:3px 8px; background:#4caf50; color:#fff; border:none; border-radius:4px; cursor:pointer;" onclick="saveCurrentAsPreset()">保存</button>
+            <button style="font-size:0.7rem; padding:3px 8px; background:#e0e0e0; color:#333; border:none; border-radius:4px; cursor:pointer;" onclick="hidePresetSaveUI()">キャンセル</button>
+          </div>
+        </div>
+        <div id="lighting-presets-list" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
       </div>
     </div>
     <div class="card">
@@ -527,6 +546,29 @@ function esc(s) {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 汎用確認ダイアログ（Promise を返す）
+function showConfirm(message, { title = '確認', okLabel = 'OK', cancelLabel = 'キャンセル', danger = false } = {}) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    const btnClass = danger ? 'danger' : 'primary';
+    overlay.innerHTML = `<div class="modal-box">
+      <h3>${esc(title)}</h3>
+      <p>${esc(message)}</p>
+      <div class="btn-group">
+        <button class="${btnClass}" data-action="ok">${esc(okLabel)}</button>
+        <button class="secondary" data-action="cancel">${esc(cancelLabel)}</button>
+      </div>
+    </div>`;
+    overlay.addEventListener('click', e => {
+      const action = e.target.dataset?.action;
+      if (action === 'ok') { overlay.remove(); resolve(true); }
+      else if (action === 'cancel') { overlay.remove(); resolve(false); }
+    });
+    document.body.appendChild(overlay);
+  });
 }
 
 function setStatus(id, msg, type) {
@@ -1099,7 +1141,7 @@ async function bgmStop() {
 }
 
 async function bgmDelete(file) {
-  if (!confirm('このトラックを削除しますか？')) return;
+  if (!await showConfirm('このトラックを削除しますか？', { title: '削除', okLabel: '削除', danger: true })) return;
   try {
     const r = await fetch('/api/bgm/track?file=' + encodeURIComponent(file), { method: 'DELETE' });
     const data = await r.json();
@@ -1400,14 +1442,10 @@ async function deleteScreenshot(name) {
 
 // --- ライティングプリセット ---
 const LIGHTING_PRESETS = {
-  vivid_sunset: { brightness: 0.8,  contrast: 1.15, temperature: 0.5,  saturation: 1.45 },
-  vivid_deep:   { brightness: 0.75, contrast: 1.3,  temperature: 0.3,  saturation: 1.4 },
-  warm_vivid:   { brightness: 0.85, contrast: 1.15, temperature: 0.3,  saturation: 1.35 },
+  default: { brightness: 1.0, contrast: 1.0, temperature: 0.1, saturation: 1.0, ambient: 0.75, directional: 1.0, lightX: 0.5, lightY: 1.5, lightZ: 2.0 },
 };
 
-function applyLightingPreset(name) {
-  const p = LIGHTING_PRESETS[name];
-  if (!p) return;
+function applyLightingValues(p) {
   // スライダーと数値入力を更新
   for (const [key, val] of Object.entries(p)) {
     const dataKey = 'lighting.' + key;
@@ -1416,10 +1454,66 @@ function applyLightingPreset(name) {
     const slider = document.querySelector(`input[type="range"][data-key="${dataKey}"]`);
     if (slider) slider.value = val;
   }
-  // プレビュー（保存なし）で即座に反映
   api('POST', '/api/overlay/preview', { lighting: p });
-  // 続けてDB保存も実行
   api('POST', '/api/overlay/settings', { lighting: p });
+}
+
+function applyLightingPreset(name) {
+  const p = LIGHTING_PRESETS[name];
+  if (p) applyLightingValues(p);
+}
+
+// 現在のスライダー値を読み取る
+function getCurrentLightingValues() {
+  const keys = ['brightness', 'contrast', 'temperature', 'saturation', 'ambient', 'directional', 'lightX', 'lightY', 'lightZ'];
+  const values = {};
+  for (const key of keys) {
+    const el = document.getElementById('lv-lighting-' + key);
+    if (el) values[key] = parseFloat(el.value);
+  }
+  return values;
+}
+
+// プリセット保存UI
+function showPresetSaveUI() {
+  document.getElementById('preset-save-ui').style.display = '';
+  document.getElementById('preset-name-input').focus();
+}
+function hidePresetSaveUI() {
+  document.getElementById('preset-save-ui').style.display = 'none';
+  document.getElementById('preset-name-input').value = '';
+}
+
+async function saveCurrentAsPreset() {
+  const name = document.getElementById('preset-name-input').value.trim();
+  if (!name) return;
+  const values = getCurrentLightingValues();
+  await api('POST', '/api/lighting/presets', { name, values });
+  hidePresetSaveUI();
+  loadLightingPresets();
+}
+
+async function deleteLightingPreset(name) {
+  if (!await showConfirm(`プリセット「${name}」を削除しますか？`, { title: '削除', okLabel: '削除', danger: true })) return;
+  await fetch('/api/lighting/presets', { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name }) });
+  loadLightingPresets();
+}
+
+async function loadLightingPresets() {
+  try {
+    const data = await (await fetch('/api/lighting/presets')).json();
+    const container = document.getElementById('lighting-presets-list');
+    if (!data.presets || data.presets.length === 0) {
+      container.innerHTML = '<span style="font-size:0.75rem; color:#9a88b5;">保存済みプリセットなし</span>';
+      return;
+    }
+    container.innerHTML = data.presets.map(p =>
+      `<div style="display:inline-flex; align-items:center; gap:2px; background:#f3e5f5; border-radius:4px; padding:2px 4px;">
+        <button class="secondary" style="font-size:0.75rem; padding:3px 8px;" onclick='applyLightingValues(${JSON.stringify(p.values)})'>${esc(p.name)}</button>
+        <button style="font-size:0.65rem; padding:1px 4px; background:none; border:none; color:#999; cursor:pointer;" onclick="deleteLightingPreset('${esc(p.name)}')" title="削除">&times;</button>
+      </div>`
+    ).join('');
+  } catch (e) {}
 }
 
 // --- TODO ---
@@ -1515,7 +1609,7 @@ async function loadLayout() {
 
 // --- 再起動 ---
 async function doRestart() {
-  if (!confirm('サーバーを再起動しますか？')) return;
+  if (!await showConfirm('サーバーを再起動しますか？', { title: '再起動' })) return;
   log('再起動リクエスト送信...');
   try {
     await fetch('/api/restart', { method: 'POST' });
@@ -1583,6 +1677,7 @@ if (TAB_NAMES.includes(initTab)) switchTab(initTab);
 loadVolumes();
 loadLayout();
 loadCharacter();
+loadLightingPresets();
 loadBgmTracks();
 loadTopicStatus();
 loadTopicScripts();

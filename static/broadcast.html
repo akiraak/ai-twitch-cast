@@ -517,8 +517,7 @@ const avatarArea = document.getElementById('avatar-area');
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
 renderer.setPixelRatio(Math.max(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMapping = THREE.NoToneMapping;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(20, 1, 0.1, 100);
@@ -538,20 +537,33 @@ window.addEventListener('resize', resizeRenderer);
 new ResizeObserver(resizeRenderer).observe(avatarArea);
 
 // ライティング
-const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
+const BASE_AMBIENT = 0.75;
+const BASE_DIRECTIONAL = 1.0;
+const ambientLight = new THREE.AmbientLight(0xffffff, BASE_AMBIENT);
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-dirLight.position.set(1, 2, 3);
+const dirLight = new THREE.DirectionalLight(0xffffff, BASE_DIRECTIONAL);
+dirLight.position.set(0.5, 1.5, 2.0);  // 前方やや右上から照らす
 scene.add(dirLight);
 
 // ライティング設定を外部から制御
 window.avatarLighting = {
+  BASE_AMBIENT,
+  BASE_DIRECTIONAL,
   setAmbient(intensity) { ambientLight.intensity = intensity; },
   setDirectional(intensity) { dirLight.intensity = intensity; },
-  setExposure(val) { renderer.toneMappingExposure = val; },
+  setExposure(val) {
+    // NoToneMapping: ライト強度の倍率で代替
+    ambientLight.intensity = BASE_AMBIENT * val;
+    dirLight.intensity = BASE_DIRECTIONAL * val;
+  },
   setColor(r, g, b) {
     ambientLight.color.setRGB(r, g, b);
     dirLight.color.setRGB(r, g, b);
+  },
+  setPosition(x, y, z) {
+    if (x != null) dirLight.position.x = x;
+    if (y != null) dirLight.position.y = y;
+    if (z != null) dirLight.position.z = z;
   },
 };
 
@@ -869,11 +881,19 @@ function applySettings(s) {
     const c = s.lighting.contrast ?? 1.0;
     const temp = s.lighting.temperature ?? 0;  // -1(寒色)〜+1(暖色)
     const sat = s.lighting.saturation ?? 1.0;
-    // 明るさ → トーンマッピング露出（ACESが白飛び防止）
-    L.setExposure(b);
-    // コントラスト → 環境光/指向性光の比率
-    L.setAmbient(Math.max(0.5, Math.min(4.0, 2.0 / c)));
-    L.setDirectional(Math.max(0.3, Math.min(4.0, 1.5 * c)));
+    // 詳細ライト設定（直接指定がある場合はそちらを優先）
+    if (s.lighting.ambient != null) L.setAmbient(s.lighting.ambient);
+    if (s.lighting.directional != null) L.setDirectional(s.lighting.directional);
+    if (s.lighting.ambient == null && s.lighting.directional == null) {
+      // 明るさ・コントラストからの自動計算（詳細設定がない場合のみ）
+      L.setExposure(b);
+      L.setAmbient(Math.max(0.1, Math.min(2.0, L.BASE_AMBIENT * b / c)));
+      L.setDirectional(Math.max(0.2, Math.min(3.0, L.BASE_DIRECTIONAL * b * c)));
+    }
+    // ライト方向
+    if (s.lighting.lightX != null || s.lighting.lightY != null || s.lighting.lightZ != null) {
+      L.setPosition(s.lighting.lightX, s.lighting.lightY, s.lighting.lightZ);
+    }
     // 色温度 → ライトの色（暖色=黄、寒色=青）
     const r = 1.0 + temp * 0.15;
     const g = 1.0;

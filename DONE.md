@@ -1,5 +1,13 @@
 # DONE
 
+## アバター色味改善（VSeeFace準拠）
+
+- [x] ACESFilmicToneMapping → NoToneMapping（VSeeFaceと同じくトーンマッピングなし）
+- [x] ライティング調整（AmbientLight 2.0→0.75、DirectionalLight 1.5→1.0、方向修正）
+- [x] Web UIにライト直接制御（環境光・指向性光・ライト方向X/Y/Z）追加
+- [x] ライティングプリセット保存・読込・削除機能（DB永続化）
+- [x] 汎用確認ダイアログ（showConfirm）を実装し、全confirm()を置換
+
 ## Electron配信パイプライン（Phase 1+2）
 
 - [x] Electronオフスクリーンレンダリング＋FFmpegでTwitch直接配信（xvfb/PulseAudio不要）

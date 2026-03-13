@@ -168,7 +168,7 @@ def _get_overlay_defaults():
 
 _OVERLAY_DEFAULTS = {
     "avatar": {"positionX": 46.5, "positionY": 24.3, "width": 53.5, "height": 75.7, "zIndex": 5},
-    "lighting": {"brightness": 1.0, "contrast": 1.0, "temperature": 0, "saturation": 1.0},
+    "lighting": {"brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0, "ambient": 0.75, "directional": 1.0, "lightX": 0.5, "lightY": 1.5, "lightZ": 2.0},
     "subtitle": {"bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3, "bgOpacity": 0.85, "zIndex": 20},
     "todo": {"positionX": 36, "positionY": 2, "width": 28, "height": 70, "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20},
     "topic": {"positionX": 1.04, "positionY": 1.85, "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95, "zIndex": 20},
@@ -289,6 +289,57 @@ async def save_overlay_settings(request: Request):
     # 全設定を読み直してブロードキャスト
     full = await get_overlay_settings()
     await state.broadcast_overlay({"type": "settings_update", **full})
+    return {"ok": True}
+
+
+@router.get("/api/lighting/presets")
+async def get_lighting_presets():
+    """保存済みライティングプリセット一覧を返す"""
+    import json as _json
+    raw = db.get_setting("lighting.presets", "[]")
+    try:
+        presets = _json.loads(raw)
+    except Exception:
+        presets = []
+    return {"presets": presets}
+
+
+@router.post("/api/lighting/presets")
+async def save_lighting_preset(request: Request):
+    """ライティングプリセットを保存する"""
+    import json as _json
+    body = await request.json()
+    name = body.get("name", "").strip()
+    values = body.get("values", {})
+    if not name:
+        return {"ok": False, "error": "name is required"}
+    raw = db.get_setting("lighting.presets", "[]")
+    try:
+        presets = _json.loads(raw)
+    except Exception:
+        presets = []
+    # 同名があれば上書き
+    presets = [p for p in presets if p.get("name") != name]
+    presets.append({"name": name, "values": values})
+    db.set_setting("lighting.presets", _json.dumps(presets, ensure_ascii=False))
+    return {"ok": True}
+
+
+@router.delete("/api/lighting/presets")
+async def delete_lighting_preset(request: Request):
+    """ライティングプリセットを削除する"""
+    import json as _json
+    body = await request.json()
+    name = body.get("name", "").strip()
+    if not name:
+        return {"ok": False, "error": "name is required"}
+    raw = db.get_setting("lighting.presets", "[]")
+    try:
+        presets = _json.loads(raw)
+    except Exception:
+        presets = []
+    presets = [p for p in presets if p.get("name") != name]
+    db.set_setting("lighting.presets", _json.dumps(presets, ensure_ascii=False))
     return {"ok": True}
 
 
