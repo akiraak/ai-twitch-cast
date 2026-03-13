@@ -595,8 +595,8 @@ function closeBroadcastWindow() {
 function onBroadcastPaint(event, dirty, image) {
   if (!ffmpegProcess || !ffmpegProcess.stdin || !ffmpegProcess.stdin.writable) return;
 
-  // バックプレッシャー: バッファが溜まっている場合はフレームをスキップ（2フレーム分≒16MB）
-  if (ffmpegProcess.stdin.writableLength > 1024 * 1024 * 16) {
+  // バックプレッシャー: バッファが溜まっている場合はフレームをスキップ（1フレーム分≒8MB）
+  if (ffmpegProcess.stdin.writableLength > 1024 * 1024 * 8) {
     frameDropCount++;
     return;
   }
@@ -638,7 +638,7 @@ async function startStream(config) {
     }
     await openBroadcastWindow(config.serverUrl);
     // ページ読み込み完了を待つ
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 1500));
   }
 
   const rtmpUrl = `rtmp://live-tyo.twitch.tv/app/${streamKey}`;
@@ -646,16 +646,17 @@ async function startStream(config) {
   // FFmpegコマンド: rawvideo(pipe:0) + 音声(HTTP PCMストリーム) → H.264+AAC → RTMP
   const ffmpegArgs = [
     // 映像入力: パイプからBGRA rawvideo
-    '-thread_queue_size', '512',
+    '-thread_queue_size', '64',
     '-f', 'rawvideo',
     '-pixel_format', 'bgra',
     '-video_size', resolution,
     '-framerate', String(framerate),
     '-i', 'pipe:0',
-    // 音声入力: ローカルHTTP経由でbroadcast.htmlのPCM音声を受け取る
+    // 音声入力: ローカルHTTP経由でbroadcast.htmlのPCM音声を受け取る（低遅延）
+    '-fflags', 'nobuffer',
     '-probesize', '32',
     '-analyzeduration', '0',
-    '-thread_queue_size', '4096',
+    '-thread_queue_size', '512',
     '-f', 's16le',
     '-ar', '44100',
     '-ac', '2',
@@ -663,20 +664,22 @@ async function startStream(config) {
   ];
 
   ffmpegArgs.push(
-    // 映像エンコード
+    // 映像エンコード（低遅延設定）
     '-c:v', 'libx264',
     '-preset', preset,
     '-tune', 'zerolatency',
     '-b:v', videoBitrate,
     '-maxrate', videoBitrate,
-    '-bufsize', videoBitrate,
+    '-bufsize', `${Math.round(parseInt(videoBitrate) / 2)}k`,  // ビットレートの半分（バッファ遅延削減）
     '-pix_fmt', 'yuv420p',
     '-g', String(framerate * 2),
+    '-flags', '+low_delay',
     // 音声エンコード
     '-c:a', 'aac',
     '-b:a', audioBitrate,
     '-ar', '44100',
-    // 出力
+    // 出力（低遅延フラッシュ）
+    '-flush_packets', '1',
     '-f', 'flv',
     rtmpUrl,
   );

@@ -227,6 +227,7 @@
 - [x] 配信音声: FFmpegの音声入力をanullsrc→ローカルHTTPストリーム（broadcast.htmlのPCM音声）に変更、backgroundThrottling無効化+AudioContext監視+診断ログ追加
 - [x] 配信音声: メインプロセス直接WAVバイパス（broadcast.html AudioContext不使用、IPC経由でmain.jsが直接WAV取得→リサンプル→FFmpegストリーム書き込み）
 - [x] 音声診断ログAPI追加（Electron側 `/audio/log`、WSL2プロキシ `/api/broadcast/audio-log`）
+- [x] 配信遅延改善: FFmpeg低遅延フラグ追加（`-flush_packets 1`, `-flags +low_delay`, `-fflags nobuffer`, bufsize半減, thread_queue_size縮小, バックプレッシャー閾値8MB化）
 
 ## Phase 0: 環境構築・基盤
 
