@@ -74,6 +74,7 @@
 - [x] キャプチャウィンドウのレイアウト設定（X/Y位置・幅・高さ・Z順序）をWeb UIの配信画面タブに追加
 - [x] キャプチャレイヤーの四隅リサイズ修正（重複ハンドル防止＋overflow:hidden除去）
 - [x] Go LiveでElectron未起動時にワンクリックプレビューを自動起動してから配信開始
+- [x] Electron WebSocket /ws/control接続不可修正（noServerモード+手動upgrade振り分けで複数WebSocket.Server共存）
 
 ## プロジェクト整理
 

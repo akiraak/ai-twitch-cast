@@ -764,8 +764,20 @@ ${captureList.join('') || '<p>なし</p>'}
     console.log(`http://localhost:${PORT}/`);
   });
 
-  // WebSocketサーバー（キャプチャフレーム配信用）
-  wss = new WebSocket.Server({ server: httpServer, path: '/ws/capture', perMessageDeflate: false });
+  // WebSocketサーバー（noServerモードで手動振り分け）
+  wss = new WebSocket.Server({ noServer: true, perMessageDeflate: false });
+  const controlWss = new WebSocket.Server({ noServer: true, perMessageDeflate: false });
+
+  httpServer.on('upgrade', (request, socket, head) => {
+    const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+    if (pathname === '/ws/capture') {
+      wss.handleUpgrade(request, socket, head, (ws) => wss.emit('connection', ws, request));
+    } else if (pathname === '/ws/control') {
+      controlWss.handleUpgrade(request, socket, head, (ws) => controlWss.emit('connection', ws, request));
+    } else {
+      socket.destroy();
+    }
+  });
 
   wss.on('connection', (ws) => {
     console.log(`WebSocketクライアント接続 (計${wss.clients.size})`);
@@ -782,9 +794,6 @@ ${captureList.join('') || '<p>なし</p>'}
       console.log(`WebSocketクライアント切断 (残${wss.clients.size})`);
     });
   });
-
-  // WebSocket制御サーバー（WSL2↔Electron コマンド制御用）
-  const controlWss = new WebSocket.Server({ server: httpServer, path: '/ws/control', perMessageDeflate: false });
 
   controlWss.on('connection', (ws) => {
     console.log('制御WebSocket接続');
