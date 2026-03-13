@@ -164,6 +164,7 @@
   <div class="tab" onclick="switchTab('topic', this)">トピック</div>
   <div class="tab" onclick="switchTab('db', this)">DB</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
+  <div class="tab" onclick="switchTab('todo', this)">TODO</div>
 </div>
 
 <div class="main">
@@ -450,6 +451,15 @@ topics      1──N  topic_scripts (topic_id)</div>
     </div>
   </div>
 
+  <!-- ===== TODO ===== -->
+  <div class="tab-content" id="tab-todo">
+    <div class="card">
+      <h2>TODO一覧</h2>
+      <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:12px;">クリックでアバターが作業開始を読み上げます</p>
+      <div id="todo-list" style="font-size:0.85rem;"></div>
+    </div>
+  </div>
+
   <!-- ===== Debug ===== -->
   <div class="tab-content" id="tab-debug">
     <div class="grid">
@@ -471,7 +481,7 @@ topics      1──N  topic_scripts (topic_id)</div>
 
 <script>
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'db', 'debug'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'db', 'debug', 'todo'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -488,6 +498,7 @@ function switchTab(name, el) {
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
   if (name === 'debug') loadScreenshots();
+  if (name === 'todo') loadTodoList();
 }
 
 
@@ -1380,6 +1391,51 @@ async function loadScreenshots() {
 async function deleteScreenshot(name) {
   await fetch('/api/capture/screenshots/' + encodeURIComponent(name), { method: 'DELETE' });
   loadScreenshots();
+}
+
+// --- TODO ---
+async function loadTodoList() {
+  try {
+    const data = await (await fetch('/api/todo')).json();
+    const el = document.getElementById('todo-list');
+    if (!data.items || data.items.length === 0) {
+      el.innerHTML = '<div style="color:#9a88b5;">TODOはありません</div>';
+      return;
+    }
+    let currentSection = '';
+    let html = '';
+    for (const item of data.items) {
+      if (item.section !== currentSection) {
+        currentSection = item.section;
+        html += `<div style="font-size:0.8rem; font-weight:600; color:#7b1fa2; margin:12px 0 6px; border-bottom:1px solid #e8ddf5; padding-bottom:4px;">${esc(currentSection)}</div>`;
+      }
+      const isActive = item.status === 'in_progress';
+      const bg = isActive ? 'background:#f3e5f5; border-left:3px solid #7b1fa2;' : 'border-left:3px solid transparent;';
+      const icon = isActive ? '▶ ' : '';
+      html += `<div style="padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer; ${bg} transition:background 0.15s;" onmouseenter="this.style.background='#f0e8ff'" onmouseleave="this.style.background='${isActive ? '#f3e5f5' : ''}'" onclick="startTodo(this, '${esc(item.text).replace(/'/g, "\\'")}')">${icon}${esc(item.text)}</div>`;
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    document.getElementById('todo-list').innerHTML = '<div style="color:#c62828;">読み込みエラー</div>';
+  }
+}
+
+async function startTodo(el, text) {
+  el.style.opacity = '0.5';
+  el.style.pointerEvents = 'none';
+  try {
+    const res = await api('POST', '/api/todo/start', { text });
+    if (res.ok) {
+      showToast('作業開始: ' + text);
+    } else {
+      showToast(res.error || 'エラー', 'error');
+    }
+    loadTodoList();
+  } catch (e) {
+    showToast('エラー', 'error');
+    el.style.opacity = '1';
+    el.style.pointerEvents = '';
+  }
 }
 
 // --- 配信画面 ---
