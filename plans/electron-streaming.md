@@ -105,8 +105,163 @@ WSL2 (FastAPI Server)
 6. ✅ preview.html/index.htmlにモード選択UI追加
 
 ### Phase 6: MJPEG排除
-1. ウィンドウキャプチャをElectron内で直接合成（broadcast.htmlに直接描画）
-2. MJPEG HTTP streaming コードを廃止（または互換モードとして残す）
+
+#### 現状のデータフロー（3経路が並存）
+
+**経路A: MJPEG HTTP（レガシー）**
+```
+capture-renderer.js (getUserMedia → canvas → JPEG blob)
+  → IPC 'capture-frame' → main.js
+  → main.js: session.clients (HTTP multipart/x-mixed-replace)
+  → broadcast.html: <img src="http://host:9090/stream/{id}"> (フォールバック)
+```
+
+**経路B: WebSocket バイナリ（現行メイン）**
+```
+capture-renderer.js (getUserMedia → canvas → JPEG blob)
+  → IPC 'capture-frame' → main.js
+  → main.js: wss (WebSocket /ws/capture, 1byte index + JPEG)
+  → broadcast.html: WebSocket → Blob → ObjectURL → <img>.src
+```
+
+**経路C: HTTP snapshot（補助）**
+```
+main.js: GET /snapshot/:id → session.latestFrame (単一JPEG)
+```
+
+**問題**: broadcast.htmlが同じElectronアプリ内で動作しているのに、ネットワーク経由で映像を転送している。
+
+#### 設計方針
+
+broadcast.htmlがElectronのオフスクリーンウィンドウ内で動作している場合、**IPC経由でフレームデータを直接渡す**。
+
+- `broadcast-preload.js` に `window.captureReceiver` APIを追加
+- `main.js` で `capture-frame` → `broadcastWindow.webContents.send()` で直接転送
+- `broadcast.html` でIPC受信 → `<img>` にObjectURLで設定
+
+#### 2つのコンテキスト
+
+| コンテキスト | 使用場所 | window.captureReceiver | キャプチャ表示 |
+|---|---|---|---|
+| **Electronオフスクリーン** | broadcastWindow (配信用) | **あり** | IPC直接受信 |
+| **Electronプレビュー** | previewWindow → iframe | **なし** | WebSocket経由(既存) |
+
+broadcastWindowには`broadcast-preload.js`がpreload設定済み → 新APIを追加可能。
+previewWindowはiframe内broadcast.htmlにpreload未設定 → `window.captureReceiver`不在 → 自動的にWebSocketフォールバック。
+
+#### Step 1: broadcast-preload.js にキャプチャ受信API追加
+
+`win-capture-app/broadcast-preload.js` を拡張:
+
+```javascript
+contextBridge.exposeInMainWorld('captureReceiver', {
+  isAvailable: true,
+  onFrame(callback) {
+    // callback(captureId, jpegArrayBuffer)
+    ipcRenderer.on('capture-frame-to-broadcast', (event, { id, jpeg }) => {
+      callback(id, jpeg);
+    });
+  },
+  onCaptureAdd(callback) {
+    ipcRenderer.on('capture-add-to-broadcast', (event, data) => callback(data));
+  },
+  onCaptureRemove(callback) {
+    ipcRenderer.on('capture-remove-to-broadcast', (event, data) => callback(data));
+  },
+});
+```
+
+#### Step 2: main.js でbroadcastWindowへフレーム直接送信
+
+`ipcMain.on('capture-frame', ...)` ハンドラを拡張:
+
+```javascript
+// broadcastWindowへIPC直接送信
+if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+  broadcastWindow.webContents.send('capture-frame-to-broadcast', { id, jpeg });
+}
+```
+
+キャプチャ開始/停止時にも通知:
+```javascript
+// startCaptureSession内:
+broadcastWindow.webContents.send('capture-add-to-broadcast', { id, name });
+
+// stopCapture内:
+broadcastWindow.webContents.send('capture-remove-to-broadcast', { id });
+```
+
+broadcastWindow起動時に既存キャプチャ一覧をIPCで送信する初期化処理も必要。
+
+#### Step 3: broadcast.html でIPC受信の分岐
+
+`addCaptureLayer()` を修正:
+- `window.captureReceiver` が存在 → IPC直接受信（WebSocket接続不要）
+- 存在しない → 既存のWebSocket/MJPEGフォールバック
+
+```javascript
+function setupDirectCapture() {
+  if (!window.captureReceiver?.isAvailable) return false;
+
+  window.captureReceiver.onFrame((id, jpegBuffer) => {
+    const img = captureImgMap[id];
+    if (!img) return;
+    const blob = new Blob([jpegBuffer], { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    const prevUrl = img._blobUrl;
+    img.src = url;
+    img._blobUrl = url;
+    if (prevUrl) URL.revokeObjectURL(prevUrl);
+  });
+
+  window.captureReceiver.onCaptureAdd((data) => { /* ... */ });
+  window.captureReceiver.onCaptureRemove((data) => { /* ... */ });
+
+  return true;
+}
+```
+
+#### Step 4: MJPEG HTTPストリーミングコードの整理
+
+動作確認後に段階的廃止:
+
+**残すもの（プレビュー互換のため）:**
+- WebSocket `/ws/capture` によるフレーム配信
+- `/snapshot/:id` エンドポイント（デバッグ用）
+
+**廃止するもの:**
+- `/stream/:id` MJPEG HTTPエンドポイント
+- `session.clients` (MJPEG HTTP接続管理)
+- `capture-frame` IPC内のMJPEGクライアント送信部分
+
+#### 実装順序
+
+```
+Step 1 (broadcast-preload.js拡張)
+  ↓
+Step 2 (main.jsフレーム転送)
+  ↓
+Step 3 (broadcast.html分岐)
+  ↓
+動作確認: Electron配信でIPC直接転送 + プレビューでWebSocket転送
+  ↓
+Step 4 (MJPEGコード整理)
+```
+
+#### 変更ファイル一覧
+
+| ファイル | 変更内容 | 影響度 |
+|---|---|---|
+| `win-capture-app/broadcast-preload.js` | captureReceiver API追加 | 小 |
+| `win-capture-app/main.js` | broadcastWindowへのIPC送信追加、MJPEG整理 | 中 |
+| `static/broadcast.html` | IPC直接受信モード追加、WebSocketフォールバック維持 | 中 |
+| `scripts/routes/capture.py` | コメント修正のみ | 極小 |
+
+#### リスク・注意点
+
+- **IPC転送の帯域**: `webContents.send()` で大量フレーム送信時にIPCチャネルが詰まる可能性。バックプレッシャー制御を検討
+- **broadcastWindow生存期間**: キャプチャ開始時にbroadcastWindowが未起動の場合がある。起動時に既存キャプチャ一覧を送信する初期化処理が必要
+- **preview.htmlとの互換性**: previewWindow内のiframeにはpreload未設定なので自動的にWebSocketフォールバック。両コンテキストでテスト必須
 
 ## リスク・注意点
 
@@ -120,4 +275,4 @@ WSL2 (FastAPI Server)
 - 作成日: 2026-03-12
 - 更新日: 2026-03-12
 - 優先度: 中
-- 状態: Phase 1+2+3+5 実装済み + WSL2パイプライン削除完了（Electron一本化）。Phase 6（MJPEG排除）が次のステップ
+- 状態: Phase 1+2+3+5 実装済み + WSL2パイプライン削除完了（Electron一本化）。Phase 6（MJPEG排除）プラン策定済み、実装着手待ち

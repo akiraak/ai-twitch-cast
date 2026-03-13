@@ -1106,22 +1106,55 @@ function stopAvatarStream() {
 // === ウィンドウキャプチャ ===
 const captureContainer = document.getElementById('capture-container');
 const captureLayers = {};
+const captureImgMap = {};      // capture_id -> img element
 
-// WebSocketキャプチャ接続
+// IPC直接受信モード（Electronオフスクリーン配信時のみ有効）
+let useDirectCapture = false;
+
+function setupDirectCapture() {
+  if (!window.captureReceiver || !window.captureReceiver.isAvailable) return false;
+
+  window.captureReceiver.onFrame((id, jpegBuffer) => {
+    const img = captureImgMap[id];
+    if (!img) return;
+    const blob = new Blob([jpegBuffer], { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    const prevUrl = img._blobUrl;
+    img.src = url;
+    img._blobUrl = url;
+    if (prevUrl) URL.revokeObjectURL(prevUrl);
+  });
+
+  window.captureReceiver.onCaptureAdd((data) => {
+    // broadcastWindow起動時の既存キャプチャ or 新規キャプチャ追加
+    if (!captureLayers[data.id]) {
+      addCaptureLayer(data.id, '', data.name || data.id, data.layout || { x: 5, y: 10, width: 40, height: 45, zIndex: 2 });
+    }
+  });
+
+  window.captureReceiver.onCaptureRemove((data) => {
+    removeCaptureLayer(data.id);
+  });
+
+  useDirectCapture = true;
+  console.log('[DirectCapture] Electron IPC直接受信モード有効');
+  return true;
+}
+
+// WebSocketキャプチャ接続（プレビューウィンドウ用フォールバック）
 let captureWs = null;
 let captureWsUrl = null;
-const captureImgMap = {};      // capture_id -> img element
 const captureIndexToId = {};   // index -> capture_id
 
 function connectCaptureWs(wsUrl) {
-  if (captureWs && captureWs.readyState <= 1) return; // 接続中 or 接続済み
+  if (useDirectCapture) return; // IPC直接受信モードではWebSocket不要
+  if (captureWs && captureWs.readyState <= 1) return;
   captureWsUrl = wsUrl;
   captureWs = new WebSocket(wsUrl);
   captureWs.binaryType = 'arraybuffer';
 
   captureWs.onmessage = (e) => {
     if (typeof e.data === 'string') {
-      // JSON: キャプチャ一覧/更新
       const msg = JSON.parse(e.data);
       if (msg.type === 'captures') {
         for (const c of msg.list) {
@@ -1183,14 +1216,15 @@ function addCaptureLayer(id, streamUrl, label, layout) {
   captureLayers[id] = div;
   captureImgMap[id] = img;
 
-  // ElectronのWebSocketに接続（stream_urlからws://を導出）
-  try {
-    const httpUrl = new URL(streamUrl);
-    const wsUrl = `ws://${httpUrl.host}/ws/capture`;
-    connectCaptureWs(wsUrl);
-  } catch (e) {
-    // WebSocket接続失敗時はMJPEGフォールバック
-    img.src = streamUrl;
+  if (!useDirectCapture) {
+    // プレビュー / 非Electron環境: WebSocket経由でフレーム受信
+    try {
+      const httpUrl = new URL(streamUrl);
+      const wsUrl = `ws://${httpUrl.host}/ws/capture`;
+      connectCaptureWs(wsUrl);
+    } catch (e) {
+      // URLパース失敗時は無視（IPC直接受信モードではstreamUrl空）
+    }
   }
 
   setupEditable(div);
@@ -1709,7 +1743,12 @@ async function init() {
     if (av.url) setAvatarStream(av.url);
   } catch (e) {}
 
-  // キャプチャソース読み込み
+  // キャプチャIPC直接受信（Electronオフスクリーン配信時）
+  setupDirectCapture();
+
+  // キャプチャソース読み込み（プレビュー / 非Electron環境用）
+  // IPC直接受信モードではbroadcastWindow起動時にIPCでキャプチャ一覧が来るが、
+  // API経由のレイアウト情報も必要なので両方から読み込む
   try {
     const res = await fetch('/api/capture/sources');
     const sources = await res.json();

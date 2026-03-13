@@ -139,7 +139,6 @@ function debouncedSaveBounds() {
  * @property {string} name - ウィンドウ名
  * @property {BrowserWindow} window - 非表示レンダラーウィンドウ
  * @property {Buffer|null} latestFrame - 最新JPEGフレーム
- * @property {Set} clients - MJPEG接続中のHTTPレスポンス
  * @property {number} fps
  */
 
@@ -151,24 +150,14 @@ ipcMain.on('capture-frame', (event, { id, jpeg }) => {
   const buf = Buffer.from(jpeg);
   session.latestFrame = buf;
 
-  // 全MJPEGクライアントにプッシュ（互換性維持）
-  const dead = [];
-  for (const res of session.clients) {
-    try {
-      res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${buf.length}\r\n\r\n`);
-      res.write(buf);
-      res.write('\r\n');
-    } catch (e) {
-      dead.push(res);
-    }
-  }
-  for (const res of dead) {
-    session.clients.delete(res);
+  // broadcastWindowへIPC直接送信（Phase 6: MJPEG/WebSocket不要の高速パス）
+  if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+    broadcastWindow.webContents.send('capture-frame-to-broadcast', { id, jpeg });
   }
 
-  // WebSocketクライアントにバイナリ送信（1byte index + JPEG）
+  // WebSocketクライアントにバイナリ送信（プレビューウィンドウ用）
   const captureIdx = captureIndexMap.get(id);
-  if (captureIdx !== undefined && wss) {
+  if (captureIdx !== undefined && wss && wss.clients.size > 0) {
     const header = Buffer.alloc(1);
     header[0] = captureIdx;
     const frame = Buffer.concat([header, buf]);
@@ -231,7 +220,6 @@ async function startCaptureSession({ sourceId, id: customId, fps, quality }) {
     name: sourceName,
     window: win,
     latestFrame: null,
-    clients: new Set(),
     fps: fps || DEFAULT_FPS,
   };
 
@@ -248,6 +236,15 @@ async function startCaptureSession({ sourceId, id: customId, fps, quality }) {
     });
     wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) client.send(msg);
+    });
+  }
+
+  // broadcastWindowへキャプチャ追加を通知（IPC直接受信用）
+  if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+    broadcastWindow.webContents.send('capture-add-to-broadcast', {
+      id: captureId,
+      index: captureIndexMap.get(captureId),
+      name: sourceName,
     });
   }
 
@@ -273,7 +270,6 @@ function getCapturesList() {
       name: session.name,
       fps: session.fps,
       has_frame: session.latestFrame !== null,
-      clients: session.clients.size,
     });
   }
   return list;
@@ -336,6 +332,19 @@ async function openBroadcastWindow(serverUrl) {
   });
 
   broadcastWindow.webContents.setFrameRate(cfg.framerate);
+
+  // ページ読み込み完了時に既存キャプチャ一覧をIPC送信
+  broadcastWindow.webContents.on('did-finish-load', () => {
+    if (!broadcastWindow || broadcastWindow.isDestroyed()) return;
+    for (const [id, session] of captures) {
+      broadcastWindow.webContents.send('capture-add-to-broadcast', {
+        id,
+        index: captureIndexMap.get(id),
+        name: session.name,
+      });
+    }
+  });
+
   broadcastWindow.loadURL(broadcastUrl);
   broadcastWindow.on('closed', () => {
     broadcastWindow = null;
@@ -616,22 +625,9 @@ function startServer() {
     res.json(getCapturesList());
   });
 
-  // GET /stream/:id - MJPEGストリーム
+  // GET /stream/:id - MJPEGストリーム（廃止: snapshotにリダイレクト）
   server.get('/stream/:id', (req, res) => {
-    const session = captures.get(req.params.id);
-    if (!session) {
-      return res.status(404).json({ error: `capture '${req.params.id}' not found` });
-    }
-
-    res.writeHead(200, {
-      'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-    });
-
-    session.clients.add(res);
-    req.on('close', () => session.clients.delete(res));
+    res.redirect(`/snapshot/${req.params.id}`);
   });
 
   // GET /snapshot/:id - 単一フレーム
@@ -657,7 +653,7 @@ function startServer() {
     for (const [id, session] of captures) {
       captureList.push(`<div>
         <h3>${id}: ${session.name}</h3>
-        <img src="/stream/${id}" style="max-width:480px;">
+        <img src="/snapshot/${id}" style="max-width:480px;">
       </div>`);
     }
     const streamStatus = getStreamStatus();
@@ -868,11 +864,6 @@ function stopCapture(id) {
   const session = captures.get(id);
   if (!session) return false;
 
-  // MJPEGクライアントを閉じる
-  for (const res of session.clients) {
-    try { res.end(); } catch (e) {}
-  }
-
   // BrowserWindowを閉じる
   try {
     if (!session.window.isDestroyed()) {
@@ -883,7 +874,12 @@ function stopCapture(id) {
   captures.delete(id);
   captureIndexMap.delete(id);
 
-  // WebSocketクライアントにキャプチャ削除を通知
+  // broadcastWindowへキャプチャ削除を通知（IPC直接受信用）
+  if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+    broadcastWindow.webContents.send('capture-remove-to-broadcast', { id });
+  }
+
+  // WebSocketクライアントにキャプチャ削除を通知（プレビュー用）
   if (wss) {
     const msg = JSON.stringify({ type: 'capture_remove', id });
     wss.clients.forEach(client => {

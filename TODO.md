@@ -9,7 +9,7 @@
 
 ### サーバ
 - [ ] 表示が煩雑なので整理する
-- [ ] Electron配信: Phase 6 MJPEG排除（ウィンドウキャプチャをElectron内で直接合成） → [plans/electron-streaming.md](plans/electron-streaming.md)
+- [ ] Electron配信: Phase 6 テスト確認待ち（IPC直接受信実装済み、MJPEG HTTP廃止済み） → [plans/electron-streaming.md](plans/electron-streaming.md)
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
 - [ ] あきらと他のユーザーに返すプロンプトを変える。あきらには英語多め。他の視聴者にはその人のコメントの言語をメインに。ちょっとだけ日本語入れる感じで
 - [ ] 汎用的なGitリポジトリをベースにした開発配信機能を入れる。外部のリポジトリをcloneして、その操作を実況する

@@ -14,6 +14,7 @@
 - [x] WSL2配信パイプライン削除（stream_controller.py全削除、xvfb/PulseAudio/Chromium依存排除、Electron一本化）
 - [x] stream_control.py/state.py/index.html/preview.htmlをElectron専用に簡略化
 - [x] docs/obs-free-streaming.md削除、CLAUDE.md/README.md/.env.example/mkdocs.yml更新
+- [x] Phase 6: MJPEG排除（キャプチャフレームをIPC直接転送、MJPEG HTTPエンドポイント廃止）
 
 ## 字幕デバッグ・レイアウト修正
 
