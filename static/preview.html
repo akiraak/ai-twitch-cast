@@ -68,8 +68,6 @@
     text-align: center;
   }
   .panel-btn:hover { background: rgba(124, 77, 255, 0.15); }
-  .panel-btn.primary { background: #7c4dff; color: #fff; }
-  .panel-btn.primary:hover { background: #651fff; }
   .panel-btn.go-live { background: #4caf50; color: #fff; border-color: #4caf50; font-weight: bold; }
   .panel-btn.go-live:hover { background: #43a047; }
   .panel-btn.stop { background: #f44336; color: #fff; border-color: #f44336; }
@@ -226,7 +224,7 @@ async function updateStatus() {
       stopBtn.style.display = '';
       const mins = Math.floor((st.uptime_seconds || 0) / 60);
       const secs = Math.floor((st.uptime_seconds || 0) % 60);
-      info.textContent = `${st.resolution} ${st.framerate}fps | ${mins}:${String(secs).padStart(2,'0')}`;
+      info.textContent = `${st.resolution || '1920x1080'} ${st.framerate || 30}fps | ${mins}:${String(secs).padStart(2,'0')}`;
     } else {
       dot.className = 'status-dot preview';
       label.textContent = 'PREVIEW';

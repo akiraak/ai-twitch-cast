@@ -9,14 +9,12 @@ from src.ai_responder import get_character_id, seed_character
 from src.comment_reader import CommentReader
 from src.git_watcher import GitWatcher
 from src.topic_talker import TopicTalker
-from src.stream_controller import StreamController
 from src.scene_config import load_config_json
 from src.twitch_api import TwitchAPI
 from src.vsf_controller import VSFController
 from src.vts_controller import VTSController
 
 # コントローラー
-stream = StreamController()
 vts = VTSController()
 vsf = VSFController()
 twitch_api = TwitchAPI()
@@ -87,9 +85,6 @@ async def _on_git_commit(commit_hash, message):
 
 # Git監視
 git_watcher = GitWatcher(on_commit=_on_git_commit)
-
-# StreamControllerにブロードキャスト関数を注入
-stream.set_broadcast_fn(broadcast_to_broadcast)
 
 
 async def ensure_reader():

@@ -1,6 +1,7 @@
-"""配信制御ルート（OBS不要版） - StreamController管理"""
+"""配信制御ルート - Electronパイプライン経由でTwitch配信"""
 
 import logging
+import os
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -12,34 +13,88 @@ from src.scene_config import load_config_value, save_config_value
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# 配信中フラグ
+_is_streaming = False
 
-@router.post("/api/broadcast/setup")
-async def broadcast_setup():
-    """xvfb + Chromium + PulseAudio を起動"""
+
+async def _electron_stream_start():
+    """Electron経由でTwitch配信を開始"""
+    from scripts.routes.capture import _ws_request
+    from src.wsl_path import get_windows_host_ip
+
+    stream_key = os.environ.get("TWITCH_STREAM_KEY", "")
+    if not stream_key:
+        raise ValueError("TWITCH_STREAM_KEY が .env に設定されていません")
+
+    # Electronアプリが起動しているか確認
     try:
-        await state.stream.setup()
+        await _ws_request("stream_status")
+    except Exception:
+        raise RuntimeError("Electronアプリに接続できません。先にプレビューを起動してください。")
+
+    web_port = os.environ.get("WEB_PORT", "8080")
+    try:
+        host = get_windows_host_ip()
+    except Exception:
+        host = "localhost"
+    server_url = f"http://{host}:{web_port}"
+
+    result = await _ws_request(
+        "start_stream",
+        streamKey=stream_key,
+        serverUrl=server_url,
+    )
+    if not result.get("ok"):
+        raise RuntimeError(result.get("error", "Electron配信開始失敗"))
+
+
+async def _electron_stream_stop():
+    """Electron経由の配信を停止"""
+    from scripts.routes.capture import _ws_request
+    try:
+        await _ws_request("stop_stream")
+    except Exception as e:
+        logger.warning("Electron配信停止エラー（無視）: %s", e)
+
+
+async def _electron_stream_status() -> dict:
+    """Electron配信の状態を取得"""
+    from scripts.routes.capture import _ws_request
+    try:
+        return await _ws_request("stream_status")
+    except Exception:
+        return {"streaming": False}
+
+
+# =====================================================
+# 配信制御
+# =====================================================
+
+
+@router.post("/api/broadcast/go-live")
+async def broadcast_go_live():
+    """Electron経由で配信開始"""
+    global _is_streaming
+    try:
+        electron_st = await _electron_stream_status()
+        if not electron_st.get("streaming"):
+            await _electron_stream_start()
+        _is_streaming = True
+        await state.ensure_reader()
+        await state.git_watcher.start()
         return {"ok": True}
     except Exception as e:
-        logger.error("セットアップ失敗: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/api/broadcast/teardown")
-async def broadcast_teardown():
-    """全プロセスを停止"""
-    try:
-        await state.stream.teardown()
-        return {"ok": True}
-    except Exception as e:
-        logger.error("ティアダウン失敗: %s", e)
+        logger.error("Go Live失敗: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/api/broadcast/start")
 async def broadcast_start():
-    """FFmpeg RTMP配信を開始"""
+    """Electron経由で配信開始"""
+    global _is_streaming
     try:
-        await state.stream.start_stream()
+        await _electron_stream_start()
+        _is_streaming = True
         await state.ensure_reader()
         await state.git_watcher.start()
         return {"ok": True}
@@ -48,27 +103,10 @@ async def broadcast_start():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/api/broadcast/go-live")
-async def broadcast_go_live():
-    """Setup + 配信開始をワンステップで実行"""
-    try:
-        status = state.stream.get_stream_status()
-        if not status["setup"]:
-            await state.stream.setup()
-        if not status["streaming"]:
-            await state.stream.start_stream()
-            await state.ensure_reader()
-            await state.git_watcher.start()
-        return {"ok": True}
-    except Exception as e:
-        logger.error("Go Live失敗: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.post("/api/broadcast/stop")
 async def broadcast_stop():
-    """FFmpeg RTMP配信を停止"""
-    from src import db
+    """配信を停止"""
+    global _is_streaming
 
     await state.git_watcher.stop()
     if state.reader.is_running:
@@ -76,8 +114,15 @@ async def broadcast_stop():
     if state.current_episode:
         db.end_episode(state.current_episode["id"])
         state.current_episode = None
-    await state.stream.stop_stream()
+
+    await _electron_stream_stop()
+    _is_streaming = False
     return {"ok": True}
+
+
+# =====================================================
+# シーン
+# =====================================================
 
 
 class SceneRequest(BaseModel):
@@ -90,7 +135,8 @@ async def broadcast_scene(body: SceneRequest):
     valid_scenes = ["main", "start", "end"]
     if body.name not in valid_scenes:
         raise HTTPException(status_code=400, detail=f"不明なシーン: {body.name} (有効: {valid_scenes})")
-    await state.stream.set_scene(body.name)
+    await state.broadcast_to_broadcast({"type": "scene", "name": body.name})
+    logger.info("シーン切替: %s", body.name)
     return {"ok": True, "scene": body.name}
 
 
@@ -106,6 +152,11 @@ async def broadcast_scenes():
     }
 
 
+# =====================================================
+# 音量
+# =====================================================
+
+
 class VolumeRequest(BaseModel):
     source: str
     volume: float
@@ -113,11 +164,9 @@ class VolumeRequest(BaseModel):
 
 def _get_volume(source):
     """音量を取得（DB volume.* → scenes.json audio_volumes.* → デフォルト）"""
-    # DBにvolume.*キーで保存されている
     val = db.get_setting(f"volume.{source}")
     if val is not None:
         return float(val)
-    # scenes.jsonフォールバック
     val = load_config_value(f"audio_volumes.{source}")
     if val is not None:
         return float(val)
@@ -142,12 +191,16 @@ async def broadcast_set_volume(body: VolumeRequest):
 
     db.set_setting(f"volume.{body.source}", body.volume)
 
-    await state.stream.set_volume(body.source, body.volume)
+    await state.broadcast_to_broadcast({"type": "volume", "source": body.source, "volume": body.volume})
+    logger.info("音量変更: %s = %.2f", body.source, body.volume)
 
     return {"ok": True}
 
 
-# --- アバターキャプチャ ---
+# =====================================================
+# アバターキャプチャ
+# =====================================================
+
 
 class AvatarStreamRequest(BaseModel):
     url: str
@@ -191,27 +244,45 @@ async def broadcast_stop_avatar():
     return {"ok": True}
 
 
+# =====================================================
+# ステータス・診断
+# =====================================================
+
+
 @router.get("/api/broadcast/status")
 async def broadcast_status():
     """配信状態を返す"""
-    return state.stream.get_stream_status()
+    electron_st = await _electron_stream_status()
+    streaming = electron_st.get("streaming", False)
+
+    result = {
+        "streaming": streaming,
+        "uptime_seconds": electron_st.get("uptime_seconds"),
+        "frames_sent": electron_st.get("frames_sent"),
+        "frames_dropped": electron_st.get("frames_dropped"),
+        "resolution": (electron_st.get("config") or {}).get("resolution", "1920x1080"),
+        "framerate": (electron_st.get("config") or {}).get("framerate", 30),
+        "audio_pipe_connected": electron_st.get("audio_pipe_connected", False),
+        "electron": electron_st,
+    }
+    return result
 
 
 @router.get("/api/broadcast/diag")
 async def broadcast_diag():
-    """プロセスヘルスチェック"""
-    status = state.stream.get_stream_status()
+    """Electronアプリのヘルスチェック"""
     errors = []
+    electron_st = await _electron_stream_status()
 
-    if status["setup"] and not status["xvfb_running"]:
-        errors.append("Xvfbが停止しています")
-    if status["setup"] and not status["browser_running"]:
-        errors.append("Chromiumが停止しています")
-    if status["streaming"] and not status["ffmpeg_running"]:
-        errors.append("FFmpegが停止しています")
+    if _is_streaming and not electron_st.get("streaming"):
+        errors.append("Electron配信が停止しています")
+
+    if not electron_st.get("streaming") and electron_st == {"streaming": False}:
+        errors.append("Electronアプリに接続できません")
 
     return {
-        **status,
+        "streaming": electron_st.get("streaming", False),
+        "electron": electron_st,
         "errors": errors,
         "healthy": len(errors) == 0,
     }

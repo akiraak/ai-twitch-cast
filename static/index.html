@@ -177,7 +177,6 @@
 <div class="header">
   <h1><a href="/">AI Twitch Cast</a></h1>
   <div class="header-actions">
-    <button onclick="doSetup()">Setup</button>
     <button class="success" onclick="doStart()">配信開始</button>
     <button class="danger" onclick="doStop()">配信停止</button>
     <button class="secondary" onclick="doRestart()">再起動</button>
@@ -185,18 +184,6 @@
 </div>
 
 <div class="status-bar" id="status-bar">
-  <div class="status-item">
-    <span class="status-dot off" id="sb-xvfb"></span>
-    <span class="status-label">Xvfb</span>
-  </div>
-  <div class="status-item">
-    <span class="status-dot off" id="sb-browser"></span>
-    <span class="status-label">Browser</span>
-  </div>
-  <div class="status-item">
-    <span class="status-dot off" id="sb-ffmpeg"></span>
-    <span class="status-label">FFmpeg</span>
-  </div>
   <div class="status-item">
     <span class="status-dot off" id="sb-stream"></span>
     <span class="status-label">配信</span>
@@ -267,11 +254,7 @@
       <div class="card">
         <h2><span class="status-dot off" id="stream-dot"></span> 配信制御</h2>
         <div class="btn-row">
-          <button onclick="doSetup()">Setup</button>
-          <button class="danger" onclick="doTeardown()">Teardown</button>
-        </div>
-        <div class="btn-row">
-          <button class="success" onclick="doStart()">配信開始</button>
+          <button class="success" onclick="doGoLive()">Go Live</button>
           <button class="danger" onclick="doStop()">配信停止</button>
         </div>
         <div id="uptime-display" style="margin-top:8px; display:none;">
@@ -291,23 +274,8 @@
       </div>
 
       <div class="card">
-        <h2>プロセス状態</h2>
+        <h2>配信状態</h2>
         <div class="process-grid">
-          <div class="process-item">
-            <span class="status-dot off" id="proc-xvfb"></span>
-            <span class="label">Xvfb</span>
-            <span class="value" id="proc-xvfb-text">停止</span>
-          </div>
-          <div class="process-item">
-            <span class="status-dot off" id="proc-browser"></span>
-            <span class="label">Chromium</span>
-            <span class="value" id="proc-browser-text">停止</span>
-          </div>
-          <div class="process-item">
-            <span class="status-dot off" id="proc-ffmpeg"></span>
-            <span class="label">FFmpeg</span>
-            <span class="value" id="proc-ffmpeg-text">停止</span>
-          </div>
           <div class="process-item">
             <span class="label">解像度</span>
             <span class="value" id="proc-resolution">-</span>
@@ -317,8 +285,8 @@
             <span class="value" id="proc-fps">-</span>
           </div>
           <div class="process-item">
-            <span class="label">Display</span>
-            <span class="value" id="proc-display">-</span>
+            <span class="label">音声パイプ</span>
+            <span class="value" id="proc-audio-pipe">-</span>
           </div>
         </div>
         <div class="btn-row" style="margin-top:12px;">
@@ -690,17 +658,11 @@ async function api(method, url, body) {
 }
 
 // --- 配信制御 ---
-async function doSetup() {
-  log('Setup開始...');
-  const res = await api('POST', '/api/broadcast/setup');
-  if (res?.ok) showToast('Setup完了', 'success');
-  refreshStatus();
-}
-
-async function doTeardown() {
-  log('Teardown開始...');
-  const res = await api('POST', '/api/broadcast/teardown');
-  if (res?.ok) showToast('Teardown完了', 'success');
+async function doGoLive() {
+  log('Go Live...');
+  const res = await api('POST', '/api/broadcast/go-live');
+  if (res?.ok) showToast('配信開始', 'success');
+  else showToast(res?.detail || '配信開始失敗', 'error');
   refreshStatus();
 }
 
@@ -708,6 +670,7 @@ async function doStart() {
   log('配信開始...');
   const res = await api('POST', '/api/broadcast/start');
   if (res?.ok) showToast('配信開始', 'success');
+  else showToast(res?.detail || '配信開始失敗', 'error');
   refreshStatus();
 }
 
@@ -760,25 +723,15 @@ async function refreshStatus() {
   try {
     const data = await (await fetch('/api/broadcast/status')).json();
 
-    setDot('proc-xvfb', data.xvfb_running);
-    setDot('proc-browser', data.browser_running);
-    setDot('proc-ffmpeg', data.ffmpeg_running);
-    document.getElementById('proc-xvfb-text').textContent = data.xvfb_running ? '稼働中' : '停止';
-    document.getElementById('proc-browser-text').textContent = data.browser_running ? '稼働中' : '停止';
-    document.getElementById('proc-ffmpeg-text').textContent = data.ffmpeg_running ? '稼働中' : '停止';
     document.getElementById('proc-resolution').textContent = data.resolution || '-';
     document.getElementById('proc-fps').textContent = data.framerate || '-';
-    document.getElementById('proc-display').textContent = data.display || '-';
-
-    setDot('sb-xvfb', data.xvfb_running);
-    setDot('sb-browser', data.browser_running);
-    setDot('sb-ffmpeg', data.ffmpeg_running);
+    document.getElementById('proc-audio-pipe').textContent = data.audio_pipe_connected ? '接続中' : '未接続';
 
     const streaming = data.streaming;
     document.getElementById('sb-stream').className = 'status-dot ' + (streaming ? 'live' : 'off');
     document.getElementById('sb-stream-text').textContent = streaming ? '配信中' : '停止中';
     document.getElementById('status-bar').classList.toggle('streaming', streaming);
-    setDot('stream-dot', data.setup);
+    setDot('stream-dot', streaming);
 
     const uptimeEl = document.getElementById('uptime-display');
     if (data.uptime_seconds != null) {
@@ -1762,13 +1715,6 @@ setInterval(captureRefreshStatus, 10000);
   } catch (e) {
     previewOneClick();
   }
-  // 配信環境を事前にSetup（Go Live時のFFmpeg起動だけで済むように）
-  try {
-    const st = await (await fetch('/api/broadcast/status')).json();
-    if (!st.setup) {
-      fetch('/api/broadcast/setup', { method: 'POST' });
-    }
-  } catch (e) {}
 })();
 </script>
 </body>

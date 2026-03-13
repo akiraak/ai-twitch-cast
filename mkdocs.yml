@@ -35,7 +35,6 @@ nav:
   - 音声:
     - ボイスサンプル比較: voice-samples.md
   - 配信:
-    - 配信パイプライン: obs-free-streaming.md
     - ウィンドウキャプチャ: window-capture.md
   - Web UI:
     - デザイン改善提案: webui-design-proposal.md

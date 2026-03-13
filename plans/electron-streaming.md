@@ -96,10 +96,13 @@ WSL2 (FastAPI Server)
 2. TTS音声URL、BGM制御、字幕等のイベントをWebSocket経由で受信
 3. broadcast.htmlのWebSocket接続先をWSL2サーバーに向ける（現状と同じ）
 
-### Phase 5: 配信制御APIの移行
-1. `stream_controller.py`のFFmpeg起動ロジックをElectron側にも実装
-2. WSL2の`/api/broadcast/go-live`等からElectronのFFmpegを制御する経路を追加
-3. xvfb/PulseAudio関連コードを条件分岐またはElectronモードとして分離
+### Phase 5: 配信制御API統合 ✅ 実装済み
+1. ✅ 配信モード設定（`stream.mode` DB保存、`GET/POST /api/broadcast/mode`）
+2. ✅ `/api/broadcast/go-live` にモード分岐（electron/wsl2）
+3. ✅ `/api/broadcast/start`, `/api/broadcast/stop` がモードに応じてElectron or WSL2を制御
+4. ✅ `/api/broadcast/status` が統合ステータスを返す（アクティブモード・Electron状態含む）
+5. ✅ 配信中はモード変更不可（409エラー）
+6. ✅ preview.html/index.htmlにモード選択UI追加
 
 ### Phase 6: MJPEG排除
 1. ウィンドウキャプチャをElectron内で直接合成（broadcast.htmlに直接描画）
@@ -111,10 +114,10 @@ WSL2 (FastAPI Server)
 - **Electronのメモリ使用量**: 画面キャプチャ+エンコードでメモリ消費が増加する可能性
 - **デバッグの困難さ**: WSL2では`DISPLAY=:99`で別のChromiumからbroadcast.htmlを確認できたが、Electronでは確認方法が変わる
 - **段階的移行**: 一度にすべてを移行せず、Phase単位で動作確認しながら進める
-- **フォールバック**: WSL2パイプラインは削除せず、切替可能にしておく
+- ~~**フォールバック**: WSL2パイプラインは削除せず、切替可能にしておく~~ → WSL2パイプライン削除済み（Electron一本化）
 
 ## ステータス
 - 作成日: 2026-03-12
 - 更新日: 2026-03-12
 - 優先度: 中
-- 状態: Phase 1+2+3 実装済み（映像+音声キャプチャ完了）、Phase 5（配信制御API統合）が次のステップ
+- 状態: Phase 1+2+3+5 実装済み + WSL2パイプライン削除完了（Electron一本化）。Phase 6（MJPEG排除）が次のステップ

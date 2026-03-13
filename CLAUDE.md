@@ -4,12 +4,12 @@ AIを活用し、プログラムで全自動Twitch配信を行うプロジェク
 
 ## プロジェクト概要
 
-独自配信パイプライン（xvfb + Chromium + FFmpeg）、Twitch API連携、画像生成・収集、テキスト生成、音声合成など、配信に必要な要素をすべてプログラムで生成・制御する。
+Electron配信パイプライン（Windows側でbroadcast.htmlをオフスクリーンレンダリング→FFmpegでTwitch直接配信）、Twitch API連携、画像生成・収集、テキスト生成、音声合成など、配信に必要な要素をすべてプログラムで生成・制御する。
 
 ## 主要コンポーネント
 
-- **独自配信パイプライン** - xvfb + Chromium + PulseAudio + FFmpegによる配信
-- **ウィンドウキャプチャ** - Windows側Electronアプリ（`win-capture-app/`）でウィンドウをキャプチャ→MJPEGストリーム配信→broadcast.htmlで表示
+- **Electron配信パイプライン** - Windows側Electronアプリ（`win-capture-app/`）でbroadcast.htmlをオフスクリーンレンダリング→FFmpegでTwitch直接配信（OBS/xvfb不要）
+- **ウィンドウキャプチャ** - 同Electronアプリでウィンドウをキャプチャ→MJPEGストリーム配信→broadcast.htmlで表示
 - **Twitch API** - チャット読み取り・配信管理・視聴者インタラクション
 - **テキスト生成** - LLMによる台本・コメント・ナレーション生成
 - **音声合成** - TTS（Text-to-Speech）によるナレーション音声生成
@@ -57,7 +57,6 @@ ai-twitch-cast/
 │   ├── avatar-research.md   # アバター表示・アニメーション調査
 │   ├── 3d-model-research.md # 3Dモデル調査
 │   ├── vrm-conversion-log.md # VRM変換作業ログ
-│   ├── obs-free-streaming.md # 配信パイプラインガイド
 │   └── window-capture.md   # ウィンドウキャプチャシステム設計
 ├── win-capture-app/          # Windows側Electronキャプチャ＋配信アプリ
 │   ├── main.js              # メインプロセス（HTTPサーバー+キャプチャ管理+FFmpeg配信）
@@ -67,7 +66,6 @@ ai-twitch-cast/
 │   ├── package.json         # Electron+electron-builder設定
 │   └── build.sh             # ビルドスクリプト
 ├── src/                      # ソースコード
-│   ├── stream_controller.py  # 配信プロセス管理（xvfb/Chromium/PulseAudio/FFmpeg）
 │   ├── vts_controller.py     # VTube Studio API制御（Live2D）
 │   ├── vsf_controller.py     # VSeeFace VMC Protocol制御（VRM）
 │   ├── scene_config.py       # 設定の定義（scenes.jsonから読み込み）
@@ -82,7 +80,7 @@ ai-twitch-cast/
 ├── scripts/                  # 実行スクリプト
 │   ├── console.py            # 対話式コンソール（アバター制御）
 │   ├── web.py                # Webインターフェース（startup自動復旧・shutdownハンドラ付き）
-│   ├── state.py              # 共有状態（コントローラー・WebSocket・GitWatcher・StreamController）
+│   ├── state.py              # 共有状態（コントローラー・WebSocket・GitWatcher）
 │   ├── routes/               # ルートモジュール（avatar/capture/character/overlay/twitch/topic/bgm/db_viewer/stream_control）
 │   ├── deploy_model.py       # Live2Dモデルデプロイ
 │   ├── convert_to_vrm.py     # FBX→VRM変換（Blenderスクリプト）
@@ -126,8 +124,9 @@ ai-twitch-cast/
 
 ## WSL2環境について
 
-- **開発はWSL2上で行い、VTube Studio・VSeeFaceはWindows上で動作する**
-- WebサーバーはWSL2内で起動し、broadcast.htmlはxvfb内のChromiumで表示する
+- **開発はWSL2上で行い、配信はWindows側Electronアプリが担当する**
+- WebサーバーはWSL2内で起動（API/TTS/AI生成のバックエンド）
+- Electronアプリがbroadcast.htmlをオフスクリーンレンダリングし、FFmpegでTwitchに直接配信
 - Webサーバーのポートは環境変数 `WEB_PORT` で設定（デフォルト: 8080）
 
 ## Webサーバー運用注意
@@ -169,7 +168,7 @@ curl -s http://localhost:$WEB_PORT/api/todo    # TODOが返るか
 | ウィンドウキャプチャ | Electronアプリ起動→ウィンドウ選択→broadcast.htmlにMJPEGストリーム表示 |
 | レイアウト編集 | `/broadcast` でドラッグ＆リサイズ→保存→配信画面に反映（常時編集可能） |
 | WebSocket接続 | broadcast.htmlがWebSocketで接続している |
-| Web UI Setup | Setupボタンでトースト通知が出る（成功=緑、エラー=赤） |
+| Go Live | Go Liveボタンで配信開始（Electron経由）、トースト通知が出る |
 
 ## メモリ（実装記録）
 

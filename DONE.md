@@ -10,6 +10,10 @@
 - [x] Phase 3: TTS/BGM音声キャプチャ（AudioContext+ScriptProcessorNode→PCM→IPC→Named Pipe→FFmpeg）
 - [x] broadcast-preload.js追加（contextBridge経由でaudioCapture API公開）
 - [x] Windows Named Pipe経由のPCMデータ中継（非WindowsはanullsrcフォールバックFFmpeg）
+- [x] Phase 5: 配信制御API統合（go-liveからElectron配信開始、統合ステータスAPI）
+- [x] WSL2配信パイプライン削除（stream_controller.py全削除、xvfb/PulseAudio/Chromium依存排除、Electron一本化）
+- [x] stream_control.py/state.py/index.html/preview.htmlをElectron専用に簡略化
+- [x] docs/obs-free-streaming.md削除、CLAUDE.md/README.md/.env.example/mkdocs.yml更新
 
 ## 字幕デバッグ・レイアウト修正
 
