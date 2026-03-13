@@ -1564,13 +1564,21 @@ async function loadTodoList() {
       }
       const isActive = item.status === 'in_progress';
       const bg = isActive ? 'background:#f3e5f5; border-left:3px solid #7b1fa2;' : 'border-left:3px solid transparent;';
-      const icon = isActive ? '▶ ' : '';
-      html += `<div style="padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer; ${bg} transition:background 0.15s;" onmouseenter="this.style.background='#f0e8ff'" onmouseleave="this.style.background='${isActive ? '#f3e5f5' : ''}'" onclick="startTodo(this, '${esc(item.text).replace(/'/g, "\\'")}')">${icon}${esc(item.text)}</div>`;
+      const checkbox = isActive
+        ? '<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:4px; background:#7b1fa2; flex-shrink:0; font-size:0.7rem; color:#fff;">▶</span>'
+        : '<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border:2px solid #d0c0e8; border-radius:4px; flex-shrink:0;"></span>';
+      html += `<div style="padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer; ${bg} transition:background 0.15s; display:flex; align-items:center; gap:8px;" onmouseenter="this.style.background='#f0e8ff'" onmouseleave="this.style.background='${isActive ? '#f3e5f5' : ''}'"><span style="flex:1; display:flex; align-items:center; gap:8px;" onclick="startTodo(this.parentElement, '${esc(item.text).replace(/'/g, "\\'")}')">${checkbox}${esc(item.text)}</span><button onclick="event.stopPropagation();copyTodo(this,'${esc(item.text).replace(/'/g, "\\'")}')" style="flex-shrink:0; padding:2px 6px; border:1px solid #d0c0e8; border-radius:4px; background:#fff; color:#7b1fa2; cursor:pointer; font-size:0.75rem;" title="コピー">📋</button></div>`;
     }
     el.innerHTML = html;
   } catch (e) {
     document.getElementById('todo-list').innerHTML = '<div style="color:#c62828;">読み込みエラー</div>';
   }
+}
+
+async function copyTodo(btn, text) {
+  await navigator.clipboard.writeText(text);
+  btn.textContent = '✓';
+  setTimeout(() => btn.textContent = '📋', 1000);
 }
 
 async function startTodo(el, text) {
