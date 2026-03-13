@@ -75,6 +75,10 @@
 - [x] キャプチャレイヤーの四隅リサイズ修正（重複ハンドル防止＋overflow:hidden除去）
 - [x] Go LiveでElectron未起動時にワンクリックプレビューを自動起動してから配信開始
 - [x] Electron WebSocket /ws/control接続不可修正（noServerモード+手動upgrade振り分けで複数WebSocket.Server共存）
+- [x] serverUrl方向修正（get_windows_host_ip→get_wsl_ip: Electron→WSL2へのアクセスに正しいIPを使用）
+- [x] FFmpeg自動ダウンロード機能追加（getFfmpegPath強化+downloadFfmpeg: PowerShellでBtbN FFmpeg Buildsから自動取得）
+- [x] FFmpeg起動失敗の即座検出修正（spawn後500ms待機で即座終了を検知、エラーを正しく返す）
+- [x] _ws_requestにtimeoutパラメータ追加（start_streamは120秒タイムアウトでFFmpegダウンロード対応）
 
 ## プロジェクト整理
 

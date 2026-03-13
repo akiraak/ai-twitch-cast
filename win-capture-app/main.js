@@ -7,7 +7,7 @@
  */
 
 const { app, BrowserWindow, Menu, desktopCapturer, ipcMain } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const net = require('net');
 const express = require('express');
 const fs = require('fs');
@@ -38,6 +38,7 @@ let streamStartTime = null;    // 配信開始時刻（ms）
 let streamConfig = null;       // 現在の配信設定
 let frameCount = 0;            // 送信フレーム数
 let frameDropCount = 0;        // ドロップフレーム数
+let ffmpegLastLog = [];        // FFmpeg stderrの最後のログ（診断用）
 
 // === 音声パイプ（Windows Named Pipe） ===
 const AUDIO_PIPE_NAME = process.platform === 'win32'
@@ -59,12 +60,98 @@ function getFfmpegPath() {
   const bundled = path.join(process.resourcesPath, 'ffmpeg', 'ffmpeg.exe');
   if (fs.existsSync(bundled)) return bundled;
 
-  // 2. 開発時: ./ffmpeg/ffmpeg.exe
-  const dev = path.join(__dirname, 'ffmpeg', 'ffmpeg.exe');
-  if (fs.existsSync(dev)) return dev;
+  // 2. exe横のffmpegディレクトリ（デプロイ先で自動ダウンロードした場合）
+  const exeDir = app.isPackaged
+    ? path.dirname(process.execPath)
+    : __dirname;
+  const exeSibling = path.join(exeDir, 'ffmpeg', 'ffmpeg.exe');
+  if (fs.existsSync(exeSibling)) return exeSibling;
 
-  // 3. フォールバック: PATH上のffmpeg
-  return 'ffmpeg';
+  // 3. 開発時: ./ffmpeg/ffmpeg.exe（exeSiblingと同じになる場合あり）
+  const dev = path.join(__dirname, 'ffmpeg', 'ffmpeg.exe');
+  if (dev !== exeSibling && fs.existsSync(dev)) return dev;
+
+  // 4. PATHにffmpegがあるかチェック（Windows: where, Unix: which）
+  try {
+    const cmd = process.platform === 'win32' ? 'where ffmpeg' : 'which ffmpeg';
+    const result = execSync(cmd, { encoding: 'utf-8', timeout: 5000 }).trim();
+    if (result) return result.split('\n')[0].trim();
+  } catch (_) {
+    // PATHにない
+  }
+
+  // 5. フォールバック: ダウンロード先パス（まだ存在しないが、downloadFfmpegで配置される）
+  return exeSibling;
+}
+
+/**
+ * FFmpegをダウンロードして配置する（Windows専用）
+ * BtbN FFmpeg Builds (GPL版) を使用
+ */
+async function downloadFfmpeg() {
+  // asar内は書き込み不可なので、exeと同階層 or userDataに配置
+  const exeDir = app.isPackaged
+    ? path.dirname(process.execPath)
+    : __dirname;
+  const targetDir = path.join(exeDir, 'ffmpeg');
+  const targetExe = path.join(targetDir, 'ffmpeg.exe');
+  if (fs.existsSync(targetExe)) return targetExe;
+
+  console.log('FFmpegが見つかりません。自動ダウンロードを開始します...');
+
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  // PowerShellでダウンロード＋展開（Windows環境前提）
+  const zipPath = path.join(targetDir, 'ffmpeg-temp.zip');
+  const extractDir = path.join(targetDir, 'temp-extract');
+
+  const psScript = `
+$ProgressPreference = 'SilentlyContinue'
+$url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
+Write-Host "Downloading FFmpeg..."
+Invoke-WebRequest -Uri $url -OutFile '${zipPath.replace(/\\/g, '\\\\')}'
+Write-Host "Extracting..."
+Expand-Archive -Path '${zipPath.replace(/\\/g, '\\\\')}' -DestinationPath '${extractDir.replace(/\\/g, '\\\\')}' -Force
+$ffmpegExe = Get-ChildItem -Path '${extractDir.replace(/\\/g, '\\\\')}' -Filter ffmpeg.exe -Recurse | Where-Object { $_.Directory.Name -eq 'bin' } | Select-Object -First 1
+if ($ffmpegExe) {
+  Copy-Item $ffmpegExe.FullName '${targetExe.replace(/\\/g, '\\\\')}'
+  Write-Host "OK"
+} else {
+  Write-Host "ERROR: ffmpeg.exe not found in archive"
+  exit 1
+}
+`;
+
+  return new Promise((resolve, reject) => {
+    const ps = spawn('powershell', ['-NoProfile', '-Command', psScript], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    ps.stdout.on('data', (d) => { stdout += d; console.log('[FFmpegDL]', d.toString().trim()); });
+    ps.stderr.on('data', (d) => { stderr += d; });
+
+    ps.on('close', (code) => {
+      // クリーンアップ
+      try { fs.rmSync(zipPath, { force: true }); } catch (_) {}
+      try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) {}
+
+      if (code === 0 && fs.existsSync(targetExe)) {
+        const size = fs.statSync(targetExe).size;
+        console.log(`FFmpegダウンロード完了: ${(size / 1024 / 1024).toFixed(1)} MB`);
+        resolve(targetExe);
+      } else {
+        reject(new Error(`FFmpegダウンロード失敗 (code: ${code}): ${stderr || stdout}`));
+      }
+    });
+
+    ps.on('error', (err) => {
+      reject(new Error(`FFmpegダウンロード失敗: ${err.message}`));
+    });
+  });
 }
 
 function startAudioPipe() {
@@ -373,15 +460,19 @@ function closeBroadcastWindow() {
 function onBroadcastPaint(event, dirty, image) {
   if (!ffmpegProcess || !ffmpegProcess.stdin || !ffmpegProcess.stdin.writable) return;
 
+  // バックプレッシャー: バッファが溜まっている場合はフレームをスキップ（2フレーム分≒16MB）
+  if (ffmpegProcess.stdin.writableLength > 1024 * 1024 * 16) {
+    frameDropCount++;
+    return;
+  }
+
   try {
     const bitmap = image.toBitmap();
-    const canWrite = ffmpegProcess.stdin.write(bitmap);
+    ffmpegProcess.stdin.write(bitmap);
     frameCount++;
-    if (!canWrite) {
-      frameDropCount++;
-    }
   } catch (e) {
     // FFmpegのstdinが閉じている場合は無視
+    frameDropCount++;
   }
 }
 
@@ -417,40 +508,23 @@ async function startStream(config) {
 
   const rtmpUrl = `rtmp://live-tyo.twitch.tv/app/${streamKey}`;
 
-  // 音声パイプを起動（Windows Named Pipe経由でbroadcast.htmlのPCMを受信）
-  const useAudioPipe = !!AUDIO_PIPE_NAME;
-  if (useAudioPipe) {
-    try {
-      await startAudioPipe();
-    } catch (e) {
-      console.warn('音声パイプ作成失敗、無音モードで続行:', e.message);
-    }
-  }
+  // 音声: まずanullsrcで確実に配信を開始する
+  // （Named Pipe音声統合は将来の課題）
 
-  // FFmpegコマンド: rawvideo(stdin) + PCM音声(named pipe or anullsrc) → H.264+AAC → RTMP
+  // FFmpegコマンド: rawvideo(stdin) + 音声(anullsrc常時 + PCMオプション混合) → H.264+AAC → RTMP
   const ffmpegArgs = [
     // 映像入力: パイプからBGRA rawvideo
+    '-thread_queue_size', '512',
     '-f', 'rawvideo',
     '-pixel_format', 'bgra',
     '-video_size', resolution,
     '-framerate', String(framerate),
     '-i', 'pipe:0',
+    // 音声入力: 常にanullsrcを使用（確実に音声データが流れるようにする）
+    // broadcast.htmlの音声はNamed Pipe経由で別途混合する将来拡張あり
+    '-f', 'lavfi',
+    '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
   ];
-
-  // 音声入力: Named Pipe（Windows）またはanullsrc（フォールバック）
-  if (useAudioPipe && audioPipeServer) {
-    ffmpegArgs.push(
-      '-f', 's16le',
-      '-ar', '44100',
-      '-ac', '2',
-      '-i', AUDIO_PIPE_NAME,
-    );
-  } else {
-    ffmpegArgs.push(
-      '-f', 'lavfi',
-      '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
-    );
-  }
 
   ffmpegArgs.push(
     // 映像エンコード
@@ -471,7 +545,22 @@ async function startStream(config) {
     rtmpUrl,
   );
 
-  const ffmpegBin = getFfmpegPath();
+  let ffmpegBin = getFfmpegPath();
+
+  // FFmpegが見つからない場合、自動ダウンロードを試みる
+  if (!fs.existsSync(ffmpegBin)) {
+    if (process.platform === 'win32') {
+      console.log('FFmpegが見つかりません。自動ダウンロードを試みます...');
+      try {
+        ffmpegBin = await downloadFfmpeg();
+      } catch (e) {
+        return { ok: false, error: `FFmpegの自動ダウンロードに失敗しました: ${e.message}` };
+      }
+    } else {
+      return { ok: false, error: `FFmpegが見つかりません（検索パス: ${ffmpegBin}）` };
+    }
+  }
+
   console.log('FFmpeg起動:', ffmpegBin, ffmpegArgs.join(' '));
 
   try {
@@ -479,12 +568,58 @@ async function startStream(config) {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch (e) {
-    return { ok: false, error: `FFmpeg起動失敗: ${e.message}。ffmpegが見つかりません（検索パス: ${ffmpegBin}）` };
+    return { ok: false, error: `FFmpeg起動失敗: ${e.message}（パス: ${ffmpegBin}）` };
   }
 
+  // spawnは非同期なので、プロセスが即座に失敗するケースを検出する
+  const spawnResult = await new Promise((resolve) => {
+    let settled = false;
+    const onError = (err) => {
+      if (!settled) {
+        settled = true;
+        resolve({ ok: false, error: `FFmpeg起動失敗: ${err.message}（パス: ${ffmpegBin}）` });
+      }
+    };
+    const onClose = (code) => {
+      if (!settled) {
+        settled = true;
+        resolve({ ok: false, error: `FFmpegが即座に終了しました (code: ${code})。ffmpegがPATHに存在するか確認してください（検索パス: ${ffmpegBin}）` });
+      }
+    };
+    ffmpegProcess.on('error', onError);
+    ffmpegProcess.on('close', onClose);
+    // 500ms待って生存確認
+    setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        ffmpegProcess.removeListener('error', onError);
+        ffmpegProcess.removeListener('close', onClose);
+        resolve({ ok: true });
+      }
+    }, 500);
+  });
+
+  if (!spawnResult.ok) {
+    stopAudioPipe();
+    ffmpegProcess = null;
+    streamStartTime = null;
+    return spawnResult;
+  }
+
+  // stdinのエラーハンドラ（パイプ破損でクラッシュしないように）
+  ffmpegProcess.stdin.on('error', (err) => {
+    console.warn('FFmpeg stdin エラー（無視）:', err.message);
+  });
+
+  ffmpegLastLog = [];
   ffmpegProcess.stderr.on('data', (data) => {
     const line = data.toString().trim();
-    if (line) console.log('[FFmpeg]', line);
+    if (line) {
+      console.log('[FFmpeg]', line);
+      ffmpegLastLog.push(line);
+      // 最後の20行だけ保持
+      if (ffmpegLastLog.length > 20) ffmpegLastLog.shift();
+    }
   });
 
   ffmpegProcess.on('close', (code) => {
@@ -499,7 +634,11 @@ async function startStream(config) {
   });
 
   ffmpegProcess.on('error', (err) => {
-    console.error('FFmpegエラー:', err.message);
+    console.error('FFmpegプロセスエラー:', err.message);
+    // paintリスナーを解除
+    if (broadcastWindow && !broadcastWindow.isDestroyed()) {
+      broadcastWindow.webContents.removeListener('paint', onBroadcastPaint);
+    }
     stopAudioPipe();
     ffmpegProcess = null;
     streamStartTime = null;
@@ -560,6 +699,7 @@ function stopStream() {
 
 function getStreamStatus() {
   const ffmpegBin = getFfmpegPath();
+  const ffmpegExists = fs.existsSync(ffmpegBin);
   return {
     streaming: ffmpegProcess !== null && ffmpegProcess.exitCode === null,
     broadcast_window_open: broadcastWindow !== null && !broadcastWindow.isDestroyed(),
@@ -568,7 +708,8 @@ function getStreamStatus() {
     frames_dropped: frameDropCount,
     config: streamConfig,
     ffmpeg_path: ffmpegBin,
-    ffmpeg_bundled: ffmpegBin !== 'ffmpeg',
+    ffmpeg_exists: ffmpegExists,
+    ffmpeg_log: ffmpegLastLog.slice(-5),
     audio_pipe: AUDIO_PIPE_NAME,
     audio_pipe_connected: audioPipeConnection !== null,
   };
@@ -904,11 +1045,22 @@ function stopCapture(id) {
 }
 
 // === Electron App Lifecycle ===
+// DPIスケーリングを1に固定（オフスクリーンレンダリングのサイズを正確にする）
+app.commandLine.appendSwitch('force-device-scale-factor', '1');
+
 // UNCパス（\\wsl.localhost\...）から起動時のみGPUを無効化
 if (app.getPath('exe').startsWith('\\\\')) {
   app.commandLine.appendSwitch('disable-gpu');
   app.commandLine.appendSwitch('disable-software-rasterizer');
 }
+
+// 未処理例外でクラッシュしないようにする
+process.on('uncaughtException', (err) => {
+  console.error('未処理例外（クラッシュ防止）:', err.message, err.stack);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('未処理Promise拒否:', reason);
+});
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);

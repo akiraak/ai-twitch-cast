@@ -93,6 +93,7 @@ async def _electron_stream_start():
 
     result = await _ws_request(
         "start_stream",
+        timeout=120.0,  # FFmpeg自動ダウンロード時は時間がかかる
         streamKey=stream_key,
         serverUrl=server_url,
     )
@@ -332,9 +333,13 @@ async def broadcast_diag():
     if not electron_st.get("streaming") and electron_st == {"streaming": False}:
         errors.append("Electronアプリに接続できません")
 
+    if electron_st.get("ffmpeg_exists") is False:
+        errors.append(f"FFmpegが見つかりません: {electron_st.get('ffmpeg_path', '不明')}")
+
     return {
         "streaming": electron_st.get("streaming", False),
         "electron": electron_st,
+        "ffmpeg_log": electron_st.get("ffmpeg_log", []),
         "errors": errors,
         "healthy": len(errors) == 0,
     }

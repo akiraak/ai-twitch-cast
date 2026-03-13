@@ -326,7 +326,7 @@ async def _read_capture_ws():
         _pending_requests.clear()
 
 
-async def _ws_request(action, **params):
+async def _ws_request(action, timeout=5.0, **params):
     """WebSocket経由でElectronにコマンドを送信し、レスポンスを待つ"""
     async with _capture_ws_lock:
         ws = await _ensure_capture_ws()
@@ -335,7 +335,7 @@ async def _ws_request(action, **params):
     _pending_requests[rid] = fut
     try:
         await ws.send(json.dumps({"requestId": rid, "action": action, **params}))
-        result = await asyncio.wait_for(fut, timeout=5.0)
+        result = await asyncio.wait_for(fut, timeout=timeout)
         # 配列レスポンスは data フィールドに入る
         return result.get("data", result)
     finally:
