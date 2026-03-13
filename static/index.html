@@ -143,7 +143,7 @@
 <div class="header">
   <h1><a href="/">AI Twitch Cast</a></h1>
   <div class="header-actions">
-    <button class="success" onclick="doStart()">配信開始</button>
+    <button class="success" onclick="doGoLive()">配信開始</button>
     <button class="danger" onclick="doStop()">配信停止</button>
     <button class="secondary" onclick="doRestart()">再起動</button>
   </div>
@@ -528,15 +528,8 @@ async function api(method, url, body) {
 // --- 配信制御 ---
 async function doGoLive() {
   log('Go Live...');
+  showToast('配信準備中...', 'success', 10000);
   const res = await api('POST', '/api/broadcast/go-live');
-  if (res?.ok) showToast('配信開始', 'success');
-  else showToast(res?.detail || '配信開始失敗', 'error');
-  refreshStatus();
-}
-
-async function doStart() {
-  log('配信開始...');
-  const res = await api('POST', '/api/broadcast/start');
   if (res?.ok) showToast('配信開始', 'success');
   else showToast(res?.detail || '配信開始失敗', 'error');
   refreshStatus();

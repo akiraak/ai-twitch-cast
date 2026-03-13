@@ -17,6 +17,43 @@ router = APIRouter()
 _is_streaming = False
 
 
+async def _ensure_electron():
+    """Electronアプリが起動していなければワンクリックプレビューで自動起動し、接続を待つ"""
+    import asyncio
+    from scripts.routes.capture import _ws_request, capture_preview_oneclick, capture_preview_oneclick_status
+
+    try:
+        await _ws_request("stream_status")
+        return  # 既に接続済み
+    except Exception:
+        pass
+
+    # ワンクリックプレビューを起動
+    logger.info("Electronアプリ未起動 → ワンクリックプレビューを自動開始")
+    await capture_preview_oneclick()
+
+    # 完了を待つ（最大60秒）
+    for _ in range(120):
+        await asyncio.sleep(0.5)
+        st = await capture_preview_oneclick_status()
+        if st.get("status") == "done":
+            break
+        if st.get("status") == "error":
+            raise RuntimeError(f"Electron自動起動失敗: {st.get('message', '不明なエラー')}")
+    else:
+        raise RuntimeError("Electron自動起動タイムアウト")
+
+    # WebSocket接続を待つ（最大10秒）
+    for _ in range(20):
+        await asyncio.sleep(0.5)
+        try:
+            await _ws_request("stream_status")
+            return
+        except Exception:
+            pass
+    raise RuntimeError("Electron起動後のWebSocket接続に失敗しました")
+
+
 async def _electron_stream_start():
     """Electron経由でTwitch配信を開始"""
     from scripts.routes.capture import _ws_request
@@ -26,11 +63,8 @@ async def _electron_stream_start():
     if not stream_key:
         raise ValueError("TWITCH_STREAM_KEY が .env に設定されていません")
 
-    # Electronアプリが起動しているか確認
-    try:
-        await _ws_request("stream_status")
-    except Exception:
-        raise RuntimeError("Electronアプリに接続できません。先にプレビューを起動してください。")
+    # Electronアプリが起動していなければ自動起動
+    await _ensure_electron()
 
     web_port = os.environ.get("WEB_PORT", "8080")
     try:
