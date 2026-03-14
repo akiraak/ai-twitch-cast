@@ -21,6 +21,11 @@ cd "$(dirname "$0")"
 
 APP_NAME="WinNativeApp"
 
+# ソース（リポジトリ内）→ Windows FSビルドディレクトリ
+SRC_DIR="$(pwd)/win-native-app/WinNativeApp"
+BUILD_BASE="/mnt/c/Users/akira/AppData/Local/win-native-app"
+BUILD_DIR="$BUILD_BASE/WinNativeApp"
+
 # --stop: アプリ停止
 if [[ "$1" == "--stop" ]]; then
     echo "停止中..."
@@ -37,9 +42,7 @@ fi
 if [[ "$1" == "--status" ]]; then
     if tasklist.exe /FI "IMAGENAME eq ${APP_NAME}.exe" /NH 2>/dev/null | grep -q "$APP_NAME"; then
         echo "実行中"
-        # ログの最新行を表示
-        NATIVE_DIR=$(readlink -f win-native-app)
-        LOG_DIR="$NATIVE_DIR/WinNativeApp/bin/Release/net8.0-windows10.0.22621.0/logs"
+        LOG_DIR="$BUILD_DIR/bin/Release/net8.0-windows10.0.22621.0/logs"
         LOG_FILE=$(ls -t "$LOG_DIR"/app*.log 2>/dev/null | head -1)
         if [ -n "$LOG_FILE" ]; then
             echo "--- 最新ログ ---"
@@ -81,14 +84,14 @@ if [ -z "$TOKEN" ]; then
     exit 1
 fi
 
-# Windows側プロジェクトパス（シンボリックリンク解決）
-NATIVE_DIR=$(readlink -f win-native-app)
-if [ ! -d "$NATIVE_DIR/WinNativeApp" ]; then
-    echo "エラー: win-native-app/WinNativeApp が見つかりません"
-    echo "  シンボリックリンク: win-native-app -> /mnt/c/Users/akira/Downloads/win-native-app"
-    exit 1
-fi
-WIN_PROJECT=$(wslpath -w "$NATIVE_DIR/WinNativeApp")
+# ソースをWindows FSにコピー（ビルド高速化）
+echo "ソースを同期中..."
+mkdir -p "$BUILD_DIR/Capture" "$BUILD_DIR/Streaming"
+cp "$SRC_DIR"/*.cs "$SRC_DIR"/*.csproj "$BUILD_DIR/" 2>/dev/null
+cp "$SRC_DIR"/Capture/*.cs "$BUILD_DIR/Capture/"
+cp "$SRC_DIR"/Streaming/*.cs "$BUILD_DIR/Streaming/"
+
+WIN_PROJECT=$(wslpath -w "$BUILD_DIR")
 
 # ビルド
 echo "ビルド中..."
@@ -102,8 +105,7 @@ fi
 echo "ビルド完了"
 
 # EXEパス
-EXE_PATH="$NATIVE_DIR/WinNativeApp/bin/Release/net8.0-windows10.0.22621.0/${APP_NAME}.exe"
-WIN_EXE=$(wslpath -w "$EXE_PATH")
+EXE_PATH="$BUILD_DIR/bin/Release/net8.0-windows10.0.22621.0/${APP_NAME}.exe"
 
 # FFmpegパス（Electronアプリがダウンロード済みのものを優先）
 if [ -z "$FFMPEG_PATH" ]; then
