@@ -21,4 +21,4 @@
 - [ ] テストの充実
 - [ ] リファクタリング
 - [ ] 配信中に Electron で位置調整しても繁栄されない
-- [ ] 英語の発音をちゃんと英語っぽく
+- [>] 英語の発音をちゃんと英語っぽく → [plans/tts-mixed-language-pronunciation.md](plans/tts-mixed-language-pronunciation.md)

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import time
 import wave
 
@@ -31,6 +32,21 @@ def _get_tts_style():
         return DEFAULT_STYLE
 
 
+def _add_english_hints(text):
+    """日本語テキスト中の英語部分に発音ヒントを付与する
+
+    例: "今日はYouTubeの動画" → "今日は[English: YouTube]の動画"
+    """
+    # 2文字以上の連続した英語単語（1文字の英字は除外）
+    def replace_match(m):
+        word = m.group(0).strip()
+        if len(word) < 2:
+            return m.group(0)
+        return f"[English: {word}]"
+
+    return re.sub(r'[A-Za-z][A-Za-z0-9](?:[A-Za-z0-9\s\.\-\']*[A-Za-z0-9])?', replace_match, text)
+
+
 def synthesize(text, output_path, voice=None):
     """テキストから音声ファイルを生成する
 
@@ -40,7 +56,9 @@ def synthesize(text, output_path, voice=None):
         voice: 音声名 (デフォルト: Despina)
     """
     style = os.environ.get("TTS_STYLE") or _get_tts_style()
-    prompt = f"{style}: {text}"
+    processed_text = _add_english_hints(text)
+    prompt = f"{style}: {processed_text}"
+    logger.info("[tts] prompt: %s", prompt)
     return synthesize_with_prompt(prompt, output_path, voice=voice)
 
 

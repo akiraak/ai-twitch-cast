@@ -40,7 +40,7 @@ LANGUAGE_MODES = {
     "ja": {
         "name": "日本語メイン",
         "description": "日本語ベースで返答、英語訳を添える",
-        "tts_style": "終始にこにこしているような、柔らかく楽しげなトーンで読み上げてください",
+        "tts_style": "Read in a cheerful, warm, always-smiling tone (にこにこ). IMPORTANT: When you encounter English words or phrases, pronounce them with native English pronunciation, NOT katakana/Japanese pronunciation. Switch naturally between Japanese and English pronunciation.",
         "rules": [
             "これは日本語の配信なので、日本語ベースで返答しつつ相手の言語も混ぜて親しみを出す。",
             "- 日本語コメント → response: 日本語、english: 英語訳",
