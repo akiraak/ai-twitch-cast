@@ -1,5 +1,9 @@
 # DONE
 
+## TTS英語発音改善
+
+- [x] 英語の発音をちゃんと英語っぽく（AI生成時に言語タグ分離+スタイルプロンプト英語化+発音ヒント挿入、サウンドテスト言語選択対応）
+
 ## プレビューウィンドウに音量メーター追加
 
 - [x] broadcast.htmlにAudioContext+AnalyserNodeで音量測定（BGM+Voice合成RMS→dBFS）
@@ -14,6 +18,10 @@
 - [x] pyvts依存・VTS環境変数・AVATAR_APP設定を削除
 - [x] Live2D関連ドキュメント・リソースディレクトリ削除
 - [x] VRM機能は影響なし（broadcast.html内Three.js+three-vrm）
+
+## ライティング設定の永続化
+
+- [x] ライティング設定（明るさ・コントラスト・色温度・彩度・環境光・指向性光・ライト方向）をDB保存し、次回起動時に自動反映（broadcast.html init()で/api/overlay/settings読み込み→applySettings適用）
 
 ## アバター色味改善
 
