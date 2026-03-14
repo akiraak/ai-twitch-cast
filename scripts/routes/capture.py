@@ -13,7 +13,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -535,6 +535,14 @@ async def capture_launch():
 
         if await _wait_for_server(timeout=10):
             logger.info("キャプチャサーバー起動成功")
+            # 保存済みキャプチャを自動復元
+            await asyncio.sleep(1)  # ウィンドウ列挙待ち
+            try:
+                result = await capture_restore()
+                if result.get("restored", 0) > 0:
+                    logger.info("キャプチャ自動復元: %d件", result["restored"])
+            except Exception as e:
+                logger.warning("キャプチャ自動復元失敗: %s", e)
             return {"ok": True}
 
         return {"ok": False, "error": "起動タイムアウト"}
@@ -754,6 +762,25 @@ def _run_preview_oneclick():
             return
         done.append("wait_server")
 
+        # ---- Stage: restore_captures ----
+        saved_configs = _load_saved_configs()
+        if saved_configs:
+            _update_oneclick("restore_captures", "キャプチャ復元中...", 88, done, skipped)
+            time.sleep(1)  # ウィンドウ列挙待ち
+            try:
+                import httpx as _httpx
+                web_port = os.environ.get("WEB_PORT", "8080")
+                resp = _httpx.post(f"http://localhost:{web_port}/api/capture/restore", timeout=15.0)
+                if resp.status_code == 200:
+                    rdata = resp.json()
+                    logger.info("ワンクリック: キャプチャ復元 %d件", rdata.get("restored", 0))
+                done.append("restore_captures")
+            except Exception as e:
+                logger.warning("ワンクリック: キャプチャ復元失敗: %s", e)
+                skipped.append("restore_captures")
+        else:
+            skipped.append("restore_captures")
+
         # ---- Stage: open_preview ----
         _update_oneclick("open_preview", "プレビューを開いています...", 92, done, skipped)
         try:
@@ -885,6 +912,92 @@ class CaptureStartRequest(BaseModel):
 
 
 # =====================================================
+# 保存済みキャプチャ設定API
+# NOTE: /api/capture/{capture_id} より前に定義する必要がある（パス競合防止）
+# =====================================================
+
+
+@router.get("/api/capture/saved")
+async def capture_saved_list():
+    """保存済みキャプチャ設定一覧"""
+    return _load_saved_configs()
+
+
+@router.delete("/api/capture/saved")
+async def capture_saved_delete(request: Request):
+    """保存済みキャプチャ設定を削除"""
+    body = await request.json()
+    window_name = body.get("window_name", "")
+    if window_name:
+        _remove_saved_config(window_name)
+    return {"ok": True}
+
+
+@router.post("/api/capture/restore")
+async def capture_restore():
+    """保存済み設定からウィンドウ名マッチングでキャプチャを復元"""
+    saved = _load_saved_configs()
+    if not saved:
+        return {"ok": True, "restored": 0, "message": "保存済み設定なし"}
+
+    try:
+        windows = await _proxy_request("GET", "/windows")
+    except Exception as e:
+        return {"ok": False, "error": f"Electronに接続できません: {e}"}
+
+    # 現在アクティブなキャプチャのウィンドウ名を取得
+    try:
+        active = await _proxy_request("GET", "/captures")
+        active_names = {c.get("name", "") for c in active}
+    except Exception:
+        active_names = set()
+
+    restored = 0
+    for config in saved:
+        wname = config["window_name"]
+        if wname in active_names:
+            continue
+
+        # ウィンドウ名マッチング（完全一致 → 部分一致）
+        match = None
+        for w in windows:
+            if w["name"] == wname:
+                match = w
+                break
+        if not match:
+            for w in windows:
+                if wname in w["name"] or w["name"] in wname:
+                    match = w
+                    break
+
+        if not match:
+            continue
+
+        try:
+            data = await _proxy_request("POST", "/capture", {"sourceId": match["sourceId"]})
+            if data.get("ok"):
+                cid = data["id"]
+                layout = config.get("layout", {"x": 5, "y": 10, "width": 40, "height": 50, "zIndex": 10, "visible": True})
+                label = config.get("label", wname)
+                _save_capture_layout(cid, layout, label, window_name=match["name"])
+                # 名前が変わっていたら保存済み設定も更新
+                if match["name"] != wname:
+                    _upsert_saved_config(match["name"], label, layout)
+                await state.broadcast_to_broadcast({
+                    "type": "capture_add",
+                    "id": cid,
+                    "stream_url": f"{_capture_base_url()}/stream/{cid}",
+                    "label": label,
+                    "layout": layout,
+                })
+                restored += 1
+        except Exception as e:
+            logger.warning("キャプチャ復元失敗 %s: %s", wname, e)
+
+    return {"ok": True, "restored": restored}
+
+
+# =====================================================
 # スクリーンショット（デバッグ用）
 # NOTE: /api/capture/{capture_id} より前に定義する必要がある（パス競合防止）
 # =====================================================
@@ -979,20 +1092,21 @@ async def capture_start(body: CaptureStartRequest):
         raise HTTPException(status_code=400, detail=data.get("error", "unknown"))
 
     cid = data["id"]
+    window_name = data.get("name", "")
     stream_url = f"{_capture_base_url()}/stream/{cid}"
-    layout = {
-        "x": 5,
-        "y": 10,
-        "width": 40,
-        "height": 50,
-        "zIndex": 10,
-        "visible": True,
-    }
 
-    label = body.label or data.get("name", "")
+    # 保存済み設定があればレイアウトを復元、なければデフォルト
+    label = body.label or window_name
+    layout = {"x": 5, "y": 10, "width": 40, "height": 50, "zIndex": 10, "visible": True}
+    for c in _load_saved_configs():
+        if c["window_name"] == window_name:
+            layout = c.get("layout", layout)
+            label = c.get("label", label)
+            break
 
-    # DBにレイアウト保存
-    _save_capture_layout(cid, layout, label)
+    # DBにレイアウト保存（アクティブ + 永続）
+    _save_capture_layout(cid, layout, label, window_name=window_name)
+    _upsert_saved_config(window_name, label, layout)
 
     # broadcast.htmlに通知
     await state.broadcast_to_broadcast(
@@ -1102,31 +1216,86 @@ def _save_capture_sources(sources):
     db.set_setting("capture.sources", json.dumps(sources, ensure_ascii=False))
 
 
-def _save_capture_layout(capture_id, layout, label=""):
+def _save_capture_layout(capture_id, layout, label="", window_name=""):
     sources = _load_capture_sources()
     for s in sources:
         if s["id"] == capture_id:
             s["layout"] = layout
             s["label"] = label
+            if window_name:
+                s["window_name"] = window_name
             _save_capture_sources(sources)
             return
-    sources.append({"id": capture_id, "label": label, "layout": layout})
+    entry = {"id": capture_id, "label": label, "layout": layout}
+    if window_name:
+        entry["window_name"] = window_name
+    sources.append(entry)
     _save_capture_sources(sources)
 
 
 def _update_capture_layout(capture_id, layout_update):
     sources = _load_capture_sources()
+    window_name = ""
     for s in sources:
         if s["id"] == capture_id:
             s.setdefault("layout", {}).update(layout_update)
+            window_name = s.get("window_name", "")
             _save_capture_sources(sources)
-            return
+            break
+    # 保存済み設定のレイアウトも同期更新
+    if window_name:
+        configs = _load_saved_configs()
+        for c in configs:
+            if c["window_name"] == window_name:
+                c.setdefault("layout", {}).update(layout_update)
+                _save_saved_configs(configs)
+                break
 
 
 def _remove_capture_layout(capture_id):
     sources = _load_capture_sources()
     sources = [s for s in sources if s["id"] != capture_id]
     _save_capture_sources(sources)
+
+
+# =====================================================
+# DB管理（保存済みキャプチャ設定 - 永続化）
+# =====================================================
+
+
+def _load_saved_configs():
+    raw = db.get_setting("capture.saved_configs")
+    if raw:
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    return []
+
+
+def _save_saved_configs(configs):
+    db.set_setting("capture.saved_configs", json.dumps(configs, ensure_ascii=False))
+
+
+def _upsert_saved_config(window_name, label, layout):
+    """window_nameで保存済み設定を追加/更新"""
+    if not window_name:
+        return
+    configs = _load_saved_configs()
+    for c in configs:
+        if c["window_name"] == window_name:
+            c["label"] = label
+            c["layout"] = layout
+            _save_saved_configs(configs)
+            return
+    configs.append({"window_name": window_name, "label": label, "layout": layout})
+    _save_saved_configs(configs)
+
+
+def _remove_saved_config(window_name):
+    configs = _load_saved_configs()
+    configs = [c for c in configs if c["window_name"] != window_name]
+    _save_saved_configs(configs)
 
 
 # =====================================================
