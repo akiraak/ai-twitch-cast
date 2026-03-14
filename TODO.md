@@ -20,3 +20,4 @@
 - [ ] リファクタリング
 - [ ] 配信中に Electron で位置調整しても繁栄されない
 - [>] 画像保蔵機能と同様にElectron画面の動画撮影 → [plans/video-recording.md](plans/video-recording.md)
+- [ ] Electronを別の実装に置き換えられるか検討（軽量化・柔軟な実装が行えるかの観点） → [plans/electron-alternative.md](plans/electron-alternative.md)
