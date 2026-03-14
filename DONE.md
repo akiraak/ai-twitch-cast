@@ -281,6 +281,15 @@
 - [x] 著作権物（アバターVRM・背景画像）は`.gitignore`で既にgit管理から除外済み
 - [x] git履歴にも著作権物が含まれていないことを確認済み（一度もコミットされていない）
 
+## C#ネイティブ配信アプリ（Phase 1: 基盤）
+
+- [x] .NET 8 SDK インストール（Windows側 dotnet.exe 8.0.419）
+- [x] C# WinFormsプロジェクト作成（WebView2 + Vortice.Direct3D11 + Serilog）
+- [x] WebView2オフスクリーンレンダリング（隠しウィンドウ -32000,-32000 で正常描画確認）
+- [x] WGCフレームキャプチャ実装（TryCreateFromWindowId + Direct3D11CaptureFramePool で1920x1080/30fps取得）
+- [x] D3D11テクスチャ→BGRA→PNG保存パイプライン（CsWinRT COM interop解決）
+- [x] シンボリックリンクでgit管理統合（/mnt/c/Users/akira/Downloads/win-native-app → win-native-app/）
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成

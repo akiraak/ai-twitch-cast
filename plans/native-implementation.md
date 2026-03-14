@@ -193,22 +193,25 @@ dotnet.exe publish "$WIN_PATH" -c Release -r win-x64 --self-contained -o "$WIN_P
 WSL2ファイルシステム上のファイルにWindows側dotnet.exeがアクセスすると、9Pプロトコル経由になり
 ビルドが数倍〜10倍遅くなる。C#プロジェクトは `/mnt/c/` 以下に配置すること。
 
-### ディレクトリ構成案
+### ディレクトリ構成
 
 ```
 /home/ubuntu/ai-twitch-cast/          ← WSL2 FS（Python/サーバー側、git管理）
   ├── src/
   ├── scripts/
   ├── static/broadcast.html
+  ├── win-native-app -> /mnt/c/Users/akira/Downloads/win-native-app  ← シンボリックリンク
   └── ...
 
-/mnt/c/Projects/win-native-app/       ← Windows FS（C#プロジェクト）
-  ├── WinNativeApp.csproj
-  ├── Program.cs
-  ├── WebViewHost.cs
-  ├── CaptureManager.cs
-  ├── AudioPipeline.cs
-  └── publish/                         ← ビルド成果物
+/mnt/c/Users/akira/Downloads/win-native-app/  ← Windows FS（C#プロジェクト）
+  └── WinNativeApp/
+      ├── WinNativeApp.csproj
+      ├── Program.cs
+      ├── MainForm.cs
+      ├── Capture/
+      │   ├── Direct3DInterop.cs
+      │   └── FrameCapture.cs
+      └── bin/Release/                         ← ビルド成果物（.gitignore）
 ```
 
 ### post-commit ビルド統合
@@ -284,7 +287,7 @@ Claude Codeからログファイルを読んで問題を特定するワークフ
 ### ログファイル配置
 
 ```
-/mnt/c/Projects/win-native-app/
+/mnt/c/Users/akira/Downloads/win-native-app/
   └── logs/
       ├── app.log            ← アプリ全体のログ（Serilog ローリングファイル）
       ├── webview.log        ← WebView2 関連（ナビゲーション・JS エラー・IPC）
@@ -330,13 +333,13 @@ WSL2側からWindows FS上のログを直接読める:
 
 ```bash
 # 最新ログを確認
-cat /mnt/c/Projects/win-native-app/logs/app.log
+cat /mnt/c/Users/akira/Downloads/win-native-app/logs/app.log
 
 # FFmpegエラーを確認
-cat /mnt/c/Projects/win-native-app/logs/ffmpeg.log
+cat /mnt/c/Users/akira/Downloads/win-native-app/logs/ffmpeg.log
 
 # Claude Code の Read ツールでも直接読める
-# → /mnt/c/Projects/win-native-app/logs/app.log
+# → /mnt/c/Users/akira/Downloads/win-native-app/logs/app.log
 ```
 
 ### ビルド時のログ
@@ -344,9 +347,31 @@ cat /mnt/c/Projects/win-native-app/logs/ffmpeg.log
 `dotnet.exe` の出力もファイルに保存して、ビルドエラーをClaude Codeから確認可能にする:
 
 ```bash
-dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Projects/win-native-app/logs/build.log
+dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downloads/win-native-app/logs/build.log
+```
+
+## ディレクトリ構成（実際）
+
+```
+/mnt/c/Users/akira/Downloads/win-native-app/  ← Windows FS（C#プロジェクト）
+  └── WinNativeApp/
+      ├── WinNativeApp.csproj
+      ├── Program.cs                           ← エントリポイント（Serilog初期化）
+      ├── MainForm.cs                          ← WebView2フォーム（オフスクリーン）
+      └── Capture/
+          ├── Direct3DInterop.cs               ← D3D11/WinRT/WGC COM interop
+          └── FrameCapture.cs                  ← WGCフレームキャプチャ+PNG保存
+
+/home/ubuntu/ai-twitch-cast/win-native-app    ← シンボリックリンク（git管理用）
 ```
 
 ## ステータス
 - 作成日: 2026-03-14
-- 状態: 計画中
+- 状態: Phase 1 完了
+- Phase 1 完了日: 2026-03-14
+- Phase 1 検証結果:
+  - WebView2: 隠しウィンドウ(-32000,-32000)で正常描画 (**問題なし**)
+  - WGC: `TryCreateFromWindowId` + `Direct3D11CaptureFramePool` で1920x1080フレーム取得成功
+  - フレームレート: 約30fps
+  - CsWinRT interop: `MarshalInterface<T>.FromAbi()` + `IWinRTObject.NativeObject.ThisPtr` で解決
+  - Vortice.Direct3D11 3.8.3 でD3D11テクスチャ操作

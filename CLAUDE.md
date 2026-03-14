@@ -53,13 +53,18 @@ ai-twitch-cast/
 │   ├── 3d-model-research.md # 3Dモデル調査
 │   ├── vrm-conversion-log.md # VRM変換作業ログ
 │   └── window-capture.md   # ウィンドウキャプチャシステム設計
-├── win-capture-app/          # Windows側Electronキャプチャ＋配信アプリ
+├── win-capture-app/          # Windows側Electronキャプチャ＋配信アプリ（現行）
 │   ├── main.js              # メインプロセス（HTTPサーバー+キャプチャ管理+FFmpeg配信）
 │   ├── preload.js           # IPC bridge
 │   ├── capture.html         # 非表示レンダラーページ
 │   ├── capture-renderer.js  # レンダラー（getUserMedia+canvas+JPEG書き出し）
 │   ├── package.json         # Electron+electron-builder設定
 │   └── build.sh             # ビルドスクリプト
+├── win-native-app/           # C#ネイティブ配信アプリ（Electron後継、開発中）→ symlink to Windows FS
+│   └── WinNativeApp/        # .NET 8 WinForms + WebView2 + WGC
+│       ├── Program.cs       # エントリポイント
+│       ├── MainForm.cs      # WebView2フォーム（オフスクリーン）
+│       └── Capture/         # WGCフレームキャプチャ
 ├── src/                      # ソースコード
 │   ├── scene_config.py       # 設定の定義（scenes.jsonから読み込み）
 │   ├── tts.py                # TTS音声合成（Gemini 2.5 Flash TTS）

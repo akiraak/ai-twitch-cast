@@ -17,4 +17,6 @@ tmp/
 win-capture-app/node_modules/
 win-capture-app/package-lock.json
 win-capture-app/dist/
+win-native-app/WinNativeApp/bin/
+win-native-app/WinNativeApp/obj/
 *.log
