@@ -159,7 +159,6 @@
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('layout', this)">配信画面</div>
-  <div class="tab" onclick="switchTab('capture', this)">キャプチャ</div>
   <div class="tab" onclick="switchTab('files', this)">素材</div>
   <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
@@ -173,7 +172,62 @@
 
   <!-- ===== 配信画面 ===== -->
   <div class="tab-content active" id="tab-layout">
-    <div class="card">
+    <div class="grid">
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2><span class="status-dot off" id="capture-dot"></span> ウィンドウキャプチャ</h2>
+        <div class="btn-row">
+          <button onclick="captureLaunch()">サーバー起動</button>
+          <button class="danger" onclick="captureShutdown()">サーバー停止</button>
+        </div>
+        <div class="status" id="capture-server-status"></div>
+        <div id="capture-build-status" style="display:none; margin-top:8px; padding:8px 12px; background:#f0e8ff; border-radius:6px; font-size:0.85rem;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="capture-build-msg"></span>
+          </div>
+          <div style="margin-top:6px; background:#d0c0e8; border-radius:3px; height:6px; overflow:hidden;">
+            <div id="capture-build-bar" style="height:100%; background:#7b1fa2; width:0%; transition:width 0.3s;"></div>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+            <select id="capture-window-list" style="flex:1; padding:6px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.85rem;">
+              <option value="">-- ウィンドウ選択 --</option>
+            </select>
+            <button class="secondary" onclick="captureRefreshWindows()">更新</button>
+            <button onclick="captureStartWindow()">キャプチャ</button>
+          </div>
+          <div id="capture-list" style="font-size:0.85rem;"></div>
+        </div>
+        <div style="margin-top:12px;">
+          <button onclick="previewOneClick()" style="width:100%; background:#7b1fa2; color:white; font-weight:bold; padding:10px;">ワンクリックプレビュー</button>
+        </div>
+        <style>
+          @keyframes oneclick-spin { to { transform: rotate(360deg); } }
+          @keyframes oneclick-pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+          .oneclick-spinner { display:inline-block; width:14px; height:14px; border:2px solid #d0c0e8; border-top-color:#7b1fa2; border-radius:50%; animation:oneclick-spin 0.8s linear infinite; }
+          .oneclick-stage { display:inline-flex; align-items:center; gap:2px; padding:2px 6px; border-radius:3px; }
+          .oneclick-stage.done { color:#4caf50; }
+          .oneclick-stage.skipped { color:#999; }
+          .oneclick-stage.running { color:#7b1fa2; font-weight:bold; animation:oneclick-pulse 1.2s ease-in-out infinite; }
+          .oneclick-stage.error { color:#f44336; }
+        </style>
+        <div id="oneclick-status" style="display:none; margin-top:8px; padding:8px 12px; background:#f0e8ff; border-radius:6px; font-size:0.85rem;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="oneclick-spinner" class="oneclick-spinner"></span>
+            <span id="oneclick-msg"></span>
+          </div>
+          <div style="margin-top:6px; background:#d0c0e8; border-radius:3px; height:6px; overflow:hidden;">
+            <div id="oneclick-bar" style="height:100%; background:#7b1fa2; width:0%; transition:width 0.3s;"></div>
+          </div>
+          <div id="oneclick-stages" style="margin-top:6px; font-size:0.75rem; display:flex; flex-wrap:wrap; gap:2px 8px;"></div>
+        </div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button onclick="capturePreviewOpen()">プレビュー / 配信画面編集</button>
+          <button class="secondary" onclick="capturePreviewClose()">プレビュー閉じる</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
       <h2>配信画面</h2>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
         <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
@@ -217,80 +271,8 @@
           <div class="layout-row"><span class="layout-label">Z順序</span><input type="range" class="vol-slider layout-slider" min="0" max="100" step="1" data-key="topic.zIndex" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-zIndex" min="0" max="100" step="1" data-key="topic.zIndex" oninput="onLayoutNum(this)"></div>
         </fieldset>
       </div>
+      <div id="capture-layout-list"></div>
       <div class="status" id="layout-status" style="margin-top:8px; font-size:0.75rem;">変更は自動保存されます</div>
-    </div>
-  </div>
-
-  <!-- ===== キャプチャ ===== -->
-  <div class="tab-content" id="tab-capture">
-    <div class="grid">
-      <div class="card" style="grid-column: 1 / -1;">
-        <h2><span class="status-dot off" id="capture-dot"></span> Electronサーバー</h2>
-        <div class="btn-row">
-          <button onclick="captureLaunch()">サーバー起動</button>
-          <button class="danger" onclick="captureShutdown()">サーバー停止</button>
-        </div>
-        <div class="status" id="capture-server-status"></div>
-        <div id="capture-build-status" style="display:none; margin-top:8px; padding:8px 12px; background:#f0e8ff; border-radius:6px; font-size:0.85rem;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span id="capture-build-msg"></span>
-          </div>
-          <div style="margin-top:6px; background:#d0c0e8; border-radius:3px; height:6px; overflow:hidden;">
-            <div id="capture-build-bar" style="height:100%; background:#7b1fa2; width:0%; transition:width 0.3s;"></div>
-          </div>
-        </div>
-        <div style="margin-top:12px;">
-          <button onclick="previewOneClick()" style="width:100%; background:#7b1fa2; color:white; font-weight:bold; padding:10px;">ワンクリックプレビュー</button>
-        </div>
-        <style>
-          @keyframes oneclick-spin { to { transform: rotate(360deg); } }
-          @keyframes oneclick-pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
-          .oneclick-spinner { display:inline-block; width:14px; height:14px; border:2px solid #d0c0e8; border-top-color:#7b1fa2; border-radius:50%; animation:oneclick-spin 0.8s linear infinite; }
-          .oneclick-stage { display:inline-flex; align-items:center; gap:2px; padding:2px 6px; border-radius:3px; }
-          .oneclick-stage.done { color:#4caf50; }
-          .oneclick-stage.skipped { color:#999; }
-          .oneclick-stage.running { color:#7b1fa2; font-weight:bold; animation:oneclick-pulse 1.2s ease-in-out infinite; }
-          .oneclick-stage.error { color:#f44336; }
-        </style>
-        <div id="oneclick-status" style="display:none; margin-top:8px; padding:8px 12px; background:#f0e8ff; border-radius:6px; font-size:0.85rem;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span id="oneclick-spinner" class="oneclick-spinner"></span>
-            <span id="oneclick-msg"></span>
-          </div>
-          <div style="margin-top:6px; background:#d0c0e8; border-radius:3px; height:6px; overflow:hidden;">
-            <div id="oneclick-bar" style="height:100%; background:#7b1fa2; width:0%; transition:width 0.3s;"></div>
-          </div>
-          <div id="oneclick-stages" style="margin-top:6px; font-size:0.75rem; display:flex; flex-wrap:wrap; gap:2px 8px;"></div>
-        </div>
-        <div class="btn-row" style="margin-top:12px;">
-          <button onclick="capturePreviewOpen()">プレビュー / 配信画面編集</button>
-          <button class="secondary" onclick="capturePreviewClose()">プレビュー閉じる</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <h2>キャプチャ操作</h2>
-      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-        <select id="capture-window-list" style="flex:1; padding:6px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.85rem;">
-          <option value="">-- ウィンドウ選択 --</option>
-        </select>
-        <button class="secondary" onclick="captureRefreshWindows()">更新</button>
-        <button onclick="captureStartWindow()">キャプチャ</button>
-      </div>
-      <div id="capture-list" style="font-size:0.85rem;"></div>
-      <div id="capture-layout-list" style="margin-top:8px;"></div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <h2>保存済みキャプチャ</h2>
-      <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:8px;">次回起動時に自動復元されます</p>
-      <div class="btn-row" style="margin-bottom:12px;">
-        <button onclick="captureRestoreAll()">すべて復元</button>
-      </div>
-      <div id="capture-saved-list" style="font-size:0.85rem;">
-        <span style="color:#9a88b5;">読み込み中...</span>
-      </div>
     </div>
   </div>
 
@@ -556,6 +538,16 @@ topics      1──N  topic_scripts (topic_id)</div>
   <!-- ===== Debug ===== -->
   <div class="tab-content" id="tab-debug">
     <div class="grid">
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>保存済みキャプチャ</h2>
+        <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:8px;">次回起動時に自動復元されます</p>
+        <div class="btn-row" style="margin-bottom:12px;">
+          <button onclick="captureRestoreAll()">すべて復元</button>
+        </div>
+        <div id="capture-saved-list" style="font-size:0.85rem;">
+          <span style="color:#9a88b5;">読み込み中...</span>
+        </div>
+      </div>
       <div class="card">
         <h2>スクリーンショット</h2>
         <div class="btn-row">
@@ -574,7 +566,7 @@ topics      1──N  topic_scripts (topic_id)</div>
 
 <script>
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'capture', 'character', 'sound', 'topic', 'db', 'files', 'debug', 'todo'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'db', 'files', 'debug', 'todo'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -586,13 +578,12 @@ function switchTab(name, el) {
   }
   el.classList.add('active');
   location.hash = name;
-  if (name === 'capture') { captureRefreshStatus(); captureRefreshWindows(); captureRefreshSources(); captureRefreshSaved(); }
   if (name === 'db') loadDbTables();
   if (name === 'character') loadLanguageModes();
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
   if (name === 'files') loadFilesList();
-  if (name === 'debug') loadScreenshots();
+  if (name === 'debug') { loadScreenshots(); captureRefreshSaved(); }
   if (name === 'todo') loadTodoList();
 }
 
