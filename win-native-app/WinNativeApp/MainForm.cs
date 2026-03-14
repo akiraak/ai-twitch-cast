@@ -12,7 +12,6 @@ public class MainForm : Form
     private readonly string[] _args;
     private readonly string _url;
     private readonly bool _autoStream;
-    private readonly bool _saveFrames;
 
     // Streaming pipeline
     private FfmpegProcess? _ffmpeg;
@@ -24,7 +23,6 @@ public class MainForm : Form
         _args = args;
         _url = args.FirstOrDefault(a => !a.StartsWith("--")) ?? "https://example.com";
         _autoStream = args.Contains("--stream");
-        _saveFrames = args.Contains("--save-frames");
 
         Text = "WinNativeApp";
         StartPosition = FormStartPosition.Manual;
@@ -85,7 +83,6 @@ public class MainForm : Form
         try
         {
             var capture = new FrameCapture();
-            capture.SaveFrames = _saveFrames;
             capture.StartCapture(Handle);
             _capture = capture;
             Log.Information("[MainForm] Capture started for HWND=0x{Hwnd:X}", Handle);

@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using Serilog;
 using Vortice.Direct3D;
@@ -37,16 +35,7 @@ public sealed class FrameCapture : IDisposable
     private byte[]? _frameBuffer;
     private int _cachedWidth, _cachedHeight;
 
-    // Debug: save frames as PNG
-    public bool SaveFrames { get; set; }
-    private readonly string _captureDir;
-
     public int FrameCount => _frameCount;
-
-    public FrameCapture()
-    {
-        _captureDir = Path.Combine(AppContext.BaseDirectory, "captures");
-    }
 
     public void StartCapture(IntPtr hwnd)
     {
@@ -96,20 +85,13 @@ public sealed class FrameCapture : IDisposable
             _lastFrameTimeMs = now;
         }
 
-        bool hasCallback = OnFrameReady != null;
-        bool shouldSave = SaveFrames && (_frameCount <= 5 || _frameCount % 30 == 0);
-
-        if (!hasCallback && !shouldSave) return;
+        if (OnFrameReady == null) return;
 
         // Extract BGRA bytes from GPU texture
         ExtractBgra(frame, out var w, out var h);
         if (_frameBuffer == null) return;
 
-        if (hasCallback)
-            OnFrameReady!.Invoke(_frameBuffer, w, h);
-
-        if (shouldSave)
-            SaveBufferAsPng(w, h);
+        OnFrameReady.Invoke(_frameBuffer, w, h);
     }
 
     private unsafe void ExtractBgra(Direct3D11CaptureFrame frame, out int width, out int height)
@@ -184,35 +166,6 @@ public sealed class FrameCapture : IDisposable
         _cachedWidth = w;
         _cachedHeight = h;
         Log.Debug("[Capture] Staging allocated: {W}x{H}", w, h);
-    }
-
-    private unsafe void SaveBufferAsPng(int w, int h)
-    {
-        try
-        {
-            Directory.CreateDirectory(_captureDir);
-
-            using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-            var bits = bmp.LockBits(
-                new Rectangle(0, 0, w, h),
-                ImageLockMode.WriteOnly,
-                PixelFormat.Format32bppArgb);
-
-            fixed (byte* src = _frameBuffer!)
-            {
-                Buffer.MemoryCopy(src, (void*)bits.Scan0, bits.Stride * h, w * h * 4);
-            }
-
-            bmp.UnlockBits(bits);
-
-            var path = Path.Combine(_captureDir, $"frame_{_frameCount:D6}.png");
-            bmp.Save(path, ImageFormat.Png);
-            Log.Information("[Capture] Saved frame {N} ({W}x{H})", _frameCount, w, h);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[Capture] SavePng failed");
-        }
     }
 
     public void Stop()
