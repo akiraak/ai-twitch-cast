@@ -9,8 +9,39 @@ def is_wsl() -> bool:
     return os.path.exists("/proc/sys/fs/binfmt_misc/WSLInterop") or "microsoft" in os.uname().release.lower()
 
 
+def _is_mirrored_mode() -> bool:
+    """WSL2がmirroredネットワーキングモードかどうかを判定する"""
+    try:
+        wslconfig = os.path.expanduser("/mnt/c/Users") + "/" + os.environ.get("WIN_USER", "akira") + "/.wslconfig"
+        with open(wslconfig, "r") as f:
+            for line in f:
+                stripped = line.strip().lower()
+                if stripped.startswith("networkingmode") and "mirrored" in stripped:
+                    return True
+    except Exception:
+        pass
+    # フォールバック: localhostでWindows側ポートにアクセスできるか（mirroredの特徴）
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        # ポート445(SMB)はWindows側で通常LISTEN
+        result = s.connect_ex(("localhost", 445))
+        s.close()
+        if result == 0:
+            # デフォルトゲートウェイがeth0でなくeth1ならmirroredの可能性が高い
+            r = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True)
+            if "eth1" in r.stdout:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def get_windows_host_ip() -> str:
-    """WSLからWindows側のIPアドレスを取得する"""
+    """WSLからWindows側のIPアドレスを取得する。mirroredモードではlocalhostを返す"""
+    if _is_mirrored_mode():
+        return "localhost"
     try:
         result = subprocess.run(
             ["ip", "route", "show", "default"],
@@ -32,7 +63,9 @@ def resolve_host(host: str) -> str:
 
 
 def get_wsl_ip() -> str:
-    """WSL2自身のIPアドレスを取得する"""
+    """WSL2自身のIPアドレスを取得する。mirroredモードではlocalhostを返す"""
+    if _is_mirrored_mode():
+        return "localhost"
     try:
         result = subprocess.run(
             ["hostname", "-I"],

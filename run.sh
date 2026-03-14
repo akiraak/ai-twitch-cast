@@ -53,7 +53,7 @@ fi
 echo "Starting server on port $WEB_PORT..."
 
 while [ -z "$STOP_FLAG" ]; do
-    uvicorn scripts.web:app --host 0.0.0.0 --port "$WEB_PORT" &
+    uvicorn scripts.web:app --host 0.0.0.0 --port "$WEB_PORT" 2>&1 | tee -a server.log &
     PID=$!
     echo $PID > "$PID_FILE"
     echo "サーバー起動 (PID: $PID)"
