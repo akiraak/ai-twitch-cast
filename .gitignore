@@ -17,3 +17,4 @@ tmp/
 win-capture-app/node_modules/
 win-capture-app/package-lock.json
 win-capture-app/dist/
+*.log
