@@ -123,7 +123,8 @@ class CommentReader:
                 "author": "ちょビ",
                 "message": script["content"],
                 "result": {"response": script["content"], "emotion": script["emotion"], "english": english},
-            }, chat_result={"response": script["content"], "english": english})
+            }, chat_result={"response": script["content"], "english": english},
+                tts_text=script.get("tts_text"))
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
             # アバター発話をDBに保存
@@ -154,7 +155,7 @@ class CommentReader:
             # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
             await self._speak(result["response"], subtitle={
                 "author": author, "message": message, "result": result,
-            }, chat_result=result)
+            }, chat_result=result, tts_text=result.get("tts_text"))
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
             if self._topic_talker:
@@ -222,10 +223,16 @@ class CommentReader:
         )
         await asyncio.to_thread(db.increment_comment_count, user["id"])
 
+    @staticmethod
+    def _strip_lang_tags(text):
+        """テキストから [lang:xx]...[/lang] タグを除去する"""
+        import re
+        return re.sub(r'\[/?lang(?::\w+)?\]', '', text)
+
     async def _post_to_chat(self, result):
         """AI応答をTwitchチャットに投稿する"""
         try:
-            text = result["response"]
+            text = self._strip_lang_tags(result["response"])
             english = result.get("english", "")
             if english:
                 text = f"{text} ({english})"
@@ -241,7 +248,7 @@ class CommentReader:
             "type": "comment",
             "author": author,
             "message": message,
-            "response": result["response"],
+            "response": self._strip_lang_tags(result["response"]),
             "english": result.get("english", ""),
             "emotion": result["emotion"],
         })
@@ -251,18 +258,19 @@ class CommentReader:
         if self._on_overlay:
             await self._on_overlay({"type": "speaking_end"})
 
-    async def _speak(self, text, voice=None, subtitle=None, chat_result=None):
+    async def _speak(self, text, voice=None, subtitle=None, chat_result=None, tts_text=None):
         """TTS生成・ブラウザソース経由で再生する
 
         Args:
             subtitle: 字幕データ {author, message, result}。指定時はTTS生成後に字幕と音声を同時送信
             chat_result: チャット投稿データ。指定時はTTS生成後に投稿
+            tts_text: TTS用テキスト（言語タグ付き）。指定時はこちらをTTSに送信
         """
         wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
         tts_ok = False
         try:
             logger.info("[tts] 生成中...")
-            await asyncio.to_thread(synthesize, text, str(wav_path), voice=voice)
+            await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice)
             tts_ok = True
         except Exception as e:
             logger.warning("[tts] 音声生成失敗、テキストのみ表示: %s", e)
@@ -337,7 +345,7 @@ class CommentReader:
                 "author": "システム",
                 "message": f"[{event_type}] {detail}",
                 "result": result,
-            }, chat_result=result)
+            }, chat_result=result, tts_text=result.get("tts_text"))
             self._apply_emotion("neutral")
             await self._notify_overlay_end()
             if self._topic_talker:

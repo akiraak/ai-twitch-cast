@@ -29,6 +29,29 @@ async def avatar_speak(body: SpeakRequest):
     return {"ok": True}
 
 
+class TtsTestRequest(BaseModel):
+    primary_lang: str = "日本語"
+    secondary_lang: str = "英語"
+
+
+@router.post("/api/tts/test")
+async def tts_test(body: TtsTestRequest):
+    """指定言語でテストテキストを生成してTTS再生する"""
+    langs = {body.primary_lang, body.secondary_lang}
+    no_use = []
+    if "日本語" not in langs:
+        no_use.append("Japanese")
+    if "英語" not in langs:
+        no_use.append("English")
+    restriction = f" Do NOT use {', '.join(no_use)}." if no_use else ""
+    detail = (
+        f"Say a short greeting (1 sentence) mixing {body.primary_lang} and {body.secondary_lang}."
+        f"{restriction}"
+    )
+    asyncio.ensure_future(state.reader.speak_event("TTSテスト", detail))
+    return {"ok": True}
+
+
 class ChatMessage(BaseModel):
     message: str
 

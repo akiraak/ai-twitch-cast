@@ -370,7 +370,29 @@
           oninput="onVolume('tts', this)">
         <span class="vol-pct" id="vol-tts-pct">80%</span>
       </div>
-      <div style="margin-top:8px;">
+      <div style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:0.8rem; color:#666;">第1言語</span>
+        <select id="tts-lang1" style="font-size:0.75rem; padding:2px 4px;">
+          <option value="日本語" selected>日本語</option>
+          <option value="英語">英語</option>
+          <option value="スペイン語">スペイン語</option>
+          <option value="韓国語">韓国語</option>
+          <option value="フランス語">フランス語</option>
+          <option value="中国語">中国語</option>
+          <option value="ドイツ語">ドイツ語</option>
+          <option value="ポルトガル語">ポルトガル語</option>
+        </select>
+        <span style="font-size:0.8rem; color:#666;">第2言語</span>
+        <select id="tts-lang2" style="font-size:0.75rem; padding:2px 4px;">
+          <option value="英語" selected>英語</option>
+          <option value="日本語">日本語</option>
+          <option value="スペイン語">スペイン語</option>
+          <option value="韓国語">韓国語</option>
+          <option value="フランス語">フランス語</option>
+          <option value="中国語">中国語</option>
+          <option value="ドイツ語">ドイツ語</option>
+          <option value="ポルトガル語">ポルトガル語</option>
+        </select>
         <button onclick="ttsTest()" style="font-size:0.75rem;">テスト再生</button>
       </div>
     </div>
@@ -1109,7 +1131,9 @@ async function setLanguageMode(mode) {
 
 // --- サウンド ---
 async function ttsTest() {
-  await api('POST', '/api/avatar/speak', { event_type: 'テスト', detail: '音量テストです' });
+  const lang1 = document.getElementById('tts-lang1').value;
+  const lang2 = document.getElementById('tts-lang2').value;
+  await api('POST', '/api/tts/test', { primary_lang: lang1, secondary_lang: lang2 });
 }
 
 const bgmTracksEl = document.getElementById('bgm-tracks');

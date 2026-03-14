@@ -241,8 +241,16 @@ def _build_system_prompt(stream_context=None, self_note=None):
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        f'{{"response": "返答テキスト", "emotion": "感情", "english": "{english_label}"}}',
+        f'{{"response": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "english": "{english_label}"}}',
         f"emotionは次のいずれか: {emotion_list}",
+        "",
+        "## responseとtts_textの違い（重要・厳守）",
+        "- response: チャットや字幕に表示するテキスト。タグやマークアップは絶対に含めないこと。そのまま人に見せるテキスト。",
+        "- tts_text: TTS音声合成に送信するテキスト。responseと同じ内容だが、日本語以外の言語部分に [lang:xx]...[/lang] タグを付ける。",
+        '  - xx = en, es, ko, fr, zh 等の言語コード',
+        '  - 例: response="今日はClaude Codeで開発してるよ！" → tts_text="今日は[lang:en]Claude Code[/lang]で開発してるよ！"',
+        '  - 例: response="¡Hola!いらっしゃい！Welcome！" → tts_text="[lang:es]¡Hola![/lang]いらっしゃい！[lang:en]Welcome[/lang]！"',
+        "  - 日本語のみの場合はタグ不要（responseと同じ内容にする）",
     ])
 
     return "\n".join(parts)
@@ -495,8 +503,14 @@ def generate_topic_line(title, description="", last_speeches=None, recent_commen
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返してください。それ以外のテキストは出力しないでください。",
-        f'{{"content": "セリフ", "emotion": "感情", "english": "{english_label}"}}',
+        f'{{"content": "セリフ", "tts_text": "読み上げ用テキスト", "emotion": "感情", "english": "{english_label}"}}',
         f"emotionは次のいずれか: {emotion_list}",
+        "",
+        "## contentとtts_textの違い（重要・厳守）",
+        "- content: チャットや字幕に表示。タグやマークアップは絶対に含めない。",
+        "- tts_text: TTS音声合成用。contentと同じ内容だが、日本語以外の部分に [lang:xx]...[/lang] タグを付ける。",
+        '  - 例: content="Claude Codeすごい！" → tts_text="[lang:en]Claude Code[/lang]すごい！"',
+        "  - 日本語のみの場合はcontentと同じ内容にする。",
     ])
 
     system_prompt = "\n".join(parts)
@@ -562,8 +576,14 @@ def generate_event_response(event_type, detail):
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        f'{{"response": "返答テキスト", "emotion": "感情", "english": "{english_label}"}}',
+        f'{{"response": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "english": "{english_label}"}}',
         f"emotionは次のいずれか: {emotion_list}",
+        "",
+        "## responseとtts_textの違い（重要・厳守）",
+        "- response: チャットや字幕に表示。タグやマークアップは絶対に含めない。",
+        "- tts_text: TTS音声合成用。responseと同じ内容だが、日本語以外の部分に [lang:xx]...[/lang] タグを付ける。",
+        '  - 例: response="Claude Codeすごい！" → tts_text="[lang:en]Claude Code[/lang]すごい！"',
+        "  - 日本語のみの場合はresponseと同じ内容にする。",
     ])
 
     system_prompt = "\n".join(parts)

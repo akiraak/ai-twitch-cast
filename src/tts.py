@@ -32,17 +32,35 @@ def _get_tts_style():
         return DEFAULT_STYLE
 
 
-def _add_english_hints(text):
-    """日本語テキスト中の英語部分に発音ヒントを付与する
+def _convert_lang_tags(text):
+    """[lang:xx]...[/lang] タグを TTS用の発音ヒントに変換する
 
-    例: "今日はYouTubeの動画" → "今日は[English: YouTube]の動画"
+    AIが生成した言語タグを、TTSが理解しやすい形式に変換。
+    タグがない場合は正規表現で英語部分を検出してフォールバック。
+
+    例: "今日は[lang:en]YouTube[/lang]の動画" → "今日は[English]YouTube[Japanese]の動画"
     """
-    # 2文字以上の連続した英語単語（1文字の英字は除外）
+    # [lang:xx]...[/lang] タグがある場合はそれを変換
+    LANG_NAMES = {
+        "en": "English", "es": "Spanish", "ko": "Korean",
+        "fr": "French", "zh": "Chinese", "de": "German",
+        "pt": "Portuguese", "ru": "Russian", "it": "Italian",
+        "ar": "Arabic", "th": "Thai", "vi": "Vietnamese",
+    }
+    if "[lang:" in text:
+        def replace_tag(m):
+            code = m.group(1)
+            content = m.group(2)
+            lang_name = LANG_NAMES.get(code, code.upper())
+            return f"[{lang_name}]{content}[Japanese]"
+        return re.sub(r'\[lang:(\w+)\](.*?)\[/lang\]', replace_tag, text)
+
+    # フォールバック: 正規表現で英語部分を検出
     def replace_match(m):
         word = m.group(0).strip()
         if len(word) < 2:
             return m.group(0)
-        return f"[English: {word}]"
+        return f'[English]{word}[Japanese]'
 
     return re.sub(r'[A-Za-z][A-Za-z0-9](?:[A-Za-z0-9\s\.\-\']*[A-Za-z0-9])?', replace_match, text)
 
@@ -56,7 +74,7 @@ def synthesize(text, output_path, voice=None):
         voice: 音声名 (デフォルト: Despina)
     """
     style = os.environ.get("TTS_STYLE") or _get_tts_style()
-    processed_text = _add_english_hints(text)
+    processed_text = _convert_lang_tags(text)
     prompt = f"{style}: {processed_text}"
     logger.info("[tts] prompt: %s", prompt)
     return synthesize_with_prompt(prompt, output_path, voice=voice)
