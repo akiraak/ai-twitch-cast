@@ -367,7 +367,7 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
 
 ## ステータス
 - 作成日: 2026-03-14
-- 状態: Phase 1 完了
+- 状態: Phase 2 完了
 - Phase 1 完了日: 2026-03-14
 - Phase 1 検証結果:
   - WebView2: 隠しウィンドウ(-32000,-32000)で正常描画 (**問題なし**)
@@ -375,3 +375,11 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
   - フレームレート: 約30fps
   - CsWinRT interop: `MarshalInterface<T>.FromAbi()` + `IWinRTObject.NativeObject.ThisPtr` で解決
   - Vortice.Direct3D11 3.8.3 でD3D11テクスチャ操作
+- Phase 2 完了日: 2026-03-14
+- Phase 2 実装内容:
+  - FFmpegProcess: 子プロセス管理（video stdin + audio named pipe → RTMP）
+  - AudioLoopback: NAudio WasapiLoopbackCapture（システムワイドループバック、TODO: プロセス別に変更）
+  - FrameCapture改修: OnFrameReadyコールバック + FPSスロットル + ステージングテクスチャ再利用
+  - StreamConfig: 環境変数ベースの配信設定（STREAM_KEY/STREAM_RESOLUTION/STREAM_FPS/STREAM_BITRATE）
+  - MainForm: --stream フラグで自動配信開始、StartStreamingAsync/StopStreamingAsync
+  - ビルド確認: dotnet.exe build Release 成功

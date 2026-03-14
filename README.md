@@ -56,7 +56,7 @@ TTS_VOICE=Aoede
 ### Web UI（推奨）
 
 ```bash
-./run.sh
+./server.sh
 ```
 
 ブラウザで http://127.0.0.1:8080 にアクセス。ポートは `.env` の `WEB_PORT` で変更可能（デフォルト: 8080）。

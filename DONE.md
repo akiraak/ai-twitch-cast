@@ -290,6 +290,15 @@
 - [x] D3D11テクスチャ→BGRA→PNG保存パイプライン（CsWinRT COM interop解決）
 - [x] シンボリックリンクでgit管理統合（/mnt/c/Users/akira/Downloads/win-native-app → win-native-app/）
 
+## C#ネイティブ配信アプリ（Phase 2: FFmpeg配信パイプライン）
+
+- [x] FfmpegProcess: FFmpeg子プロセス管理（rawvideo stdin + 名前付きパイプ音声入力 → RTMP出力）
+- [x] AudioLoopback: NAudio WasapiLoopbackCapture によるシステム音声キャプチャ
+- [x] FrameCapture改修: OnFrameReadyコールバック、FPSスロットル、ステージングテクスチャ再利用
+- [x] StreamConfig: 環境変数ベースの配信設定（STREAM_KEY/STREAM_RESOLUTION/STREAM_FPS/STREAM_BITRATE/FFMPEG_PATH）
+- [x] MainForm統合: --stream フラグで自動配信パイプライン開始（WGC→FFmpeg stdin、WASAPI→named pipe→FFmpeg）
+- [x] FFmpeg stderr → logs/ffmpeg.log 自動保存
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成

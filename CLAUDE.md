@@ -63,8 +63,9 @@ ai-twitch-cast/
 ├── win-native-app/           # C#ネイティブ配信アプリ（Electron後継、開発中）→ symlink to Windows FS
 │   └── WinNativeApp/        # .NET 8 WinForms + WebView2 + WGC
 │       ├── Program.cs       # エントリポイント
-│       ├── MainForm.cs      # WebView2フォーム（オフスクリーン）
-│       └── Capture/         # WGCフレームキャプチャ
+│       ├── MainForm.cs      # WebView2フォーム（オフスクリーン）+ 配信パイプライン制御
+│       ├── Capture/         # WGCフレームキャプチャ
+│       └── Streaming/       # FFmpeg配信パイプライン（FfmpegProcess + AudioLoopback + StreamConfig）
 ├── src/                      # ソースコード
 │   ├── scene_config.py       # 設定の定義（scenes.jsonから読み込み）
 │   ├── tts.py                # TTS音声合成（Gemini 2.5 Flash TTS）
@@ -90,7 +91,8 @@ ai-twitch-cast/
 │   ├── vrm/                  # VRMモデル
 │   ├── audio/
 │   └── video/
-├── run.sh                    # サーバー起動スクリプト（再起動ループ+PIDファイル管理+二重起動防止）
+├── server.sh                 # Webサーバー起動（再起動ループ+PIDファイル管理+二重起動防止）
+├── stream.sh                 # C#ネイティブ配信アプリ起動（.envからSTREAM_KEY読み込み）
 ├── scenes.json               # 設定ファイル（オーバーレイ・音量・BGM・アバター設定）
 ├── mkdocs.yml                # MkDocs設定
 ├── requirements.txt          # Python依存パッケージ
@@ -125,10 +127,10 @@ ai-twitch-cast/
 
 ## Webサーバー運用注意
 
-- Webサーバーは `./run.sh` で起動（`.env` の `WEB_PORT` を自動読み込み、デフォルト8080）
-- **二重起動防止**: `run.sh` は起動時に既存プロセスをPIDファイル＋ポート使用チェックで自動停止する
+- Webサーバーは `./server.sh` で起動（`.env` の `WEB_PORT` を自動読み込み、デフォルト8080）
+- **二重起動防止**: `server.sh` は起動時に既存プロセスをPIDファイル＋ポート使用チェックで自動停止する
 - **`--reload` は使わない**。コード変更はコミット時に自動反映される（post-commit hookがサーバーを再起動）
-- コミット時の動作: post-commit hook → `.pending_commit` にコミット情報保存 → サーバーkill → run.shが自動再起動 → startup復旧（アバター・Reader・Git監視） → コミット読み上げ
+- コミット時の動作: post-commit hook → `.pending_commit` にコミット情報保存 → サーバーkill → server.shが自動再起動 → startup復旧（アバター・Reader・Git監視） → コミット読み上げ
 - **Setup済みの状態は `.server_state` ファイルで管理**。このファイルが存在する場合、サーバー起動時に自動復旧する
 
 ## 音声アーキテクチャ
