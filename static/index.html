@@ -136,6 +136,12 @@
   .db-tab .db-tab-count { font-size: 0.7rem; opacity: 0.7; margin-left: 4px; }
   .db-scroll { overflow-x: auto; max-height: 500px; overflow-y: auto; border: 1px solid #d0c0e8; border-radius: 6px; }
   .db-er { font-size: 0.75rem; color: #6a5590; line-height: 1.6; font-family: monospace; white-space: pre; overflow-x: auto; padding: 10px; background: #faf8ff; border-radius: 6px; border: 1px solid #e0d8f0; }
+  .todo-copy-btn {
+    flex-shrink: 0; width: 28px; height: 28px; border: 1px solid #d0c0e8; border-radius: 6px;
+    background: #faf7ff no-repeat center / 14px 14px; cursor: pointer; transition: background-color 0.15s;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%237b1fa2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E");
+  }
+  .todo-copy-btn:hover { background-color: #ede4fa; }
 </style>
 </head>
 <body>
@@ -1642,7 +1648,7 @@ async function loadTodoList() {
       const checkbox = isActive
         ? '<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:4px; background:#7b1fa2; flex-shrink:0; font-size:0.7rem; color:#fff;">▶</span>'
         : '<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border:2px solid #d0c0e8; border-radius:4px; flex-shrink:0;"></span>';
-      html += `<div style="padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer; ${bg} transition:background 0.15s; display:flex; align-items:center; gap:8px;" onmouseenter="this.style.background='#f0e8ff'" onmouseleave="this.style.background='${isActive ? '#f3e5f5' : ''}'"><span style="flex:1; display:flex; align-items:center; gap:8px;" onclick="startTodo(this.parentElement, '${esc(item.text).replace(/'/g, "\\'")}')">${checkbox}${esc(item.text)}</span><button onclick="event.stopPropagation();copyTodo(this,'${esc(item.text).replace(/'/g, "\\'")}')" style="flex-shrink:0; padding:2px 6px; border:1px solid #d0c0e8; border-radius:4px; background:#fff; color:#7b1fa2; cursor:pointer; font-size:0.75rem;" title="コピー">📋</button></div>`;
+      html += `<div style="padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer; ${bg} transition:background 0.15s; display:flex; align-items:center; gap:8px;" onmouseenter="this.style.background='#f0e8ff'" onmouseleave="this.style.background='${isActive ? '#f3e5f5' : ''}'"><span style="flex:1; display:flex; align-items:center; gap:8px;" onclick="startTodo(this.parentElement, '${esc(item.text).replace(/'/g, "\\'")}')">${checkbox}${esc(item.text)}</span><button class="todo-copy-btn" onclick="event.stopPropagation();copyTodo(this,'${esc(item.text).replace(/'/g, "\\'")}')" title="コピー"></button></div>`;
     }
     el.innerHTML = html;
   } catch (e) {
@@ -1650,10 +1656,12 @@ async function loadTodoList() {
   }
 }
 
+const ICON_COPY = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%237b1fa2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E";
+const ICON_CHECK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%234caf50' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E";
 async function copyTodo(btn, text) {
   await navigator.clipboard.writeText(text);
-  btn.textContent = '✓';
-  setTimeout(() => btn.textContent = '📋', 1000);
+  btn.style.backgroundImage = `url("${ICON_CHECK}")`;
+  setTimeout(() => { btn.style.backgroundImage = `url("${ICON_COPY}")`; }, 1000);
 }
 
 async function startTodo(el, text) {
