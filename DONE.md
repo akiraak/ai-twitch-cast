@@ -394,6 +394,10 @@
 - [x] WebView2 autoplay音声許可（--autoplay-policy=no-user-gesture-required）
 - [x] WebView2 JSコンソールログをアプリログに転送（console.log/error → postMessage → Serilog）
 - [x] frames/drops表示をパネルから削除
+- [x] 音量スライダー: HTTP POST→WebSocket経由に変更（POSTタイムアウト問題を解消、broadcast.htmlのWebSocket接続を利用してDB保存）
+- [x] トレイアイコン: 既存のトレイ機能（配信開始/停止/最小化）が正常動作確認
+- [x] Go Live API: WebSocket /ws/control経由での配信開始が正常動作確認
+- [x] ウィンドウ閉じ修正: OnFormClosingにtry-catch追加+CleanupResourcesで_ffmpeg強制クリーンアップ（配信停止失敗時もウィンドウが閉じるように）
 
 ## WebSocket SendAsync同時呼び出しエラー修正
 

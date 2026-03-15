@@ -48,9 +48,8 @@ public class MainForm : Form
     private DateTime _streamStartTime;
     private string? _activeStreamKey;
 
-    // サーバーAPI用共有HttpClient + 音量デバウンス
-    private static readonly HttpClient _sharedHttp = new() { Timeout = TimeSpan.FromSeconds(5) };
-    private CancellationTokenSource? _volumeDebounce;
+    // サーバーAPI用共有HttpClient（初期音量取得用）
+    private static readonly HttpClient _sharedHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     // Window capture (Phase 3)
     private CaptureManager? _captureManager;
@@ -407,39 +406,25 @@ public class MainForm : Form
         var vol = value / 100.0;
         var volStr = vol.ToString("F2", CultureInfo.InvariantCulture);
 
-        // 1. broadcast.htmlの音量をJS注入で即座に変更
-        if (_webView.CoreWebView2 != null)
-        {
-            var js = $@"
-                if (typeof volumes !== 'undefined') {{
-                    volumes.{EscapeJs(volumeType)} = {volStr};
-                    if (typeof applyVolume === 'function') applyVolume();
-                }}";
-            _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
-        }
+        if (_webView.CoreWebView2 == null) return;
 
-        // 2. サーバーAPIでDB保存 + WebSocket配信（デバウンス200ms）
-        _volumeDebounce?.Cancel();
-        var cts = new CancellationTokenSource();
-        _volumeDebounce = cts;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(200, cts.Token);
-                var serverUrl = _url.Contains("/broadcast")
-                    ? _url[.._url.IndexOf("/broadcast", StringComparison.Ordinal)]
-                    : "http://localhost:8080";
-                var json = $"{{\"source\":\"{volumeType}\",\"volume\":{volStr}}}";
-                await _sharedHttp.PostAsync($"{serverUrl}/api/broadcast/volume",
-                    new StringContent(json, System.Text.Encoding.UTF8, "application/json"), cts.Token);
-            }
-            catch (OperationCanceledException) { /* debounced */ }
-            catch (Exception ex)
-            {
-                Log.Debug("[MainForm] Volume API call failed: {Error}", ex.Message);
-            }
-        });
+        // broadcast.htmlの音量を即座に変更 + WebSocket経由でサーバーに保存（デバウンス200ms）
+        var js = $@"
+            if (typeof volumes !== 'undefined') {{
+                volumes.{EscapeJs(volumeType)} = {volStr};
+                if (typeof applyVolume === 'function') applyVolume();
+            }}
+            clearTimeout(window._volSaveTimer);
+            window._volSaveTimer = setTimeout(function() {{
+                if (window._ws && window._ws.readyState === 1) {{
+                    window._ws.send(JSON.stringify({{
+                        type: 'save_volume',
+                        source: '{EscapeJs(volumeType)}',
+                        volume: {volStr}
+                    }}));
+                }}
+            }}, 200);";
+        _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
     }
 
     private async void OnLoad(object? sender, EventArgs e)
@@ -983,7 +968,19 @@ public class MainForm : Form
             // Need async cleanup → cancel close, do cleanup, re-close
             e.Cancel = true;
             _closing = true;
-            await StopStreamingAsync();
+            try
+            {
+                await StopStreamingAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[MainForm] Error stopping stream during close");
+                // 停止失敗時も強制クリーンアップ
+                try { _ffmpeg?.Dispose(); } catch { }
+                _ffmpeg = null;
+                _audio?.Dispose();
+                _audio = null;
+            }
             Close();
             return;
         }
@@ -1000,6 +997,15 @@ public class MainForm : Form
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
         }
+        // 配信パイプラインが残っていたら強制クリーンアップ
+        if (_ffmpeg != null)
+        {
+            try { _ffmpeg.Dispose(); } catch { }
+            _ffmpeg = null;
+        }
+        _audio?.Stop();
+        _audio?.Dispose();
+        _audio = null;
         _capture?.Stop();
         _capture?.Dispose();
         _captureManager?.Dispose();

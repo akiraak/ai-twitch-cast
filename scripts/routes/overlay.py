@@ -1,6 +1,7 @@
 """オーバーレイルート（WebSocket + 設定 + TODO表示）"""
 
 import asyncio
+import json as _json_mod
 import logging
 import re
 import secrets
@@ -95,7 +96,17 @@ async def broadcast_ws(websocket: WebSocket):
         pass
     try:
         while True:
-            await websocket.receive_text()
+            text = await websocket.receive_text()
+            try:
+                msg = _json_mod.loads(text)
+                if msg.get("type") == "save_volume":
+                    source = msg.get("source", "")
+                    volume = msg.get("volume", 0)
+                    if source in ("master", "tts", "bgm"):
+                        db.set_setting(f"volume.{source}", volume)
+                        logger.debug("音量保存(WS): %s = %.2f", source, volume)
+            except Exception:
+                pass
     except WebSocketDisconnect:
         state.broadcast_clients.discard(websocket)
 

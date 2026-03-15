@@ -1110,6 +1110,7 @@ async function loadTodo() {
 function connectWS() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${protocol}//${location.host}/ws/broadcast`);
+  window._ws = ws;  // グローバル参照（C# JS注入からの音量保存用）
 
   ws.onmessage = (e) => {
     const data = JSON.parse(e.data);
@@ -1240,7 +1241,7 @@ function connectWS() {
     }
   };
 
-  ws.onclose = () => setTimeout(connectWS, 3000);
+  ws.onclose = () => { window._ws = null; setTimeout(connectWS, 3000); };
   ws.onerror = () => ws.close();
 }
 
