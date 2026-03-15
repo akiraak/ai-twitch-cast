@@ -369,6 +369,10 @@
 - [x] アプリ表示名を「WinNativeApp」→「AI Twitch Cast」に変更（ウィンドウタイトル・トレイ・バルーン・ログ・HTTPバージョン文字列）
 - [x] タイトルバーをダークモードに変更（DwmSetWindowAttribute DWMWA_USE_IMMERSIVE_DARK_MODE）
 - [x] broadcast.htmlからウィンドウ追加UI（セレクトボックス・追加ボタン・editLoadWindows/editAddCapture関数・10秒ポーリング）を完全削除
+- [x] ClientSize修正（Size→ClientSize: タイトルバー分のクライアント領域縮小を解消）
+- [x] 検証完了: FixedSingleウィンドウでWGCキャプチャ正常動作
+- [x] 検証完了: ClientSize修正後、WebView2描画サイズが正確に1280x720
+- [x] 検証完了: ウィンドウが最背面でもキャプチャ継続
 
 ## WebSocket SendAsync同時呼び出しエラー修正
 
