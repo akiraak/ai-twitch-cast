@@ -22,7 +22,11 @@
 - [ ] 画像保蔵機能と同様にElectron画面の動画撮影 → [plans/video-recording.md](plans/video-recording.md)
 - [ ] Electronを別の実装に置き換えられるか検討（軽量化・柔軟な実装が行えるかの観点） → [plans/electron-alternative.md](plans/electron-alternative.md)
 - [>] Electronをネイティブ実装に変更（C#+WebView2+WGC+WASAPI） → [plans/native-implementation.md](plans/native-implementation.md)
-        - [ ] Phase 6: プレビューウィンドウ統合（ウィンドウ可視化、固定解像度、タスクバー表示）
+        - Phase 6: 残作業（検証）
+                - [ ] 検証: FixedSingleウィンドウでWGCキャプチャが正常動作するか
+                - [ ] 検証: タイトルバー分のクライアント領域変化でWebView2描画サイズに影響がないか
+                - [ ] 検証: ウィンドウが最背面でもキャプチャが継続するか
         - [ ] Phase 7: UIパネル追加（配信領域+UIパネルの1ウィンドウ構成、WGCクロップ）
         - [ ] Phase 8: Electron完全削除（capture.pyのElectronコード・win-capture-app/・Web UI削除）
-- [ ] ネイティブアプリにffmpegが同梱されているか確認（現状はElectronダウンロード済みのものを流用）
+        - [ ] 音が鳴っていない
+        - [ ] ネイティブアプリにffmpegが同梱されているか確認（現状はElectronダウンロード済みのものを流用）

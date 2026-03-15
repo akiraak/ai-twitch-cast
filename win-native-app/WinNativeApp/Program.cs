@@ -21,7 +21,7 @@ static class Program
                 outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
 
-        Log.Information("WinNativeApp starting...");
+        Log.Information("AI Twitch Cast starting...");
 
         try
         {

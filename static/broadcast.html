@@ -167,42 +167,6 @@
   }
 
   /* === 編集モード === */
-  .edit-toolbar { display: flex; }
-  body.embedded .edit-toolbar { display: none; }
-  .edit-toolbar {
-    position: fixed; top: 0; left: 0; right: 0;
-    height: 44px;
-    background: rgba(0, 0, 0, 0.9);
-    border-bottom: 2px solid #7c4dff;
-    z-index: 9999;
-    align-items: center;
-    padding: 0 16px;
-    gap: 12px;
-    font-family: system-ui, sans-serif;
-    font-size: 13px;
-    color: #eee;
-  }
-  .edit-toolbar button {
-    padding: 4px 14px;
-    border: 1px solid #7c4dff;
-    border-radius: 4px;
-    background: transparent;
-    color: #b388ff;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .edit-toolbar button:hover { background: #7c4dff33; }
-  .edit-toolbar button.primary { background: #7c4dff; color: #fff; }
-  .edit-toolbar select {
-    padding: 4px 8px;
-    border: 1px solid #555;
-    border-radius: 4px;
-    background: #222;
-    color: #eee;
-    font-size: 13px;
-  }
-  .edit-toolbar .spacer { flex: 1; }
-
   [data-editable] {
     cursor: pointer;
     pointer-events: auto !important;
@@ -422,14 +386,6 @@
 </style>
 </head>
 <body>
-
-<!-- 編集ツールバー -->
-<div class="edit-toolbar">
-  <select id="edit-window-list"><option value="">-- ウィンドウ追加 --</option></select>
-  <button onclick="editAddCapture()">追加</button>
-  <span class="spacer"></span>
-  <button class="primary" onclick="editSave()">保存</button>
-</div>
 
 <!-- 右クリックメニュー -->
 <div class="edit-context-menu" id="edit-context-menu">
@@ -1835,39 +1791,8 @@ async function editSave() {
   _saving = false;
 }
 
-async function editLoadWindows() {
-  const sel = document.getElementById('edit-window-list');
-  sel.innerHTML = '<option value="">-- ウィンドウ追加 --</option>';
-  try {
-    const res = await fetch('/api/capture/windows');
-    const windows = await res.json();
-    for (const w of windows) {
-      const opt = document.createElement('option');
-      opt.value = w.sourceId;
-      opt.textContent = w.name.substring(0, 50);
-      sel.appendChild(opt);
-    }
-  } catch (e) { console.log('ウィンドウ一覧取得エラー:', e.message); }
-}
-
-async function editAddCapture() {
-  const sel = document.getElementById('edit-window-list');
-  const sourceId = sel.value;
-  if (!sourceId) return;
-  const label = sel.selectedOptions[0]?.textContent || '';
-  try {
-    await fetch('/api/capture/start', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ sourceId, label }),
-    });
-  } catch (e) { console.log('キャプチャ開始エラー:', e.message); }
-}
-
 function initEditMode() {
   document.querySelectorAll('[data-editable]').forEach(setupEditable);
-  editLoadWindows();
-  setInterval(editLoadWindows, 10000);
 }
 
 // === 初期化 ===

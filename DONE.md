@@ -358,6 +358,18 @@
 - [x] Map計測ログ追加（Map=0ms readback=0ms を確認）
 - [x] 結果: 30fps / speed=1.01x / drops固定（初期のみ）/ パイプwrite=1ms安定
 
+## C#ネイティブ配信アプリ（Phase 6: プレビューウィンドウ統合）
+
+- [x] FormBorderStyle.None → FixedSingle に変更（タイトルバー＋閉じる/最小化ボタン表示、リサイズ不可）
+- [x] MaximizeBox = false（最大化ボタン無効化）
+- [x] ウィンドウタイトルに配信状態をリアルタイム表示（「待機中」「配信中 HH:MM:SS」、トレイ更新タイマーで同期）
+- [x] 配信中の閉じるボタン → トレイに最小化（誤終了防止、バルーン通知付き）
+- [x] トレイの「終了」メニューとQuit APIは _forceClose フラグで強制終了を維持
+- [x] トレイアイコンダブルクリックでウィンドウ復元（Show + Normal + Activate）
+- [x] アプリ表示名を「WinNativeApp」→「AI Twitch Cast」に変更（ウィンドウタイトル・トレイ・バルーン・ログ・HTTPバージョン文字列）
+- [x] タイトルバーをダークモードに変更（DwmSetWindowAttribute DWMWA_USE_IMMERSIVE_DARK_MODE）
+- [x] broadcast.htmlからウィンドウ追加UI（セレクトボックス・追加ボタン・editLoadWindows/editAddCapture関数・10秒ポーリング）を完全削除
+
 ## WebSocket SendAsync同時呼び出しエラー修正
 
 - [x] SendWsResponseにSemaphoreSlimによる排他制御を追加（起動時の同時リクエストによるSendAsync競合を解消）

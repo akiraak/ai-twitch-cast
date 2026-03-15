@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using Microsoft.Web.WebView2.WinForms;
 using Serilog;
 using WinNativeApp.Capture;
@@ -9,6 +10,11 @@ namespace WinNativeApp;
 
 public class MainForm : Form
 {
+    // DWM Dark Mode API
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
     private readonly WebView2 _webView;
     private FrameCapture? _capture;
     private readonly string[] _args;
@@ -19,6 +25,7 @@ public class MainForm : Form
     private FfmpegProcess? _ffmpeg;
     private AudioLoopback? _audio;
     private bool _closing;
+    private bool _forceClose;
     private DateTime _streamStartTime;
     private string? _activeStreamKey;
 
@@ -41,11 +48,16 @@ public class MainForm : Form
         _httpPort = int.TryParse(
             Environment.GetEnvironmentVariable("WIN_CAPTURE_PORT"), out var p) ? p : 9090;
 
-        Text = "WinNativeApp";
+        Text = "AI Twitch Cast - 起動中";
         StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(1280, 720);
-        FormBorderStyle = FormBorderStyle.None;
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MaximizeBox = false;
         ShowInTaskbar = true;
+
+        // タイトルバーをダークモードに設定
+        var darkMode = 1;
+        DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
 
         _webView = new WebView2 { Dock = DockStyle.Fill };
         Controls.Add(_webView);
@@ -70,14 +82,20 @@ public class MainForm : Form
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_trayStreamItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("終了", null, (_, _) => Close());
+        menu.Items.Add("終了", null, (_, _) => { _forceClose = true; Close(); });
 
         _trayIcon = new NotifyIcon
         {
             Icon = CreateTrayIcon(Color.Gray),
-            Text = "WinNativeApp - 起動中",
+            Text = "AI Twitch Cast - 起動中",
             Visible = true,
             ContextMenuStrip = menu,
+        };
+        _trayIcon.DoubleClick += (_, _) =>
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
+            Activate();
         };
 
         // トレイアイコン定期更新（3秒）
@@ -95,17 +113,20 @@ public class MainForm : Form
         {
             var uptime = _ffmpeg!.Uptime;
             var frames = _ffmpeg.FrameCount;
+            var uptimeStr = uptime.ToString(@"hh\:mm\:ss");
             _trayIcon!.Icon = CreateTrayIcon(Color.Red);
-            _trayIcon.Text = $"配信中 ({uptime:hh\\:mm\\:ss}) - {frames} frames";
-            _trayStatusItem!.Text = $"配信中: {uptime:hh\\:mm\\:ss} / {frames} frames";
+            _trayIcon.Text = $"配信中 ({uptimeStr}) - {frames} frames";
+            _trayStatusItem!.Text = $"配信中: {uptimeStr} / {frames} frames";
             _trayStreamItem!.Text = "配信停止";
+            Text = $"AI Twitch Cast - 配信中 {uptimeStr}";
         }
         else
         {
             _trayIcon!.Icon = CreateTrayIcon(Color.LimeGreen);
-            _trayIcon.Text = $"WinNativeApp - 待機中 (キャプチャ: {captures})";
+            _trayIcon.Text = $"AI Twitch Cast - 待機中 (キャプチャ: {captures})";
             _trayStatusItem!.Text = $"待機中 (キャプチャ: {captures})";
             _trayStreamItem!.Text = "配信開始";
+            Text = "AI Twitch Cast - 待機中";
         }
     }
 
@@ -114,24 +135,24 @@ public class MainForm : Form
         if (_ffmpeg is { IsRunning: true })
         {
             await StopStreamingAsync();
-            _trayIcon?.ShowBalloonTip(2000, "WinNativeApp", "配信を停止しました", ToolTipIcon.Info);
+            _trayIcon?.ShowBalloonTip(2000, "AI Twitch Cast", "配信を停止しました", ToolTipIcon.Info);
         }
         else
         {
             var config = StreamConfig.FromArgs(_args);
             if (string.IsNullOrEmpty(config.StreamKey) && string.IsNullOrEmpty(_activeStreamKey))
             {
-                _trayIcon?.ShowBalloonTip(3000, "WinNativeApp", "ストリームキーが設定されていません", ToolTipIcon.Warning);
+                _trayIcon?.ShowBalloonTip(3000, "AI Twitch Cast", "ストリームキーが設定されていません", ToolTipIcon.Warning);
                 return;
             }
             try
             {
                 await StartStreamingWithKeyAsync(_activeStreamKey ?? config.StreamKey ?? "");
-                _trayIcon?.ShowBalloonTip(2000, "WinNativeApp", "配信を開始しました", ToolTipIcon.Info);
+                _trayIcon?.ShowBalloonTip(2000, "AI Twitch Cast", "配信を開始しました", ToolTipIcon.Info);
             }
             catch (Exception ex)
             {
-                _trayIcon?.ShowBalloonTip(3000, "WinNativeApp", $"配信開始失敗: {ex.Message}", ToolTipIcon.Error);
+                _trayIcon?.ShowBalloonTip(3000, "AI Twitch Cast", $"配信開始失敗: {ex.Message}", ToolTipIcon.Error);
             }
         }
     }
@@ -221,7 +242,7 @@ public class MainForm : Form
 
         _httpServer.OnQuit = () =>
         {
-            BeginInvoke(() => Close());
+            BeginInvoke(() => { _forceClose = true; Close(); });
         };
 
         try
@@ -501,6 +522,8 @@ public class MainForm : Form
 
         if (!e.IsSuccess) return;
 
+        Text = "AI Twitch Cast - 待機中";
+
         // Wait for rendering to settle
         await Task.Delay(2000);
         StartCapture();
@@ -585,6 +608,17 @@ public class MainForm : Form
         {
             // Second pass after async cleanup
             CleanupResources();
+            return;
+        }
+
+        // 配信中に閉じるボタン → トレイに最小化（誤終了防止）
+        if (_ffmpeg is { IsRunning: true } && e.CloseReason == CloseReason.UserClosing && !_forceClose)
+        {
+            e.Cancel = true;
+            WindowState = FormWindowState.Minimized;
+            Hide();
+            _trayIcon?.ShowBalloonTip(2000, "AI Twitch Cast", "配信中のためトレイに最小化しました", ToolTipIcon.Info);
+            Log.Information("[MainForm] Minimized to tray (streaming active)");
             return;
         }
 

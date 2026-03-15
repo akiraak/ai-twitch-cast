@@ -184,7 +184,7 @@ public class HttpServer : IDisposable
             captures = captures.Count,
             streaming,
             broadcast_window = true,  // WebView2は常に起動している
-            version = "WinNativeApp/1.0"
+            version = "AITwitchCast/1.0"
         });
     }
 
@@ -452,7 +452,7 @@ public class HttpServer : IDisposable
             captures = captures.Count,
             streaming,
             broadcast_window = true,
-            version = "WinNativeApp/1.0"
+            version = "AITwitchCast/1.0"
         };
     }
 

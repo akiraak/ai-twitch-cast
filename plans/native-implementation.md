@@ -437,7 +437,7 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
 
 ## ステータス
 - 作成日: 2026-03-14
-- 状態: Phase 5 完了
+- 状態: Phase 6 完了
 - Phase 1 完了日: 2026-03-14
 - Phase 1 検証結果:
   - WebView2: 隠しウィンドウ(-32000,-32000)で正常描画 (**問題なし**)
@@ -492,3 +492,11 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
   - 修正: stdin書き込みブロック（非同期バックグラウンド書き込み）
   - 修正: 音声入力不足（初期サイレンス + フォールバックタイマー）
   - 課題: フレームレート約4fps（パイプ帯域ボトルネック、最適化は別タスク）
+- Phase 6 完了日: 2026-03-14
+- Phase 6 実装内容:
+  - FormBorderStyle.None → FixedSingle（タイトルバー＋ボタン表示、リサイズ不可）
+  - MaximizeBox = false（最大化ボタン無効化）
+  - ウィンドウタイトルにリアルタイム配信状態表示（トレイ更新タイマーと同期）
+  - 配信中の閉じるボタン → トレイ最小化（_forceCloseフラグで終了/最小化を制御）
+  - トレイアイコンダブルクリックでウィンドウ復元
+  - ビルド確認: dotnet.exe build Release 成功
