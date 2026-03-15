@@ -752,16 +752,23 @@ let todoSettings = {};
 let volumes = { master: 0.8, tts: 0.8, bgm: 1.0 };
 let _masterGain = null;  // AudioContext GainNode（master 200%対応）
 
+// 二乗カーブ: 人間の聴覚に合わせた知覚的音量変換
+// 100% → gain 1.0 (0dB), 200% → gain 4.0 (+12dB)
+function perceptualGain(linear) {
+  return linear * linear;
+}
+
 function applyVolume() {
   if (_masterGain) {
-    // AudioContext経由: 個別音量はaudio要素、マスターはGainNode（200%対応）
-    ttsAudio.volume = Math.min(1.0, volumes.tts);
-    bgmAudio.volume = Math.min(1.0, volumes.bgm);
-    _masterGain.gain.value = volumes.master;
+    // AudioContext経由: 個別音量はaudio要素、マスターはGainNode（二乗カーブ、200%対応）
+    ttsAudio.volume = Math.min(1.0, perceptualGain(volumes.tts));
+    bgmAudio.volume = Math.min(1.0, perceptualGain(volumes.bgm));
+    _masterGain.gain.value = perceptualGain(volumes.master);
   } else {
     // フォールバック: audio要素のみ（1.0上限）
-    ttsAudio.volume = Math.min(1.0, volumes.master * volumes.tts);
-    bgmAudio.volume = Math.min(1.0, volumes.master * volumes.bgm);
+    const masterGain = perceptualGain(volumes.master);
+    ttsAudio.volume = Math.min(1.0, masterGain * perceptualGain(volumes.tts));
+    bgmAudio.volume = Math.min(1.0, masterGain * perceptualGain(volumes.bgm));
   }
   // WebView2パネルに音量同期通知
   try { window.chrome?.webview?.postMessage({_volumeSync: volumes}); } catch(e){}
@@ -867,16 +874,18 @@ function setupAudioMeter() {
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.3;
 
-    // TTS/BGM両方をAnalyserに接続
-    const ttsSource = ctx.createMediaElementSource(ttsAudio);
-    const bgmSource = ctx.createMediaElementSource(bgmAudio);
-    ttsSource.connect(analyser);
-    bgmSource.connect(analyser);
     // マスター音量GainNode（0-2.0対応、200%ブースト可能）
     const masterGain = ctx.createGain();
-    masterGain.gain.value = volumes.master;
-    analyser.connect(masterGain);
-    masterGain.connect(ctx.destination);
+    masterGain.gain.value = perceptualGain(volumes.master);
+
+    // TTS/BGM → masterGain → analyser → destination
+    // analyserをmasterGainの後に配置し、最終出力レベルを計測
+    const ttsSource = ctx.createMediaElementSource(ttsAudio);
+    const bgmSource = ctx.createMediaElementSource(bgmAudio);
+    ttsSource.connect(masterGain);
+    bgmSource.connect(masterGain);
+    masterGain.connect(analyser);
+    analyser.connect(ctx.destination);
     _masterGain = masterGain;
 
     _meterCtx = ctx;
@@ -915,6 +924,10 @@ function setupAudioMeter() {
       // 親ウィンドウ（preview.html iframe）に送信
       if (window.parent !== window) {
         window.parent.postMessage(msg, '*');
+      }
+      // WebView2（C#ネイティブアプリ）に送信
+      if (window.chrome?.webview) {
+        window.chrome.webview.postMessage({ _audioLevel: msg });
       }
     }, 50);
 

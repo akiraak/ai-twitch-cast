@@ -25,6 +25,13 @@
 
 - [x] 英語の発音をちゃんと英語っぽく（AI生成時に言語タグ分離+スタイルプロンプト英語化+発音ヒント挿入、サウンドテスト言語選択対応）
 
+## C#ネイティブアプリに音量メーター追加・音量カーブ改善
+
+- [x] broadcast.html → WebView2 postMessage → C# → control-panel.html の音量レベル転送パイプライン追加
+- [x] control-panel.htmlに音量メーターUI（レベルバー・ピーク・dB表示・BGM/Voiceソース表示）
+- [x] AnalyserNodeをmasterGainの後に移動し、マスター音量変更がメーターに反映されるよう修正
+- [x] 全音量チャンネル（Master/TTS/BGM）に二乗カーブ（perceptualGain）適用。人間の聴覚特性に合わせた知覚的音量制御
+
 ## プレビューウィンドウに音量メーター追加
 
 - [x] broadcast.htmlにAudioContext+AnalyserNodeで音量測定（BGM+Voice合成RMS→dBFS）

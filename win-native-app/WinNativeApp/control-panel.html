@@ -154,6 +154,41 @@ input[type="range"]::-webkit-slider-thumb {
 }
 input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover); }
 
+/* Audio Meter */
+.meter-sources { display: flex; gap: 4px; margin-bottom: 4px; }
+.meter-src {
+  font-size: 9px; padding: 1px 5px; border-radius: 2px;
+  background: var(--bg-input); color: var(--text-dim); transition: all 0.15s;
+}
+.meter-src.active { color: #fff; }
+.meter-src.bgm.active { background: #2d6a4f; }
+.meter-src.tts.active { background: #5c4d9a; }
+.meter-container {
+  position: relative; height: 8px; background: #0a0a14;
+  border-radius: 3px; overflow: hidden; border: 1px solid var(--border);
+}
+.meter-bar {
+  position: absolute; top: 0; left: 0; height: 100%; width: 0%;
+  transition: width 0.05s linear; border-radius: 2px;
+}
+.meter-bar.level {
+  background: linear-gradient(90deg, #2d6a4f 0%, #52b788 50%, #f4a261 80%, #e76f51 95%);
+  z-index: 1;
+}
+.meter-bar.peak {
+  width: 2px; background: #fff; z-index: 2;
+  transition: left 0.05s linear; left: 0%;
+}
+.meter-info {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 2px; font-size: 10px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+.meter-db { color: #52b788; }
+.meter-db.hot { color: #f4a261; }
+.meter-db.clip { color: #e76f51; }
+.meter-peak { color: var(--text-dim); }
+
 /* Log */
 .log-area {
   flex: 1;
@@ -220,6 +255,18 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
     <input type="range" min="0" max="100" value="50" id="volBgm" oninput="onVolume('bgm',this.value)">
     <span class="volume-value" id="volBgmVal">50%</span>
   </div>
+  <div class="meter-sources">
+    <span class="meter-src bgm" id="meterBgm">BGM</span>
+    <span class="meter-src tts" id="meterTts">Voice</span>
+  </div>
+  <div class="meter-container">
+    <div class="meter-bar level" id="meterLevel"></div>
+    <div class="meter-bar peak" id="meterPeak"></div>
+  </div>
+  <div class="meter-info">
+    <span class="meter-db" id="meterDb">-∞ dB</span>
+    <span class="meter-peak" id="meterPeakDb">pk -∞</span>
+  </div>
 </div>
 
 <div class="section flex">
@@ -241,6 +288,7 @@ wv?.addEventListener('message', e => {
     case 'captures': updateCaptures(m.captures); break;
     case 'log': appendLog(m.text, m.level); break;
     case 'volume': setVolumes(m); break;
+    case 'audioLevel': updateMeter(m); break;
   }
 });
 
@@ -333,6 +381,34 @@ function appendLog(text, level) {
   area.appendChild(span);
   while (area.childNodes.length > 300) area.removeChild(area.firstChild);
   area.scrollTop = area.scrollHeight;
+}
+
+// 音量メーター
+const METER_MIN_DB = -60;
+let meterSmooth = METER_MIN_DB;
+
+function meterDbToPct(db) {
+  if (db <= METER_MIN_DB) return 0;
+  if (db >= 0) return 100;
+  return ((db - METER_MIN_DB) / (0 - METER_MIN_DB)) * 100;
+}
+
+function updateMeter(data) {
+  const db = isFinite(data.db) ? Math.max(METER_MIN_DB, data.db) : METER_MIN_DB;
+  const peak = isFinite(data.peak) ? Math.max(METER_MIN_DB, data.peak) : METER_MIN_DB;
+  meterSmooth = db > meterSmooth ? db : meterSmooth * 0.85 + db * 0.15;
+
+  $('meterLevel').style.width = meterDbToPct(meterSmooth) + '%';
+  $('meterPeak').style.left = meterDbToPct(peak) + '%';
+
+  const dbStr = meterSmooth <= METER_MIN_DB ? '-∞ dB' : meterSmooth.toFixed(1) + ' dB';
+  const pkStr = peak <= METER_MIN_DB ? 'pk -∞' : 'pk ' + peak.toFixed(0);
+  $('meterDb').textContent = dbStr;
+  $('meterPeakDb').textContent = pkStr;
+  $('meterDb').className = 'meter-db' + (meterSmooth > -3 ? ' clip' : meterSmooth > -12 ? ' hot' : '');
+
+  $('meterBgm').classList.toggle('active', !!data.bgm);
+  $('meterTts').classList.toggle('active', !!data.tts);
 }
 
 // 初期化

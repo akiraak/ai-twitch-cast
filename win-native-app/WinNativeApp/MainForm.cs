@@ -460,6 +460,18 @@ public class MainForm : Form
                             bgm = (int)(volSync.GetProperty("bgm").GetDouble() * 100),
                         });
                     }
+                    // broadcast.htmlからの音量レベル → パネルに転送
+                    if (msg.TryGetProperty("_audioLevel", out var audioLevel))
+                    {
+                        SendPanelMessage(new
+                        {
+                            type = "audioLevel",
+                            db = audioLevel.GetProperty("db").GetDouble(),
+                            peak = audioLevel.GetProperty("peak").GetDouble(),
+                            bgm = audioLevel.GetProperty("bgm").GetBoolean(),
+                            tts = audioLevel.GetProperty("tts").GetBoolean(),
+                        });
+                    }
                 }
                 catch { }
             };
