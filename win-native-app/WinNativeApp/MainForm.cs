@@ -470,6 +470,7 @@ public class MainForm : Form
         _capture.OnFrameReady = (data, w, h) => _ffmpeg.WriteVideoFrame(data);
 
         _streamStartTime = DateTime.UtcNow;
+        Text = "AI Twitch Cast - 配信中";
         Log.Information("[MainForm] Streaming pipeline active");
     }
 
@@ -599,6 +600,7 @@ public class MainForm : Form
         }
 
         _activeStreamKey = null;
+        Text = "AI Twitch Cast - 待機中";
         Log.Information("[MainForm] Streaming stopped");
     }
 
