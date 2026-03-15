@@ -374,6 +374,27 @@
 - [x] 検証完了: ClientSize修正後、WebView2描画サイズが正確に1280x720
 - [x] 検証完了: ウィンドウが最背面でもキャプチャ継続
 
+## C#ネイティブ配信アプリ（Phase 7: UIパネル検証・修正）
+
+- [x] ビルド成功確認（stream.sh でビルドエラーなし）
+- [x] ウィンドウが1680x720で表示される（左1280: broadcast.html、右400: パネル）
+- [x] パネルがダークテーマで表示される（control-panel.html読み込み成功）
+- [x] WGCクロップ修正: クライアント領域オフセット計算（GetWindowRect+ClientToScreen）でタイトルバー・枠を除外
+- [x] 配信制御: Go Liveボタンで配信開始 → Stopボタンで停止
+- [x] 配信制御: 配信中にステータス表示（uptime）が更新される
+- [x] ストリームキーをstream.shで常に渡すよう修正（パネルGo Live対応）
+- [x] キャプチャ: ↻ボタンでウィンドウ一覧取得 → 開始 → broadcast.htmlに表示（layout null修正）
+- [x] キャプチャ: 各アイテムに✕ボタンで個別停止（選択式UI廃止）
+- [x] ログエリアのテキスト選択・コピー対応（user-select: text）
+- [x] 音量スライダー: パネル操作でbroadcast.htmlの音量が変わる（JS変数名修正: broadcastState→volumes）
+- [x] 音量スライダー: サーバーAPI経由でDB保存・WebSocket配信（共有HttpClient+デバウンス）
+- [x] 音量スライダー: パネル初期表示でサーバーから現在値を取得
+- [x] 音量スライダー: Web UI→パネル同期（broadcast.html applyVolumeからWebView2 postMessage通知）
+- [x] Master音量200%対応（AudioContext GainNode経由、TTS/BGMは100%上限）
+- [x] WebView2 autoplay音声許可（--autoplay-policy=no-user-gesture-required）
+- [x] WebView2 JSコンソールログをアプリログに転送（console.log/error → postMessage → Serilog）
+- [x] frames/drops表示をパネルから削除
+
 ## WebSocket SendAsync同時呼び出しエラー修正
 
 - [x] SendWsResponseにSemaphoreSlimによる排他制御を追加（起動時の同時リクエストによるSendAsync競合を解消）

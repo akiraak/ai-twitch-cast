@@ -741,10 +741,21 @@ let todoSettings = {};
 
 // === 音量管理 ===
 let volumes = { master: 0.8, tts: 0.8, bgm: 1.0 };
+let _masterGain = null;  // AudioContext GainNode（master 200%対応）
 
 function applyVolume() {
-  ttsAudio.volume = volumes.master * volumes.tts;
-  bgmAudio.volume = volumes.master * volumes.bgm;
+  if (_masterGain) {
+    // AudioContext経由: 個別音量はaudio要素、マスターはGainNode（200%対応）
+    ttsAudio.volume = Math.min(1.0, volumes.tts);
+    bgmAudio.volume = Math.min(1.0, volumes.bgm);
+    _masterGain.gain.value = volumes.master;
+  } else {
+    // フォールバック: audio要素のみ（1.0上限）
+    ttsAudio.volume = Math.min(1.0, volumes.master * volumes.tts);
+    bgmAudio.volume = Math.min(1.0, volumes.master * volumes.bgm);
+  }
+  // WebView2パネルに音量同期通知
+  try { window.chrome?.webview?.postMessage({_volumeSync: volumes}); } catch(e){}
 }
 
 // === Electron音声キャプチャ（オフスクリーン配信用） ===
@@ -852,8 +863,12 @@ function setupAudioMeter() {
     const bgmSource = ctx.createMediaElementSource(bgmAudio);
     ttsSource.connect(analyser);
     bgmSource.connect(analyser);
-    // スピーカー出力も維持
-    analyser.connect(ctx.destination);
+    // マスター音量GainNode（0-2.0対応、200%ブースト可能）
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = volumes.master;
+    analyser.connect(masterGain);
+    masterGain.connect(ctx.destination);
+    _masterGain = masterGain;
 
     _meterCtx = ctx;
     _meterAnalyser = analyser;

@@ -18,6 +18,16 @@ public class MainForm : Form
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
+    // Win32: クライアント領域オフセット計算用
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+    [DllImport("user32.dll")]
+    private static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int X, Y; }
+
     // Phase 7: 配信領域サイズ（UIパネルを除いたbroadcast.html部分）
     private const int BroadcastWidth = 1280;
     private const int BroadcastHeight = 720;
@@ -37,6 +47,10 @@ public class MainForm : Form
     private bool _forceClose;
     private DateTime _streamStartTime;
     private string? _activeStreamKey;
+
+    // サーバーAPI用共有HttpClient + 音量デバウンス
+    private static readonly HttpClient _sharedHttp = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private CancellationTokenSource? _volumeDebounce;
 
     // Window capture (Phase 3)
     private CaptureManager? _captureManager;
@@ -259,6 +273,29 @@ public class MainForm : Form
                         windows = windows.Select(w => new { title = w.Title, hwnd = $"0x{w.Hwnd.ToInt64():X}" }).ToArray()
                     });
                     SendPanelCaptures();
+                    // サーバーから現在の音量を取得してパネルに反映
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var serverUrl = _url.Contains("/broadcast")
+                                ? _url[.._url.IndexOf("/broadcast", StringComparison.Ordinal)]
+                                : "http://localhost:8080";
+                            var json = await _sharedHttp.GetStringAsync($"{serverUrl}/api/broadcast/volume");
+                            var vol = JsonSerializer.Deserialize<JsonElement>(json);
+                            BeginInvoke(() => SendPanelMessage(new
+                            {
+                                type = "volume",
+                                master = (int)(vol.GetProperty("master").GetDouble() * 100),
+                                tts = (int)(vol.GetProperty("tts").GetDouble() * 100),
+                                bgm = (int)(vol.GetProperty("bgm").GetDouble() * 100),
+                            }));
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Debug("[MainForm] Volume fetch failed: {Error}", ex.Message);
+                        }
+                    });
                     break;
 
                 case "goLive":
@@ -365,18 +402,44 @@ public class MainForm : Form
 
     private void HandlePanelVolume(JsonElement msg)
     {
-        var type = msg.GetProperty("type").GetString() ?? "";
+        var volumeType = msg.GetProperty("volumeType").GetString() ?? "";
         var value = msg.GetProperty("value").GetInt32();
-        // broadcast.htmlの音量をJS注入で変更
-        if (_webView.CoreWebView2 == null) return;
-        var valueStr = (value / 100.0).ToString("F2", CultureInfo.InvariantCulture);
-        var js = $@"
-            if (typeof broadcastState !== 'undefined' && broadcastState.volume) {{
-                broadcastState.volume.{EscapeJs(type)} = {valueStr};
-                if (typeof updateVolumes === 'function') updateVolumes();
-                else if (typeof applyVolume === 'function') applyVolume();
-            }}";
-        _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+        var vol = value / 100.0;
+        var volStr = vol.ToString("F2", CultureInfo.InvariantCulture);
+
+        // 1. broadcast.htmlの音量をJS注入で即座に変更
+        if (_webView.CoreWebView2 != null)
+        {
+            var js = $@"
+                if (typeof volumes !== 'undefined') {{
+                    volumes.{EscapeJs(volumeType)} = {volStr};
+                    if (typeof applyVolume === 'function') applyVolume();
+                }}";
+            _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+        }
+
+        // 2. サーバーAPIでDB保存 + WebSocket配信（デバウンス200ms）
+        _volumeDebounce?.Cancel();
+        var cts = new CancellationTokenSource();
+        _volumeDebounce = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(200, cts.Token);
+                var serverUrl = _url.Contains("/broadcast")
+                    ? _url[.._url.IndexOf("/broadcast", StringComparison.Ordinal)]
+                    : "http://localhost:8080";
+                var json = $"{{\"source\":\"{volumeType}\",\"volume\":{volStr}}}";
+                await _sharedHttp.PostAsync($"{serverUrl}/api/broadcast/volume",
+                    new StringContent(json, System.Text.Encoding.UTF8, "application/json"), cts.Token);
+            }
+            catch (OperationCanceledException) { /* debounced */ }
+            catch (Exception ex)
+            {
+                Log.Debug("[MainForm] Volume API call failed: {Error}", ex.Message);
+            }
+        });
     }
 
     private async void OnLoad(object? sender, EventArgs e)
@@ -385,12 +448,50 @@ public class MainForm : Form
 
         try
         {
-            // broadcast.html用WebView2
-            await _webView.EnsureCoreWebView2Async();
+            // broadcast.html用WebView2（autoplay音声許可）
+            var env = await CoreWebView2Environment.CreateAsync(null, null,
+                new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required"));
+            await _webView.EnsureCoreWebView2Async(env);
             Log.Information("[MainForm] WebView2 ready, version={Version}",
                 _webView.CoreWebView2.Environment.BrowserVersionString);
 
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+            // JSコンソールをC#ログに転送（WebView2 postMessage経由）
+            _webView.CoreWebView2.WebMessageReceived += (_, args) =>
+            {
+                try
+                {
+                    var msg = JsonSerializer.Deserialize<JsonElement>(args.WebMessageAsJson);
+                    if (msg.TryGetProperty("_console", out var text))
+                        Log.Debug("[WebView2:JS] {Message}", text.GetString());
+                    // broadcast.htmlからの音量変更通知 → パネルに転送
+                    if (msg.TryGetProperty("_volumeSync", out var volSync))
+                    {
+                        SendPanelMessage(new
+                        {
+                            type = "volume",
+                            master = (int)(volSync.GetProperty("master").GetDouble() * 100),
+                            tts = (int)(volSync.GetProperty("tts").GetDouble() * 100),
+                            bgm = (int)(volSync.GetProperty("bgm").GetDouble() * 100),
+                        });
+                    }
+                }
+                catch { }
+            };
+            await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                (function(){
+                    const orig = console.log;
+                    console.log = function(){
+                        orig.apply(console, arguments);
+                        try { window.chrome.webview.postMessage({_console: Array.from(arguments).join(' ')}); } catch(e){}
+                    };
+                    const origErr = console.error;
+                    console.error = function(){
+                        origErr.apply(console, arguments);
+                        try { window.chrome.webview.postMessage({_console: 'ERROR: ' + Array.from(arguments).join(' ')}); } catch(e){}
+                    };
+                })();
+            ");
             _webView.CoreWebView2.Navigate(_url);
             Log.Information("[MainForm] Navigating to {Url}", _url);
         }
@@ -405,7 +506,7 @@ public class MainForm : Form
         // Phase 7: パネルWebView2初期化（HTTPサーバー起動後）
         try
         {
-            await _panelView.EnsureCoreWebView2Async();
+            await _panelView.EnsureCoreWebView2Async(_webView.CoreWebView2.Environment);
             _panelView.CoreWebView2.WebMessageReceived += OnPanelMessage;
             // C#アプリのHTTPサーバーからパネルHTMLを取得
             _panelView.CoreWebView2.Navigate($"http://localhost:{_httpPort}/panel");
@@ -710,7 +811,8 @@ public class MainForm : Form
         if (_webView.CoreWebView2 == null) return;
         var snapshotUrl = $"http://localhost:{_httpPort}/snapshot/{id}";
         var js = $"if(typeof addCaptureLayer==='function')" +
-                 $"addCaptureLayer('{EscapeJs(id)}','{EscapeJs(snapshotUrl)}','{EscapeJs(title)}',null)";
+                 $"addCaptureLayer('{EscapeJs(id)}','{EscapeJs(snapshotUrl)}','{EscapeJs(title)}'," +
+                 $"{{x:5,y:10,width:40,height:45,zIndex:2}})";
         _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
         Log.Debug("[MainForm] Injected addCaptureLayer: {Id}", id);
     }
@@ -751,6 +853,22 @@ public class MainForm : Form
 
         // Wait for rendering to settle
         await Task.Delay(2000);
+
+        // 音声診断ログ
+        _ = _webView.CoreWebView2.ExecuteScriptAsync(@"
+            setTimeout(() => {
+                const bgm = document.getElementById('bgm-audio');
+                const tts = document.getElementById('tts-audio');
+                console.log('[AudioDiag] bgm.paused=' + bgm?.paused + ' src=' + (bgm?.src||'') + ' volume=' + bgm?.volume + ' muted=' + bgm?.muted + ' readyState=' + bgm?.readyState);
+                console.log('[AudioDiag] tts.paused=' + tts?.paused + ' src=' + (tts?.src||'') + ' volume=' + tts?.volume);
+                if (typeof _meterCtx !== 'undefined' && _meterCtx) {
+                    console.log('[AudioDiag] AudioContext state=' + _meterCtx.state + ' sampleRate=' + _meterCtx.sampleRate);
+                } else {
+                    console.log('[AudioDiag] AudioContext not created');
+                }
+            }, 3000);
+        ");
+
         StartCapture();
 
         if (_autoStream)
@@ -766,11 +884,18 @@ public class MainForm : Form
         try
         {
             var capture = new FrameCapture();
-            // Phase 7: クロップ矩形を設定（配信領域のみ切り出す）
-            // WGCはクライアント領域をキャプチャするため、(0,0)から配信解像度分を切り出す
-            capture.CropRect = new Rectangle(0, 0, BroadcastWidth, BroadcastHeight);
-            Log.Information("[MainForm] CropRect set to ({X},{Y},{W},{H})",
-                0, 0, BroadcastWidth, BroadcastHeight);
+
+            // Phase 7: WGCはウィンドウ全体（タイトルバー+枠含む）をキャプチャするため、
+            // クライアント領域のオフセットを計算してクロップに反映する
+            GetWindowRect(Handle, out var windowRect);
+            var clientOrigin = new POINT { X = 0, Y = 0 };
+            ClientToScreen(Handle, ref clientOrigin);
+            int offsetX = clientOrigin.X - windowRect.Left;
+            int offsetY = clientOrigin.Y - windowRect.Top;
+
+            capture.CropRect = new Rectangle(offsetX, offsetY, BroadcastWidth, BroadcastHeight);
+            Log.Information("[MainForm] CropRect set to ({X},{Y},{W},{H}) (client offset: {OX},{OY})",
+                offsetX, offsetY, BroadcastWidth, BroadcastHeight, offsetX, offsetY);
             capture.StartCapture(Handle);
             _capture = capture;
             Log.Information("[MainForm] Capture started for HWND=0x{Hwnd:X}", Handle);

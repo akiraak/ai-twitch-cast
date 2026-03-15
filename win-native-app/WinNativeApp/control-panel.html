@@ -126,7 +126,10 @@ select:focus { border-color: var(--accent); }
 }
 .capture-item:last-child { border-bottom: none; }
 .capture-item:hover { background: var(--bg-input); }
-.capture-item.selected { background: var(--accent); color: #fff; }
+.capture-item { display: flex; align-items: center; gap: 4px; }
+.capture-item .cap-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.capture-item .cap-stop { background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; }
+.capture-item .cap-stop:hover { color: var(--red-hover); }
 .capture-empty { padding: 10px; text-align: center; color: var(--text-dim); font-size: 11px; }
 
 /* Volume */
@@ -166,6 +169,8 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   white-space: pre-wrap;
   word-break: break-all;
   min-height: 0;
+  user-select: text;
+  cursor: text;
 }
 .log-error { color: #f48771; }
 .log-success { color: #89d185; }
@@ -192,7 +197,6 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   </div>
   <div class="btn-row">
     <button class="btn" onclick="startCapture()">開始</button>
-    <button class="btn" onclick="stopCapture()">停止</button>
   </div>
   <div class="capture-list" id="captureList">
     <div class="capture-empty">キャプチャなし</div>
@@ -203,7 +207,7 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   <div class="section-title">音量</div>
   <div class="volume-row">
     <span class="volume-label">Master</span>
-    <input type="range" min="0" max="100" value="80" id="volMaster" oninput="onVolume('master',this.value)">
+    <input type="range" min="0" max="200" value="80" id="volMaster" oninput="onVolume('master',this.value)">
     <span class="volume-value" id="volMasterVal">80%</span>
   </div>
   <div class="volume-row">
@@ -253,15 +257,10 @@ function startCapture() {
   send({action:'startCapture', hwnd: opt.dataset.hwnd, title: opt.textContent});
 }
 
-function stopCapture() {
-  const item = document.querySelector('.capture-item.selected');
-  if (item) send({action:'stopCapture', id: item.dataset.id});
-}
-
 function onVolume(type, val) {
   const key = 'vol' + type.charAt(0).toUpperCase() + type.slice(1) + 'Val';
   $(key).textContent = val + '%';
-  send({action:'volume', type, value: parseInt(val)});
+  send({action:'volume', volumeType: type, value: parseInt(val)});
 }
 
 // UI更新
@@ -270,7 +269,7 @@ function updateStatus(s) {
   if (s.streaming) {
     el.textContent = '配信中  ' + (s.uptime || '');
     el.className = 'status live';
-    st.textContent = `${(s.frames||0).toLocaleString()} frames / ${(s.drops||0).toLocaleString()} drops`;
+    st.textContent = '';
     $('goLiveBtn').disabled = true;
     $('stopBtn').disabled = false;
   } else {
@@ -301,13 +300,18 @@ function updateCaptures(caps) {
   list.innerHTML = '';
   caps.forEach(c => {
     const d = document.createElement('div');
-    d.className = 'capture-item' + (c.id === selId ? ' selected' : '');
-    d.textContent = '[' + c.id + '] ' + c.name;
+    d.className = 'capture-item';
     d.dataset.id = c.id;
-    d.onclick = () => {
-      document.querySelectorAll('.capture-item').forEach(el => el.classList.remove('selected'));
-      d.classList.add('selected');
-    };
+    const name = document.createElement('span');
+    name.className = 'cap-name';
+    name.textContent = c.name;
+    d.appendChild(name);
+    const stop = document.createElement('button');
+    stop.className = 'cap-stop';
+    stop.textContent = '✕';
+    stop.title = '停止';
+    stop.onclick = () => send({action:'stopCapture', id: c.id});
+    d.appendChild(stop);
     list.appendChild(d);
   });
 }

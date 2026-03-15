@@ -372,7 +372,7 @@
       <h2>読み上げ</h2>
       <div class="vol-row">
         <span class="vol-label">音量</span>
-        <input type="range" id="vol-tts" min="0" max="200" step="1" value="80" class="vol-slider"
+        <input type="range" id="vol-tts" min="0" max="100" step="1" value="80" class="vol-slider"
           oninput="onVolume('tts', this)">
         <span class="vol-pct" id="vol-tts-pct">80%</span>
       </div>
@@ -406,7 +406,7 @@
       <h2>BGM</h2>
       <div class="vol-row" style="margin-bottom:12px;">
         <span class="vol-label">音量</span>
-        <input type="range" id="vol-bgm" min="0" max="200" step="1" value="100" class="vol-slider"
+        <input type="range" id="vol-bgm" min="0" max="100" step="1" value="100" class="vol-slider"
           oninput="onVolume('bgm', this)">
         <span class="vol-pct" id="vol-bgm-pct">100%</span>
       </div>
@@ -698,9 +698,12 @@ async function loadVolumes() {
   try {
     const data = await (await fetch('/api/broadcast/volume')).json();
     for (const key of ['master', 'tts', 'bgm']) {
+      const slider = document.getElementById(`vol-${key}`);
+      // スライダー操作中は上書きしない
+      if (document.activeElement === slider) continue;
       const val = data[key] ?? 1.0;
       const pct = Math.round(val * 100);
-      document.getElementById(`vol-${key}`).value = pct;
+      slider.value = pct;
       document.getElementById(`vol-${key}-pct`).textContent = pct + '%';
     }
   } catch (e) {}
@@ -716,6 +719,7 @@ async function refreshStatus() {
     document.getElementById('sb-stream-text').textContent = streaming ? '配信中' : '停止中';
     document.getElementById('status-bar').classList.toggle('streaming', streaming);
   } catch (e) {}
+  loadVolumes();
 }
 
 // --- ウィンドウキャプチャ ---
@@ -1218,7 +1222,7 @@ async function loadBgmTracks() {
       </div>
       <div class="vol-row" style="margin-top:4px;">
         <span class="vol-label">曲音量</span>
-        <input type="range" min="0" max="200" step="1" value="${volPct}" class="vol-slider"
+        <input type="range" min="0" max="100" step="1" value="${volPct}" class="vol-slider"
           oninput="this.nextElementSibling.textContent=this.value+'%'"
           onchange="setTrackVolume('${esc(t.file)}', this.value)">
         <span class="vol-pct">${volPct}%</span>

@@ -130,6 +130,11 @@ if [ -n "$FFMPEG_PATH" ]; then
     NATIVE_ARGS="$NATIVE_ARGS --ffmpeg-path $FFMPEG_PATH"
 fi
 
+# ストリームキーは常に渡す（パネルのGo Liveボタンから配信開始する場合にも必要）
+if [ -n "$TWITCH_STREAM_KEY" ]; then
+    NATIVE_ARGS="$NATIVE_ARGS --stream-key $TWITCH_STREAM_KEY"
+fi
+
 for arg in "$@"; do
     case "$arg" in
         --stream)
