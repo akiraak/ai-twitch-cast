@@ -28,8 +28,11 @@ public sealed class AudioLoopback : IDisposable
         if (_capture == null) throw new InvalidOperationException("Not initialized");
 
         // サイレンスバッファ（WASAPIがデータを出さない場合のフォールバック）
-        // 10ms分: 48000Hz * 2ch * 4bytes/sample * 0.01s = 3840 bytes
-        var silenceBuf = new byte[3840];
+        // 100ms分: 48000Hz * 2ch * 4bytes/sample * 0.1s = 38400 bytes
+        // ※ 10ms分だとFFmpegが音声不足で全体が0.1x speedに制限される
+        var wf = _capture.WaveFormat;
+        var silenceBytes = wf.SampleRate * wf.Channels * (wf.BitsPerSample / 8) / 10; // 100ms分
+        var silenceBuf = new byte[silenceBytes];
         _silenceTimer = new System.Threading.Timer(_ =>
         {
             try { onData(silenceBuf, 0, silenceBuf.Length); }

@@ -4,10 +4,15 @@ public class StreamConfig
 {
     public int Width { get; set; } = 1280;
     public int Height { get; set; } = 720;
-    public int Framerate { get; set; } = 30;
+    public int Framerate { get; set; } = 20;
     public string VideoBitrate { get; set; } = "2500k";
     public string AudioBitrate { get; set; } = "128k";
     public string Preset { get; set; } = "ultrafast";
+    /// <summary>
+    /// 映像エンコーダ。"auto"=HWエンコーダ自動検出→フォールバックlibx264、
+    /// "libx264"=CPU、"h264_nvenc"=NVIDIA、"h264_amf"=AMD、"h264_qsv"=Intel
+    /// </summary>
+    public string Encoder { get; set; } = "auto";
     public string? StreamKey { get; set; }
     public string RtmpUrl { get; set; } = "rtmp://live-tyo.twitch.tv/app";
     public string? FfmpegPath { get; set; }
@@ -41,6 +46,9 @@ public class StreamConfig
                     break;
                 case "--rtmp-url" when i + 1 < args.Length:
                     config.RtmpUrl = args[++i];
+                    break;
+                case "--encoder" when i + 1 < args.Length:
+                    config.Encoder = args[++i];
                     break;
             }
         }

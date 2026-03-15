@@ -338,6 +338,17 @@
 - [x] stream.sh: `--ffmpeg-path`を常に渡すよう変更（配信モード以外でもGo Live API対応）
 - [x] StreamConfigデフォルト解像度を1280x720に変更
 
+## フレームレート最適化 Step 1-3（4fps → 18fps）
+
+- [x] 映像入力をstdin匿名パイプ→名前付きパイプ（8MBバッファ）に変更（パイプ書き込み250ms→1ms）
+- [x] BGRA→NV12 CPU変換追加（ColorConverter.cs新規、パイプ転送量3.7MB→1.4MBで63%削減）
+- [x] HWエンコーダ自動検出（NVENC→AMF→QSV→libx264の優先順probe、`--encoder`オプション追加）
+- [x] ダブルバッファ方式でGCプレッシャー回避（毎フレームnew byte[]廃止）
+- [x] `-flush_packets 1`除去（RTMP出力のフレーム毎フラッシュが全体を0.748xに制限していた）
+- [x] サイレンスフォールバック修正（10ms/100ms→100ms/100ms、音声不足でFFmpegが0.1x speedに制限されていた根本原因）
+- [x] デフォルトフレームレートを30→20fpsに変更（GPU readbackが55ms/frameのため暫定対応）
+- [x] フレームレート最適化プラン作成（plans/framerate-optimization.md）
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成
