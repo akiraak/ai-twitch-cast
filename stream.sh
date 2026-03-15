@@ -123,6 +123,11 @@ URL="${SERVER_URL}/broadcast?token=${TOKEN}"
 NATIVE_ARGS="$URL"
 STREAM_MODE=false
 
+# FFmpegパスは常に渡す（Go Live APIから後で配信開始される場合にも必要）
+if [ -n "$FFMPEG_PATH" ]; then
+    NATIVE_ARGS="$NATIVE_ARGS --ffmpeg-path $FFMPEG_PATH"
+fi
+
 for arg in "$@"; do
     case "$arg" in
         --stream)
@@ -141,9 +146,6 @@ if [ "$STREAM_MODE" = true ]; then
         exit 1
     fi
     NATIVE_ARGS="$NATIVE_ARGS --stream --stream-key $TWITCH_STREAM_KEY"
-    if [ -n "$FFMPEG_PATH" ]; then
-        NATIVE_ARGS="$NATIVE_ARGS --ffmpeg-path $FFMPEG_PATH"
-    fi
     echo "配信モード: ON"
 else
     echo "表示モード（配信なし）"

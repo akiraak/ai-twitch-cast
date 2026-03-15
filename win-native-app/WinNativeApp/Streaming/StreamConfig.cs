@@ -2,8 +2,8 @@ namespace WinNativeApp.Streaming;
 
 public class StreamConfig
 {
-    public int Width { get; set; } = 1920;
-    public int Height { get; set; } = 1080;
+    public int Width { get; set; } = 1280;
+    public int Height { get; set; } = 720;
     public int Framerate { get; set; } = 30;
     public string VideoBitrate { get; set; } = "2500k";
     public string AudioBitrate { get; set; } = "128k";

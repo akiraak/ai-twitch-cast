@@ -1,7 +1,9 @@
-"""配信制御ルート - Electronパイプライン経由でTwitch配信"""
+"""配信制御ルート - Windows配信アプリ（C#ネイティブ or Electron）経由でTwitch配信"""
 
 import logging
 import os
+import subprocess
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -16,9 +18,17 @@ router = APIRouter()
 # 配信中フラグ
 _is_streaming = False
 
+# プロジェクトルート
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-async def _ensure_electron():
-    """Electronアプリが起動していなければワンクリックプレビューで自動起動し、接続を待つ"""
+
+def _use_native_app() -> bool:
+    """ネイティブアプリ（C#）を使用するかどうか"""
+    return os.environ.get("USE_NATIVE_APP", "1").lower() in ("1", "true", "yes")
+
+
+async def _ensure_capture_app():
+    """配信アプリ（ネイティブ or Electron）が起動していなければ自動起動し、接続を待つ"""
     import asyncio
     import httpx
     from scripts.routes.capture import (
@@ -26,17 +36,17 @@ async def _ensure_electron():
         capture_preview_oneclick, capture_preview_oneclick_status,
     )
 
-    # ElectronのHTTPサーバーが起動しているか確認
-    electron_http_ok = False
+    # HTTPサーバーが起動しているか確認（ネイティブもElectronも同じポート）
+    app_http_ok = False
     try:
         resp = httpx.get(f"{_capture_base_url()}/status", timeout=2.0)
-        electron_http_ok = resp.status_code == 200
+        app_http_ok = resp.status_code == 200
     except Exception:
         pass
 
-    if electron_http_ok:
-        # HTTPは応答するがWebSocketが繋がらない → WebSocketリトライ（最大10秒）
-        logger.info("Electron HTTPは応答あり → WebSocket再接続を試行")
+    if app_http_ok:
+        # HTTPは応答あり → WebSocket接続を確立（最大10秒）
+        logger.info("配信アプリHTTP応答あり → WebSocket再接続を試行")
         for i in range(20):
             await asyncio.sleep(0.5)
             try:
@@ -44,9 +54,53 @@ async def _ensure_electron():
                 return
             except Exception:
                 pass
-        raise RuntimeError("ElectronのWebSocket接続に失敗しました。Electronアプリを再起動してください。")
+        raise RuntimeError("配信アプリのWebSocket接続に失敗しました。アプリを再起動してください。")
 
-    # Electronが起動していない → ワンクリックプレビューで自動起動
+    # アプリが起動していない → 自動起動
+    if _use_native_app():
+        await _launch_native_app()
+    else:
+        await _launch_electron_app()
+
+
+async def _launch_native_app():
+    """C#ネイティブアプリをstream.sh経由で自動起動"""
+    import asyncio
+    from scripts.routes.capture import _ws_request
+
+    logger.info("ネイティブアプリ未起動 → stream.sh で自動起動")
+    stream_sh = _PROJECT_ROOT / "stream.sh"
+    if not stream_sh.exists():
+        raise RuntimeError(f"stream.sh が見つかりません: {stream_sh}")
+
+    # stream.shをバックグラウンドで実行
+    subprocess.Popen(
+        ["bash", str(stream_sh)],
+        cwd=str(_PROJECT_ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # WebSocket接続を待つ（最大90秒 - ビルド時間を考慮）
+    for i in range(180):
+        await asyncio.sleep(0.5)
+        try:
+            await _ws_request("stream_status")
+            logger.info("ネイティブアプリ起動完了（%d秒）", (i + 1) // 2)
+            return
+        except Exception:
+            pass
+    raise RuntimeError("ネイティブアプリの起動がタイムアウトしました（90秒）")
+
+
+async def _launch_electron_app():
+    """Electronアプリをワンクリックプレビューで自動起動"""
+    import asyncio
+    from scripts.routes.capture import (
+        _ws_request,
+        capture_preview_oneclick, capture_preview_oneclick_status,
+    )
+
     logger.info("Electronアプリ未起動 → ワンクリックプレビューを自動開始")
     await capture_preview_oneclick()
 
@@ -72,8 +126,8 @@ async def _ensure_electron():
     raise RuntimeError("Electron起動後のWebSocket接続に失敗しました")
 
 
-async def _electron_stream_start():
-    """Electron経由でTwitch配信を開始"""
+async def _capture_stream_start():
+    """配信アプリ経由でTwitch配信を開始"""
     from scripts.routes.capture import _ws_request
     from src.wsl_path import get_wsl_ip
 
@@ -81,8 +135,8 @@ async def _electron_stream_start():
     if not stream_key:
         raise ValueError("TWITCH_STREAM_KEY が .env に設定されていません")
 
-    # Electronアプリが起動していなければ自動起動
-    await _ensure_electron()
+    # アプリが起動していなければ自動起動
+    await _ensure_capture_app()
 
     web_port = os.environ.get("WEB_PORT", "8080")
     try:
@@ -93,25 +147,25 @@ async def _electron_stream_start():
 
     result = await _ws_request(
         "start_stream",
-        timeout=120.0,  # FFmpeg自動ダウンロード時は時間がかかる
+        timeout=120.0,
         streamKey=stream_key,
         serverUrl=server_url,
     )
     if not result.get("ok"):
-        raise RuntimeError(result.get("error", "Electron配信開始失敗"))
+        raise RuntimeError(result.get("error", "配信開始失敗"))
 
 
-async def _electron_stream_stop():
-    """Electron経由の配信を停止"""
+async def _capture_stream_stop():
+    """配信を停止"""
     from scripts.routes.capture import _ws_request
     try:
         await _ws_request("stop_stream")
     except Exception as e:
-        logger.warning("Electron配信停止エラー（無視）: %s", e)
+        logger.warning("配信停止エラー（無視）: %s", e)
 
 
-async def _electron_stream_status() -> dict:
-    """Electron配信の状態を取得"""
+async def _capture_stream_status() -> dict:
+    """配信の状態を取得"""
     from scripts.routes.capture import _ws_request
     try:
         return await _ws_request("stream_status")
@@ -126,12 +180,12 @@ async def _electron_stream_status() -> dict:
 
 @router.post("/api/broadcast/go-live")
 async def broadcast_go_live():
-    """Electron経由で配信開始"""
+    """配信開始（ネイティブ or Electron自動選択）"""
     global _is_streaming
     try:
-        electron_st = await _electron_stream_status()
-        if not electron_st.get("streaming"):
-            await _electron_stream_start()
+        st = await _capture_stream_status()
+        if not st.get("streaming"):
+            await _capture_stream_start()
         _is_streaming = True
         await state.ensure_reader()
         await state.git_watcher.start()
@@ -143,10 +197,10 @@ async def broadcast_go_live():
 
 @router.post("/api/broadcast/start")
 async def broadcast_start():
-    """Electron経由で配信開始"""
+    """配信開始"""
     global _is_streaming
     try:
-        await _electron_stream_start()
+        await _capture_stream_start()
         _is_streaming = True
         await state.ensure_reader()
         await state.git_watcher.start()
@@ -168,7 +222,7 @@ async def broadcast_stop():
         db.end_episode(state.current_episode["id"])
         state.current_episode = None
 
-    await _electron_stream_stop()
+    await _capture_stream_stop()
     _is_streaming = False
     return {"ok": True}
 
@@ -305,42 +359,45 @@ async def broadcast_stop_avatar():
 @router.get("/api/broadcast/status")
 async def broadcast_status():
     """配信状態を返す"""
-    electron_st = await _electron_stream_status()
-    streaming = electron_st.get("streaming", False)
+    app_st = await _capture_stream_status()
+    streaming = app_st.get("streaming", False)
 
     result = {
         "streaming": streaming,
-        "uptime_seconds": electron_st.get("uptime_seconds"),
-        "frames_sent": electron_st.get("frames_sent"),
-        "frames_dropped": electron_st.get("frames_dropped"),
-        "resolution": (electron_st.get("config") or {}).get("resolution", "1920x1080"),
-        "framerate": (electron_st.get("config") or {}).get("framerate", 30),
-        "audio_stream_connected": electron_st.get("audio_stream_connected", False),
-        "audio_receiving_pcm": electron_st.get("audio_receiving_pcm", False),
-        "electron": electron_st,
+        "uptime_seconds": app_st.get("uptime_seconds"),
+        "frames_sent": app_st.get("frames_sent"),
+        "frames_dropped": app_st.get("frames_dropped"),
+        "resolution": (app_st.get("config") or {}).get("resolution", "1920x1080"),
+        "framerate": (app_st.get("config") or {}).get("framerate", 30),
+        "audio_stream_connected": app_st.get("audio_stream_connected", False),
+        "audio_receiving_pcm": app_st.get("audio_receiving_pcm", False),
+        "native_app": _use_native_app(),
+        "app": app_st,
     }
     return result
 
 
 @router.get("/api/broadcast/diag")
 async def broadcast_diag():
-    """Electronアプリのヘルスチェック"""
+    """配信アプリのヘルスチェック"""
     errors = []
-    electron_st = await _electron_stream_status()
+    app_st = await _capture_stream_status()
+    app_type = "ネイティブ" if _use_native_app() else "Electron"
 
-    if _is_streaming and not electron_st.get("streaming"):
-        errors.append("Electron配信が停止しています")
+    if _is_streaming and not app_st.get("streaming"):
+        errors.append(f"{app_type}配信が停止しています")
 
-    if not electron_st.get("streaming") and electron_st == {"streaming": False}:
-        errors.append("Electronアプリに接続できません")
+    if not app_st.get("streaming") and app_st == {"streaming": False}:
+        errors.append(f"{app_type}アプリに接続できません")
 
-    if electron_st.get("ffmpeg_exists") is False:
-        errors.append(f"FFmpegが見つかりません: {electron_st.get('ffmpeg_path', '不明')}")
+    if app_st.get("ffmpeg_exists") is False:
+        errors.append(f"FFmpegが見つかりません: {app_st.get('ffmpeg_path', '不明')}")
 
     return {
-        "streaming": electron_st.get("streaming", False),
-        "electron": electron_st,
-        "ffmpeg_log": electron_st.get("ffmpeg_log", []),
+        "streaming": app_st.get("streaming", False),
+        "native_app": _use_native_app(),
+        "app": app_st,
+        "ffmpeg_log": app_st.get("ffmpeg_log", []),
         "errors": errors,
         "healthy": len(errors) == 0,
     }
@@ -348,7 +405,7 @@ async def broadcast_diag():
 
 @router.get("/api/broadcast/audio-log")
 async def broadcast_audio_log():
-    """Electronアプリの音声診断ログを取得"""
+    """配信アプリの音声診断ログを取得"""
     import httpx
     from scripts.routes.capture import _capture_base_url
     try:

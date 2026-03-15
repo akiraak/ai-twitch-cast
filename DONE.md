@@ -317,6 +317,27 @@
 - [x] MainForm: WebSocket経由の動的streamKey配信開始、WebView2 CapturePreviewAsyncスクリーンショット
 - [x] WSL2 FastAPIサーバーとの通信互換確認（既存の`_ws_request()`がそのまま動作）
 
+## C#ネイティブ配信アプリ（Phase 5: 統合・移行）
+
+- [x] stream_control.py: Electron固有コード→アプリ非依存化（`_ensure_capture_app()`でネイティブ/Electron自動選択）
+- [x] ネイティブアプリ自動起動（`USE_NATIVE_APP=1`時にstream.sh経由で自動起動、90秒タイムアウト）
+- [x] Electron自動起動はフォールバックとして維持（`USE_NATIVE_APP=0`で既存ワンクリックプレビュー）
+- [x] Go Live/Stop/Status APIをアプリ非依存に統一（WebSocketプロトコルは既に共通）
+- [x] システムトレイアイコン追加（NotifyIcon: 配信状態表示、右クリックメニューで配信開始/停止/終了）
+- [x] トレイアイコン定期更新（3秒間隔: 配信中=赤、待機中=緑、uptime/frames/captures表示）
+- [x] トレイからの配信開始/停止（バルーン通知付き）
+- [x] .env.example に `USE_NATIVE_APP` 設定追加
+- [x] FFmpegパス解決確認（stream.shがElectronダウンロード済FFmpegを`--ffmpeg-path`で渡す、PATHフォールバック有り）
+- [x] Twitch配信テスト成功（Go Live API→FFmpeg→RTMP→Twitch映像確認）
+- [x] UIスレッドエラー修正（HandleStartStream/StopStreamをBeginInvokeでマーシャリング）
+- [x] WGCフレーム停止修正（Direct3D11CaptureFramePool.Create→CreateFreeThreadedに変更）
+- [x] オフスクリーン描画停止修正（ウィンドウを-32000,-32000から画面中央CenterScreenに移動）
+- [x] FFmpeg stdin書き込みブロック修正（WriteVideoFrameを非同期バックグラウンドスレッドに変更）
+- [x] FFmpeg音声入力不足修正（初期サイレンス1秒送信 + WASAPIデータ未着時100msサイレンスフォールバックタイマー）
+- [x] FFmpegに`-y -nostdin`フラグ追加（プロンプト防止）
+- [x] stream.sh: `--ffmpeg-path`を常に渡すよう変更（配信モード以外でもGo Live API対応）
+- [x] StreamConfigデフォルト解像度を1280x720に変更
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成

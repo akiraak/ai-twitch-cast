@@ -52,7 +52,8 @@ public sealed class FrameCapture : IDisposable
         var item = Direct3DInterop.CreateCaptureItemForWindow(hwnd);
         Log.Information("[Capture] Item: {W}x{H}", item.Size.Width, item.Size.Height);
 
-        _framePool = Direct3D11CaptureFramePool.Create(
+        // CreateFreeThreaded: コールバックがスレッドプールで発火（UIスレッド非依存）
+        _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             _winrtDevice,
             DirectXPixelFormat.B8G8R8A8UIntNormalized,
             2,
@@ -74,6 +75,10 @@ public sealed class FrameCapture : IDisposable
         if (frame == null) return;
 
         _frameCount++;
+
+        // 最初の数フレームと以降100フレームごとにログ
+        if (_frameCount <= 3 || _frameCount % 100 == 0)
+            Log.Debug("[Capture] Frame {N} arrived", _frameCount);
 
         // FPS throttle
         if (TargetFps > 0)

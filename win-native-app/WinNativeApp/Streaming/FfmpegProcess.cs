@@ -16,6 +16,7 @@ public sealed class FfmpegProcess : IDisposable
     private long _dropCount;
     private DateTime _startTime;
     private volatile bool _stopping;
+    private volatile bool _writingVideo;
     private bool _disposed;
 
     public bool IsRunning => _process is { HasExited: false };
@@ -46,6 +47,7 @@ public sealed class FfmpegProcess : IDisposable
         var rtmpTarget = $"{_config.RtmpUrl}/{_config.StreamKey}";
 
         var args = string.Join(" ",
+            "-y -nostdin",
             // Video input (stdin)
             "-thread_queue_size 64",
             "-f rawvideo -pixel_format bgra",
@@ -115,7 +117,33 @@ public sealed class FfmpegProcess : IDisposable
         // Wait for FFmpeg to connect to audio pipe
         Log.Information("[FFmpeg] Waiting for audio pipe connection...");
         await _audioPipe.WaitForConnectionAsync(ct);
-        Log.Information("[FFmpeg] Audio pipe connected, streaming active");
+        Log.Information("[FFmpeg] Audio pipe connected");
+
+        // 初期サイレンスを送信（FFmpegが音声入力を待ってブロックしないように）
+        // 1秒分のサイレンス（f32le, 48kHz, stereo = 48000 * 2 * 4 = 384000 bytes）
+        var silenceBytes = new byte[384000];
+        try
+        {
+            _audioPipe.Write(silenceBytes, 0, silenceBytes.Length);
+            _audioPipe.Flush();
+            Log.Information("[FFmpeg] Initial silence sent ({Bytes} bytes)", silenceBytes.Length);
+        }
+        catch (IOException ex)
+        {
+            Log.Warning("[FFmpeg] Initial silence error: {Msg}", ex.Message);
+        }
+
+        // ヘルスチェック: 5秒後にFFmpegの状態を確認
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(5000);
+            if (_process == null) return;
+            if (_process.HasExited)
+                Log.Error("[FFmpeg] Process exited after 5s! ExitCode={Code}", _process.ExitCode);
+            else
+                Log.Information("[FFmpeg] Health check: running, frames={F} drops={D}",
+                    FrameCount, DropCount);
+        });
     }
 
     public void WriteVideoFrame(byte[] bgraData)
@@ -129,15 +157,34 @@ public sealed class FfmpegProcess : IDisposable
             return;
         }
 
-        try
-        {
-            _process!.StandardInput.BaseStream.Write(bgraData, 0, bgraData.Length);
-            Interlocked.Increment(ref _frameCount);
-        }
-        catch (IOException)
+        // 前の書き込みがまだ完了していなければフレームをスキップ（WGCコールバックをブロックしない）
+        if (_writingVideo)
         {
             Interlocked.Increment(ref _dropCount);
+            return;
         }
+
+        // データをコピーしてバックグラウンドで書き込み
+        var copy = new byte[bgraData.Length];
+        Buffer.BlockCopy(bgraData, 0, copy, 0, bgraData.Length);
+
+        _writingVideo = true;
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try
+            {
+                _process!.StandardInput.BaseStream.Write(copy, 0, copy.Length);
+                Interlocked.Increment(ref _frameCount);
+            }
+            catch (IOException)
+            {
+                Interlocked.Increment(ref _dropCount);
+            }
+            finally
+            {
+                _writingVideo = false;
+            }
+        });
     }
 
     public void WriteAudioData(byte[] data, int offset, int count)

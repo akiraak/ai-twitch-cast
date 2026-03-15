@@ -22,5 +22,8 @@
 - [ ] 画像保蔵機能と同様にElectron画面の動画撮影 → [plans/video-recording.md](plans/video-recording.md)
 - [ ] Electronを別の実装に置き換えられるか検討（軽量化・柔軟な実装が行えるかの観点） → [plans/electron-alternative.md](plans/electron-alternative.md)
 - [>] Electronをネイティブ実装に変更（C#+WebView2+WGC+WASAPI） → [plans/native-implementation.md](plans/native-implementation.md)
-        - [>] Phase 5: 統合・移行（Go Live制御、システムトレイ、エラー回復、Electron並行テスト）
-        - [ ] ffmpegを同梱しているか確認
+        - [ ] フレームレート最適化（現状~4fps、パイプ帯域がボトルネック。共有メモリ or 事前エンコード方式を検討）
+        - [ ] Phase 6: プレビューウィンドウ統合（ウィンドウ可視化、固定解像度、タスクバー表示）
+        - [ ] Phase 7: UIパネル追加（配信領域+UIパネルの1ウィンドウ構成、WGCクロップ）
+        - [ ] Phase 8: Electron完全削除（capture.pyのElectronコード・win-capture-app/・Web UI削除）
+- [ ] ネイティブアプリにffmpegが同梱されているか確認（現状はElectronダウンロード済みのものを流用）

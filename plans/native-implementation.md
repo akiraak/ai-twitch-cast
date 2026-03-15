@@ -105,15 +105,85 @@ Electronはバイナリ150-300MB、メモリ150-300MBを消費し、Node.js + Ch
 18. 自動起動・エラー回復
 19. Electronアプリとの並行テスト → 切り替え
 
+### Phase 6: プレビューウィンドウ統合
+
+現在の隠しウィンドウ方式を、**デスクトップに表示される1ウィンドウアプリ**に変更する。
+配信画面（broadcast.html）のプレビューと配信を同一ウィンドウで実現する。
+
+**方針:**
+- ウィンドウサイズを配信解像度（1920x1080 or 1280x720）に固定（リサイズ不可）
+- ウィンドウを画面外(-32000)ではなくデスクトップ上に表示
+- WGCキャプチャはウィンドウ全体をそのまま取得（解像度問題なし）
+- タスクバーに表示（ShowInTaskbar = true）
+- システムトレイアイコンは維持
+
+20. MainFormを可視化（Location通常位置、FormBorderStyle=FixedSingle、ShowInTaskbar=true）
+21. ウィンドウタイトルに配信状態を表示（「WinNativeApp - 待機中」「配信中 00:12:34」等）
+22. ウィンドウ閉じるボタンの動作をトレイ最小化に変更（配信中の誤終了防止）
+
+**検証ポイント:**
+- 可視ウィンドウでもWGCキャプチャが正常に動作するか
+- WebGL(VRMアバター)の描画パフォーマンスに影響がないか
+- ウィンドウフォーカスの影響（最背面に置いてもキャプチャが継続するか）
+
+### Phase 7: UIパネル追加
+
+ウィンドウにUIパネルを追加し、Web UIなしでも基本操作ができるようにする。
+配信画面の右側にUIパネルを配置する。
+
+**方針:**
+- ウィンドウを拡張（例: 配信1280x720 + UIパネル400px = 1680x720）
+- WGCキャプチャ後にクロップして配信領域のみをFFmpegに送信
+- UIパネルはWinForms or 第2WebView2で実装
+
+23. ウィンドウレイアウト変更（左: broadcast.html WebView2、右: UIパネル）
+24. WGCキャプチャ → クロップ処理（配信領域のみ切り出してFFmpegに送信）
+25. UIパネル: 配信制御（Go Live / Stop / ステータス表示）
+26. UIパネル: ウィンドウキャプチャ管理（一覧・開始・停止）
+27. UIパネル: 音量スライダー（master/tts/bgm）
+28. UIパネル: ログ表示（FFmpeg出力・接続状態）
+
+### フレームレート最適化
+
+配信テストで約4fpsしか出ない問題の改善。WGCは60fpsでフレームを生成しているが、FFmpegのstdinパイプへの書き込みがボトルネック。
+
+**原因:**
+- 1フレーム1280x720 BGRA = 3.7MB を同期的にstdinパイプに書き込み
+- Windowsの匿名パイプバッファは小さい（4KB）ため、FFmpegが読むまで多数の小チャンクに分割される
+- 書き込み中は次フレームをスキップ → 実効4fps程度
+
+**改善案:**
+
+| 方式 | 期待fps | 実装難易度 | 説明 |
+|------|:---:|:---:|------|
+| 名前付きパイプ（大バッファ） | 15-20 | 低 | 映像入力もstdinではなく名前付きパイプに変更（バッファ8MB+）。音声パイプと同じアプローチ |
+| GPU上でNV12変換 | 20-30 | 中 | D3D11コンピュートシェーダーでBGRA→NV12変換、データ量を1/2に削減 |
+| 共有メモリ + FFmpeg rawvideo | 25-30 | 中 | メモリマップトファイルでゼロコピー転送 |
+| HWエンコード（NVENC/QSV） | 30 | 中 | GPU側でH.264エンコードまで完結、FFmpegにはエンコード済みNALを渡す |
+| FFmpeg直接リンク | 30 | 高 | libavcodec/libavformatをC#からP/Invokeで直接呼び出し、パイプ不要 |
+
+**推奨:** まず「名前付きパイプ（大バッファ）」を試す。最小限の変更で大幅改善が見込める。
+
+### Phase 8: Electron完全削除
+
+ネイティブアプリが安定稼働した後、Electronアプリを完全に削除する。
+
+29. capture.py からElectronビルド・デプロイ・管理コードを削除
+30. win-capture-app/ ディレクトリ削除
+31. Web UIからElectron関連UI（ワンクリックプレビュー等）を削除
+32. CLAUDE.md・README.md更新
+
 ## リスクと対策
 
 | リスク | 深刻度 | 対策 |
 |--------|:---:|------|
-| WebView2 隠しウィンドウで描画停止 | **高** | 画面外(-32000,-32000)に配置 / 最小化せず1x1ピクセルウィンドウ / CompositionController活用 |
+| WebView2 隠しウィンドウで描画停止 | **高** | Phase 6で可視化することで根本解決 |
 | WASAPI ループバックの Win11 要件 | **中** | Win10 build 20348+ が必要。対象環境を確認。代替: NAudio直接ミキシング（Electron方式と同等） |
 | WebView2 プロセスPID特定 | **中** | `CoreWebView2Environment.BrowserProcessId` で取得可能 |
 | WGC フレームレート制御 | **中** | WGCはVSync依存。タイマー+フレームドロップで30fps調整 |
 | broadcast.html の Electron IPC 依存 | **低** | `window.audioCapture` / `window.captureReceiver` を WebView2 JS injection で互換実装 |
+| Phase 7 クロップのCPU負荷 | **低** | 行ごとのmemcpyで軽量。1920x1080で約8MB/frame、30fpsで240MB/s程度のメモリコピー |
+| Phase 7 UIパネル追加でウィンドウサイズが大きくなる | **低** | リサイズ不可で固定。モニタに収まらない場合はスケール対応を検討 |
 
 ## 先行事例（実証済み）
 
@@ -377,7 +447,7 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
 
 ## ステータス
 - 作成日: 2026-03-14
-- 状態: Phase 4 完了
+- 状態: Phase 5 完了
 - Phase 1 完了日: 2026-03-14
 - Phase 1 検証結果:
   - WebView2: 隠しウィンドウ(-32000,-32000)で正常描画 (**問題なし**)
@@ -413,3 +483,22 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
   - MainForm: WebView2 CapturePreviewAsync でスクリーンショット（PNG base64）
   - WSL2 FastAPIサーバーとの通信: 既存の `_ws_request()` がそのまま動作（同じプロトコル）
   - ビルド確認: dotnet.exe build Release 成功
+- Phase 5 完了日: 2026-03-14
+- Phase 5 実装内容:
+  - stream_control.py: `_ensure_electron()` → `_ensure_capture_app()` に統合（ネイティブ/Electron自動選択）
+  - `USE_NATIVE_APP` 環境変数（デフォルト: 1）でアプリ選択
+  - ネイティブアプリ自動起動: stream.sh経由でビルド+起動（90秒タイムアウト）
+  - Electronフォールバック: `USE_NATIVE_APP=0`で既存ワンクリックプレビューを維持
+  - Go Live/Stop/Status APIのElectron依存を排除（関数名・コメント・レスポンスキーを汎用化）
+  - システムトレイアイコン（NotifyIcon）: 配信状態を色で表示（赤=配信中、緑=待機中）
+  - トレイ右クリックメニュー: 状態表示、配信開始/停止、アプリ終了
+  - トレイ定期更新（3秒間隔）: uptime・frames・captures表示
+  - FFmpegパス: stream.shがElectronダウンロード済みFFmpegを`--ffmpeg-path`で渡す
+  - ビルド確認: dotnet.exe build Release 成功
+  - Twitch配信テスト: 成功（Go Live API → FFmpeg → RTMP → Twitch映像確認）
+  - 修正: UIスレッドエラー（BeginInvokeマーシャリング）
+  - 修正: WGCフレーム停止（CreateFreeThreaded）
+  - 修正: オフスクリーン描画停止（ウィンドウ可視化 CenterScreen）
+  - 修正: stdin書き込みブロック（非同期バックグラウンド書き込み）
+  - 修正: 音声入力不足（初期サイレンス + フォールバックタイマー）
+  - 課題: フレームレート約4fps（パイプ帯域ボトルネック、最適化は別タスク）

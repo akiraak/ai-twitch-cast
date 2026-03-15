@@ -27,6 +27,12 @@ public class MainForm : Form
     private HttpServer? _httpServer;
     private readonly int _httpPort;
 
+    // System tray (Phase 5)
+    private NotifyIcon? _trayIcon;
+    private ToolStripMenuItem? _trayStatusItem;
+    private ToolStripMenuItem? _trayStreamItem;
+    private System.Windows.Forms.Timer? _trayUpdateTimer;
+
     public MainForm(string[] args)
     {
         _args = args;
@@ -36,17 +42,110 @@ public class MainForm : Form
             Environment.GetEnvironmentVariable("WIN_CAPTURE_PORT"), out var p) ? p : 9090;
 
         Text = "WinNativeApp";
-        StartPosition = FormStartPosition.Manual;
-        Location = new Point(-32000, -32000);
-        Size = new Size(1920, 1080);
+        StartPosition = FormStartPosition.CenterScreen;
+        Size = new Size(1280, 720);
         FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = false;
+        ShowInTaskbar = true;
 
         _webView = new WebView2 { Dock = DockStyle.Fill };
         Controls.Add(_webView);
 
+        InitializeTrayIcon();
+
         Load += OnLoad;
         FormClosing += OnFormClosing;
+    }
+
+    // =====================================================
+    // システムトレイアイコン
+    // =====================================================
+
+    private void InitializeTrayIcon()
+    {
+        _trayStatusItem = new ToolStripMenuItem("状態: 起動中...") { Enabled = false };
+        _trayStreamItem = new ToolStripMenuItem("配信開始", null, OnTrayStreamToggle);
+
+        var menu = new ContextMenuStrip();
+        menu.Items.Add(_trayStatusItem);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(_trayStreamItem);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("終了", null, (_, _) => Close());
+
+        _trayIcon = new NotifyIcon
+        {
+            Icon = CreateTrayIcon(Color.Gray),
+            Text = "WinNativeApp - 起動中",
+            Visible = true,
+            ContextMenuStrip = menu,
+        };
+
+        // トレイアイコン定期更新（3秒）
+        _trayUpdateTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+        _trayUpdateTimer.Tick += OnTrayUpdate;
+        _trayUpdateTimer.Start();
+    }
+
+    private void OnTrayUpdate(object? sender, EventArgs e)
+    {
+        var streaming = _ffmpeg is { IsRunning: true };
+        var captures = _captureManager?.ListCaptures().Count ?? 0;
+
+        if (streaming)
+        {
+            var uptime = _ffmpeg!.Uptime;
+            var frames = _ffmpeg.FrameCount;
+            _trayIcon!.Icon = CreateTrayIcon(Color.Red);
+            _trayIcon.Text = $"配信中 ({uptime:hh\\:mm\\:ss}) - {frames} frames";
+            _trayStatusItem!.Text = $"配信中: {uptime:hh\\:mm\\:ss} / {frames} frames";
+            _trayStreamItem!.Text = "配信停止";
+        }
+        else
+        {
+            _trayIcon!.Icon = CreateTrayIcon(Color.LimeGreen);
+            _trayIcon.Text = $"WinNativeApp - 待機中 (キャプチャ: {captures})";
+            _trayStatusItem!.Text = $"待機中 (キャプチャ: {captures})";
+            _trayStreamItem!.Text = "配信開始";
+        }
+    }
+
+    private async void OnTrayStreamToggle(object? sender, EventArgs e)
+    {
+        if (_ffmpeg is { IsRunning: true })
+        {
+            await StopStreamingAsync();
+            _trayIcon?.ShowBalloonTip(2000, "WinNativeApp", "配信を停止しました", ToolTipIcon.Info);
+        }
+        else
+        {
+            var config = StreamConfig.FromArgs(_args);
+            if (string.IsNullOrEmpty(config.StreamKey) && string.IsNullOrEmpty(_activeStreamKey))
+            {
+                _trayIcon?.ShowBalloonTip(3000, "WinNativeApp", "ストリームキーが設定されていません", ToolTipIcon.Warning);
+                return;
+            }
+            try
+            {
+                await StartStreamingWithKeyAsync(_activeStreamKey ?? config.StreamKey ?? "");
+                _trayIcon?.ShowBalloonTip(2000, "WinNativeApp", "配信を開始しました", ToolTipIcon.Info);
+            }
+            catch (Exception ex)
+            {
+                _trayIcon?.ShowBalloonTip(3000, "WinNativeApp", $"配信開始失敗: {ex.Message}", ToolTipIcon.Error);
+            }
+        }
+    }
+
+    private static Icon CreateTrayIcon(Color color)
+    {
+        var bmp = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using var brush = new SolidBrush(color);
+        g.FillEllipse(brush, 2, 2, 12, 12);
+        using var pen = new Pen(Color.White, 1);
+        g.DrawEllipse(pen, 2, 2, 12, 12);
+        return Icon.FromHandle(bmp.GetHicon());
     }
 
 
@@ -141,6 +240,25 @@ public class MainForm : Form
 
     private async Task<object> HandleStartStreamRequest(string streamKey, string? serverUrl)
     {
+        // WebView2操作はUIスレッドが必要 → InvokeでUIスレッドに移動
+        var tcs = new TaskCompletionSource<object>();
+        BeginInvoke(async () =>
+        {
+            try
+            {
+                var result = await HandleStartStreamOnUIThread(streamKey, serverUrl);
+                tcs.TrySetResult(result);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetResult(new Dictionary<string, object> { ["ok"] = false, ["error"] = ex.Message });
+            }
+        });
+        return await tcs.Task;
+    }
+
+    private async Task<object> HandleStartStreamOnUIThread(string streamKey, string? serverUrl)
+    {
         if (_ffmpeg != null)
             return new Dictionary<string, object> { ["ok"] = false, ["error"] = "既に配信中です" };
 
@@ -190,22 +308,37 @@ public class MainForm : Form
 
     private async Task<object> HandleStopStreamRequest()
     {
-        if (_ffmpeg == null)
-            return new Dictionary<string, object> { ["ok"] = false, ["error"] = "配信中ではありません" };
-
-        var uptime = _ffmpeg.Uptime;
-        var frames = _ffmpeg.FrameCount;
-        var drops = _ffmpeg.DropCount;
-
-        await StopStreamingAsync();
-
-        return new Dictionary<string, object>
+        var tcs = new TaskCompletionSource<object>();
+        BeginInvoke(async () =>
         {
-            ["ok"] = true,
-            ["uptime_seconds"] = (int)uptime.TotalSeconds,
-            ["frames_sent"] = frames,
-            ["frames_dropped"] = drops,
-        };
+            try
+            {
+                if (_ffmpeg == null)
+                {
+                    tcs.TrySetResult(new Dictionary<string, object> { ["ok"] = false, ["error"] = "配信中ではありません" });
+                    return;
+                }
+
+                var uptime = _ffmpeg.Uptime;
+                var frames = _ffmpeg.FrameCount;
+                var drops = _ffmpeg.DropCount;
+
+                await StopStreamingAsync();
+
+                tcs.TrySetResult(new Dictionary<string, object>
+                {
+                    ["ok"] = true,
+                    ["uptime_seconds"] = (int)uptime.TotalSeconds,
+                    ["frames_sent"] = frames,
+                    ["frames_dropped"] = drops,
+                });
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetResult(new Dictionary<string, object> { ["ok"] = false, ["error"] = ex.Message });
+            }
+        });
+        return await tcs.Task;
     }
 
     private object GetStreamStatusDict()
@@ -451,11 +584,7 @@ public class MainForm : Form
         if (_closing)
         {
             // Second pass after async cleanup
-            _capture?.Stop();
-            _capture?.Dispose();
-            _captureManager?.Dispose();
-            _httpServer?.Dispose();
-            Log.Information("[MainForm] Closed");
+            CleanupResources();
             return;
         }
 
@@ -469,6 +598,18 @@ public class MainForm : Form
             return;
         }
 
+        CleanupResources();
+    }
+
+    private void CleanupResources()
+    {
+        _trayUpdateTimer?.Stop();
+        _trayUpdateTimer?.Dispose();
+        if (_trayIcon != null)
+        {
+            _trayIcon.Visible = false;
+            _trayIcon.Dispose();
+        }
         _capture?.Stop();
         _capture?.Dispose();
         _captureManager?.Dispose();
