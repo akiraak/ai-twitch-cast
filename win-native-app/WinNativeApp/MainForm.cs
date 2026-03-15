@@ -963,11 +963,14 @@ public class MainForm : Form
             return;
         }
 
+        // ★ 即座にウィンドウを隠す（クリーンアップ中の「間」を解消）
+        e.Cancel = true;
+        _closing = true;
+        Hide();
+
+        // バックグラウンドでクリーンアップ
         if (_ffmpeg != null)
         {
-            // Need async cleanup → cancel close, do cleanup, re-close
-            e.Cancel = true;
-            _closing = true;
             try
             {
                 await StopStreamingAsync();
@@ -975,17 +978,15 @@ public class MainForm : Form
             catch (Exception ex)
             {
                 Log.Error(ex, "[MainForm] Error stopping stream during close");
-                // 停止失敗時も強制クリーンアップ
                 try { _ffmpeg?.Dispose(); } catch { }
                 _ffmpeg = null;
                 _audio?.Dispose();
                 _audio = null;
             }
-            Close();
-            return;
         }
 
         CleanupResources();
+        Close();
     }
 
     private void CleanupResources()
