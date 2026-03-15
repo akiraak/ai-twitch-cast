@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using Serilog;
 using Vortice.Direct3D;
@@ -27,6 +28,12 @@ public sealed class FrameCapture : IDisposable
     // Target frame rate (0 = no throttle, process every WGC frame)
     public int TargetFps { get; set; }
 
+    /// <summary>
+    /// クロップ矩形（キャプチャフレーム座標系）。設定時はこの領域のみ出力する。
+    /// Phase 7: UIパネル追加時に配信領域のみを切り出すために使用。
+    /// </summary>
+    public Rectangle? CropRect { get; set; }
+
     private readonly Stopwatch _fpsWatch = Stopwatch.StartNew();
     private long _lastFrameTimeMs;
 
@@ -37,7 +44,8 @@ public sealed class FrameCapture : IDisposable
     private int _pendingWidth, _pendingHeight;
 
     private byte[]? _frameBuffer;
-    private int _cachedWidth, _cachedHeight;
+    private int _cachedWidth, _cachedHeight;    // ステージングテクスチャサイズ
+    private int _outputWidth, _outputHeight;    // 出力バッファサイズ（クロップ適用後）
 
     public int FrameCount => _frameCount;
 
@@ -138,30 +146,48 @@ public sealed class FrameCapture : IDisposable
                     {
                         int rw = _pendingWidth, rh = _pendingHeight;
 
-                        // RowPitch == Width*4 なら一括コピー（720回→1回に削減）
-                        if (mapped.RowPitch == rw * 4)
+                        // クロップ矩形の計算（設定時は指定領域のみ、未設定時は全体）
+                        var crop = CropRect;
+                        int outW, outH, srcX, srcY;
+                        if (crop.HasValue)
+                        {
+                            srcX = Math.Clamp(crop.Value.X, 0, rw);
+                            srcY = Math.Clamp(crop.Value.Y, 0, rh);
+                            outW = Math.Min(crop.Value.Width, rw - srcX);
+                            outH = Math.Min(crop.Value.Height, rh - srcY);
+                        }
+                        else
+                        {
+                            srcX = 0; srcY = 0; outW = rw; outH = rh;
+                        }
+
+                        EnsureOutputBuffer(outW, outH);
+
+                        // クロップなし＋RowPitch一致 → 一括コピー（最速パス）
+                        if (srcX == 0 && srcY == 0 && outW == rw && outH == rh && mapped.RowPitch == rw * 4)
                         {
                             fixed (byte* dst = _frameBuffer!)
                             {
                                 Buffer.MemoryCopy(
                                     (void*)mapped.DataPointer, dst,
-                                    rw * rh * 4, rw * rh * 4);
+                                    outW * outH * 4, outW * outH * 4);
                             }
                         }
                         else
                         {
-                            for (int y = 0; y < rh; y++)
+                            // 行ごとコピー（クロップ対応 + RowPitch不一致対応）
+                            for (int y = 0; y < outH; y++)
                             {
-                                var src = (byte*)(mapped.DataPointer + y * mapped.RowPitch);
-                                fixed (byte* dst = &_frameBuffer![y * rw * 4])
+                                var src = (byte*)(mapped.DataPointer + (srcY + y) * mapped.RowPitch + srcX * 4);
+                                fixed (byte* dst = &_frameBuffer![y * outW * 4])
                                 {
-                                    Buffer.MemoryCopy(src, dst, rw * 4, rw * 4);
+                                    Buffer.MemoryCopy(src, dst, outW * 4, outW * 4);
                                 }
                             }
                         }
 
-                        width = rw;
-                        height = rh;
+                        width = outW;
+                        height = outH;
                     }
                     finally
                     {
@@ -170,8 +196,8 @@ public sealed class FrameCapture : IDisposable
 
                     sw.Stop();
                     if (_frameCount <= 5 || _frameCount % 30 == 0)
-                        Log.Debug("[Capture] Map={MapMs}ms readback={TotalMs}ms frame={N}",
-                            mapMs, sw.ElapsedMilliseconds, _frameCount);
+                        Log.Debug("[Capture] Map={MapMs}ms readback={TotalMs}ms frame={N} out={OutW}x{OutH}",
+                            mapMs, sw.ElapsedMilliseconds, _frameCount, width, height);
                 }
 
                 // ② 今フレームのCopyResourceをキューイング（非同期GPU操作、すぐ戻る）
@@ -210,12 +236,24 @@ public sealed class FrameCapture : IDisposable
             });
         }
 
-        _frameBuffer = new byte[w * h * 4];
         _cachedWidth = w;
         _cachedHeight = h;
         _hasPendingFrame = false;
         _stagingIdx = 0;
+        _outputWidth = 0;  // 出力バッファ再確保を強制
+        _outputHeight = 0;
         Log.Debug("[Capture] Double staging allocated: {W}x{H}", w, h);
+    }
+
+    private void EnsureOutputBuffer(int w, int h)
+    {
+        if (_outputWidth == w && _outputHeight == h && _frameBuffer != null)
+            return;
+
+        _frameBuffer = new byte[w * h * 4];
+        _outputWidth = w;
+        _outputHeight = h;
+        Log.Debug("[Capture] Output buffer: {W}x{H} (crop={Crop})", w, h, CropRect.HasValue);
     }
 
     public void Stop()

@@ -1,5 +1,8 @@
+using System.Drawing;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Serilog;
 using WinNativeApp.Capture;
@@ -15,7 +18,13 @@ public class MainForm : Form
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
+    // Phase 7: 配信領域サイズ（UIパネルを除いたbroadcast.html部分）
+    private const int BroadcastWidth = 1280;
+    private const int BroadcastHeight = 720;
+    private const int UiPanelWidth = 400;
+
     private readonly WebView2 _webView;
+    private readonly WebView2 _panelView;  // Phase 7: UIパネル（HTML/CSS）
     private FrameCapture? _capture;
     private readonly string[] _args;
     private readonly string _url;
@@ -50,7 +59,8 @@ public class MainForm : Form
 
         Text = "AI Twitch Cast - 起動中";
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(1280, 720);
+        // Phase 7: 配信領域 + UIパネル
+        ClientSize = new Size(BroadcastWidth + UiPanelWidth, BroadcastHeight);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         ShowInTaskbar = true;
@@ -59,8 +69,23 @@ public class MainForm : Form
         var darkMode = 1;
         DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
 
-        _webView = new WebView2 { Dock = DockStyle.Fill };
+        // Phase 7: WebView2は左側に固定配置（Dock.Fillではなく明示的サイズ）
+        _webView = new WebView2
+        {
+            Location = new Point(0, 0),
+            Size = new Size(BroadcastWidth, BroadcastHeight),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left,
+        };
         Controls.Add(_webView);
+
+        // Phase 7: UIパネル（WebView2 + HTML/CSS）を右側に配置
+        _panelView = new WebView2
+        {
+            Location = new Point(BroadcastWidth, 0),
+            Size = new Size(UiPanelWidth, BroadcastHeight),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left,
+        };
+        Controls.Add(_panelView);
 
         InitializeTrayIcon();
 
@@ -108,11 +133,12 @@ public class MainForm : Form
     {
         var streaming = _ffmpeg is { IsRunning: true };
         var captures = _captureManager?.ListCaptures().Count ?? 0;
+        var uptime = streaming ? _ffmpeg!.Uptime : TimeSpan.Zero;
+        var frames = _ffmpeg?.FrameCount ?? 0;
+        var drops = _ffmpeg?.DropCount ?? 0;
 
         if (streaming)
         {
-            var uptime = _ffmpeg!.Uptime;
-            var frames = _ffmpeg.FrameCount;
             var uptimeStr = uptime.ToString(@"hh\:mm\:ss");
             _trayIcon!.Icon = CreateTrayIcon(Color.Red);
             _trayIcon.Text = $"配信中 ({uptimeStr}) - {frames} frames";
@@ -128,6 +154,17 @@ public class MainForm : Form
             _trayStreamItem!.Text = "配信開始";
             Text = "AI Twitch Cast - 待機中";
         }
+
+        // Phase 7: UIパネルに状態送信
+        SendPanelMessage(new
+        {
+            type = "status",
+            streaming,
+            uptime = uptime.ToString(@"hh\:mm\:ss"),
+            frames,
+            drops
+        });
+        SendPanelCaptures();
     }
 
     private async void OnTrayStreamToggle(object? sender, EventArgs e)
@@ -170,12 +207,185 @@ public class MainForm : Form
     }
 
 
+    // =====================================================
+    // UIパネル (Phase 7: WebView2 + HTML/CSS)
+    // =====================================================
+
+    /// <summary>パネルWebView2にJSONメッセージを送信する</summary>
+    private void SendPanelMessage(object data)
+    {
+        if (_panelView.CoreWebView2 == null) return;
+        try
+        {
+            _panelView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(data));
+        }
+        catch { /* panel not ready */ }
+    }
+
+    /// <summary>パネルのログエリアにメッセージを表示する</summary>
+    private void PanelLog(string text, string level = "")
+    {
+        SendPanelMessage(new { type = "log", text, level });
+    }
+
+    /// <summary>パネルにキャプチャ一覧を送信する</summary>
+    private void SendPanelCaptures()
+    {
+        var captures = _captureManager?.ListCaptures() ?? [];
+        SendPanelMessage(new
+        {
+            type = "captures",
+            captures = captures.Select(c => new { id = c.Id, name = c.Name }).ToArray()
+        });
+    }
+
+    /// <summary>パネルからのメッセージを処理する</summary>
+    private async void OnPanelMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        try
+        {
+            var msg = JsonSerializer.Deserialize<JsonElement>(e.WebMessageAsJson);
+            var action = msg.GetProperty("action").GetString() ?? "";
+
+            switch (action)
+            {
+                case "init":
+                    // 初期状態を送信
+                    PanelLog("接続完了", "success");
+                    var windows = WindowEnumerator.GetWindows();
+                    SendPanelMessage(new
+                    {
+                        type = "windows",
+                        windows = windows.Select(w => new { title = w.Title, hwnd = $"0x{w.Hwnd.ToInt64():X}" }).ToArray()
+                    });
+                    SendPanelCaptures();
+                    break;
+
+                case "goLive":
+                    await HandlePanelGoLive();
+                    break;
+
+                case "stopStream":
+                    await HandlePanelStopStream();
+                    break;
+
+                case "refreshWindows":
+                    var wins = WindowEnumerator.GetWindows();
+                    SendPanelMessage(new
+                    {
+                        type = "windows",
+                        windows = wins.Select(w => new { title = w.Title, hwnd = $"0x{w.Hwnd.ToInt64():X}" }).ToArray()
+                    });
+                    PanelLog($"ウィンドウ一覧更新: {wins.Count}件", "info");
+                    break;
+
+                case "startCapture":
+                    HandlePanelStartCapture(msg);
+                    break;
+
+                case "stopCapture":
+                    HandlePanelStopCapture(msg);
+                    break;
+
+                case "volume":
+                    HandlePanelVolume(msg);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[MainForm] Panel message error");
+        }
+    }
+
+    private async Task HandlePanelGoLive()
+    {
+        var config = StreamConfig.FromArgs(_args);
+        var key = _activeStreamKey ?? config.StreamKey;
+        if (string.IsNullOrEmpty(key))
+        {
+            PanelLog("ストリームキーが未設定です", "error");
+            return;
+        }
+        try
+        {
+            await StartStreamingWithKeyAsync(key);
+            PanelLog("配信を開始しました", "success");
+        }
+        catch (Exception ex)
+        {
+            PanelLog($"配信開始失敗: {ex.Message}", "error");
+        }
+    }
+
+    private async Task HandlePanelStopStream()
+    {
+        try
+        {
+            await StopStreamingAsync();
+            PanelLog("配信を停止しました", "success");
+        }
+        catch (Exception ex)
+        {
+            PanelLog($"配信停止失敗: {ex.Message}", "error");
+        }
+    }
+
+    private void HandlePanelStartCapture(JsonElement msg)
+    {
+        if (_captureManager == null) return;
+        var hwndStr = msg.GetProperty("hwnd").GetString() ?? "";
+        var title = msg.GetProperty("title").GetString() ?? "";
+        try
+        {
+            var hwnd = ParseHwnd(hwndStr);
+            var id = _captureManager.StartCapture(hwnd, title, 15, 70);
+            InjectAddCaptureLayer(id, title);
+            SendPanelCaptures();
+            PanelLog($"キャプチャ開始: {title}", "success");
+        }
+        catch (Exception ex)
+        {
+            PanelLog($"キャプチャ開始失敗: {ex.Message}", "error");
+        }
+    }
+
+    private void HandlePanelStopCapture(JsonElement msg)
+    {
+        if (_captureManager == null) return;
+        var id = msg.GetProperty("id").GetString() ?? "";
+        var ok = _captureManager.StopCapture(id);
+        if (ok)
+        {
+            InjectRemoveCaptureLayer(id);
+            SendPanelCaptures();
+            PanelLog($"キャプチャ停止: {id}", "info");
+        }
+    }
+
+    private void HandlePanelVolume(JsonElement msg)
+    {
+        var type = msg.GetProperty("type").GetString() ?? "";
+        var value = msg.GetProperty("value").GetInt32();
+        // broadcast.htmlの音量をJS注入で変更
+        if (_webView.CoreWebView2 == null) return;
+        var valueStr = (value / 100.0).ToString("F2", CultureInfo.InvariantCulture);
+        var js = $@"
+            if (typeof broadcastState !== 'undefined' && broadcastState.volume) {{
+                broadcastState.volume.{EscapeJs(type)} = {valueStr};
+                if (typeof updateVolumes === 'function') updateVolumes();
+                else if (typeof applyVolume === 'function') applyVolume();
+            }}";
+        _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+    }
+
     private async void OnLoad(object? sender, EventArgs e)
     {
         Log.Information("[MainForm] Loaded, initializing WebView2...");
 
         try
         {
+            // broadcast.html用WebView2
             await _webView.EnsureCoreWebView2Async();
             Log.Information("[MainForm] WebView2 ready, version={Version}",
                 _webView.CoreWebView2.Environment.BrowserVersionString);
@@ -191,6 +401,20 @@ public class MainForm : Form
 
         // ウィンドウキャプチャ管理 + HTTPサーバー起動
         InitializeCaptureServer();
+
+        // Phase 7: パネルWebView2初期化（HTTPサーバー起動後）
+        try
+        {
+            await _panelView.EnsureCoreWebView2Async();
+            _panelView.CoreWebView2.WebMessageReceived += OnPanelMessage;
+            // C#アプリのHTTPサーバーからパネルHTMLを取得
+            _panelView.CoreWebView2.Navigate($"http://localhost:{_httpPort}/panel");
+            Log.Information("[MainForm] Panel WebView2 initialized");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[MainForm] Panel WebView2 init failed");
+        }
     }
 
     private void InitializeCaptureServer()
@@ -542,6 +766,11 @@ public class MainForm : Form
         try
         {
             var capture = new FrameCapture();
+            // Phase 7: クロップ矩形を設定（配信領域のみ切り出す）
+            // WGCはクライアント領域をキャプチャするため、(0,0)から配信解像度分を切り出す
+            capture.CropRect = new Rectangle(0, 0, BroadcastWidth, BroadcastHeight);
+            Log.Information("[MainForm] CropRect set to ({X},{Y},{W},{H})",
+                0, 0, BroadcastWidth, BroadcastHeight);
             capture.StartCapture(Handle);
             _capture = capture;
             Log.Information("[MainForm] Capture started for HWND=0x{Hwnd:X}", Handle);

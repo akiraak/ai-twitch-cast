@@ -150,6 +150,9 @@ public class HttpServer : IDisposable
                 await HandleStreamStatus(res);
             else if (path == "/quit" && method == "POST")
                 await HandleQuit(res);
+            // Phase 7: UIパネルHTML配信
+            else if (path == "/panel" && method == "GET")
+                await HandlePanel(res);
             else
             {
                 res.StatusCode = 404;
@@ -313,6 +316,23 @@ public class HttpServer : IDisposable
     {
         await WriteJson(res, new { ok = true });
         OnQuit?.Invoke();
+    }
+
+    private async Task HandlePanel(HttpListenerResponse res)
+    {
+        var htmlPath = Path.Combine(AppContext.BaseDirectory, "control-panel.html");
+        if (!File.Exists(htmlPath))
+        {
+            res.StatusCode = 404;
+            await WriteJson(res, new { error = "control-panel.html not found" });
+            return;
+        }
+        res.ContentType = "text/html; charset=utf-8";
+        var html = await File.ReadAllTextAsync(htmlPath);
+        var bytes = Encoding.UTF8.GetBytes(html);
+        res.ContentLength64 = bytes.Length;
+        await res.OutputStream.WriteAsync(bytes);
+        res.Close();
     }
 
     // =====================================================

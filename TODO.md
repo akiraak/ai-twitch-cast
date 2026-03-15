@@ -22,8 +22,21 @@
 - [ ] 画像保蔵機能と同様にElectron画面の動画撮影 → [plans/video-recording.md](plans/video-recording.md)
 - [ ] Electronを別の実装に置き換えられるか検討（軽量化・柔軟な実装が行えるかの観点） → [plans/electron-alternative.md](plans/electron-alternative.md)
 - [>] Electronをネイティブ実装に変更（C#+WebView2+WGC+WASAPI） → [plans/native-implementation.md](plans/native-implementation.md)
-        - [ ] ネイティブアプリ起動時に旧Electronアプリ等のポート9090競合を検出・解決する仕組み
-        - [ ] Phase 7: UIパネル追加（配信領域+UIパネルの1ウィンドウ構成、WGCクロップ）
+        - [>] Phase 7: UIパネル追加（配信領域+UIパネルの1ウィンドウ構成、WGCクロップ）
+                - [ ] ビルド成功するか（stream.sh でビルドエラーなし）
+                - [ ] ウィンドウが1680x720で表示される（左1280: broadcast.html、右400: パネル）
+                - [ ] パネルがダークテーマで表示される（control-panel.html読み込み成功）
+                - [ ] WGCクロップ: 配信映像が1280x720のまま（UIパネル部分が映らない）
+                - [ ] 配信制御: Go Liveボタンで配信開始 → Stopボタンで停止
+                - [ ] 配信制御: 配信中にステータス表示（uptime/frames/drops）が更新される
+                - [ ] キャプチャ: ↻ボタンでウィンドウ一覧取得 → 開始 → broadcast.htmlに表示 → 停止
+                - [ ] 音量スライダー: Master/TTS/BGMスライダー操作でbroadcast.htmlの音量が変わる
+                - [ ] ログ: 操作時にログエリアにメッセージが表示される
+                - [ ] トレイアイコン: 既存のトレイ機能（配信開始/停止/最小化）が引き続き動作する
+                - [ ] Go Live API（WebSocket /ws/control経由）での配信開始が引き続き動作する
         - [ ] Phase 8: Electron完全削除（capture.pyのElectronコード・win-capture-app/・Web UI削除）
+        - [ ] ネイティブアプリ起動時に旧Electronアプリ等のポート9090競合を検出・解決する仕組み
         - [ ] 音が鳴っていない
         - [ ] ネイティブアプリにffmpegが同梱されているか確認（現状はElectronダウンロード済みのものを流用）
+        - [ ] broadcast.html, control-panel.htmlをサーバから受け取るメリットとデメリットの検討
+        - [ ] ビュワーを×で閉じても一瞬間がある

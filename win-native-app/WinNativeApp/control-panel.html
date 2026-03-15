@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=400">
+<title>Control Panel</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1e1e1e;
+  --bg-section: #252526;
+  --bg-input: #3c3c3c;
+  --bg-input-hover: #505050;
+  --text: #cccccc;
+  --text-dim: #858585;
+  --accent: #0e639c;
+  --accent-hover: #1177bb;
+  --green: #388a34;
+  --green-hover: #45a641;
+  --red: #c94040;
+  --red-hover: #d95050;
+  --border: #3c3c3c;
+  --radius: 4px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #424242; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Section */
+.section {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.section.flex { flex: 1; display: flex; flex-direction: column; border-bottom: none; min-height: 0; }
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s;
+  background: var(--bg-input);
+  color: var(--text);
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg-input-hover); }
+.btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+
+.btn-go { background: var(--green); border-color: var(--green); color: #fff; font-weight: 600; }
+.btn-go:hover { background: var(--green-hover); }
+.btn-stop { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+.btn-stop:hover { background: var(--red-hover); }
+
+.btn-row { display: flex; gap: 6px; margin-bottom: 8px; }
+
+/* Status */
+.status { font-size: 13px; margin-bottom: 2px; }
+.status.live { color: #f48771; font-weight: 600; }
+.stats { font-size: 11px; color: var(--text-dim); min-height: 16px; }
+
+/* Select */
+.select-row { display: flex; gap: 4px; margin-bottom: 6px; }
+select {
+  flex: 1;
+  padding: 3px 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  min-width: 0;
+}
+select:focus { border-color: var(--accent); }
+
+/* Capture List */
+.capture-list {
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 48px;
+  max-height: 90px;
+  overflow-y: auto;
+  margin-top: 6px;
+}
+.capture-item {
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #2d2d30;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.capture-item:last-child { border-bottom: none; }
+.capture-item:hover { background: var(--bg-input); }
+.capture-item.selected { background: var(--accent); color: #fff; }
+.capture-empty { padding: 10px; text-align: center; color: var(--text-dim); font-size: 11px; }
+
+/* Volume */
+.volume-row { display: flex; align-items: center; margin-bottom: 4px; gap: 6px; }
+.volume-label { width: 44px; font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+.volume-value { width: 34px; text-align: right; font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+input[type="range"] {
+  -webkit-appearance: none;
+  flex: 1;
+  height: 4px;
+  background: var(--bg-input);
+  border-radius: 2px;
+  outline: none;
+  min-width: 0;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover); }
+
+/* Log */
+.log-area {
+  flex: 1;
+  background: #1a1a1a;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #9da5b4;
+  padding: 6px 8px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  min-height: 0;
+}
+.log-error { color: #f48771; }
+.log-success { color: #89d185; }
+.log-info { color: #9cdcfe; }
+</style>
+</head>
+<body>
+
+<div class="section">
+  <div class="section-title">配信制御</div>
+  <div class="btn-row">
+    <button class="btn btn-go" id="goLiveBtn" onclick="goLive()">● Go Live</button>
+    <button class="btn btn-stop" id="stopBtn" onclick="stopStream()" disabled>■ Stop</button>
+  </div>
+  <div class="status" id="streamStatus">待機中</div>
+  <div class="stats" id="streamStats"></div>
+</div>
+
+<div class="section">
+  <div class="section-title">キャプチャ</div>
+  <div class="select-row">
+    <select id="windowSelect"><option>ウィンドウを読み込み中...</option></select>
+    <button class="btn" onclick="refreshWindows()" title="更新">↻</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn" onclick="startCapture()">開始</button>
+    <button class="btn" onclick="stopCapture()">停止</button>
+  </div>
+  <div class="capture-list" id="captureList">
+    <div class="capture-empty">キャプチャなし</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">音量</div>
+  <div class="volume-row">
+    <span class="volume-label">Master</span>
+    <input type="range" min="0" max="100" value="80" id="volMaster" oninput="onVolume('master',this.value)">
+    <span class="volume-value" id="volMasterVal">80%</span>
+  </div>
+  <div class="volume-row">
+    <span class="volume-label">TTS</span>
+    <input type="range" min="0" max="100" value="90" id="volTts" oninput="onVolume('tts',this.value)">
+    <span class="volume-value" id="volTtsVal">90%</span>
+  </div>
+  <div class="volume-row">
+    <span class="volume-label">BGM</span>
+    <input type="range" min="0" max="100" value="50" id="volBgm" oninput="onVolume('bgm',this.value)">
+    <span class="volume-value" id="volBgmVal">50%</span>
+  </div>
+</div>
+
+<div class="section flex">
+  <div class="section-title">ログ</div>
+  <div class="log-area" id="logArea"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const wv = window.chrome?.webview;
+
+// C# → HTML
+wv?.addEventListener('message', e => {
+  const m = e.data;
+  if (!m?.type) return;
+  switch (m.type) {
+    case 'status': updateStatus(m); break;
+    case 'windows': updateWindows(m.windows); break;
+    case 'captures': updateCaptures(m.captures); break;
+    case 'log': appendLog(m.text, m.level); break;
+    case 'volume': setVolumes(m); break;
+  }
+});
+
+// HTML → C#
+function send(msg) { wv?.postMessage(msg); }
+function goLive() { send({action:'goLive'}); }
+function stopStream() { send({action:'stopStream'}); }
+function refreshWindows() { send({action:'refreshWindows'}); }
+
+function startCapture() {
+  const sel = $('windowSelect');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt?.dataset?.hwnd) return;
+  send({action:'startCapture', hwnd: opt.dataset.hwnd, title: opt.textContent});
+}
+
+function stopCapture() {
+  const item = document.querySelector('.capture-item.selected');
+  if (item) send({action:'stopCapture', id: item.dataset.id});
+}
+
+function onVolume(type, val) {
+  const key = 'vol' + type.charAt(0).toUpperCase() + type.slice(1) + 'Val';
+  $(key).textContent = val + '%';
+  send({action:'volume', type, value: parseInt(val)});
+}
+
+// UI更新
+function updateStatus(s) {
+  const el = $('streamStatus'), st = $('streamStats');
+  if (s.streaming) {
+    el.textContent = '配信中  ' + (s.uptime || '');
+    el.className = 'status live';
+    st.textContent = `${(s.frames||0).toLocaleString()} frames / ${(s.drops||0).toLocaleString()} drops`;
+    $('goLiveBtn').disabled = true;
+    $('stopBtn').disabled = false;
+  } else {
+    el.textContent = '待機中';
+    el.className = 'status';
+    st.textContent = '';
+    $('goLiveBtn').disabled = false;
+    $('stopBtn').disabled = true;
+  }
+}
+
+function updateWindows(wins) {
+  const sel = $('windowSelect');
+  sel.innerHTML = '';
+  if (!wins?.length) { sel.innerHTML = '<option>ウィンドウなし</option>'; return; }
+  wins.forEach(w => {
+    const o = document.createElement('option');
+    o.textContent = w.title;
+    o.dataset.hwnd = w.hwnd;
+    sel.appendChild(o);
+  });
+}
+
+function updateCaptures(caps) {
+  const list = $('captureList');
+  if (!caps?.length) { list.innerHTML = '<div class="capture-empty">キャプチャなし</div>'; return; }
+  const selId = document.querySelector('.capture-item.selected')?.dataset?.id;
+  list.innerHTML = '';
+  caps.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'capture-item' + (c.id === selId ? ' selected' : '');
+    d.textContent = '[' + c.id + '] ' + c.name;
+    d.dataset.id = c.id;
+    d.onclick = () => {
+      document.querySelectorAll('.capture-item').forEach(el => el.classList.remove('selected'));
+      d.classList.add('selected');
+    };
+    list.appendChild(d);
+  });
+}
+
+function setVolumes(v) {
+  ['master','tts','bgm'].forEach(t => {
+    if (v[t] === undefined) return;
+    const key = t.charAt(0).toUpperCase() + t.slice(1);
+    $('vol'+key).value = v[t];
+    $('vol'+key+'Val').textContent = v[t]+'%';
+  });
+}
+
+function appendLog(text, level) {
+  const area = $('logArea');
+  const span = document.createElement('span');
+  if (level) span.className = 'log-' + level;
+  span.textContent = text + '\n';
+  area.appendChild(span);
+  while (area.childNodes.length > 300) area.removeChild(area.firstChild);
+  area.scrollTop = area.scrollHeight;
+}
+
+// 初期化
+send({action:'init'});
+appendLog('パネル起動', 'info');
+</script>
+</body>
+</html>

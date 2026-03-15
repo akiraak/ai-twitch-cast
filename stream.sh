@@ -91,6 +91,8 @@ cp "$SRC_DIR"/*.cs "$SRC_DIR"/*.csproj "$BUILD_DIR/" 2>/dev/null
 cp "$SRC_DIR"/Capture/*.cs "$BUILD_DIR/Capture/"
 cp "$SRC_DIR"/Streaming/*.cs "$BUILD_DIR/Streaming/"
 cp "$SRC_DIR"/Server/*.cs "$BUILD_DIR/Server/"
+# Phase 7: パネルHTMLをビルド出力にコピー
+cp "$SRC_DIR"/control-panel.html "$BUILD_DIR/" 2>/dev/null
 
 WIN_PROJECT=$(wslpath -w "$BUILD_DIR")
 
