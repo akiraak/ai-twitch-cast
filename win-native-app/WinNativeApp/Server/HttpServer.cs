@@ -21,6 +21,7 @@ public class HttpServer : IDisposable
     // WebSocket接続管理
     private readonly List<WebSocket> _controlClients = new();
     private readonly object _wsLock = new();
+    private readonly SemaphoreSlim _wsSendLock = new(1, 1);
 
     // キャプチャコールバック（MainFormが設定）
     public Func<List<WindowInfo>>? OnListWindows { get; set; }
@@ -544,7 +545,7 @@ public class HttpServer : IDisposable
         return new { ok = true };
     }
 
-    private static async Task SendWsResponse(WebSocket ws, string? requestId, object result)
+    private async Task SendWsResponse(WebSocket ws, string? requestId, object result)
     {
         if (ws.State != WebSocketState.Open) return;
 
@@ -571,7 +572,16 @@ public class HttpServer : IDisposable
 
         var json = JsonSerializer.Serialize(response);
         var bytes = Encoding.UTF8.GetBytes(json);
-        await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+        await _wsSendLock.WaitAsync();
+        try
+        {
+            if (ws.State == WebSocketState.Open)
+                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+        }
+        finally
+        {
+            _wsSendLock.Release();
+        }
     }
 
     // =====================================================

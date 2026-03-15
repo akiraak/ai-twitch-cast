@@ -30,8 +30,12 @@ public sealed class FrameCapture : IDisposable
     private readonly Stopwatch _fpsWatch = Stopwatch.StartNew();
     private long _lastFrameTimeMs;
 
-    // Pre-allocated staging resources (reused across frames)
-    private ID3D11Texture2D? _stagingTexture;
+    // ダブルステージングテクスチャ（パイプライン化でGPU readback待ち解消）
+    private readonly ID3D11Texture2D?[] _stagingTextures = new ID3D11Texture2D?[2];
+    private int _stagingIdx;           // 次にCopyResourceする先のインデックス（0 or 1）
+    private bool _hasPendingFrame;     // 前フレームのCopyResourceが完了待ちか
+    private int _pendingWidth, _pendingHeight;
+
     private byte[]? _frameBuffer;
     private int _cachedWidth, _cachedHeight;
 
@@ -80,23 +84,27 @@ public sealed class FrameCapture : IDisposable
         if (_frameCount <= 3 || _frameCount % 100 == 0)
             Log.Debug("[Capture] Frame {N} arrived", _frameCount);
 
-        // FPS throttle
+        // FPS throttle（固定間隔ベース: ジッター耐性のため _lastFrameTimeMs += interval）
         if (TargetFps > 0)
         {
             var now = _fpsWatch.ElapsedMilliseconds;
-            var minInterval = 1000.0 / TargetFps;
+            var minInterval = 1000L / TargetFps;  // 30fps → 33ms
             if (now - _lastFrameTimeMs < minInterval)
                 return;
-            _lastFrameTimeMs = now;
+            // 固定間隔で進める（now基準だとジッターが蓄積して22fpsに低下する）
+            // ただし大幅に遅れた場合はnowにリセット（フレームバースト防止）
+            _lastFrameTimeMs += minInterval;
+            if (now - _lastFrameTimeMs > minInterval * 2)
+                _lastFrameTimeMs = now;
         }
 
         if (OnFrameReady == null) return;
 
-        // Extract BGRA bytes from GPU texture
+        // Extract BGRA bytes from GPU texture (double-buffered pipeline)
         ExtractBgra(frame, out var w, out var h);
-        if (_frameBuffer == null) return;
+        if (w == 0 || h == 0) return;
 
-        OnFrameReady.Invoke(_frameBuffer, w, h);
+        OnFrameReady.Invoke(_frameBuffer!, w, h);
     }
 
     private unsafe void ExtractBgra(Direct3D11CaptureFrame frame, out int width, out int height)
@@ -119,27 +127,59 @@ public sealed class FrameCapture : IDisposable
 
                 EnsureStaging(w, h, desc.Format);
 
-                _d3dContext!.CopyResource(_stagingTexture!, srcTex);
-
-                var mapped = _d3dContext.Map(_stagingTexture!, 0, MapMode.Read);
-                try
+                // ① 前フレームのMapを先に実行（前回のCopyResourceから1フレーム経過 → GPU完了済み → 即座完了）
+                if (_hasPendingFrame)
                 {
-                    for (int y = 0; y < h; y++)
+                    int readIdx = _stagingIdx ^ 1;  // 前フレームが書き込んだテクスチャ
+                    var sw = Stopwatch.StartNew();
+                    var mapped = _d3dContext!.Map(_stagingTextures[readIdx]!, 0, MapMode.Read);
+                    var mapMs = sw.ElapsedMilliseconds;
+                    try
                     {
-                        var src = (byte*)(mapped.DataPointer + y * mapped.RowPitch);
-                        fixed (byte* dst = &_frameBuffer![y * w * 4])
+                        int rw = _pendingWidth, rh = _pendingHeight;
+
+                        // RowPitch == Width*4 なら一括コピー（720回→1回に削減）
+                        if (mapped.RowPitch == rw * 4)
                         {
-                            Buffer.MemoryCopy(src, dst, w * 4, w * 4);
+                            fixed (byte* dst = _frameBuffer!)
+                            {
+                                Buffer.MemoryCopy(
+                                    (void*)mapped.DataPointer, dst,
+                                    rw * rh * 4, rw * rh * 4);
+                            }
                         }
+                        else
+                        {
+                            for (int y = 0; y < rh; y++)
+                            {
+                                var src = (byte*)(mapped.DataPointer + y * mapped.RowPitch);
+                                fixed (byte* dst = &_frameBuffer![y * rw * 4])
+                                {
+                                    Buffer.MemoryCopy(src, dst, rw * 4, rw * 4);
+                                }
+                            }
+                        }
+
+                        width = rw;
+                        height = rh;
                     }
-                }
-                finally
-                {
-                    _d3dContext.Unmap(_stagingTexture!, 0);
+                    finally
+                    {
+                        _d3dContext.Unmap(_stagingTextures[readIdx]!, 0);
+                    }
+
+                    sw.Stop();
+                    if (_frameCount <= 5 || _frameCount % 30 == 0)
+                        Log.Debug("[Capture] Map={MapMs}ms readback={TotalMs}ms frame={N}",
+                            mapMs, sw.ElapsedMilliseconds, _frameCount);
                 }
 
-                width = w;
-                height = h;
+                // ② 今フレームのCopyResourceをキューイング（非同期GPU操作、すぐ戻る）
+                _d3dContext!.CopyResource(_stagingTextures[_stagingIdx]!, srcTex);
+                _pendingWidth = w;
+                _pendingHeight = h;
+                _hasPendingFrame = true;
+                _stagingIdx ^= 1;  // 次フレームは別のテクスチャに書き込む
             }
             catch (Exception ex)
             {
@@ -150,27 +190,32 @@ public sealed class FrameCapture : IDisposable
 
     private void EnsureStaging(int w, int h, Format fmt)
     {
-        if (_cachedWidth == w && _cachedHeight == h && _stagingTexture != null)
+        if (_cachedWidth == w && _cachedHeight == h && _stagingTextures[0] != null)
             return;
 
-        _stagingTexture?.Dispose();
-        _stagingTexture = _d3dDevice!.CreateTexture2D(new Texture2DDescription
+        for (int i = 0; i < 2; i++)
         {
-            Width = (uint)w,
-            Height = (uint)h,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = fmt,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Staging,
-            BindFlags = BindFlags.None,
-            CPUAccessFlags = CpuAccessFlags.Read,
-        });
+            _stagingTextures[i]?.Dispose();
+            _stagingTextures[i] = _d3dDevice!.CreateTexture2D(new Texture2DDescription
+            {
+                Width = (uint)w,
+                Height = (uint)h,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = fmt,
+                SampleDescription = new SampleDescription(1, 0),
+                Usage = ResourceUsage.Staging,
+                BindFlags = BindFlags.None,
+                CPUAccessFlags = CpuAccessFlags.Read,
+            });
+        }
 
         _frameBuffer = new byte[w * h * 4];
         _cachedWidth = w;
         _cachedHeight = h;
-        Log.Debug("[Capture] Staging allocated: {W}x{H}", w, h);
+        _hasPendingFrame = false;
+        _stagingIdx = 0;
+        Log.Debug("[Capture] Double staging allocated: {W}x{H}", w, h);
     }
 
     public void Stop()
@@ -187,7 +232,8 @@ public sealed class FrameCapture : IDisposable
         if (_disposed) return;
         _disposed = true;
         Stop();
-        _stagingTexture?.Dispose();
+        foreach (var tex in _stagingTextures)
+            tex?.Dispose();
         _winrtDevice?.Dispose();
         _d3dContext?.Dispose();
         _d3dDevice?.Dispose();

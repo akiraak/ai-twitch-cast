@@ -2,338 +2,273 @@
 
 ## 背景
 
-C#ネイティブ配信アプリ（Phase 5完了）のTwitch配信テストで、**映像が約4fpsしか出ない**問題が発生。
-WGCは60fpsでフレームを生成しているが、FFmpegへのフレーム転送がボトルネックになっている。
+C#ネイティブ配信アプリのTwitch配信テストで、**映像が約4fpsしか出ない**問題が発生。
+Step 1-3の最適化で**18fps（0.922x speed）**まで改善したが、目標の30fpsには未達。
 
-## 現状分析
+## 完了済み最適化（4fps → 18fps）
 
-### データフロー
-
-```
-WGC (60fps)
-  → D3D11 staging texture → CPU readback (MemoryCopy)
-  → BGRA byte[] (3.7MB/frame @1280x720)
-  → Buffer.BlockCopy (3.7MB コピー)
-  → ThreadPool → StandardInput.BaseStream.Write (stdin匿名パイプ)
-  → FFmpeg rawvideo入力 → libx264 ultrafast → RTMP
-```
-
-### ボトルネック箇所
-
-**FFmpegのstdinパイプ書き込み**がボトルネック。
-
-| 要因 | 詳細 |
-|------|------|
-| フレームサイズ | 1280×720×4(BGRA) = **3,686,400 bytes ≈ 3.7MB** |
-| 必要スループット | 3.7MB × 30fps = **111MB/s** |
-| 匿名パイプのバッファ | Windows匿名パイプのデフォルトバッファ = **4KB** |
-| 書き込み動作 | `Write(3.7MB)` → 4KBずつカーネルに転送 → FFmpegが読むまでブロック → 約920回のチャンク転送 |
-| フレームドロップ | `_writingVideo` フラグで前回書き込み中はスキップ |
-| 実効レート | 1フレーム書き込み ≈ 250ms → **約4fps** |
-
-### 各段階の所要時間（推定）
-
-| 段階 | 時間 | 備考 |
+| Step | 内容 | 効果 |
 |------|------|------|
-| GPU→CPU readback | 1-3ms | D3D11 Map/MemoryCopy、事前確保済みステージングテクスチャ |
-| Buffer.BlockCopy | 1ms | 3.7MBのメモリコピー |
-| パイプ書き込み | **200-300ms** | ★ボトルネック。4KBバッファ × 920チャンク |
-| FFmpeg rawvideo読み取り | 含まれる | パイプ書き込みと同期 |
-| libx264エンコード | 5-15ms | ultrafast preset、CPU依存 |
+| Step 1 | 名前付きパイプ（8MBバッファ） | stdin書き込み 250ms → 1ms |
+| Step 2 | BGRA→NV12 CPU変換 | パイプ転送量 3.7MB → 1.4MB（63%削減） |
+| Step 3 | HWエンコーダ自動検出（h264_nvenc） | CPUエンコード負荷解消 |
+| 追加 | `-flush_packets 1`除去 | RTMP毎フレームフラッシュで0.748x speed |
+| 追加 | サイレンスバッファ 10ms→100ms | 音声不足でFFmpegが0.1x speedに制限 |
+| 追加 | デフォルトFPS 30→20 | GPU readback 55msに合わせた暫定値 |
 
-**結論:** パイプ書き込みが全体の95%を占めている。
+## 現在のボトルネック
 
-## 改善戦略
+**D3D11 Map()のGPU完了待ち = ~55ms/frame**
 
-3段階のアプローチで、簡単な変更から順に実装する。
-
-### Step 1: 名前付きパイプ（大バッファ）— 最小変更で最大効果
-
-**概要:** 映像入力をstdin匿名パイプから名前付きパイプに変更し、バッファサイズを大幅に拡大する。
-
-**原理:**
-- 匿名パイプ: バッファ4KB → 3.7MBの書き込みが920回のチャンクに分割、毎回カーネルとFFmpegの同期待ち
-- 名前付きパイプ（8MBバッファ）: 3.7MBが1-2回の書き込みでカーネルバッファにコピー完了、FFmpegは非同期に読み取り
-
-**期待改善: 4fps → 15-25fps**
-
-**変更ファイル:** `Streaming/FfmpegProcess.cs`
-
-**実装内容:**
-
-```csharp
-// 変更前: stdin匿名パイプ
-"-i pipe:0"
-_process.StandardInput.BaseStream.Write(copy, 0, copy.Length);
-
-// 変更後: 名前付きパイプ（8MBバッファ）
-private NamedPipeServerStream _videoPipe;
-private string _videoPipeName = $"winnative_video_{Environment.ProcessId}";
-
-// パイプ作成（音声パイプと同じパターン）
-_videoPipe = new NamedPipeServerStream(
-    _videoPipeName, PipeDirection.Out, 1,
-    PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
-    outBufferSize: 8 * 1024 * 1024,  // 8MBバッファ（2フレーム分以上）
-    inBufferSize: 0);
-
-// FFmpegの引数
-$@"-i \\.\pipe\{_videoPipeName}"  // stdin:0 → 名前付きパイプに変更
-
-// StandardInputのリダイレクトを無効化（もうstdinは使わない）
-RedirectStandardInput = false,
-
-// 書き込み
-_videoPipe.Write(copy, 0, copy.Length);
+```
+OnFrameArrived (WGCコールバック、50msごと@20fps)
+  └─ ExtractBgra
+       ├─ CopyResource(staging, srcTexture)   ← GPUにコピー指示（非同期）
+       ├─ Map(staging, Read)                   ← ★ GPU完了まで ~55ms ブロック
+       ├─ MemoryCopy row-by-row (720行)        ← ~1ms
+       └─ Unmap
+  └─ OnFrameReady → FfmpegProcess.WriteVideoFrame
+       ├─ BGRA→NV12 変換                       ← ~1ms
+       └─ NamedPipe.Write                      ← ~1ms
 ```
 
-**変更量:** FfmpegProcess.cs のみ、約30行の変更
+**原因:** `CopyResource()`はGPUに非同期コマンドをキューイングするだけだが、直後の`Map()`がGPUパイプラインの全コマンド完了を待つ（暗黙のFlush）。DWMコンポジションやGPU負荷も影響し、実測55msのブロッキングが発生。
 
-**注意点:**
-- `RedirectStandardInput`を無効化するため、`-nostdin`フラグはそのまま維持
-- FFmpegの起動後、名前付きパイプの接続待ちが必要（音声パイプと同じパターン）
-- 音声パイプより先に映像パイプを接続する（FFmpegの入力順序に合わせる）
+**結果:** 1000ms ÷ 55ms ≈ 18fps が上限。
 
----
+## 改善戦略: ダブルステージングテクスチャ・パイプライン
 
-### Step 2: BGRA→NV12 CPU変換 — データ量を63%削減
+### 基本原理
 
-**概要:** FFmpegに渡す前に、CPU上でBGRA（4バイト/ピクセル）をNV12（1.5バイト/ピクセル）に変換する。
+ステージングテクスチャを2枚用意し、**CopyResourceとMapを1フレームずらして実行**する。
+Frame N-1のCopyResourceから50ms経過後（次フレーム到着時）にMapすれば、GPU完了待ちはほぼ0msになる。
 
-**原理:**
-- BGRA: 1280×720×4 = 3,686,400 bytes (3.7MB)
-- NV12: 1280×720×1.5 = 1,382,400 bytes (1.4MB)
-- データ量が**63%削減** → パイプスループットの余裕が大幅に増加
+```
+Frame 1: Copy → staging[0]                              （初回はMapなし）
+Frame 2: Copy → staging[1], Map staging[0] → 読み出し   （50ms経過後 → Map即座完了）
+Frame 3: Copy → staging[0], Map staging[1] → 読み出し
+Frame 4: Copy → staging[1], Map staging[0] → 読み出し
+  ...
+```
 
-**期待改善: Step 1と組み合わせて → 25-30fps**
+**トレードオフ:** 1フレーム（50ms @20fps）の遅延が追加される。Twitch配信では問題にならない。
 
-**変更ファイル:**
-- `Streaming/FfmpegProcess.cs` — FFmpeg引数変更 + NV12バッファ書き込み
-- `Capture/FrameCapture.cs` または新規 `Streaming/ColorConverter.cs` — BGRA→NV12変換
+### 期待改善
 
-**実装内容:**
+- Map(): 55ms → <1ms
+- 1フレームあたり合計: ~3ms（Map + MemoryCopy + NV12変換 + パイプ書き込み）
+- 達成可能FPS: 30fps以上（33ms budget >> 3ms actual）
+- **デフォルトFPSを20→30に変更可能**
+
+## 実装
+
+### 変更ファイル: `Capture/FrameCapture.cs` のみ
+
+### 変更内容
 
 ```csharp
-// 新規: ColorConverter.cs（またはFfmpegProcess内にstaticメソッド）
-public static class ColorConverter
+// === フィールド追加 ===
+
+// ダブルステージングテクスチャ
+private ID3D11Texture2D?[] _stagingTextures = new ID3D11Texture2D?[2];
+private int _stagingIdx;          // 次にCopyResourceする先のインデックス（0 or 1）
+private bool _hasPendingFrame;    // 前フレームのCopyResourceが完了待ちか
+private int _pendingWidth, _pendingHeight;
+
+// 既存フィールドの削除:
+// - _stagingTexture → _stagingTextures[2] に置き換え
+// - _cachedWidth, _cachedHeight はそのまま（テクスチャ再作成判定用）
+
+
+// === ExtractBgra → パイプライン化 ===
+
+private unsafe void ExtractBgra(Direct3D11CaptureFrame frame, out int width, out int height)
 {
-    /// <summary>
-    /// BGRA → NV12 変換。
-    /// NV12レイアウト: Y平面 (W×H) + UV平面 (W×H/2、UVインターリーブ)
-    /// </summary>
-    public static void BgraToNv12(byte[] bgra, byte[] nv12, int width, int height)
+    width = 0;
+    height = 0;
+
+    lock (_lock)
     {
-        int ySize = width * height;
-        int uvOffset = ySize;
-
-        for (int y = 0; y < height; y++)
+        try
         {
-            for (int x = 0; x < width; x++)
-            {
-                int bgraIdx = (y * width + x) * 4;
-                byte b = bgra[bgraIdx];
-                byte g = bgra[bgraIdx + 1];
-                byte r = bgra[bgraIdx + 2];
-                // BGRA→YUV BT.601
-                byte yVal = (byte)Math.Clamp((( 66 * r + 129 * g +  25 * b + 128) >> 8) + 16, 0, 255);
-                nv12[y * width + x] = yVal;
+            var textureGuid = typeof(ID3D11Texture2D).GUID;
+            var texturePtr = Direct3DInterop.GetDXGISurfaceFromWinRT(
+                frame.Surface, textureGuid);
 
-                // UV: 2x2ブロックの左上ピクセルのみ（サブサンプリング）
-                if ((y & 1) == 0 && (x & 1) == 0)
+            using var srcTex = new ID3D11Texture2D(texturePtr);
+            var desc = srcTex.Description;
+            int w = (int)desc.Width;
+            int h = (int)desc.Height;
+
+            EnsureStaging(w, h, desc.Format);
+
+            // ① 前フレームのMapを先に実行（前回のCopyResourceから50ms経過 → 即座完了）
+            if (_hasPendingFrame)
+            {
+                int readIdx = _stagingIdx ^ 1;  // 前フレームが書き込んだテクスチャ
+                var mapped = _d3dContext!.Map(_stagingTextures[readIdx]!, 0, MapMode.Read);
+                try
                 {
-                    byte u = (byte)Math.Clamp(((-38 * r -  74 * g + 112 * b + 128) >> 8) + 128, 0, 255);
-                    byte v = (byte)Math.Clamp(((112 * r -  94 * g -  18 * b + 128) >> 8) + 128, 0, 255);
-                    int uvIdx = uvOffset + (y / 2) * width + (x & ~1);
-                    nv12[uvIdx]     = u;
-                    nv12[uvIdx + 1] = v;
+                    int rw = _pendingWidth, rh = _pendingHeight;
+                    // RowPitch == Width*4 なら一括コピー、違えば行ごと
+                    if (mapped.RowPitch == rw * 4)
+                    {
+                        fixed (byte* dst = _frameBuffer!)
+                        {
+                            Buffer.MemoryCopy(
+                                (void*)mapped.DataPointer, dst,
+                                rw * rh * 4, rw * rh * 4);
+                        }
+                    }
+                    else
+                    {
+                        for (int y = 0; y < rh; y++)
+                        {
+                            var src = (byte*)(mapped.DataPointer + y * mapped.RowPitch);
+                            fixed (byte* dst = &_frameBuffer![y * rw * 4])
+                            {
+                                Buffer.MemoryCopy(src, dst, rw * 4, rw * 4);
+                            }
+                        }
+                    }
+                    width = rw;
+                    height = rh;
+                }
+                finally
+                {
+                    _d3dContext.Unmap(_stagingTextures[readIdx]!, 0);
                 }
             }
+
+            // ② 今フレームのCopyResourceをキューイング（非同期、すぐ戻る）
+            _d3dContext!.CopyResource(_stagingTextures[_stagingIdx]!, srcTex);
+            _pendingWidth = w;
+            _pendingHeight = h;
+            _hasPendingFrame = true;
+            _stagingIdx ^= 1;  // 次フレームは別のテクスチャに書き込む
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[Capture] ExtractBgra failed at frame {N}", _frameCount);
         }
     }
 }
 
-// FFmpegの引数変更
-"-f rawvideo -pixel_format nv12"  // bgra → nv12 に変更
-"-pix_fmt yuv420p"  // これは出力フォーマットなので維持（NV12は既にyuv420p互換）
+
+// === EnsureStaging → 2枚分作成 ===
+
+private void EnsureStaging(int w, int h, Format fmt)
+{
+    if (_cachedWidth == w && _cachedHeight == h && _stagingTextures[0] != null)
+        return;
+
+    for (int i = 0; i < 2; i++)
+    {
+        _stagingTextures[i]?.Dispose();
+        _stagingTextures[i] = _d3dDevice!.CreateTexture2D(new Texture2DDescription
+        {
+            Width = (uint)w,
+            Height = (uint)h,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = fmt,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Staging,
+            BindFlags = BindFlags.None,
+            CPUAccessFlags = CpuAccessFlags.Read,
+        });
+    }
+
+    _frameBuffer = new byte[w * h * 4];
+    _cachedWidth = w;
+    _cachedHeight = h;
+    _hasPendingFrame = false;
+    _stagingIdx = 0;
+    Log.Debug("[Capture] Double staging allocated: {W}x{H}", w, h);
+}
+
+
+// === Dispose → 2枚分解放 ===
+
+public void Dispose()
+{
+    if (_disposed) return;
+    _disposed = true;
+    Stop();
+    foreach (var tex in _stagingTextures)
+        tex?.Dispose();
+    _winrtDevice?.Dispose();
+    _d3dContext?.Dispose();
+    _d3dDevice?.Dispose();
+}
 ```
 
-**パフォーマンス考慮:**
-- 純C#のループでも1280×720なら5-10ms程度（921,600ピクセル）
-- `Unsafe` + SIMD (`System.Runtime.Intrinsics`) で1-3msに最適化可能
-- NV12変換はThreadPoolの書き込みスレッド内で実行（WGCコールバックをブロックしない）
-
-**注意点:**
-- NV12はFFmpegの`rawvideo`デマルチプレクサが直接対応（`-pixel_format nv12`）
-- BT.601係数を使用（SDコンテンツ向け。HDならBT.709に変更）
-- FFmpeg側で`-pix_fmt yuv420p`を指定しているが、NV12→yuv420pはFFmpeg内部でほぼゼロコストの変換
-
----
-
-### Step 3: NVENCハードウェアエンコード — GPUでH.264エンコードまで完結（オプション）
-
-**概要:** NVIDIA GPUのNVENCエンコーダを使用し、フレームをGPU上でH.264にエンコードしてからFFmpegに渡す。
-
-**原理:**
-- GPUテクスチャ → NVENC → H.264 NAL units (10-50KB/frame)
-- パイプ転送量: 3.7MB → 10-50KB（**99%削減**）
-- CPU libx264エンコードも不要になり、CPU負荷も大幅低下
-
-**期待改善: → 30fps（確実）**
-
-**方式A: FFmpeg側のNVENCを使う（推奨・変更最小）**
-
-```
-// FFmpegの引数変更のみ
-"-c:v h264_nvenc -preset p1 -tune ll"  // libx264 → h264_nvenc
-// p1 = 最速プリセット、ll = low latency tune
-```
-
-- BGRAのままパイプに流してFFmpeg内でNVENCエンコード
-- Step 1（名前付きパイプ）は前提として必要（rawvideoの転送は必要）
-- Step 2（NV12変換）と組み合わせるとさらに効果的
-- NVIDIA GPU搭載マシンでのみ動作
-
-**方式B: D3D11テクスチャを直接NVENCに渡す（最速・変更大）**
+### 変更ファイル: `Streaming/StreamConfig.cs`
 
 ```csharp
-// GPU上でテクスチャ → NVENCエンコード → compressed NAL → パイプ
-// CPU readbackが完全に不要になる
-// ただしNVENC C# SDKの導入が必要（NvEncSharp等）
+// FPS デフォルト値を30に戻す
+public int Framerate { get; set; } = 30;
 ```
 
-- CPU readback自体を省略（ゼロコピー）
-- パイプ帯域は事実上問題にならない（圧縮済み）
-- 実装コストが大きく、NVIDIA専用
+## 計測ログの追加
 
-**方式C: AMD AMF / Intel QSV（GPU非依存対応）**
-
-```
-// AMD GPU
-"-c:v h264_amf -quality speed"
-
-// Intel iGPU (QSV)
-"-c:v h264_qsv -preset veryfast"
-```
-
-- FFmpegの引数変更のみで対応可能
-- GPUベンダーの自動検出ロジックが必要
-
-**注意点:**
-- NVIDIA以外のGPU対応が必要な場合は方式A+Cの組み合わせ（自動検出）
-- Twitch推奨のキーフレーム間隔（2秒）を維持すること
-- NVENCの同時セッション数制限に注意（コンシューマGPUは通常5セッション）
-
----
-
-## 実装順序と判断基準
-
-```
-Step 1: 名前付きパイプ
-  │
-  ├─ 25fps以上出る → 完了（Step 2/3はスキップ可）
-  │
-  └─ 15-20fps程度 → Step 2へ
-       │
-       ├─ 28fps以上出る → 完了
-       │
-       └─ まだ不足 → Step 3へ（NVENC）
-```
-
-| Step | 期待fps | 実装コスト | 変更ファイル数 | 変更行数 |
-|------|:-------:|:----------:|:--------------:|:--------:|
-| Step 1 | 15-25 | **低** | 1 | ~30 |
-| Step 2 | 25-30 | **中** | 2 | ~80 |
-| Step 3A | 30 | **低** | 1 | ~5 |
-| Step 3B | 30+ | **高** | 3+ | ~200 |
-
-## 補足: その他の最適化（Step 1-3の効果が十分なら不要）
-
-### GPU上でBGRA→NV12変換（D3D11 Compute Shader）
-
-FrameCapture内のGPUテクスチャに対してCompute Shaderを実行し、GPU上でBGRA→NV12に変換してからCPU readbackする。
-CPU readbackのデータ量自体が1.4MBに削減される。
-
-- 実装: HLSL Compute Shader + D3D11 CreateComputeShader
-- 効果: CPU readback時間とメモリコピー時間が63%削減
-- Step 2のCPU変換と排他（どちらか一方）
-
-### ダブルバッファリング
-
-WriteVideoFrameで毎回`new byte[]`するのではなく、2つのバッファを交互に使用。
-GCプレッシャー削減とメモリアロケーション時間短縮。
+Map()の所要時間を計測し、ダブルバッファの効果を確認する。
 
 ```csharp
-// 現状: 毎フレーム3.7MBのアロケーション
-var copy = new byte[bgraData.Length];
-
-// 改善: 事前確保した2バッファを交互に使用
-private byte[] _bufA, _bufB;
-private int _bufIdx;
-var buf = (_bufIdx++ & 1) == 0 ? _bufA : _bufB;
-Buffer.BlockCopy(bgraData, 0, buf, 0, bgraData.Length);
+// ExtractBgra内、Map前後にStopwatch
+if (_hasPendingFrame)
+{
+    var sw = Stopwatch.StartNew();
+    var mapped = _d3dContext!.Map(...);
+    var mapMs = sw.ElapsedMilliseconds;
+    // ... データ読み出し ...
+    sw.Stop();
+    if (_frameCount <= 5 || _frameCount % 30 == 0)
+        Log.Debug("[Capture] Map={MapMs}ms total={TotalMs}ms", mapMs, sw.ElapsedMilliseconds);
+}
 ```
 
-### FrameCapture側のreadback最適化
+## 変更量
 
-FrameCapture.ExtractBgra()で行ごとにMemoryCopyしている部分を、RowPitch == Width*4の場合は一括コピーに変更。
-
-```csharp
-// 現状: 行ごとにコピー（720回のMemoryCopy）
-for (int y = 0; y < h; y++)
-    Buffer.MemoryCopy(src + y * rowPitch, dst + y * w * 4, w * 4, w * 4);
-
-// 改善: RowPitch == Width*4 なら一括コピー
-if (mapped.RowPitch == w * 4)
-    Buffer.MemoryCopy(mapped.DataPointer, dst, totalSize, totalSize);
-else
-    // padding がある場合のみ行ごとコピー
-    for (int y = 0; y < h; y++) ...
-```
+| ファイル | 変更内容 | 変更行数 |
+|----------|----------|:--------:|
+| `Capture/FrameCapture.cs` | ダブルステージングテクスチャ + パイプライン化 + RowPitch最適化 + 計測ログ | ~50行 |
+| `Streaming/StreamConfig.cs` | FPS 20→30 | 1行 |
 
 ## リスク
 
 | リスク | 深刻度 | 対策 |
 |--------|:------:|------|
-| 名前付きパイプの接続順序 | 中 | FFmpegの入力順序（`-i`の順）でパイプを接続。映像→音声の順で`WaitForConnectionAsync` |
-| NV12変換の色差 | 低 | BT.601係数で十分。必要ならBT.709に切り替え |
-| NVENCの可用性 | 中 | NVIDIA GPU非搭載時は`libx264`にフォールバック。FFmpegの`-hwaccel auto`で自動検出 |
-| 名前付きパイプのバッファ上限 | 低 | Windowsの名前付きパイプは最大数GBのバッファ可能。8MBで十分 |
-| FFmpegのrawvideo NV12対応 | 低 | FFmpegは`-pixel_format nv12`をネイティブサポート |
+| 初回フレームが出力されない | 低 | パイプラインの初回はCopyResourceのみでMapしないため、1フレーム遅れで開始。FfmpegProcess側の初期黒フレームが表示されるので視覚的問題なし |
+| 解像度変更時のテクスチャ不整合 | 低 | EnsureStagingで両テクスチャを再作成 + `_hasPendingFrame=false`でパイプラインリセット |
+| Map()がまだ遅い場合 | 中 | 計測ログで確認。50ms経過後もMapが遅い場合、原因はGPU contention（DWM等）。対策: ID3D11Query(Event)で完了チェック → 未完了ならスキップ |
+| 1フレーム遅延 | 低 | 20fps=50ms、30fps=33msの遅延追加。Twitch配信のバッファ（2-5秒）に比べ無視できる |
 
 ## 検証方法
 
-1. **FPS計測:** FfmpegProcess内の`_frameCount`と`_dropCount`を定期ログ出力
-2. **書き込み時間計測:** WriteVideoFrame内にStopwatchを追加、フレームあたりの書き込み時間をログ
-3. **FFmpegログ:** `ffmpeg.log`の`frame=`行でエンコードFPSを確認
-4. **Twitch確認:** 配信画面のスムーズさを目視確認
+1. **Map時間:** ログの `[Capture] Map=Xms` で確認。目標: <5ms
+2. **FFmpeg FPS:** `ffmpeg.log` の `frame=` 行でエンコードFPS確認。目標: 30fps
+3. **ドロップ数:** `[FFmpeg] ... drops=X` で確認。目標: drops=0に近い
+4. **Twitch目視:** 配信画面のスムーズさ確認
 
-```csharp
-// 計測ログ追加例
-var sw = Stopwatch.StartNew();
-_videoPipe.Write(copy, 0, copy.Length);
-sw.Stop();
-if (_frameCount % 30 == 0)
-    Log.Debug("[FFmpeg] Write {Ms}ms, frames={F} drops={D}",
-        sw.ElapsedMilliseconds, FrameCount, DropCount);
-```
+## 将来の追加最適化（今回のスコープ外）
+
+30fps達成後、さらなる高みを目指す場合:
+
+- **D3D11 → NVENC直接エンコード（ゼロコピー）:** GPU上でD3D11テクスチャ→NVENCエンコード→圧縮NAL（10-50KB/frame）をパイプに流す。CPU readback完全不要。NvEncSharp等のライブラリが必要。
+- **D3D11 Compute ShaderでBGRA→NV12:** GPU上で色変換してからCPU readback。readbackデータ量が3.7MB→1.4MBに。
 
 ## ステータス
 
 - 作成日: 2026-03-14
-- 状態: Step 1-3 テスト完了、追加最適化が必要
-- Step 1 完了: 名前付きパイプ（8MBバッファ）— パイプ書き込み250ms→1ms
-- Step 2 完了: BGRA→NV12 CPU変換（ColorConverter.cs）— NV12 convert=1ms
-- Step 3 完了: HWエンコーダ自動検出 — h264_nvenc使用確認
-- 追加修正1: `-flush_packets 1`除去 — RTMP毎フレームフラッシュが0.748x speedの原因だった
-- 追加修正2: サイレンスフォールバック修正（10ms→100ms）— 音声不足でFFmpegが0.1x speedに制限されていた根本原因
-- 追加修正3: デフォルトFPSを30→20に変更 — GPU readbackが55ms/frameのため暫定
-- テスト結果:
-  - 4fps (0.11x) → 18fps (0.922x) に大幅改善
-  - NV12 convert=1ms, write=1ms, drops=12（ほぼゼロ）
-  - ボトルネックはFrameCapture.ExtractBgraのD3D11 Map()（GPU完了待ち~55ms）
-- 次のアクション: FrameCaptureダブルバッファ・ステージングテクスチャで30fps化
+- 状態: 完了
+- Step 1-3: 完了（4fps → 18fps）
+- Step 4: 完了（18fps → 30fps）— ダブルステージングテクスチャ + FPSスロットル固定間隔化
+- 最終結果: 30fps / speed=1.01x / Map=0ms / drops固定 / write=1ms
 - 変更ファイル:
-  - `Streaming/FfmpegProcess.cs` — 名前付きパイプ + NV12変換 + HWエンコーダ + ダブルバッファ + 計測ログ
-  - `Streaming/ColorConverter.cs` — BGRA→NV12変換（新規）
-  - `Streaming/StreamConfig.cs` — `Encoder`プロパティ + `--encoder`引数 + FPS=20
+  - `Capture/FrameCapture.cs` — ダブルステージングテクスチャ + パイプライン化 + RowPitch最適化 + 固定間隔FPSスロットル
+  - `Streaming/FfmpegProcess.cs` — 名前付きパイプ + NV12変換 + HWエンコーダ + ダブルバッファ
+  - `Streaming/ColorConverter.cs` — BGRA→NV12変換
+  - `Streaming/StreamConfig.cs` — FPS=30 + Encoderプロパティ
   - `Streaming/AudioLoopback.cs` — サイレンスバッファ100ms化
+  - `Server/HttpServer.cs` — WebSocket SendAsync排他制御

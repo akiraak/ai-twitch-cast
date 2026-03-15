@@ -349,6 +349,19 @@
 - [x] デフォルトフレームレートを30→20fpsに変更（GPU readbackが55ms/frameのため暫定対応）
 - [x] フレームレート最適化プラン作成（plans/framerate-optimization.md）
 
+## フレームレート最適化 Step 4（18fps → 30fps達成）
+
+- [x] ダブルステージングテクスチャ・パイプライン化（CopyResourceとMapを1フレームずらし、GPU readback 55ms→0msに解消）
+- [x] RowPitch一括コピー最適化（行ごとMemoryCopy 720回→一括コピー1回）
+- [x] FPSスロットルを固定間隔ベースに変更（スレッドプールジッターによる30fps→22fps低下を解消）
+- [x] デフォルトフレームレートを20fps→30fpsに復帰
+- [x] Map計測ログ追加（Map=0ms readback=0ms を確認）
+- [x] 結果: 30fps / speed=1.01x / drops固定（初期のみ）/ パイプwrite=1ms安定
+
+## WebSocket SendAsync同時呼び出しエラー修正
+
+- [x] SendWsResponseにSemaphoreSlimによる排他制御を追加（起動時の同時リクエストによるSendAsync競合を解消）
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成
