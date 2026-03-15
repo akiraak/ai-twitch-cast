@@ -19,6 +19,8 @@ public class MainForm : Form
     private FfmpegProcess? _ffmpeg;
     private AudioLoopback? _audio;
     private bool _closing;
+    private DateTime _streamStartTime;
+    private string? _activeStreamKey;
 
     // Window capture (Phase 3)
     private CaptureManager? _captureManager;
@@ -76,6 +78,7 @@ public class MainForm : Form
         _captureManager = new CaptureManager();
         _httpServer = new HttpServer(_httpPort);
 
+        // キャプチャコールバック
         _httpServer.OnListWindows = () => WindowEnumerator.GetWindows();
 
         _httpServer.OnStartCapture = (sourceId, fps, quality) =>
@@ -99,6 +102,29 @@ public class MainForm : Form
         _httpServer.OnListCaptures = () => _captureManager.ListCaptures();
         _httpServer.OnGetSnapshot = (id) => _captureManager.GetSnapshot(id);
 
+        // 配信制御コールバック
+        _httpServer.OnStartStream = async (streamKey, serverUrl) =>
+        {
+            return await HandleStartStreamRequest(streamKey, serverUrl);
+        };
+
+        _httpServer.OnStopStream = async () =>
+        {
+            return await HandleStopStreamRequest();
+        };
+
+        _httpServer.OnGetStreamStatus = () => GetStreamStatusDict();
+
+        _httpServer.OnScreenshot = async () =>
+        {
+            return await TakeScreenshotAsync();
+        };
+
+        _httpServer.OnQuit = () =>
+        {
+            BeginInvoke(() => Close());
+        };
+
         try
         {
             _httpServer.Start();
@@ -108,6 +134,194 @@ public class MainForm : Form
             Log.Error(ex, "[MainForm] HTTP server start failed on port {Port}", _httpPort);
         }
     }
+
+    // =====================================================
+    // 配信制御（WebSocket/HTTP共通）
+    // =====================================================
+
+    private async Task<object> HandleStartStreamRequest(string streamKey, string? serverUrl)
+    {
+        if (_ffmpeg != null)
+            return new Dictionary<string, object> { ["ok"] = false, ["error"] = "既に配信中です" };
+
+        if (string.IsNullOrEmpty(streamKey))
+        {
+            // 引数・環境変数からフォールバック
+            streamKey = StreamConfig.FromArgs(_args).StreamKey ?? "";
+            if (string.IsNullOrEmpty(streamKey))
+                return new Dictionary<string, object> { ["ok"] = false, ["error"] = "streamKey が必要です" };
+        }
+
+        _activeStreamKey = streamKey;
+
+        try
+        {
+            // serverUrl指定があればbroadcast.htmlを再ナビゲーション
+            if (!string.IsNullOrEmpty(serverUrl) && _webView.CoreWebView2 != null)
+            {
+                var currentUrl = _webView.CoreWebView2.Source;
+                if (!currentUrl.StartsWith(serverUrl, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log.Information("[MainForm] Navigating to serverUrl: {Url}", serverUrl);
+                    // serverUrlからbroadcast URLを構築（tokenは現在のURLから引き継ぎ）
+                    var token = "";
+                    if (currentUrl.Contains("token="))
+                    {
+                        var idx = currentUrl.IndexOf("token=", StringComparison.Ordinal);
+                        token = currentUrl[(idx + 6)..];
+                        if (token.Contains('&'))
+                            token = token[..token.IndexOf('&')];
+                    }
+                    var newUrl = $"{serverUrl.TrimEnd('/')}/broadcast?token={token}";
+                    _webView.CoreWebView2.Navigate(newUrl);
+                    await Task.Delay(2000); // ページ読み込み待ち
+                }
+            }
+
+            await StartStreamingWithKeyAsync(streamKey);
+            return new Dictionary<string, object> { ["ok"] = true };
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[MainForm] start_stream failed");
+            return new Dictionary<string, object> { ["ok"] = false, ["error"] = ex.Message };
+        }
+    }
+
+    private async Task<object> HandleStopStreamRequest()
+    {
+        if (_ffmpeg == null)
+            return new Dictionary<string, object> { ["ok"] = false, ["error"] = "配信中ではありません" };
+
+        var uptime = _ffmpeg.Uptime;
+        var frames = _ffmpeg.FrameCount;
+        var drops = _ffmpeg.DropCount;
+
+        await StopStreamingAsync();
+
+        return new Dictionary<string, object>
+        {
+            ["ok"] = true,
+            ["uptime_seconds"] = (int)uptime.TotalSeconds,
+            ["frames_sent"] = frames,
+            ["frames_dropped"] = drops,
+        };
+    }
+
+    private object GetStreamStatusDict()
+    {
+        var streaming = _ffmpeg is { IsRunning: true };
+        var config = StreamConfig.FromArgs(_args);
+
+        var ffmpegPath = "";
+        try
+        {
+            var candidates = new[]
+            {
+                config.FfmpegPath ?? "",
+                Path.Combine(AppContext.BaseDirectory, "resources", "ffmpeg", "ffmpeg.exe"),
+                Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe"),
+                "ffmpeg.exe"
+            };
+            ffmpegPath = candidates.FirstOrDefault(p => !string.IsNullOrEmpty(p) && File.Exists(p)) ?? "ffmpeg.exe";
+        }
+        catch { ffmpegPath = "ffmpeg.exe"; }
+
+        return new Dictionary<string, object>
+        {
+            ["streaming"] = streaming,
+            ["broadcast_window_open"] = true,
+            ["uptime_seconds"] = streaming ? (object)(int)_ffmpeg!.Uptime.TotalSeconds : null!,
+            ["frames_sent"] = _ffmpeg?.FrameCount ?? 0,
+            ["frames_dropped"] = _ffmpeg?.DropCount ?? 0,
+            ["config"] = new Dictionary<string, object>
+            {
+                ["resolution"] = $"{config.Width}x{config.Height}",
+                ["framerate"] = config.Framerate,
+                ["videoBitrate"] = config.VideoBitrate,
+                ["audioBitrate"] = config.AudioBitrate,
+                ["preset"] = config.Preset,
+            },
+            ["ffmpeg_path"] = ffmpegPath,
+            ["ffmpeg_exists"] = File.Exists(ffmpegPath),
+            ["audio_stream_connected"] = _audio != null,
+            ["audio_receiving_pcm"] = _audio != null && streaming,
+            ["mixer_active"] = false,
+            ["bgm_playing"] = false,
+            ["tts_playing"] = false,
+        };
+    }
+
+    private Task<string?> TakeScreenshotAsync()
+    {
+        var tcs = new TaskCompletionSource<string?>();
+        // CoreWebView2へのアクセスはすべてUIスレッドで実行する必要がある
+        BeginInvoke(async () =>
+        {
+            try
+            {
+                if (_webView.CoreWebView2 == null)
+                {
+                    tcs.SetResult(null);
+                    return;
+                }
+                using var ms = new MemoryStream();
+                await _webView.CoreWebView2.CapturePreviewAsync(
+                    Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, ms);
+                tcs.SetResult(Convert.ToBase64String(ms.ToArray()));
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[MainForm] Screenshot failed");
+                tcs.TrySetResult(null);
+            }
+        });
+        return tcs.Task;
+    }
+
+    // =====================================================
+    // 配信パイプライン
+    // =====================================================
+
+    private async Task StartStreamingWithKeyAsync(string streamKey)
+    {
+        if (_capture == null)
+        {
+            Log.Error("[MainForm] Cannot stream: no capture running");
+            throw new InvalidOperationException("No capture running");
+        }
+
+        var config = StreamConfig.FromArgs(_args);
+        config.StreamKey = streamKey;
+
+        Log.Information("[MainForm] Starting streaming pipeline...");
+        Log.Information("[MainForm] Resolution={W}x{H} FPS={F} Bitrate={B}",
+            config.Width, config.Height, config.Framerate, config.VideoBitrate);
+
+        // 1. Initialize audio loopback → get format for FFmpeg
+        _audio = new AudioLoopback();
+        _audio.Initialize();
+
+        // 2. Create FFmpeg process with config + actual audio format
+        _ffmpeg = new FfmpegProcess(config, _audio.Format!);
+
+        // 3. Start FFmpeg (creates named pipe, starts process, waits for pipe connection)
+        await _ffmpeg.StartAsync();
+
+        // 4. Connect audio loopback → FFmpeg audio pipe
+        _audio.Start((data, offset, count) => _ffmpeg.WriteAudioData(data, offset, count));
+
+        // 5. Connect frame capture → FFmpeg video stdin
+        _capture.TargetFps = config.Framerate;
+        _capture.OnFrameReady = (data, w, h) => _ffmpeg.WriteVideoFrame(data);
+
+        _streamStartTime = DateTime.UtcNow;
+        Log.Information("[MainForm] Streaming pipeline active");
+    }
+
+    // =====================================================
+    // キャプチャレイヤーJS injection
+    // =====================================================
 
     /// <summary>
     /// WebView2にJSを注入してbroadcast.htmlにキャプチャレイヤーを追加する。
@@ -142,6 +356,10 @@ public class MainForm : Form
             ? sourceId[2..] : sourceId;
         return new IntPtr(long.Parse(s, NumberStyles.HexNumber));
     }
+
+    // =====================================================
+    // ナビゲーション・キャプチャ
+    // =====================================================
 
     private async void OnNavigationCompleted(object? sender,
         Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
@@ -195,28 +413,7 @@ public class MainForm : Form
                 return;
             }
 
-            Log.Information("[MainForm] Starting streaming pipeline...");
-            Log.Information("[MainForm] Resolution={W}x{H} FPS={F} Bitrate={B}",
-                config.Width, config.Height, config.Framerate, config.VideoBitrate);
-
-            // 1. Initialize audio loopback → get format for FFmpeg
-            _audio = new AudioLoopback();
-            _audio.Initialize();
-
-            // 2. Create FFmpeg process with config + actual audio format
-            _ffmpeg = new FfmpegProcess(config, _audio.Format!);
-
-            // 3. Start FFmpeg (creates named pipe, starts process, waits for pipe connection)
-            await _ffmpeg.StartAsync();
-
-            // 4. Connect audio loopback → FFmpeg audio pipe
-            _audio.Start((data, offset, count) => _ffmpeg.WriteAudioData(data, offset, count));
-
-            // 5. Connect frame capture → FFmpeg video stdin
-            _capture.TargetFps = config.Framerate;
-            _capture.OnFrameReady = (data, w, h) => _ffmpeg.WriteVideoFrame(data);
-
-            Log.Information("[MainForm] Streaming pipeline active");
+            await StartStreamingWithKeyAsync(config.StreamKey);
         }
         catch (Exception ex)
         {
@@ -245,6 +442,7 @@ public class MainForm : Form
             _ffmpeg = null;
         }
 
+        _activeStreamKey = null;
         Log.Information("[MainForm] Streaming stopped");
     }
 

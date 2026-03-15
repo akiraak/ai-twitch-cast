@@ -308,6 +308,15 @@
 - [x] MainForm統合: WebView2 JS injection（addCaptureLayer/removeCaptureLayer）でbroadcast.htmlにキャプチャ表示
 - [x] stream.sh: Server/ディレクトリのビルドコピー追加
 
+## C#ネイティブ配信アプリ（Phase 4: サーバー通信）
+
+- [x] WebSocket `/ws/control` 実装（HttpListenerベースのWebSocketアップグレード、JSON RPCプロトコル）
+- [x] 制御アクション実装（status, windows, start_capture, stop_capture, captures, start_stream, stop_stream, stream_status, screenshot, quit）
+- [x] Electron互換レスポンス（broadcast/preview系アクションに互換応答、配列は{data:[...]}形式）
+- [x] HTTPストリーミング制御エンドポイント追加（POST /stream/start|stop, GET /stream/status, POST /quit）
+- [x] MainForm: WebSocket経由の動的streamKey配信開始、WebView2 CapturePreviewAsyncスクリーンショット
+- [x] WSL2 FastAPIサーバーとの通信互換確認（既存の`_ws_request()`がそのまま動作）
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成

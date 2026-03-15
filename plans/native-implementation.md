@@ -377,7 +377,7 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
 
 ## ステータス
 - 作成日: 2026-03-14
-- 状態: Phase 3 完了
+- 状態: Phase 4 完了
 - Phase 1 完了日: 2026-03-14
 - Phase 1 検証結果:
   - WebView2: 隠しウィンドウ(-32000,-32000)で正常描画 (**問題なし**)
@@ -401,4 +401,15 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
   - HttpServer: HttpListenerベースのHTTP API（/status, /windows, /capture, /captures, /snapshot/{id}）
   - MainForm統合: WebView2 JS injection（addCaptureLayer/removeCaptureLayer）でbroadcast.htmlにキャプチャ表示
   - stream.sh: Server/ディレクトリのビルドコピー追加
+  - ビルド確認: dotnet.exe build Release 成功
+- Phase 4 完了日: 2026-03-14
+- Phase 4 実装内容:
+  - WebSocket `/ws/control`: HttpListenerベースのWebSocketアップグレード、JSON RPCプロトコル（requestIdマッチング）
+  - 制御アクション: status, windows, start_capture, stop_capture, captures, start_stream, stop_stream, stream_status, screenshot, quit
+  - Electron互換アクション: broadcast_open/close/status（常にtrue）、preview_open/close/status（C#では未使用）
+  - HTTPストリーミング制御: POST /stream/start, POST /stream/stop, GET /stream/status, POST /quit
+  - /stream/{id} → /snapshot/{id} 互換ルート追加
+  - MainForm: 動的streamKey対応（WebSocket経由でstreamKeyを受け取り配信開始）
+  - MainForm: WebView2 CapturePreviewAsync でスクリーンショット（PNG base64）
+  - WSL2 FastAPIサーバーとの通信: 既存の `_ws_request()` がそのまま動作（同じプロトコル）
   - ビルド確認: dotnet.exe build Release 成功
