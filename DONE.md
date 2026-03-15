@@ -1,5 +1,13 @@
 # DONE
 
+## アバターライティング起動時復元修正
+
+- [x] broadcast.htmlの`<script type="module">`（Three.js+VRM）と`<script>`（init/applySettings）の実行順序レースコンディションを修正。module scriptのCDN読み込み遅延により`window.avatarLighting`未定義のままライティング適用がスキップされていた問題を、pending settingsパターンで解決
+
+## ウィンドウ閉じ時の音声ミュート
+
+- [x] ×ボタンでウィンドウ非表示後もWebView2の音声（BGM/TTS）が鳴り続ける問題を修正。Hide()直後にCoreWebView2.IsMutedで即座にミュート
+
 ## ビュワー×ボタンの閉じ遅延修正
 
 - [x] ×クリック時にHide()を即座に呼び出し、クリーンアップはバックグラウンドで実行するよう変更（WebView2/HTTP/WGCの同期破棄によるUI遅延を解消）

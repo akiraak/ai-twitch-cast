@@ -967,6 +967,7 @@ public class MainForm : Form
         e.Cancel = true;
         _closing = true;
         Hide();
+        try { _webView.CoreWebView2.IsMuted = true; } catch { }
 
         // バックグラウンドでクリーンアップ
         if (_ffmpeg != null)
