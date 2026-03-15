@@ -1912,18 +1912,17 @@ captureRefreshStatus();
 captureRefreshSources();
 setInterval(captureRefreshStatus, 10000);
 
-// プレビュー自動起動 + 配信環境の事前Setup
-(async () => {
-  // プレビューウィンドウが開いていなければ起動
-  try {
-    const ps = await (await fetch('/api/capture/preview/status')).json();
-    if (!ps.open) {
-      previewOneClick();
-    }
-  } catch (e) {
-    previewOneClick();
-  }
-})();
+// プレビュー自動起動（無効化: ネイティブアプリ移行後はstream.shで起動するため）
+// (async () => {
+//   try {
+//     const ps = await (await fetch('/api/capture/preview/status')).json();
+//     if (!ps.open) {
+//       previewOneClick();
+//     }
+//   } catch (e) {
+//     previewOneClick();
+//   }
+// })();
 </script>
 </body>
 </html>
