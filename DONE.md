@@ -299,6 +299,15 @@
 - [x] MainForm統合: --stream フラグで自動配信パイプライン開始（WGC→FFmpeg stdin、WASAPI→named pipe→FFmpeg）
 - [x] FFmpeg stderr → logs/ffmpeg.log 自動保存
 
+## C#ネイティブ配信アプリ（Phase 3: ウィンドウキャプチャ）
+
+- [x] WindowEnumerator: Win32 EnumWindows P/Invokeでウィンドウ一覧取得（自プロセス・最小化・タイトルなし除外）
+- [x] WindowCapture: WGC CreateFreeThreadedで任意HWND→D3D11テクスチャ→BGRA→JPEG変換（FPSスロットル付き）
+- [x] CaptureManager: ConcurrentDictionaryで複数キャプチャセッション管理（スレッドセーフ）
+- [x] HttpServer: HttpListenerベースのHTTP API（/status, /windows, /capture, /captures, /snapshot/{id}）
+- [x] MainForm統合: WebView2 JS injection（addCaptureLayer/removeCaptureLayer）でbroadcast.htmlにキャプチャ表示
+- [x] stream.sh: Server/ディレクトリのビルドコピー追加
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成

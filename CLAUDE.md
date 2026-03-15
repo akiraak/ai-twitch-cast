@@ -60,11 +60,12 @@ ai-twitch-cast/
 │   ├── capture-renderer.js  # レンダラー（getUserMedia+canvas+JPEG書き出し）
 │   ├── package.json         # Electron+electron-builder設定
 │   └── build.sh             # ビルドスクリプト
-├── win-native-app/           # C#ネイティブ配信アプリ（Electron後継、開発中）→ symlink to Windows FS
+├── win-native-app/           # C#ネイティブ配信アプリ（Electron後継、開発中）
 │   └── WinNativeApp/        # .NET 8 WinForms + WebView2 + WGC
 │       ├── Program.cs       # エントリポイント
-│       ├── MainForm.cs      # WebView2フォーム（オフスクリーン）+ 配信パイプライン制御
-│       ├── Capture/         # WGCフレームキャプチャ
+│       ├── MainForm.cs      # WebView2フォーム + キャプチャ管理 + HTTPサーバー統合
+│       ├── Capture/         # WGCフレームキャプチャ + ウィンドウキャプチャ管理
+│       ├── Server/          # HTTP API（ウィンドウ一覧・キャプチャ管理・スナップショット）
 │       └── Streaming/       # FFmpeg配信パイプライン（FfmpegProcess + AudioLoopback + StreamConfig）
 ├── src/                      # ソースコード
 │   ├── scene_config.py       # 設定の定義（scenes.jsonから読み込み）

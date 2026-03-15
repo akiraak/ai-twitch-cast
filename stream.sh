@@ -86,10 +86,11 @@ fi
 
 # ソースをWindows FSにコピー（ビルド高速化）
 echo "ソースを同期中..."
-mkdir -p "$BUILD_DIR/Capture" "$BUILD_DIR/Streaming"
+mkdir -p "$BUILD_DIR/Capture" "$BUILD_DIR/Streaming" "$BUILD_DIR/Server"
 cp "$SRC_DIR"/*.cs "$SRC_DIR"/*.csproj "$BUILD_DIR/" 2>/dev/null
 cp "$SRC_DIR"/Capture/*.cs "$BUILD_DIR/Capture/"
 cp "$SRC_DIR"/Streaming/*.cs "$BUILD_DIR/Streaming/"
+cp "$SRC_DIR"/Server/*.cs "$BUILD_DIR/Server/"
 
 WIN_PROJECT=$(wslpath -w "$BUILD_DIR")
 

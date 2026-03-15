@@ -1,6 +1,8 @@
+using System.Globalization;
 using Microsoft.Web.WebView2.WinForms;
 using Serilog;
 using WinNativeApp.Capture;
+using WinNativeApp.Server;
 using WinNativeApp.Streaming;
 
 namespace WinNativeApp;
@@ -18,11 +20,18 @@ public class MainForm : Form
     private AudioLoopback? _audio;
     private bool _closing;
 
+    // Window capture (Phase 3)
+    private CaptureManager? _captureManager;
+    private HttpServer? _httpServer;
+    private readonly int _httpPort;
+
     public MainForm(string[] args)
     {
         _args = args;
         _url = args.FirstOrDefault(a => !a.StartsWith("--")) ?? "https://example.com";
         _autoStream = args.Contains("--stream");
+        _httpPort = int.TryParse(
+            Environment.GetEnvironmentVariable("WIN_CAPTURE_PORT"), out var p) ? p : 9090;
 
         Text = "WinNativeApp";
         StartPosition = FormStartPosition.Manual;
@@ -57,6 +66,81 @@ public class MainForm : Form
         {
             Log.Error(ex, "[MainForm] WebView2 init failed");
         }
+
+        // ウィンドウキャプチャ管理 + HTTPサーバー起動
+        InitializeCaptureServer();
+    }
+
+    private void InitializeCaptureServer()
+    {
+        _captureManager = new CaptureManager();
+        _httpServer = new HttpServer(_httpPort);
+
+        _httpServer.OnListWindows = () => WindowEnumerator.GetWindows();
+
+        _httpServer.OnStartCapture = (sourceId, fps, quality) =>
+        {
+            var hwnd = ParseHwnd(sourceId);
+            var title = WindowEnumerator.GetWindowTitle(hwnd);
+            var id = _captureManager.StartCapture(hwnd, title, fps, quality);
+            // broadcast.htmlにキャプチャレイヤーを追加（UIスレッドで実行）
+            BeginInvoke(() => InjectAddCaptureLayer(id, title));
+            return id;
+        };
+
+        _httpServer.OnStopCapture = (captureId) =>
+        {
+            var ok = _captureManager.StopCapture(captureId);
+            if (ok)
+                BeginInvoke(() => InjectRemoveCaptureLayer(captureId));
+            return ok;
+        };
+
+        _httpServer.OnListCaptures = () => _captureManager.ListCaptures();
+        _httpServer.OnGetSnapshot = (id) => _captureManager.GetSnapshot(id);
+
+        try
+        {
+            _httpServer.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[MainForm] HTTP server start failed on port {Port}", _httpPort);
+        }
+    }
+
+    /// <summary>
+    /// WebView2にJSを注入してbroadcast.htmlにキャプチャレイヤーを追加する。
+    /// </summary>
+    private void InjectAddCaptureLayer(string id, string title)
+    {
+        if (_webView.CoreWebView2 == null) return;
+        var snapshotUrl = $"http://localhost:{_httpPort}/snapshot/{id}";
+        var js = $"if(typeof addCaptureLayer==='function')" +
+                 $"addCaptureLayer('{EscapeJs(id)}','{EscapeJs(snapshotUrl)}','{EscapeJs(title)}',null)";
+        _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+        Log.Debug("[MainForm] Injected addCaptureLayer: {Id}", id);
+    }
+
+    /// <summary>
+    /// WebView2にJSを注入してbroadcast.htmlからキャプチャレイヤーを削除する。
+    /// </summary>
+    private void InjectRemoveCaptureLayer(string id)
+    {
+        if (_webView.CoreWebView2 == null) return;
+        var js = $"if(typeof removeCaptureLayer==='function')removeCaptureLayer('{EscapeJs(id)}')";
+        _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+        Log.Debug("[MainForm] Injected removeCaptureLayer: {Id}", id);
+    }
+
+    private static string EscapeJs(string s) =>
+        s.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\n", "\\n");
+
+    private static IntPtr ParseHwnd(string sourceId)
+    {
+        var s = sourceId.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? sourceId[2..] : sourceId;
+        return new IntPtr(long.Parse(s, NumberStyles.HexNumber));
     }
 
     private async void OnNavigationCompleted(object? sender,
@@ -171,6 +255,8 @@ public class MainForm : Form
             // Second pass after async cleanup
             _capture?.Stop();
             _capture?.Dispose();
+            _captureManager?.Dispose();
+            _httpServer?.Dispose();
             Log.Information("[MainForm] Closed");
             return;
         }
@@ -187,6 +273,8 @@ public class MainForm : Form
 
         _capture?.Stop();
         _capture?.Dispose();
+        _captureManager?.Dispose();
+        _httpServer?.Dispose();
         Log.Information("[MainForm] Closed");
     }
 }

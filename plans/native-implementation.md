@@ -353,21 +353,31 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
 ## ディレクトリ構成（実際）
 
 ```
-/mnt/c/Users/akira/Downloads/win-native-app/  ← Windows FS（C#プロジェクト）
+/home/ubuntu/ai-twitch-cast/win-native-app/   ← git管理（ソースはここ）
   └── WinNativeApp/
       ├── WinNativeApp.csproj
       ├── Program.cs                           ← エントリポイント（Serilog初期化）
-      ├── MainForm.cs                          ← WebView2フォーム（オフスクリーン）
-      └── Capture/
-          ├── Direct3DInterop.cs               ← D3D11/WinRT/WGC COM interop
-          └── FrameCapture.cs                  ← WGCフレームキャプチャ+PNG保存
+      ├── MainForm.cs                          ← WebView2フォーム + キャプチャ管理 + HTTPサーバー統合
+      ├── Capture/
+      │   ├── Direct3DInterop.cs               ← D3D11/WinRT/WGC COM interop
+      │   ├── FrameCapture.cs                  ← WGCフレームキャプチャ（配信用BGRA出力）
+      │   ├── WindowCapture.cs                 ← 任意ウィンドウのWGCキャプチャ → JPEG出力
+      │   ├── WindowEnumerator.cs              ← Win32 EnumWindowsでウィンドウ一覧取得
+      │   └── CaptureManager.cs                ← 複数WindowCaptureセッション管理
+      ├── Server/
+      │   └── HttpServer.cs                    ← HTTP API（/windows, /capture, /snapshot等）
+      └── Streaming/
+          ├── FfmpegProcess.cs                 ← FFmpeg子プロセス管理
+          ├── AudioLoopback.cs                 ← WASAPIループバック
+          └── StreamConfig.cs                  ← 配信設定
 
-/home/ubuntu/ai-twitch-cast/win-native-app    ← シンボリックリンク（git管理用）
+/mnt/c/Users/akira/AppData/Local/win-native-app/ ← Windows FSビルドディレクトリ
+  └── WinNativeApp/                              （stream.shがソースをコピーしてビルド）
 ```
 
 ## ステータス
 - 作成日: 2026-03-14
-- 状態: Phase 2 完了
+- 状態: Phase 3 完了
 - Phase 1 完了日: 2026-03-14
 - Phase 1 検証結果:
   - WebView2: 隠しウィンドウ(-32000,-32000)で正常描画 (**問題なし**)
@@ -382,4 +392,13 @@ dotnet.exe publish "$WIN_PROJECT" -c Release 2>&1 | tee /mnt/c/Users/akira/Downl
   - FrameCapture改修: OnFrameReadyコールバック + FPSスロットル + ステージングテクスチャ再利用
   - StreamConfig: 環境変数ベースの配信設定（STREAM_KEY/STREAM_RESOLUTION/STREAM_FPS/STREAM_BITRATE）
   - MainForm: --stream フラグで自動配信開始、StartStreamingAsync/StopStreamingAsync
+  - ビルド確認: dotnet.exe build Release 成功
+- Phase 3 完了日: 2026-03-14
+- Phase 3 実装内容:
+  - WindowEnumerator: Win32 EnumWindows P/Invokeでウィンドウ一覧取得（自プロセス・最小化・タイトルなし除外）
+  - WindowCapture: WGC CreateFreeThreadedで任意HWND→D3D11テクスチャ→BGRA→JPEG変換（FPSスロットル付き）
+  - CaptureManager: ConcurrentDictionaryで複数キャプチャセッション管理（スレッドセーフ）
+  - HttpServer: HttpListenerベースのHTTP API（/status, /windows, /capture, /captures, /snapshot/{id}）
+  - MainForm統合: WebView2 JS injection（addCaptureLayer/removeCaptureLayer）でbroadcast.htmlにキャプチャ表示
+  - stream.sh: Server/ディレクトリのビルドコピー追加
   - ビルド確認: dotnet.exe build Release 成功
