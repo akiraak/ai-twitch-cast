@@ -50,7 +50,7 @@ public class MainForm : Form
 
         Text = "AI Twitch Cast - 起動中";
         StartPosition = FormStartPosition.CenterScreen;
-        Size = new Size(1280, 720);
+        ClientSize = new Size(1280, 720);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         ShowInTaskbar = true;
