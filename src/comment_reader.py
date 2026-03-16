@@ -268,55 +268,65 @@ class CommentReader:
         """
         wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
         tts_ok = False
+        t_start = time.monotonic()
         try:
             logger.info("[tts] 生成中...")
             await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice)
             tts_ok = True
+            logger.info("[tts] 生成完了: %.0fms", (time.monotonic() - t_start) * 1000)
         except Exception as e:
             logger.warning("[tts] 音声生成失敗、テキストのみ表示: %s", e)
 
         if self._on_overlay:
-            # 字幕を表示
-            if subtitle:
-                await self._notify_overlay(
-                    subtitle["author"], subtitle["message"], subtitle["result"],
-                )
-
             if tts_ok:
-                # 音声ファイルパスを保持（APIで配信用）
                 self._current_audio = wav_path
+
+                # === 素材準備フェーズ（全て揃えてから発火） ===
+                t_prep = time.monotonic()
 
                 # リップシンク用振幅解析
                 lipsync_frames = None
                 try:
                     lipsync_frames = await asyncio.to_thread(analyze_amplitude, wav_path)
-                    logger.info("[lipsync] 振幅解析完了: %dフレーム", len(lipsync_frames))
+                    logger.info("[lipsync] 振幅解析完了: %dフレーム (%.0fms)",
+                                len(lipsync_frames), (time.monotonic() - t_prep) * 1000)
                 except Exception as e:
                     logger.warning("リップシンク解析失敗: %s", e)
 
-                # リップシンク開始（音声再生と同時）
+                # 音声の長さを取得
+                with wave.open(str(wav_path), "rb") as wf:
+                    duration = wf.getnframes() / wf.getframerate()
+
+                logger.info("[tts] 素材準備完了: %.0fms (TTS生成から%.0fms)",
+                            (time.monotonic() - t_prep) * 1000,
+                            (time.monotonic() - t_start) * 1000)
+
+                # === 同時発火（字幕+リップシンク+音声を一斉送信） ===
+                t_fire = time.monotonic()
+
+                if subtitle:
+                    await self._notify_overlay(
+                        subtitle["author"], subtitle["message"], subtitle["result"],
+                    )
                 if lipsync_frames:
                     await self._on_overlay({
                         "type": "lipsync",
                         "frames": lipsync_frames,
+                        "autostart": True,
                     })
+                # C#アプリにTTS送信（配信中→FFmpegパイプ、非配信→ローカル再生）
+                await self._send_tts_to_native_app(wav_path)
 
-                # 音声再生を指示
-                import time
-                audio_url = f"/api/tts/audio?t={int(time.time() * 1000)}"
-                await self._on_overlay({
-                    "type": "play_audio",
-                    "url": audio_url,
-                })
+                logger.info("[tts] 同時発火完了: %.0fms", (time.monotonic() - t_fire) * 1000)
+
                 # チャット投稿（音声再生の2秒後）
                 if chat_result:
                     async def _delayed_chat(result):
                         await asyncio.sleep(2.0)
                         await self._post_to_chat(result)
                     asyncio.create_task(_delayed_chat(chat_result))
+
                 # 音声の長さ分だけ待機
-                with wave.open(str(wav_path), "rb") as wf:
-                    duration = wf.getnframes() / wf.getframerate()
                 await asyncio.sleep(duration + 0.5)
 
                 # リップシンク停止
@@ -332,6 +342,37 @@ class CommentReader:
         self._current_audio = None
         wav_path.unlink(missing_ok=True)
         wav_path.parent.rmdir()
+
+    async def _send_tts_to_native_app(self, wav_path):
+        """TTS WAVをC#アプリに送信する。C#側で配信中→FFmpegパイプ、非配信→ローカル再生。"""
+        t0 = time.monotonic()
+        try:
+            from scripts.routes.stream_control import _get_volume
+            from scripts.routes.capture import _ws_request
+
+            import base64
+            wav_data = wav_path.read_bytes()
+            t1 = time.monotonic()
+            wav_b64 = base64.b64encode(wav_data).decode("ascii")
+            t2 = time.monotonic()
+
+            # ブラウザと同じ知覚的音量計算: min(1.0, tts²) × master²
+            master = _get_volume("master")
+            tts_vol = _get_volume("tts")
+            volume = min(1.0, tts_vol * tts_vol) * (master * master)
+
+            await _ws_request("tts_audio", timeout=10.0, data=wav_b64, volume=volume)
+            t3 = time.monotonic()
+            logger.info(
+                "[tts] C#アプリにTTS直接送信完了: %d bytes, vol=%.2f, "
+                "status=%.0fms b64=%.0fms send=%.0fms total=%.0fms",
+                len(wav_data), volume,
+                (t1 - t0) * 1000, (t2 - t1) * 1000,
+                (t3 - t2) * 1000, (t3 - t0) * 1000,
+            )
+        except Exception as e:
+            elapsed = (time.monotonic() - t0) * 1000
+            logger.warning("[tts] C#アプリへのTTS送信失敗 (%.0fms): %s", elapsed, e)
 
     async def speak_event(self, event_type, detail, voice=None):
         """イベントに対してアバターが発話する（コミット・作業開始等）"""

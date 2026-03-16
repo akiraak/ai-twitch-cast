@@ -59,7 +59,7 @@ ai-twitch-cast/
 │       ├── MainForm.cs      # WebView2フォーム + キャプチャ管理 + HTTPサーバー + システムトレイ
 │       ├── Capture/         # WGCフレームキャプチャ + ウィンドウキャプチャ管理
 │       ├── Server/          # HTTP/WebSocket API（キャプチャ・配信制御・/ws/control）
-│       └── Streaming/       # FFmpeg配信パイプライン（FfmpegProcess + AudioLoopback + StreamConfig）
+│       └── Streaming/       # FFmpeg配信パイプライン（FfmpegProcess + AudioLoopback + TtsDecoder + StreamConfig）
 ├── src/                      # ソースコード
 │   ├── scene_config.py       # 設定の定義（scenes.jsonから読み込み）
 │   ├── tts.py                # TTS音声合成（Gemini 2.5 Flash TTS）

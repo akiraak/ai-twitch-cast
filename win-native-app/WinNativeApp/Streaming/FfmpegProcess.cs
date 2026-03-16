@@ -38,18 +38,34 @@ public sealed class FfmpegProcess : IDisposable
     // キュー上限: 約1秒分（エンコード開始時にフラッシュするため、起動後は低水位を維持）
     private const int MaxAudioQueueChunks = 100;
 
+    // TTS直接書き込み用キュー（WASAPI迂回 → リップシンク完全同期）
+    private readonly ConcurrentQueue<byte[]> _ttsQueue = new();
+    private byte[]? _ttsCurrentChunk;
+    private int _ttsCurrentOffset;
+
+    // BGMミキサー用フィールド
+    private byte[]? _bgmPcm;
+    private int _bgmOffset;
+    private float _bgmVolume = 1.0f;
+    private volatile bool _bgmPlaying;
+
+    // タイマーベース音声ジェネレータ（WASAPI不要、TTS+BGMをPCM合成→FFmpegパイプ）
+    private System.Threading.Timer? _audioGenTimer;
+
     public bool IsRunning => _process is { HasExited: false };
     public long FrameCount => Interlocked.Read(ref _frameCount);
     public long DropCount => Interlocked.Read(ref _dropCount);
     public long AudioDropCount => Interlocked.Read(ref _audioDropCount);
     public TimeSpan Uptime => IsRunning ? DateTime.UtcNow - _startTime : TimeSpan.Zero;
 
-    public FfmpegProcess(StreamConfig config, WaveFormat audioFormat)
+    public FfmpegProcess(StreamConfig config, WaveFormat? audioFormat = null)
     {
         _config = config;
         _videoPipeName = $"winnative_video_{Environment.ProcessId}";
         _audioPipeName = $"winnative_audio_{Environment.ProcessId}";
-        _ffmpegAudioFormat = BuildAudioFormatArgs(audioFormat);
+        _ffmpegAudioFormat = audioFormat != null
+            ? BuildAudioFormatArgs(audioFormat)
+            : "-f f32le -ar 48000 -ac 2";
     }
 
     public async Task StartAsync(CancellationToken ct = default)
@@ -297,6 +313,142 @@ public sealed class FfmpegProcess : IDisposable
     }
 
     /// <summary>
+    /// TTS PCMデータをミキサーキューに追加する。
+    /// サーバーから受信したTTS WAVをTtsDecoderで変換後のf32le 48kHz stereo PCM。
+    /// AudioWriterLoopがWASAPI（BGM）データとサンプル単位で加算合成する。
+    /// </summary>
+    public void WriteTtsData(byte[] f32lePcm)
+    {
+        if (_audioPipe is not { IsConnected: true } || _stopping) return;
+        _ttsQueue.Enqueue(f32lePcm);
+        Log.Information("[FFmpeg] TTS PCM enqueued: {Size} bytes ({Dur:F1}s)",
+            f32lePcm.Length, f32lePcm.Length / (48000.0 * 2 * 4));
+    }
+
+    /// <summary>
+    /// タイマーベースの音声ジェネレータを開始する。
+    /// 10msごとにサイレンスチャンク（48kHz stereo f32le）を生成し、
+    /// BGM+TTSをミックスしてからキューに追加する。WASAPI不要。
+    /// </summary>
+    public void StartAudioGenerator()
+    {
+        // 10ms of 48kHz stereo f32le = 48000 * 2 * 4 / 100 = 3840 bytes
+        const int chunkSize = 3840;
+        _audioGenTimer = new System.Threading.Timer(_ =>
+        {
+            if (_stopping || _audioPipe is not { IsConnected: true }) return;
+            try
+            {
+                var chunk = new byte[chunkSize]; // all zeros = silence
+                MixBgmInto(chunk);
+                MixTtsInto(chunk);
+                _audioQueue.Enqueue(chunk);
+
+                // キュー上限超過時は古いチャンクを破棄
+                while (_audioQueue.Count > MaxAudioQueueChunks)
+                {
+                    if (_audioQueue.TryDequeue(out byte[] _))
+                        Interlocked.Increment(ref _audioDropCount);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[FFmpeg] AudioGen error: {Msg}", ex.Message);
+            }
+        }, null, 0, 10);
+        Log.Information("[FFmpeg] Audio generator started (10ms timer, {ChunkSize} bytes/chunk)", chunkSize);
+    }
+
+    /// <summary>
+    /// BGM PCMデータを設定する（48kHz stereo f32le）。ループ再生される。
+    /// </summary>
+    public void SetBgm(byte[]? pcmData, float volume)
+    {
+        _bgmPcm = pcmData;
+        _bgmOffset = 0;
+        _bgmVolume = volume;
+        _bgmPlaying = pcmData != null && pcmData.Length > 0;
+        Log.Information("[FFmpeg] BGM set: {Size} bytes, vol={Vol:F2}", pcmData?.Length ?? 0, volume);
+    }
+
+    /// <summary>BGMの音量を変更する。</summary>
+    public void SetBgmVolume(float volume)
+    {
+        _bgmVolume = volume;
+        Log.Debug("[FFmpeg] BGM volume set: {Vol:F2}", volume);
+    }
+
+    /// <summary>BGM再生を停止する。</summary>
+    public void StopBgm()
+    {
+        _bgmPlaying = false;
+        _bgmPcm = null;
+        _bgmOffset = 0;
+        Log.Information("[FFmpeg] BGM stopped");
+    }
+
+    /// <summary>
+    /// チャンクにBGM PCMを加算合成する（in-place）。
+    /// _bgmPcmの末尾に達したらオフセット0に戻ってループ再生する。
+    /// </summary>
+    private void MixBgmInto(byte[] chunk)
+    {
+        if (!_bgmPlaying) return;
+        var pcm = _bgmPcm;
+        if (pcm == null || pcm.Length < 4) return;
+
+        var vol = _bgmVolume;
+        for (int i = 0; i + 3 < chunk.Length; i += 4)
+        {
+            // ループ: 末尾に達したら先頭に戻る
+            if (_bgmOffset + 3 >= pcm.Length)
+                _bgmOffset = 0;
+
+            float bgmSample = BitConverter.ToSingle(pcm, _bgmOffset) * vol;
+            float current = BitConverter.ToSingle(chunk, i);
+            float mixed = Math.Clamp(current + bgmSample, -1.0f, 1.0f);
+            BitConverter.TryWriteBytes(chunk.AsSpan(i), mixed);
+            _bgmOffset += 4;
+        }
+    }
+
+    /// <summary>
+    /// チャンクにTTS PCMを加算合成する（in-place）。
+    /// TTSキューからデータを消費し、なくなったら何もしない。
+    /// </summary>
+    private void MixTtsInto(byte[] chunk)
+    {
+        int pos = 0;
+        while (pos + 3 < chunk.Length)
+        {
+            if (_ttsCurrentChunk == null || _ttsCurrentOffset >= _ttsCurrentChunk.Length)
+            {
+                if (!_ttsQueue.TryDequeue(out _ttsCurrentChunk))
+                    break;
+                _ttsCurrentOffset = 0;
+            }
+
+            int available = _ttsCurrentChunk.Length - _ttsCurrentOffset;
+            int remaining = chunk.Length - pos;
+            int toMix = Math.Min(available, remaining);
+            toMix = (toMix / 4) * 4;
+
+            if (toMix <= 0) break;
+
+            for (int i = 0; i < toMix; i += 4)
+            {
+                float bgm = BitConverter.ToSingle(chunk, pos + i);
+                float tts = BitConverter.ToSingle(_ttsCurrentChunk, _ttsCurrentOffset + i);
+                float mixed = Math.Clamp(bgm + tts, -1.0f, 1.0f);
+                BitConverter.TryWriteBytes(chunk.AsSpan(pos + i), mixed);
+            }
+
+            _ttsCurrentOffset += toMix;
+            pos += toMix;
+        }
+    }
+
+    /// <summary>
     /// バックグラウンドスレッド: キューから音声データを読み取りパイプに書き込む。
     /// パイプが満杯のときはこのスレッドだけがブロックされ、WASAPIは影響を受けない。
     /// </summary>
@@ -324,6 +476,7 @@ public sealed class FfmpegProcess : IDisposable
 
             if (_audioQueue.TryDequeue(out var chunk))
             {
+                // タイマーベースジェネレータが既にBGM+TTSをミキシング済み
                 try
                 {
                     pipe.Write(chunk, 0, chunk.Length);
@@ -366,6 +519,15 @@ public sealed class FfmpegProcess : IDisposable
 
         try
         {
+            // 音声ジェネレータタイマーを停止
+            try { _audioGenTimer?.Dispose(); }
+            catch { /* already disposed */ }
+            _audioGenTimer = null;
+
+            // BGMも停止
+            _bgmPlaying = false;
+            _bgmPcm = null;
+
             // パイプを先に閉じる → AudioWriterLoopのブロック中Write()を解除
             try { _videoPipe?.Dispose(); }
             catch { /* already closed */ }

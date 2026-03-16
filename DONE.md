@@ -1,5 +1,27 @@
 # DONE
 
+## 音声アーキテクチャ刷新: C#アプリ直接パイプ（WASAPI廃止）— 作業中
+
+### 完了
+- [x] TtsDecoder.cs: WAV（24kHz mono 16bit）→ 48kHz stereo f32le PCM変換 + 音量適用
+- [x] FfmpegProcess.cs: タイマーベース音声ジェネレータ + TTS/BGMミキシング（WASAPI不要）
+- [x] HttpServer.cs: `tts_audio`/`bgm_play`/`bgm_stop`/`bgm_volume` WebSocketアクション
+- [x] MainForm.cs: TTS常時ローカル再生(PlayTtsLocally) + 配信時FFmpegパイプ
+- [x] MainForm.cs: BGMダウンロード→キャッシュ→NAudioローカル再生 + パネルUI状態表示
+- [x] broadcast.html: 全音声再生コード削除（`<audio>`要素・AudioContext・メーター全撤去）
+- [x] comment_reader.py: 素材準備→同時発火フロー（字幕+リップシンク+TTS一斉送信）
+- [x] state.py: BGMコマンドをC#アプリにWebSocket転送
+- [x] capture.py: C#アプリWebSocket接続時にBGM自動復元
+- [x] プラン: plans/direct-tts-audio-pipe.md
+
+### バグ修正
+- [x] BGM配信パイプ: DecodeBgmToPcmに相対WebURLを渡していた→キャッシュファイルパスを使用
+- [x] TTS音声ガビガビ: AudioWriterLoopとタイマーの両方でMixTtsIntoを呼んでいた→タイマーのみに統一
+- [x] BGM音量変更がFFmpegに未反映: SetBgmVolume()追加、OnBgmVolumeから転送
+
+### 未検証
+- [ ] リップシンク同期（配信時のTTS直接パイプとアニメーションの同期）
+
 ## Go Live / Stop ボタンの即時フィードバック
 
 - [x] ボタン押下直後にテキスト変更（「準備中…」「停止中…」）+ CSSスピナー + disabled化で押した感を実現

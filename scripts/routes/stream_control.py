@@ -143,6 +143,8 @@ async def broadcast_go_live():
         if not st.get("streaming"):
             await _capture_stream_start()
         _is_streaming = True
+        # broadcast.htmlに配信状態を通知（TTSミュート切替用）
+        await state.broadcast_to_broadcast({"type": "stream_status", "streaming": True})
         await state.ensure_reader()
         await state.git_watcher.start()
         return {"ok": True}
@@ -158,6 +160,7 @@ async def broadcast_start():
     try:
         await _capture_stream_start()
         _is_streaming = True
+        await state.broadcast_to_broadcast({"type": "stream_status", "streaming": True})
         await state.ensure_reader()
         await state.git_watcher.start()
         return {"ok": True}
@@ -180,6 +183,8 @@ async def broadcast_stop():
 
     await _capture_stream_stop()
     _is_streaming = False
+    # broadcast.htmlに配信停止を通知（TTSミュート解除）
+    await state.broadcast_to_broadcast({"type": "stream_status", "streaming": False})
     return {"ok": True}
 
 

@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using NAudio.Wave;
 using Serilog;
 using WinNativeApp.Capture;
 using WinNativeApp.Server;
@@ -42,11 +43,18 @@ public class MainForm : Form
 
     // Streaming pipeline
     private FfmpegProcess? _ffmpeg;
-    private AudioLoopback? _audio;
+    private AudioLoopback? _audio;  // 旧WASAPI（未使用、互換性のため残す）
     private bool _closing;
     private bool _forceClose;
     private DateTime _streamStartTime;
     private string? _activeStreamKey;
+
+    // BGM state
+    private WaveOutEvent? _bgmWaveOut;
+    private MediaFoundationReader? _bgmReader;
+    private string? _currentBgmUrl;
+    private string? _currentBgmCachePath;
+    private string _serverBaseUrl = "http://localhost:8080";
 
     // サーバーAPI用共有HttpClient（初期音量取得用）
     private static readonly HttpClient _sharedHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
@@ -444,6 +452,12 @@ public class MainForm : Form
     {
         Log.Information("[MainForm] Loaded, initializing WebView2...");
 
+        // サーバーベースURLを抽出
+        if (_url.Contains("/broadcast"))
+            _serverBaseUrl = _url[.._url.IndexOf("/broadcast", StringComparison.Ordinal)];
+        else if (_url.StartsWith("http"))
+            _serverBaseUrl = _url.TrimEnd('/');
+
         try
         {
             // broadcast.html用WebView2（autoplay音声許可 + バックグラウンドスロットリング無効化）
@@ -582,6 +596,52 @@ public class MainForm : Form
         _httpServer.OnQuit = () =>
         {
             BeginInvoke(() => { _forceClose = true; Close(); });
+        };
+
+        // TTS音声: 常にローカル再生 + 配信中はFFmpegパイプにも送信
+        _httpServer.OnTtsAudio = (wavData, volume) =>
+        {
+            try
+            {
+                // 常にローカルスピーカーで再生（プレビュー）
+                PlayTtsLocally(wavData, volume);
+                // 配信中: PCMリサンプル → FFmpegミキサーにも書き込み
+                if (_ffmpeg is { IsRunning: true })
+                {
+                    var pcm = TtsDecoder.DecodeWav(wavData, volume);
+                    _ffmpeg.WriteTtsData(pcm);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[MainForm] TTS audio failed");
+            }
+        };
+
+        // BGM制御コールバック（Task.Runから呼ばれるためBeginInvokeでUIスレッドに移動）
+        _httpServer.OnBgmPlay = (url) =>
+        {
+            BeginInvoke(() => PlayBgm(url));
+        };
+
+        _httpServer.OnBgmStop = () =>
+        {
+            BeginInvoke(() =>
+            {
+                StopBgmPlayback();
+                _ffmpeg?.StopBgm();
+                SendPanelMessage(new { type = "bgm_status", state = "stopped" });
+                Log.Information("[BGM] Stopped");
+            });
+        };
+
+        _httpServer.OnBgmVolume = (source, volume) =>
+        {
+            var clamped = Math.Clamp(volume, 0f, 1f);
+            if (_bgmWaveOut != null)
+                _bgmWaveOut.Volume = clamped;
+            _ffmpeg?.SetBgmVolume(clamped);
+            Log.Debug("[BGM] Volume: {Source}={Volume}", source, volume);
         };
 
         try
@@ -737,11 +797,9 @@ public class MainForm : Form
             },
             ["ffmpeg_path"] = ffmpegPath,
             ["ffmpeg_exists"] = File.Exists(ffmpegPath),
-            ["audio_stream_connected"] = _audio != null,
-            ["audio_receiving_pcm"] = _audio != null && streaming,
-            ["mixer_active"] = false,
-            ["bgm_playing"] = false,
-            ["tts_playing"] = false,
+            ["audio_mode"] = "direct_pipe",
+            ["bgm_playing"] = _bgmReader != null,
+            ["bgm_url"] = _currentBgmUrl ?? "",
         };
     }
 
@@ -791,29 +849,42 @@ public class MainForm : Form
         Log.Information("[MainForm] Resolution={W}x{H} FPS={F} Bitrate={B}",
             config.Width, config.Height, config.Framerate, config.VideoBitrate);
 
-        // 1. Initialize audio loopback → get format for FFmpeg
-        _audio = new AudioLoopback();
-        _audio.Initialize();
+        // WASAPI不要 — 全音声はC#が直接パイプに書き込む
+        _ffmpeg = new FfmpegProcess(config);
 
-        // 2. Create FFmpeg process with config + actual audio format
-        _ffmpeg = new FfmpegProcess(config, _audio.Format!);
-
-        // 3. Start FFmpeg (creates named pipe, starts process, waits for pipe connection)
         await _ffmpeg.StartAsync();
-
-        // 3.5. FFmpegがパイプの読み取りを開始するまで待機（音声途切れ防止）
         await Task.Delay(500);
 
-        // 4. Connect audio loopback → FFmpeg audio pipe
-        _audio.Start((data, offset, count) => _ffmpeg.WriteAudioData(data, offset, count));
+        // タイマーベース音声ジェネレータ開始（サイレンス + TTS + BGMミキシング）
+        _ffmpeg.StartAudioGenerator();
 
-        // 5. Connect frame capture → FFmpeg video stdin
+        // フレームキャプチャ → FFmpegビデオパイプ接続
         _capture.TargetFps = config.Framerate;
         _capture.OnFrameReady = (data, w, h) => _ffmpeg.WriteVideoFrame(data);
 
+        // BGMが再生中なら、PCMにデコードしてFFmpegミキサーに渡す
+        if (_currentBgmCachePath != null)
+        {
+            var bgmPath = _currentBgmCachePath;
+            var ffmpeg = _ffmpeg;
+            Task.Run(() =>
+            {
+                try
+                {
+                    var pcm = DecodeBgmToPcm(bgmPath);
+                    ffmpeg?.SetBgm(pcm, 1.0f);
+                    Log.Information("[BGM] PCM decoded for streaming (on start): {Size} bytes", pcm.Length);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "[BGM] PCM decode failed on streaming start");
+                }
+            });
+        }
+
         _streamStartTime = DateTime.UtcNow;
         Text = "AI Twitch Cast - 配信中";
-        Log.Information("[MainForm] Streaming pipeline active");
+        Log.Information("[MainForm] Streaming pipeline active (direct audio, no WASAPI)");
     }
 
     // =====================================================
@@ -950,6 +1021,171 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// 非配信時: TTS WAVをローカルスピーカーで再生する（NAudio WaveOutEvent）。
+    /// バックグラウンドスレッドで再生し、完了後に自動Dispose。
+    /// </summary>
+    private static void PlayTtsLocally(byte[] wavData, float volume)
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                var ms = new MemoryStream(wavData);
+                var reader = new WaveFileReader(ms);
+                var waveOut = new WaveOutEvent();
+                waveOut.Volume = Math.Clamp(volume, 0f, 1f);
+                waveOut.Init(reader);
+                waveOut.Play();
+                Log.Debug("[TTS] Local playback started ({Size} bytes, vol={Vol:F2})", wavData.Length, volume);
+                waveOut.PlaybackStopped += (_, _) =>
+                {
+                    waveOut.Dispose();
+                    reader.Dispose();
+                    ms.Dispose();
+                };
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[TTS] Local playback failed");
+            }
+        });
+    }
+
+    /// <summary>BGMをローカル再生する。ダウンロード→再生開始。</summary>
+    // BGMキャッシュディレクトリ（初回ダウンロード後はローカルから即再生）
+    private static readonly string BgmCacheDir = Path.Combine(Path.GetTempPath(), "ai-twitch-cast-bgm");
+
+    private void PlayBgm(string url)
+    {
+        StopBgmPlayback();
+        _currentBgmUrl = url;
+
+        var fullUrl = url.StartsWith("http") ? url : _serverBaseUrl + url;
+        Log.Information("[BGM] Play: {Url}", fullUrl);
+
+        // ファイル名を抽出（表示用）
+        var fileName = Uri.UnescapeDataString(Path.GetFileNameWithoutExtension(new Uri(fullUrl).AbsolutePath));
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                // キャッシュチェック（URLハッシュ + 拡張子）
+                Directory.CreateDirectory(BgmCacheDir);
+                var urlHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(fullUrl)))[..16];
+                var ext = Path.GetExtension(new Uri(fullUrl).AbsolutePath);
+                if (string.IsNullOrEmpty(ext)) ext = ".mp3";
+                var cachePath = Path.Combine(BgmCacheDir, $"{urlHash}{ext}");
+
+                if (File.Exists(cachePath))
+                {
+                    Log.Information("[BGM] Cache hit: {Path}", cachePath);
+                }
+                else
+                {
+                    Log.Information("[BGM] Downloading {Url}...", fullUrl);
+                    BeginInvoke(() => SendPanelMessage(new { type = "bgm_status", state = "downloading", name = fileName, size = 0L }));
+
+                    using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
+                    var data = await httpClient.GetByteArrayAsync(fullUrl);
+                    await File.WriteAllBytesAsync(cachePath, data);
+                    Log.Information("[BGM] Downloaded: {Size} bytes → {Path}", data.Length, cachePath);
+                }
+
+                BeginInvoke(() =>
+                {
+                    StartBgmPlayback(cachePath);
+                    SendPanelMessage(new { type = "bgm_status", state = "playing", name = fileName });
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[BGM] Failed: {Url}", fullUrl);
+                BeginInvoke(() => SendPanelMessage(new { type = "bgm_status", state = "error", error = ex.Message }));
+            }
+        });
+    }
+
+    /// <summary>BGMファイルの再生を開始する（UIスレッド）。</summary>
+    private void StartBgmPlayback(string localPath)
+    {
+        try
+        {
+            _currentBgmCachePath = localPath;
+            _bgmReader = new MediaFoundationReader(localPath);
+            _bgmWaveOut = new WaveOutEvent();
+            _bgmWaveOut.Init(_bgmReader);
+            _bgmWaveOut.Play();
+            Log.Information("[BGM] Playback started: {Format}, file={Path}", _bgmReader.WaveFormat, localPath);
+
+            // 再生終了時にループ
+            _bgmWaveOut.PlaybackStopped += (s, e) =>
+            {
+                if (_bgmReader != null)
+                {
+                    try { _bgmReader.Position = 0; _bgmWaveOut?.Play(); }
+                    catch { }
+                }
+            };
+
+            // 配信中: PCMにデコードしてFFmpegミキサーに渡す
+            if (_ffmpeg is { IsRunning: true })
+            {
+                var ffmpeg = _ffmpeg;
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        var pcm = DecodeBgmToPcm(localPath);
+                        ffmpeg?.SetBgm(pcm, 1.0f);
+                        Log.Information("[BGM] PCM decoded for streaming: {Size} bytes", pcm.Length);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "[BGM] PCM decode failed");
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[BGM] Playback start failed: {Path}", localPath);
+        }
+    }
+
+    /// <summary>BGMのローカル再生を停止する。</summary>
+    private void StopBgmPlayback()
+    {
+        var reader = _bgmReader;
+        var waveOut = _bgmWaveOut;
+        _bgmReader = null;
+        _bgmWaveOut = null;
+        _currentBgmUrl = null;
+        _currentBgmCachePath = null;
+        try { waveOut?.Stop(); } catch { }
+        try { waveOut?.Dispose(); } catch { }
+        try { reader?.Dispose(); } catch { }
+    }
+
+    /// <summary>
+    /// BGM音声ファイルを48kHz stereo f32le PCMバイト配列にデコードする（FFmpegミキサー用）。
+    /// </summary>
+    private static byte[] DecodeBgmToPcm(string url)
+    {
+        using var reader = new MediaFoundationReader(url);
+        var targetFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
+        using var resampler = new MediaFoundationResampler(reader, targetFormat);
+        resampler.ResamplerQuality = 60;
+        using var ms = new MemoryStream();
+        var buffer = new byte[8192];
+        int read;
+        while ((read = resampler.Read(buffer, 0, buffer.Length)) > 0)
+            ms.Write(buffer, 0, read);
+        return ms.ToArray();
+    }
+
     public async Task StopStreamingAsync()
     {
         // ★ 最初にキャプチャコールバックを切断（_ffmpeg=null後にコールバックが飛ぶとNRE→クラッシュ）
@@ -963,23 +1199,11 @@ public class MainForm : Form
         // ローカル変数に退避してフィールドを即座にクリア
         // → UI更新（OnTrayUpdate）と×ボタン（OnFormClosing）が即座に正しく動作する
         var ffmpeg = _ffmpeg;
-        var audio = _audio;
         _ffmpeg = null;
-        _audio = null;
+        _audio = null;  // 互換性のためフィールドクリア（実際は未使用）
         _activeStreamKey = null;
         Text = "AI Twitch Cast - 待機中";
         Log.Information("[Stop] State cleared. Starting cleanup...");
-
-        // クリーンアップ（ローカル変数で実行、フィールドは既にnull）
-        Log.Information("[Stop] audio.Stop()...");
-        try { audio?.Stop(); }
-        catch (Exception ex) { Log.Error(ex, "[Stop] audio.Stop() failed"); }
-        Log.Information("[Stop] audio.Stop() done");
-
-        Log.Information("[Stop] audio.Dispose()...");
-        try { audio?.Dispose(); }
-        catch (Exception ex) { Log.Error(ex, "[Stop] audio.Dispose() failed"); }
-        Log.Information("[Stop] audio.Dispose() done");
 
         if (ffmpeg != null)
         {
@@ -1054,8 +1278,6 @@ public class MainForm : Form
                     Log.Error(ex, "[MainForm] Error stopping stream during close");
                     try { _ffmpeg?.Dispose(); } catch { }
                     _ffmpeg = null;
-                    _audio?.Dispose();
-                    _audio = null;
                 }
             });
             stopTask.Wait(3000);
@@ -1086,10 +1308,8 @@ public class MainForm : Form
             try { _ffmpeg.Dispose(); } catch { }
             _ffmpeg = null;
         }
-        Log.Information("[Cleanup] audio...");
-        _audio?.Stop();
-        _audio?.Dispose();
-        _audio = null;
+        Log.Information("[Cleanup] bgm...");
+        StopBgmPlayback();
         Log.Information("[Cleanup] capture...");
         _capture?.Stop();
         _capture?.Dispose();

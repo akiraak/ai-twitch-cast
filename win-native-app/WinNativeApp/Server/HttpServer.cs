@@ -37,6 +37,14 @@ public class HttpServer : IDisposable
     public Func<Task<string?>>? OnScreenshot { get; set; }  // → base64 PNG
     public Action? OnQuit { get; set; }
 
+    // TTS直接書き込みコールバック（MainFormが設定）
+    public Action<byte[], float>? OnTtsAudio { get; set; }  // (wavData, volume)
+
+    // BGM制御コールバック（MainFormが設定）
+    public Action<string>? OnBgmPlay { get; set; }     // (url)
+    public Action? OnBgmStop { get; set; }
+    public Action<string, float>? OnBgmVolume { get; set; }  // (source, volume)
+
     public int Port => _port;
 
     public HttpServer(int port = 9090)
@@ -381,7 +389,8 @@ public class HttpServer : IDisposable
 
     private async Task HandleControlWebSocket(WebSocket ws, CancellationToken ct)
     {
-        var buffer = new byte[4096];
+        // 64KBバッファ: TTS WAVデータ（base64 ~320KB）の効率的な受信
+        var buffer = new byte[65536];
 
         while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
         {
@@ -440,6 +449,10 @@ public class HttpServer : IDisposable
                 "preview_close" => new { ok = true },
                 "preview_status" => new { open = false },
                 "quit" => HandleWsQuit(),
+                "tts_audio" => HandleWsTtsAudio(msg),
+                "bgm_play" => HandleWsBgmPlay(msg),
+                "bgm_stop" => HandleWsBgmStop(),
+                "bgm_volume" => HandleWsBgmVolume(msg),
                 _ => new { ok = false, error = $"unknown action: {action}" }
             };
 
@@ -556,6 +569,58 @@ public class HttpServer : IDisposable
             return new { ok = false, error = "Screenshot failed" };
 
         return new { ok = true, png_base64 = png64, format = "png", source = "broadcast" };
+    }
+
+    private object HandleWsTtsAudio(JsonElement msg)
+    {
+        var data = msg.TryGetProperty("data", out var d) ? d.GetString() : null;
+        var volume = msg.TryGetProperty("volume", out var v) ? (float)v.GetDouble() : 1.0f;
+
+        if (string.IsNullOrEmpty(data))
+            return new { ok = false, error = "data is required" };
+
+        if (OnTtsAudio == null)
+            return new { ok = false, error = "TTS audio handler not available" };
+
+        try
+        {
+            var wavBytes = Convert.FromBase64String(data);
+            OnTtsAudio(wavBytes, volume);
+            return new { ok = true, size = wavBytes.Length };
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[WebSocket] TTS audio decode failed");
+            return new { ok = false, error = ex.Message };
+        }
+    }
+
+    private object HandleWsBgmPlay(JsonElement msg)
+    {
+        var url = msg.TryGetProperty("url", out var u) ? u.GetString() : null;
+        if (string.IsNullOrEmpty(url))
+            return new { ok = false, error = "url is required" };
+
+        if (OnBgmPlay == null)
+            return new { ok = false, error = "BGM handler not available" };
+
+        Task.Run(() => { try { OnBgmPlay(url); } catch (Exception ex) { Log.Error(ex, "[BGM] Play callback failed"); } });
+        return new { ok = true };
+    }
+
+    private object HandleWsBgmStop()
+    {
+        OnBgmStop?.Invoke();
+        return new { ok = true };
+    }
+
+    private object HandleWsBgmVolume(JsonElement msg)
+    {
+        var source = msg.TryGetProperty("source", out var s) ? s.GetString() ?? "" : "";
+        var volume = msg.TryGetProperty("volume", out var v) ? (float)v.GetDouble() : 1.0f;
+
+        OnBgmVolume?.Invoke(source, volume);
+        return new { ok = true };
     }
 
     private object HandleWsQuit()

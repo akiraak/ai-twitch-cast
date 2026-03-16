@@ -184,6 +184,17 @@ async def _restore_session():
     except Exception as e:
         logger.warning("Git監視復旧失敗: %s", e)
 
+    # C#アプリの配信状態確認（タイムアウト3秒 — アプリ未起動時にブロックしない）
+    try:
+        import scripts.routes.stream_control as sc
+        from scripts.routes.capture import _ws_request
+        st = await asyncio.wait_for(_ws_request("stream_status", timeout=2.0), timeout=3.0)
+        if st.get("streaming"):
+            sc._is_streaming = True
+            logger.info("配信状態復旧OK（C#アプリ配信中）")
+    except Exception as e:
+        logger.info("配信状態確認スキップ（C#アプリ未起動）: %s", type(e).__name__)
+
     logger.info("自動復旧完了")
 
     # 保留コミットの読み上げ（TTSクライアント接続を待ってから）

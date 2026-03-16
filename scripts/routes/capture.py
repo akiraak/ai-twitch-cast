@@ -65,7 +65,27 @@ async def _ensure_capture_ws():
     _capture_ws = await websockets.connect(url, close_timeout=2)
     _ws_reader_task = asyncio.create_task(_read_capture_ws())
     logger.info("配信アプリ制御WebSocket接続: %s", url)
+
+    # C#アプリ接続時にBGM状態を復元
+    asyncio.create_task(_restore_bgm_to_app())
+
     return _capture_ws
+
+
+async def _restore_bgm_to_app():
+    """C#アプリ接続時に保存済みBGMを送信する"""
+    await asyncio.sleep(1)  # WebSocket接続安定待ち
+    try:
+        from scripts.routes.bgm import load_bgm_settings
+        bgm = load_bgm_settings()
+        track = bgm.get("track", "")
+        if track:
+            result = await _ws_request("bgm_play", url=f"/bgm/{track}")
+            logger.info("C#アプリにBGM復元: %s result=%s", track, result)
+        else:
+            logger.info("BGM復元: トラック未設定")
+    except Exception as e:
+        logger.warning("BGM復元失敗: %s", e)
 
 
 async def _read_capture_ws():

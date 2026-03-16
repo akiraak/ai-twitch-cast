@@ -458,9 +458,7 @@
 </div>
 
 
-<!-- 音声要素（非表示） -->
-<audio id="tts-audio"></audio>
-<audio id="bgm-audio" loop></audio>
+<!-- 音声はすべてC#アプリが再生（ブラウザでは再生しない） -->
 
 <!-- Three.js + three-vrm -->
 <script type="importmap">
@@ -561,9 +559,8 @@ let earTwitchDuration = 0.2;
 let lipsyncFrames = null;
 let lipsyncStart = 0;
 let pendingLipsyncFrames = null;  // 音声再生開始まで保持
-// 音声パイプライン遅延補正（ms）: 音声がWASAPI→FFmpegに到達するまでの追加遅延分、
-// リップシンク開始を遅らせて映像と音声を同期させる。環境に合わせて調整。
-window.window.LIPSYNC_DELAY_MS = 500;
+// リップシンクはlipsyncイベント受信時に即座開始（遅延補正不要）。
+// TTS音声はC#アプリが直接FFmpegパイプに書き込む。ブラウザでは再生しない。
 
 // 外部BlendShape（感情等）
 let externalShapes = {};
@@ -758,111 +755,17 @@ const subtitleEl = document.getElementById('subtitle');
 const todoPanelEl = document.getElementById('todo-panel');
 const todoListEl = document.getElementById('todo-list');
 const topicPanelEl = document.getElementById('topic-panel');
-const ttsAudio = document.getElementById('tts-audio');
-const bgmAudio = document.getElementById('bgm-audio');
 let fadeTimer = null;
 let todoSettings = {};
 
-// === 音量管理 ===
+// === 音量管理（C#アプリに送信用、ブラウザでは音声再生しない） ===
 let volumes = { master: 0.8, tts: 0.8, bgm: 1.0 };
-let _masterGain = null;  // AudioContext GainNode（master 200%対応）
-
-// 二乗カーブ: 人間の聴覚に合わせた知覚的音量変換
-// 100% → gain 1.0 (0dB), 200% → gain 4.0 (+12dB)
-function perceptualGain(linear) {
-  return linear * linear;
-}
 
 function applyVolume() {
-  if (_masterGain) {
-    // AudioContext経由: 個別音量はaudio要素、マスターはGainNode（二乗カーブ、200%対応）
-    ttsAudio.volume = Math.min(1.0, perceptualGain(volumes.tts));
-    bgmAudio.volume = Math.min(1.0, perceptualGain(volumes.bgm));
-    _masterGain.gain.value = perceptualGain(volumes.master);
-  } else {
-    // フォールバック: audio要素のみ（1.0上限）
-    const masterGain = perceptualGain(volumes.master);
-    ttsAudio.volume = Math.min(1.0, masterGain * perceptualGain(volumes.tts));
-    bgmAudio.volume = Math.min(1.0, masterGain * perceptualGain(volumes.bgm));
-  }
   // WebView2パネルに音量同期通知
   try { window.chrome?.webview?.postMessage({_volumeSync: volumes}); } catch(e){}
 }
 
-// === 音量メーター（プレビューウィンドウ向け） ===
-let _meterCtx = null;
-let _meterAnalyser = null;
-
-function setupAudioMeter() {
-  if (_meterCtx) return; // 重複防止
-  try {
-    const ctx = new AudioContext();
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0.3;
-
-    // マスター音量GainNode（0-2.0対応、200%ブースト可能）
-    const masterGain = ctx.createGain();
-    masterGain.gain.value = perceptualGain(volumes.master);
-
-    // TTS/BGM → masterGain → analyser → destination
-    // analyserをmasterGainの後に配置し、最終出力レベルを計測
-    const ttsSource = ctx.createMediaElementSource(ttsAudio);
-    const bgmSource = ctx.createMediaElementSource(bgmAudio);
-    ttsSource.connect(masterGain);
-    bgmSource.connect(masterGain);
-    masterGain.connect(analyser);
-    analyser.connect(ctx.destination);
-    _masterGain = masterGain;
-
-    _meterCtx = ctx;
-    _meterAnalyser = analyser;
-
-    const dataArray = new Float32Array(analyser.fftSize);
-    let peakDb = -Infinity;
-    let peakTime = 0;
-
-    setInterval(() => {
-      if (ctx.state === 'suspended') ctx.resume();
-      analyser.getFloatTimeDomainData(dataArray);
-
-      // RMS計算
-      let sumSq = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sumSq += dataArray[i] * dataArray[i];
-      }
-      const rms = Math.sqrt(sumSq / dataArray.length);
-      const db = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
-
-      const now = Date.now();
-      if (db > peakDb || now - peakTime > 1500) {
-        peakDb = db;
-        peakTime = now;
-      }
-
-      const msg = {
-        type: 'audio_level',
-        db: db,
-        peak: peakDb,
-        bgm: !bgmAudio.paused && bgmAudio.src !== '',
-        tts: !ttsAudio.paused && ttsAudio.src !== '',
-      };
-
-      // 親ウィンドウ（preview.html iframe）に送信
-      if (window.parent !== window) {
-        window.parent.postMessage(msg, '*');
-      }
-      // WebView2（C#ネイティブアプリ）に送信
-      if (window.chrome?.webview) {
-        window.chrome.webview.postMessage({ _audioLevel: msg });
-      }
-    }, 50);
-
-    console.log('[AudioMeter] 音量メーター初期化完了');
-  } catch (e) {
-    console.log('[AudioMeter] 初期化失敗:', e.message);
-  }
-}
 
 // === 背景透明度の適用（CSS変数で制御） ===
 function setBgOpacity(el, opacity) {
@@ -1090,52 +993,16 @@ function connectWS() {
         if (!_saving) applySettings(data);
         break;
 
-      // TTS音声
-      case 'play_audio':
-        console.log('[Audio] TTS play_audio:', data.url);
-        ttsAudio.src = data.url;
-        ttsAudio.load();
-        ttsAudio.oncanplaythrough = () => {
-          ttsAudio.oncanplaythrough = null;
-          console.log('[Audio] TTS canplaythrough → play()');
-          const playStart = performance.now();
-          ttsAudio.play().then(() => {
-            const elapsed = (performance.now() - playStart).toFixed(0);
-            console.log(`[Audio] TTS play() resolved in ${elapsed}ms, lipsync in ${window.LIPSYNC_DELAY_MS}ms`);
-            // 音声パイプライン遅延を補正してリップシンク開始を遅らせる
-            setTimeout(() => {
-              if (window.avatarVRM) window.avatarVRM.startLipsync();
-            }, window.LIPSYNC_DELAY_MS);
-          }).catch(e => console.log('[Audio] TTS再生エラー:', e.name, e.message));
-        };
-        ttsAudio.onerror = () => console.log('[Audio] TTS読み込みエラー:', ttsAudio.error?.message);
-        break;
+      // 音声はすべてC#アプリが再生（play_audio / bgm_play / bgm_stop はブラウザ不使用）
 
-      // BGM
-      case 'bgm_play':
-        console.log('[Audio] BGM play:', data.url);
-        bgmAudio.src = data.url;
-        bgmAudio.load();
-        bgmAudio.oncanplaythrough = () => {
-          bgmAudio.oncanplaythrough = null;
-          console.log('[Audio] BGM canplaythrough → play()');
-          bgmAudio.play().catch(e => console.log('[Audio] BGM再生エラー:', e.name, e.message));
-        };
-        bgmAudio.onerror = () => console.log('[Audio] BGM読み込みエラー:', bgmAudio.error?.message);
-        break;
-      case 'bgm_stop':
-        console.log('[Audio] BGM stop');
-        bgmAudio.pause();
-        bgmAudio.src = '';
-        break;
-
-      // 音量制御
+      // 音量制御（C#アプリに転送）
       case 'volume':
         if (data.source && data.volume != null) {
           volumes[data.source] = data.volume;
           applyVolume();
         }
         break;
+
 
       // VRMアバター制御
       case 'blendshape':
@@ -1145,8 +1012,9 @@ function connectWS() {
         break;
       case 'lipsync':
         if (window.avatarVRM && data.frames) {
-          console.log(`[Audio] lipsync received: ${data.frames.length} frames`);
+          console.log(`[Audio] lipsync: ${data.frames.length} frames`);
           window.avatarVRM.setLipsync(data.frames);
+          window.avatarVRM.startLipsync();
         }
         break;
       case 'lipsync_stop':
@@ -1765,9 +1633,6 @@ async function init() {
       addCaptureLayer(s.id, s.stream_url, s.label || s.name || s.id, s.layout);
     }
   } catch (e) { console.log('キャプチャ読み込みスキップ:', e.message); }
-
-  // 音量メーター（プレビューウィンドウのiframe内で動作時）
-  setupAudioMeter();
 
   await loadTodo();
   await loadTopicPanel();

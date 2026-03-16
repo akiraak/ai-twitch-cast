@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 BGM_DIR = Path(__file__).resolve().parent.parent.parent / "resources" / "audio" / "bgm"
 
 
+
+
 def load_bgm_settings() -> dict:
     """BGM設定を読み込む（DB優先 → scenes.json）"""
     track = load_config_value("bgm.track", "")

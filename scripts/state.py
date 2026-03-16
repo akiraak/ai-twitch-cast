@@ -43,7 +43,21 @@ async def broadcast_tts(event: dict):
 
 async def broadcast_bgm(event: dict):
     """BGM音声ソースにイベントを送信する"""
+    import logging
+    _logger = logging.getLogger(__name__)
     await _broadcast(broadcast_clients, event)
+    # C#アプリにもBGMコマンドを送信
+    try:
+        from scripts.routes.capture import _ws_request
+        event_type = event.get("type", "")
+        if event_type == "bgm_play":
+            result = await _ws_request("bgm_play", url=event.get("url", ""))
+            _logger.info("[BGM] C#アプリに送信: bgm_play url=%s result=%s", event.get("url"), result)
+        elif event_type == "bgm_stop":
+            await _ws_request("bgm_stop")
+            _logger.info("[BGM] C#アプリに送信: bgm_stop")
+    except Exception as e:
+        _logger.warning("[BGM] C#アプリへの送信失敗: %s", e)
 
 
 async def broadcast_to_broadcast(event: dict):
