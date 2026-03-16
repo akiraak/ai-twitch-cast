@@ -25,5 +25,5 @@
         - [ ] Phase 8: Electron完全削除（capture.pyのElectronコード・win-capture-app/・Web UI削除）
         - [ ] ネイティブアプリ起動時に旧Electronアプリ等のポート9090競合を検出・解決する仕組み
         - [ ] ネイティブアプリにffmpegが同梱されているか確認（現状はElectronダウンロード済みのものを流用）
-        - [ ] broadcast.html, control-panel.htmlをサーバから受け取るメリットとデメリットの検討
+        - [ ] broadcast.html, control-panel.htmlをサーバから受け取るメリットとデメリットの検討 → [plans/server-served-html.md](plans/server-served-html.md)
         - [ ] 閉じるボタンを押してもプロセスがずっと消えない時がある。./stream.sh --stop で消える
