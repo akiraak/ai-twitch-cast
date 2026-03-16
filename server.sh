@@ -53,12 +53,18 @@ fi
 echo "Starting server on port $WEB_PORT..."
 
 while [ -z "$STOP_FLAG" ]; do
-    uvicorn scripts.web:app --host 0.0.0.0 --port "$WEB_PORT" 2>&1 | tee -a server.log &
+    # teeパイプ不使用: $!でuvicorn本体のPIDを取得（ゾンビ防止）
+    # ターミナル表示はtail -fで代替
+    uvicorn scripts.web:app --host 0.0.0.0 --port "$WEB_PORT" >> server.log 2>&1 &
     PID=$!
     echo $PID > "$PID_FILE"
-    echo "サーバー起動 (PID: $PID)"
+    echo "サーバー起動 (PID: $PID) — ログ: tail -f server.log"
+    # バックグラウンドでログをターミナルに流す（uvicorn終了時に自動停止）
+    tail -f server.log --pid=$PID &
+    TAIL_PID=$!
     wait $PID
     EXIT_CODE=$?
+    kill $TAIL_PID 2>/dev/null
     # cleanup によるシグナル停止の場合はループを抜ける
     if [ -n "$STOP_FLAG" ]; then
         break

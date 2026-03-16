@@ -19,6 +19,7 @@
 - [x] TTS音声ガビガビ: AudioWriterLoopとタイマーの両方でMixTtsIntoを呼んでいた→タイマーのみに統一
 - [x] BGM音量変更がFFmpegに未反映: SetBgmVolume()追加、OnBgmVolumeから転送
 - [x] 配信バッファリング: 音声ジェネレータが固定10msチャンクだがWindowsタイマー解像度15.6msで発火→音声65%供給→FFmpeg speed 0.69x。壁時計時間ベースのチャンクサイズ動的計算で1.01x安定化
+- [x] ボリューム調整: waveOutSetVolumeがアプリセッション共有でBGM⇔TTS干渉→WaveChannel32でサンプルレベル音量制御に移行。パネル/Web UI/起動時取得の全経路でC#音声パイプラインに即時反映。TTS/BGM再生中のリアルタイム音量変更対応。FFmpegミキサーもSetTtsVolume/SetBgmVolumeでリアルタイム反映
 
 ### 未検証
 - [ ] リップシンク同期（配信時のTTS直接パイプとアニメーションの同期）

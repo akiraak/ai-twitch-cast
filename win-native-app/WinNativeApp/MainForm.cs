@@ -51,10 +51,19 @@ public class MainForm : Form
 
     // BGM state
     private WaveOutEvent? _bgmWaveOut;
+    private WaveChannel32? _bgmChannel;
     private MediaFoundationReader? _bgmReader;
     private string? _currentBgmUrl;
     private string? _currentBgmCachePath;
     private string _serverBaseUrl = "http://localhost:8080";
+
+    // TTS再生中のサンプルレベル音量制御用
+    private WaveChannel32? _ttsChannel;
+
+    // 音量トラッキング（0.0〜2.0 for master, 0.0〜1.0 for others）
+    private float _volumeMaster = 0.8f;
+    private float _volumeTts = 0.8f;
+    private float _volumeBgm = 1.0f;
 
     // サーバーAPI用共有HttpClient（初期音量取得用）
     private static readonly HttpClient _sharedHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
@@ -282,7 +291,7 @@ public class MainForm : Form
                         windows = windows.Select(w => new { title = w.Title, hwnd = $"0x{w.Hwnd.ToInt64():X}" }).ToArray()
                     });
                     SendPanelCaptures();
-                    // サーバーから現在の音量を取得してパネルに反映
+                    // サーバーから現在の音量を取得してパネル + C#音声に反映
                     _ = Task.Run(async () =>
                     {
                         try
@@ -292,13 +301,19 @@ public class MainForm : Form
                                 : "http://localhost:8080";
                             var json = await _sharedHttp.GetStringAsync($"{serverUrl}/api/broadcast/volume");
                             var vol = JsonSerializer.Deserialize<JsonElement>(json);
-                            BeginInvoke(() => SendPanelMessage(new
+                            BeginInvoke(() =>
                             {
-                                type = "volume",
-                                master = (int)(vol.GetProperty("master").GetDouble() * 100),
-                                tts = (int)(vol.GetProperty("tts").GetDouble() * 100),
-                                bgm = (int)(vol.GetProperty("bgm").GetDouble() * 100),
-                            }));
+                                UpdateVolume("master", (float)vol.GetProperty("master").GetDouble());
+                                UpdateVolume("tts", (float)vol.GetProperty("tts").GetDouble());
+                                UpdateVolume("bgm", (float)vol.GetProperty("bgm").GetDouble());
+                                SendPanelMessage(new
+                                {
+                                    type = "volume",
+                                    master = (int)(vol.GetProperty("master").GetDouble() * 100),
+                                    tts = (int)(vol.GetProperty("tts").GetDouble() * 100),
+                                    bgm = (int)(vol.GetProperty("bgm").GetDouble() * 100),
+                                });
+                            });
                         }
                         catch (Exception ex)
                         {
@@ -427,9 +442,12 @@ public class MainForm : Form
         var vol = value / 100.0;
         var volStr = vol.ToString("F2", CultureInfo.InvariantCulture);
 
+        // C#音声パイプラインに即時反映
+        UpdateVolume(volumeType, (float)vol);
+
         if (_webView.CoreWebView2 == null) return;
 
-        // broadcast.htmlの音量を即座に変更 + WebSocket経由でサーバーに保存（デバウンス200ms）
+        // broadcast.htmlのJS変数を更新 + WebSocket経由でサーバーDBに保存（デバウンス200ms）
         var js = $@"
             if (typeof volumes !== 'undefined') {{
                 volumes.{EscapeJs(volumeType)} = {volStr};
@@ -446,6 +464,55 @@ public class MainForm : Form
                 }}
             }}, 200);";
         _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+    }
+
+    /// <summary>音量値を更新し、C#音声パイプラインに反映する。</summary>
+    private void UpdateVolume(string type, float vol)
+    {
+        if (type == "master") _volumeMaster = vol;
+        else if (type == "tts") _volumeTts = vol;
+        else if (type == "bgm") _volumeBgm = vol;
+
+        // master or bgm変更時: BGMローカル再生 + FFmpegミキサーに反映
+        if (type == "master" || type == "bgm")
+            ApplyBgmVolume();
+
+        // master or tts変更時: 再生中TTSの音量をリアルタイム更新
+        if (type == "master" || type == "tts")
+            ApplyTtsVolume();
+    }
+
+    /// <summary>TTS実効音量を計算し、ローカル再生とFFmpegミキサーに適用する。</summary>
+    private void ApplyTtsVolume()
+    {
+        var effectiveVol = EffectiveTtsVolume();
+        var ch = _ttsChannel;
+        if (ch != null)
+            ch.Volume = Math.Clamp(effectiveVol, 0f, 1f);
+        _ffmpeg?.SetTtsVolume(effectiveVol);
+    }
+
+    /// <summary>TTS実効音量: perceptual gain（二乗カーブ）— Python側と同じ計算式</summary>
+    private float EffectiveTtsVolume()
+    {
+        return Math.Min(1.0f, _volumeTts * _volumeTts) * (_volumeMaster * _volumeMaster);
+    }
+
+    /// <summary>BGM実効音量を計算し、ローカル再生とFFmpegに適用する。</summary>
+    private void ApplyBgmVolume()
+    {
+        var effectiveVol = EffectiveBgmVolume();
+        if (_bgmChannel != null)
+            _bgmChannel.Volume = Math.Clamp(effectiveVol, 0f, 1f);
+        _ffmpeg?.SetBgmVolume(effectiveVol);
+        Log.Debug("[BGM] Volume applied: master={M:F2} bgm={B:F2} effective={E:F3}",
+            _volumeMaster, _volumeBgm, effectiveVol);
+    }
+
+    /// <summary>BGM実効音量: perceptual gain（二乗カーブ） — TTS計算式と同じ</summary>
+    private float EffectiveBgmVolume()
+    {
+        return Math.Min(1.0f, _volumeBgm * _volumeBgm) * (_volumeMaster * _volumeMaster);
     }
 
     private async void OnLoad(object? sender, EventArgs e)
@@ -480,15 +547,21 @@ public class MainForm : Form
                     var msg = JsonSerializer.Deserialize<JsonElement>(args.WebMessageAsJson);
                     if (msg.TryGetProperty("_console", out var text))
                         Log.Debug("[WebView2:JS] {Message}", text.GetString());
-                    // broadcast.htmlからの音量変更通知 → パネルに転送
+                    // broadcast.htmlからの音量変更通知 → パネルに転送 + C#音声に反映
                     if (msg.TryGetProperty("_volumeSync", out var volSync))
                     {
+                        var m = (float)volSync.GetProperty("master").GetDouble();
+                        var t = (float)volSync.GetProperty("tts").GetDouble();
+                        var b = (float)volSync.GetProperty("bgm").GetDouble();
+                        UpdateVolume("master", m);
+                        UpdateVolume("tts", t);
+                        UpdateVolume("bgm", b);
                         SendPanelMessage(new
                         {
                             type = "volume",
-                            master = (int)(volSync.GetProperty("master").GetDouble() * 100),
+                            master = (int)(m * 100),
                             tts = (int)(volSync.GetProperty("tts").GetDouble() * 100),
-                            bgm = (int)(volSync.GetProperty("bgm").GetDouble() * 100),
+                            bgm = (int)(b * 100),
                         });
                     }
                     // broadcast.htmlからの音量レベル → パネルに転送
@@ -603,12 +676,12 @@ public class MainForm : Form
         {
             try
             {
-                // 常にローカルスピーカーで再生（プレビュー）
-                PlayTtsLocally(wavData, volume);
-                // 配信中: PCMリサンプル → FFmpegミキサーにも書き込み
+                // ローカル再生: WaveChannel32で音量制御（再生中の音量変更対応）
+                PlayTtsLocally(wavData, EffectiveTtsVolume());
+                // 配信中: PCMリサンプル → FFmpegミキサー（音量はMixTtsIntoでリアルタイム適用）
                 if (_ffmpeg is { IsRunning: true })
                 {
-                    var pcm = TtsDecoder.DecodeWav(wavData, volume);
+                    var pcm = TtsDecoder.DecodeWav(wavData, 1.0f);
                     _ffmpeg.WriteTtsData(pcm);
                 }
             }
@@ -637,11 +710,7 @@ public class MainForm : Form
 
         _httpServer.OnBgmVolume = (source, volume) =>
         {
-            var clamped = Math.Clamp(volume, 0f, 1f);
-            if (_bgmWaveOut != null)
-                _bgmWaveOut.Volume = clamped;
-            _ffmpeg?.SetBgmVolume(clamped);
-            Log.Debug("[BGM] Volume: {Source}={Volume}", source, volume);
+            BeginInvoke(() => UpdateVolume(source, Math.Clamp(volume, 0f, 1f)));
         };
 
         try
@@ -857,6 +926,7 @@ public class MainForm : Form
 
         // タイマーベース音声ジェネレータ開始（サイレンス + TTS + BGMミキシング）
         _ffmpeg.StartAudioGenerator();
+        _ffmpeg.SetTtsVolume(EffectiveTtsVolume());
 
         // フレームキャプチャ → FFmpegビデオパイプ接続
         _capture.TargetFps = config.Framerate;
@@ -872,7 +942,7 @@ public class MainForm : Form
                 try
                 {
                     var pcm = DecodeBgmToPcm(bgmPath);
-                    ffmpeg?.SetBgm(pcm, 1.0f);
+                    ffmpeg?.SetBgm(pcm, EffectiveBgmVolume());
                     Log.Information("[BGM] PCM decoded for streaming (on start): {Size} bytes", pcm.Length);
                 }
                 catch (Exception ex)
@@ -1022,10 +1092,10 @@ public class MainForm : Form
     }
 
     /// <summary>
-    /// 非配信時: TTS WAVをローカルスピーカーで再生する（NAudio WaveOutEvent）。
-    /// バックグラウンドスレッドで再生し、完了後に自動Dispose。
+    /// TTS WAVをローカルスピーカーで再生する（NAudio WaveOutEvent + WaveChannel32）。
+    /// WaveChannel32でサンプルレベル音量制御（再生中の音量変更対応）。
     /// </summary>
-    private static void PlayTtsLocally(byte[] wavData, float volume)
+    private void PlayTtsLocally(byte[] wavData, float volume)
     {
         Task.Run(() =>
         {
@@ -1033,13 +1103,16 @@ public class MainForm : Form
             {
                 var ms = new MemoryStream(wavData);
                 var reader = new WaveFileReader(ms);
+                var channel = new WaveChannel32(reader) { Volume = Math.Clamp(volume, 0f, 1f) };
+                _ttsChannel = channel; // 再生中の音量変更用に参照保持
                 var waveOut = new WaveOutEvent();
-                waveOut.Volume = Math.Clamp(volume, 0f, 1f);
-                waveOut.Init(reader);
+                waveOut.Init(channel);
+                waveOut.Volume = 1.0f; // デバイスレベルは常にmax（音量制御はWaveChannel32で行う）
                 waveOut.Play();
                 Log.Debug("[TTS] Local playback started ({Size} bytes, vol={Vol:F2})", wavData.Length, volume);
                 waveOut.PlaybackStopped += (_, _) =>
                 {
+                    if (_ttsChannel == channel) _ttsChannel = null;
                     waveOut.Dispose();
                     reader.Dispose();
                     ms.Dispose();
@@ -1115,10 +1188,14 @@ public class MainForm : Form
         {
             _currentBgmCachePath = localPath;
             _bgmReader = new MediaFoundationReader(localPath);
+            // WaveChannel32でサンプルレベル音量（waveOut.Volumeはデバイスレベルで他WaveOutに干渉するため不使用）
+            _bgmChannel = new WaveChannel32(_bgmReader) { Volume = Math.Clamp(EffectiveBgmVolume(), 0f, 1f) };
             _bgmWaveOut = new WaveOutEvent();
-            _bgmWaveOut.Init(_bgmReader);
+            _bgmWaveOut.Init(_bgmChannel);
+            _bgmWaveOut.Volume = 1.0f; // デバイスレベルは常にmax（音量制御はWaveChannel32で行う）
             _bgmWaveOut.Play();
-            Log.Information("[BGM] Playback started: {Format}, file={Path}", _bgmReader.WaveFormat, localPath);
+            Log.Information("[BGM] Playback started: {Format}, vol={Vol:F3}, file={Path}",
+                _bgmReader.WaveFormat, _bgmChannel.Volume, localPath);
 
             // 再生終了時にループ
             _bgmWaveOut.PlaybackStopped += (s, e) =>
@@ -1139,7 +1216,7 @@ public class MainForm : Form
                     try
                     {
                         var pcm = DecodeBgmToPcm(localPath);
-                        ffmpeg?.SetBgm(pcm, 1.0f);
+                        ffmpeg?.SetBgm(pcm, EffectiveBgmVolume());
                         Log.Information("[BGM] PCM decoded for streaming: {Size} bytes", pcm.Length);
                     }
                     catch (Exception ex)
@@ -1161,6 +1238,7 @@ public class MainForm : Form
         var reader = _bgmReader;
         var waveOut = _bgmWaveOut;
         _bgmReader = null;
+        _bgmChannel = null;
         _bgmWaveOut = null;
         _currentBgmUrl = null;
         _currentBgmCachePath = null;

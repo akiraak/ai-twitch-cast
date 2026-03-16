@@ -42,6 +42,7 @@ public sealed class FfmpegProcess : IDisposable
     private readonly ConcurrentQueue<byte[]> _ttsQueue = new();
     private byte[]? _ttsCurrentChunk;
     private int _ttsCurrentOffset;
+    private float _ttsVolume = 1.0f;
 
     // BGMミキサー用フィールド
     private byte[]? _bgmPcm;
@@ -326,6 +327,13 @@ public sealed class FfmpegProcess : IDisposable
             f32lePcm.Length, f32lePcm.Length / (48000.0 * 2 * 4));
     }
 
+    /// <summary>TTS音量を変更する（再生中のミキシングにリアルタイム反映）。</summary>
+    public void SetTtsVolume(float volume)
+    {
+        _ttsVolume = volume;
+        Log.Debug("[FFmpeg] TTS volume set: {Vol:F2}", volume);
+    }
+
     /// <summary>
     /// タイマーベースの音声ジェネレータを開始する。
     /// 壁時計時間を追跡し、実際の経過時間分の音声を生成する。
@@ -447,10 +455,11 @@ public sealed class FfmpegProcess : IDisposable
 
             if (toMix <= 0) break;
 
+            var vol = _ttsVolume;
             for (int i = 0; i < toMix; i += 4)
             {
                 float bgm = BitConverter.ToSingle(chunk, pos + i);
-                float tts = BitConverter.ToSingle(_ttsCurrentChunk, _ttsCurrentOffset + i);
+                float tts = BitConverter.ToSingle(_ttsCurrentChunk, _ttsCurrentOffset + i) * vol;
                 float mixed = Math.Clamp(bgm + tts, -1.0f, 1.0f);
                 BitConverter.TryWriteBytes(chunk.AsSpan(pos + i), mixed);
             }
