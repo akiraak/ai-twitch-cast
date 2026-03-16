@@ -106,13 +106,15 @@ public sealed class FrameCapture : IDisposable
                 _lastFrameTimeMs = now;
         }
 
-        if (OnFrameReady == null) return;
+        var callback = OnFrameReady;
+        if (callback == null) return;
 
         // Extract BGRA bytes from GPU texture (double-buffered pipeline)
         ExtractBgra(frame, out var w, out var h);
         if (w == 0 || h == 0) return;
 
-        OnFrameReady.Invoke(_frameBuffer!, w, h);
+        try { callback.Invoke(_frameBuffer!, w, h); }
+        catch (NullReferenceException) { /* callback target disposed during stop */ }
     }
 
     private unsafe void ExtractBgra(Direct3D11CaptureFrame frame, out int width, out int height)

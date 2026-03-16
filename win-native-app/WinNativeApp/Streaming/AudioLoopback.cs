@@ -33,8 +33,12 @@ public sealed class AudioLoopback : IDisposable
         var wf = _capture.WaveFormat;
         var silenceBytes = wf.SampleRate * wf.Channels * (wf.BitsPerSample / 8) / 10; // 100ms分
         var silenceBuf = new byte[silenceBytes];
+        long silenceCount = 0;
+        long dataCount = 0;
+        long lastLogTick = Environment.TickCount64;
         _silenceTimer = new System.Threading.Timer(_ =>
         {
+            Interlocked.Increment(ref silenceCount);
             try { onData(silenceBuf, 0, silenceBuf.Length); }
             catch { /* pipe closed */ }
         }, null, 100, 100);
@@ -43,9 +47,23 @@ public sealed class AudioLoopback : IDisposable
         {
             if (e.BytesRecorded > 0)
             {
-                _silenceTimer?.Change(100, 100);
+                Interlocked.Increment(ref dataCount);
+                // _silenceTimer?.Change()はDispose後にObjectDisposedExceptionを投げうる
+                try { _silenceTimer?.Change(100, 100); }
+                catch (ObjectDisposedException) { }
                 try { onData(e.Buffer, 0, e.BytesRecorded); }
                 catch (Exception ex) { Log.Debug("[Audio] Write error: {Msg}", ex.Message); }
+
+                // 10秒ごとに統計ログ
+                var now = Environment.TickCount64;
+                var last = Interlocked.Read(ref lastLogTick);
+                if (now - last > 10000 && Interlocked.CompareExchange(ref lastLogTick, now, last) == last)
+                {
+                    var sc = Interlocked.Exchange(ref silenceCount, 0);
+                    var dc = Interlocked.Exchange(ref dataCount, 0);
+                    Log.Information("[Audio] Stats (10s): data={Data} silence={Silence} bytes={Bytes}",
+                        dc, sc, e.BytesRecorded);
+                }
             }
         };
 
@@ -64,13 +82,12 @@ public sealed class AudioLoopback : IDisposable
 
     public void Stop()
     {
-        if (_silenceTimer != null)
-        {
-            using var waitHandle = new ManualResetEvent(false);
-            _silenceTimer.Dispose(waitHandle);
-            waitHandle.WaitOne(1000);
-            _silenceTimer = null;
-        }
+        // 先にnullにしてからDispose（DataAvailableコールバックとのレース防止）
+        var timer = _silenceTimer;
+        _silenceTimer = null;
+        // waitHandleパターンは使わない（WaitOneタイムアウト後にタイマー内部がハンドルを
+        // Signalしようとしてクラッシュするため）。単純なDisposeで十分。
+        timer?.Dispose();
         try { _capture?.StopRecording(); }
         catch (Exception ex) { Log.Debug("[Audio] Stop error: {Msg}", ex.Message); }
     }
@@ -80,6 +97,13 @@ public sealed class AudioLoopback : IDisposable
         if (_disposed) return;
         _disposed = true;
         Stop();
-        _capture?.Dispose();
+        // NAudioのWasapiLoopbackCapture.Dispose()は内部COM解放が
+        // UIスレッドでハング、他スレッドでネイティブクラッシュする。
+        // Dispose()を呼ばず、ファイナライザも抑制してリーク許容。
+        // StopRecording()で録音は停止済み。COMリソースはプロセス終了時にOS回収。
+        var capture = _capture;
+        _capture = null;
+        if (capture != null)
+            GC.SuppressFinalize(capture);
     }
 }

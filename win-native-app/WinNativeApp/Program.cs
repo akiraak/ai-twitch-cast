@@ -21,6 +21,23 @@ static class Program
                 outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
 
+        // 未処理例外をすべてキャッチしてログに記録
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            Log.Fatal(e.ExceptionObject as Exception, "[CRASH] UnhandledException (terminating={T})", e.IsTerminating);
+            Log.CloseAndFlush();
+        };
+        Application.ThreadException += (_, e) =>
+        {
+            Log.Fatal(e.Exception, "[CRASH] ThreadException");
+            Log.CloseAndFlush();
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Log.Fatal(e.Exception, "[CRASH] UnobservedTaskException");
+            e.SetObserved();
+        };
+
         Log.Information("AI Twitch Cast starting...");
 
         try

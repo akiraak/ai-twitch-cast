@@ -1,5 +1,19 @@
 # DONE
 
+## コントロールパネルStopボタン修正
+
+- [x] StopStreamingAsyncでフィールド（_ffmpeg/_audio/_activeStreamKey）を即座にクリア→UI即時反映
+- [x] OnFrameReady=nullを_ffmpeg=nullより先に実行（キャプチャコールバックのNREクラッシュ防止）
+- [x] FrameCapture.csのOnFrameReady呼び出しにローカル変数キャプチャ+NRE catchガード追加
+- [x] AudioLoopback.Stop()のManualResetEventパターン除去（using早期disposeによるクラッシュ修正）
+- [x] AudioLoopback.Stop()で_silenceTimerをnull先行設定（DataAvailableとのレース防止）
+- [x] DataAvailableの_silenceTimer.Change()をtry-catch(ObjectDisposedException)で防御
+- [x] AudioLoopback.Dispose()でNAudioのCOM Disposeをスキップ+GC.SuppressFinalize（ハング/クラッシュ回避）
+- [x] WebView2にバックグラウンドスロットリング無効化フラグ追加（音声途切れ対策）
+- [x] 未処理例外ハンドラ追加（AppDomain/ThreadException/UnobservedTaskException）
+- [x] 診断ログ追加（Panel送受信・Stop各ステップ・Audio統計）
+- [x] プラン: plans/post-electron-bugs.md
+
 ## Electron完全削除（Phase 8）
 
 - [x] win-capture-app/ ディレクトリ削除

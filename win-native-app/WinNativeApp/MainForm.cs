@@ -257,8 +257,10 @@ public class MainForm : Form
     {
         try
         {
+            Log.Debug("[Panel] Received message: {Json}", e.WebMessageAsJson);
             var msg = JsonSerializer.Deserialize<JsonElement>(e.WebMessageAsJson);
             var action = msg.GetProperty("action").GetString() ?? "";
+            Log.Information("[Panel] Action: {Action}", action);
 
             switch (action)
             {
@@ -330,7 +332,7 @@ public class MainForm : Form
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "[MainForm] Panel message error");
+            Log.Error(ex, "[Panel] OnPanelMessage error for: {Json}", e.WebMessageAsJson);
         }
     }
 
@@ -356,13 +358,17 @@ public class MainForm : Form
 
     private async Task HandlePanelStopStream()
     {
+        Log.Information("[Panel] HandlePanelStopStream called, _ffmpeg={HasFfmpeg}, IsRunning={Running}",
+            _ffmpeg != null, _ffmpeg?.IsRunning);
         try
         {
             await StopStreamingAsync();
             PanelLog("配信を停止しました", "success");
+            Log.Information("[Panel] HandlePanelStopStream completed successfully");
         }
         catch (Exception ex)
         {
+            Log.Error(ex, "[Panel] HandlePanelStopStream failed");
             PanelLog($"配信停止失敗: {ex.Message}", "error");
         }
     }
@@ -433,9 +439,13 @@ public class MainForm : Form
 
         try
         {
-            // broadcast.html用WebView2（autoplay音声許可）
+            // broadcast.html用WebView2（autoplay音声許可 + バックグラウンドスロットリング無効化）
             var env = await CoreWebView2Environment.CreateAsync(null, null,
-                new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required"));
+                new CoreWebView2EnvironmentOptions(
+                    "--autoplay-policy=no-user-gesture-required " +
+                    "--disable-background-timer-throttling " +
+                    "--disable-renderer-backgrounding " +
+                    "--disable-backgrounding-occluded-windows"));
             await _webView.EnsureCoreWebView2Async(env);
             Log.Information("[MainForm] WebView2 ready, version={Version}",
                 _webView.CoreWebView2.Environment.BrowserVersionString);
@@ -932,27 +942,49 @@ public class MainForm : Form
 
     public async Task StopStreamingAsync()
     {
-        // Disconnect capture callback first to stop writing to closing pipes
+        // ★ 最初にキャプチャコールバックを切断（_ffmpeg=null後にコールバックが飛ぶとNRE→クラッシュ）
         if (_capture != null)
         {
             _capture.OnFrameReady = null;
             _capture.TargetFps = 0;
         }
+        Log.Information("[Stop] Capture disconnected");
 
-        _audio?.Stop();
-        _audio?.Dispose();
+        // ローカル変数に退避してフィールドを即座にクリア
+        // → UI更新（OnTrayUpdate）と×ボタン（OnFormClosing）が即座に正しく動作する
+        var ffmpeg = _ffmpeg;
+        var audio = _audio;
+        _ffmpeg = null;
         _audio = null;
-
-        if (_ffmpeg != null)
-        {
-            await _ffmpeg.StopAsync();
-            _ffmpeg.Dispose();
-            _ffmpeg = null;
-        }
-
         _activeStreamKey = null;
         Text = "AI Twitch Cast - 待機中";
-        Log.Information("[MainForm] Streaming stopped");
+        Log.Information("[Stop] State cleared. Starting cleanup...");
+
+        // クリーンアップ（ローカル変数で実行、フィールドは既にnull）
+        Log.Information("[Stop] audio.Stop()...");
+        try { audio?.Stop(); }
+        catch (Exception ex) { Log.Error(ex, "[Stop] audio.Stop() failed"); }
+        Log.Information("[Stop] audio.Stop() done");
+
+        Log.Information("[Stop] audio.Dispose()...");
+        try { audio?.Dispose(); }
+        catch (Exception ex) { Log.Error(ex, "[Stop] audio.Dispose() failed"); }
+        Log.Information("[Stop] audio.Dispose() done");
+
+        if (ffmpeg != null)
+        {
+            Log.Information("[Stop] ffmpeg.StopAsync()...");
+            try { await ffmpeg.StopAsync(); }
+            catch (Exception ex) { Log.Error(ex, "[Stop] ffmpeg.StopAsync() failed"); }
+            Log.Information("[Stop] ffmpeg.StopAsync() done");
+
+            Log.Information("[Stop] ffmpeg.Dispose()...");
+            try { ffmpeg.Dispose(); }
+            catch (Exception ex) { Log.Error(ex, "[Stop] ffmpeg.Dispose() failed"); }
+            Log.Information("[Stop] ffmpeg.Dispose() done");
+        }
+
+        Log.Information("[Stop] Streaming stopped");
     }
 
     private void OnFormClosing(object? sender, FormClosingEventArgs e)

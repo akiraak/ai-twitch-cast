@@ -377,6 +377,7 @@ document.querySelector('.tab-bar').addEventListener('click', e => {
 wv?.addEventListener('message', e => {
   const m = e.data;
   if (!m?.type) return;
+  if (m.type === 'status') console.log('[Panel] C#→HTML status:', JSON.stringify(m));
   switch (m.type) {
     case 'status': updateStatus(m); break;
     case 'windows': updateWindows(m.windows); break;
@@ -388,9 +389,13 @@ wv?.addEventListener('message', e => {
 });
 
 // HTML → C#
-function send(msg) { wv?.postMessage(msg); }
+function send(msg) {
+  console.log('[Panel] send:', JSON.stringify(msg), 'wv=', !!wv);
+  if (!wv) { appendLog('ERROR: wv is null, postMessage unavailable', 'error'); return; }
+  wv.postMessage(msg);
+}
 function goLive() { send({action:'goLive'}); }
-function stopStream() { send({action:'stopStream'}); }
+function stopStream() { console.log('[Panel] stopStream clicked'); send({action:'stopStream'}); }
 function refreshWindows() { send({action:'refreshWindows'}); }
 
 function startCapture() {
