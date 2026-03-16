@@ -774,100 +774,12 @@ function applyVolume() {
   try { window.chrome?.webview?.postMessage({_volumeSync: volumes}); } catch(e){}
 }
 
-// === Electron音声キャプチャ（オフスクリーン配信用） ===
-let _electronAudioCtx = null;
-
-function setupElectronAudioCapture() {
-  if (!window.audioCapture || !window.audioCapture.isAvailable) return;
-
-  const audioCtx = new AudioContext({ sampleRate: 44100 });
-  _electronAudioCtx = audioCtx;
-
-  // TTS/BGMの<audio>をAudioContext経由にルーティング
-  const ttsSource = audioCtx.createMediaElementSource(ttsAudio);
-  const bgmSource = audioCtx.createMediaElementSource(bgmAudio);
-
-  // ミキサー
-  const mixer = audioCtx.createGain();
-  mixer.gain.value = 1.0;
-  ttsSource.connect(mixer);
-  bgmSource.connect(mixer);
-
-  // PCMキャプチャ（ScriptProcessorNode）
-  const processor = audioCtx.createScriptProcessor(4096, 2, 2);
-  mixer.connect(processor);
-
-  // スピーカー出力は不要（オフスクリーン）→ 無音でdestinationに接続してグラフを維持
-  const silentOut = audioCtx.createGain();
-  silentOut.gain.value = 0;
-  processor.connect(silentOut);
-  silentOut.connect(audioCtx.destination);
-
-  let pcmFrameCount = 0;
-  let hasNonSilence = false;
-  processor.onaudioprocess = (e) => {
-    const left = e.inputBuffer.getChannelData(0);
-    const right = e.inputBuffer.getChannelData(1);
-
-    // Float32 stereo → Int16 interleaved (s16le)
-    const pcm = new Int16Array(left.length * 2);
-    for (let i = 0; i < left.length; i++) {
-      pcm[i * 2]     = (Math.max(-1, Math.min(1, left[i]))  * 0x7FFF) | 0;
-      pcm[i * 2 + 1] = (Math.max(-1, Math.min(1, right[i])) * 0x7FFF) | 0;
-    }
-    window.audioCapture.sendPCM(pcm.buffer);
-    pcmFrameCount++;
-
-    // 非サイレンスデータの検出（音が実際に流れているかチェック）
-    if (!hasNonSilence) {
-      for (let i = 0; i < left.length; i += 64) {
-        if (Math.abs(left[i]) > 0.001 || Math.abs(right[i]) > 0.001) {
-          hasNonSilence = true;
-          console.log(`[AudioCapture] 音声データ検出! frame=${pcmFrameCount}`);
-          break;
-        }
-      }
-    }
-  };
-
-  // AudioContext状態監視（suspendされたら自動復帰）
-  audioCtx.addEventListener('statechange', () => {
-    console.log(`[AudioCapture] AudioContext state: ${audioCtx.state}`);
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume().then(() => {
-        console.log('[AudioCapture] AudioContext resumed');
-      });
-    }
-  });
-
-  // 初期状態チェック＋resume
-  console.log(`[AudioCapture] AudioContext初期state: ${audioCtx.state}`);
-  if (audioCtx.state !== 'running') {
-    audioCtx.resume().then(() => {
-      console.log(`[AudioCapture] AudioContext resume後: ${audioCtx.state}`);
-    });
-  }
-
-  // 定期診断ログ（30秒ごと）
-  setInterval(() => {
-    console.log(`[AudioCapture] 診断: state=${audioCtx.state}, frames=${pcmFrameCount}, hasAudio=${hasNonSilence}`);
-    // suspendされていたら再度resume
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-  }, 30000);
-
-  console.log('[AudioCapture] Electron音声キャプチャ有効');
-}
-
 // === 音量メーター（プレビューウィンドウ向け） ===
 let _meterCtx = null;
 let _meterAnalyser = null;
 
 function setupAudioMeter() {
   if (_meterCtx) return; // 重複防止
-  // Electronオフスクリーン配信時はメインプロセスミキサーが音声処理するためスキップ
-  if (window.audioCapture && window.audioCapture.isAvailable) return;
   try {
     const ctx = new AudioContext();
     const analyser = ctx.createAnalyser();
@@ -1165,17 +1077,7 @@ function connectWS() {
 
       // TTS音声
       case 'play_audio':
-        console.log('[Audio] TTS play_audio:', data.url, 'audioCapture=', !!window.audioCapture, 'electronCtx=', _electronAudioCtx?.state);
-        // メインプロセスバイパス（オフスクリーンAudioContext不要）
-        if (window.audioCapture && window.audioCapture.notifyPlayAudio) {
-          console.log('[Audio] TTS → notifyPlayAudio IPC送信');
-          window.audioCapture.notifyPlayAudio(data.url);
-        }
-        // ブラウザ再生も試行（プレビューウィンドウ用）
-        if (_electronAudioCtx && _electronAudioCtx.state === 'suspended') {
-          console.log('[Audio] AudioContext suspended → resume');
-          _electronAudioCtx.resume();
-        }
+        console.log('[Audio] TTS play_audio:', data.url);
         ttsAudio.src = data.url;
         ttsAudio.load();
         ttsAudio.oncanplaythrough = () => {
@@ -1188,15 +1090,7 @@ function connectWS() {
 
       // BGM
       case 'bgm_play':
-        console.log('[Audio] BGM play:', data.url, 'audioCapture=', !!window.audioCapture, 'electronCtx=', _electronAudioCtx?.state);
-        if (window.audioCapture && window.audioCapture.notifyPlayBgm) {
-          console.log('[Audio] BGM → notifyPlayBgm IPC送信');
-          window.audioCapture.notifyPlayBgm(data.url);
-        }
-        if (_electronAudioCtx && _electronAudioCtx.state === 'suspended') {
-          console.log('[Audio] AudioContext suspended → resume');
-          _electronAudioCtx.resume();
-        }
+        console.log('[Audio] BGM play:', data.url);
         bgmAudio.src = data.url;
         bgmAudio.load();
         bgmAudio.oncanplaythrough = () => {
@@ -1208,9 +1102,6 @@ function connectWS() {
         break;
       case 'bgm_stop':
         console.log('[Audio] BGM stop');
-        if (window.audioCapture && window.audioCapture.notifyStopBgm) {
-          window.audioCapture.notifyStopBgm();
-        }
         bgmAudio.pause();
         bgmAudio.src = '';
         break;
@@ -1300,42 +1191,10 @@ const captureContainer = document.getElementById('capture-container');
 const captureLayers = {};
 const captureImgMap = {};      // capture_id -> img element
 
-// IPC直接受信モード（Electronオフスクリーン配信時のみ有効）
+// IPC直接受信モード（未使用）
 let useDirectCapture = false;
 
-function setupDirectCapture() {
-  if (!window.captureReceiver || !window.captureReceiver.isAvailable) return false;
-
-  window.captureReceiver.onFrame((id, jpegBuffer) => {
-    const img = captureImgMap[id];
-    if (!img) return;
-    const blob = new Blob([jpegBuffer], { type: 'image/jpeg' });
-    const url = URL.createObjectURL(blob);
-    const prevUrl = img._blobUrl;
-    img.src = url;
-    img._blobUrl = url;
-    if (prevUrl) URL.revokeObjectURL(prevUrl);
-  });
-
-  window.captureReceiver.onCaptureAdd((data) => {
-    // broadcastWindow起動時の既存キャプチャ or 新規キャプチャ追加
-    if (!captureLayers[data.id]) {
-      addCaptureLayer(data.id, '', data.name || data.id, data.layout || { x: 5, y: 10, width: 40, height: 45, zIndex: 2 });
-    }
-  });
-
-  window.captureReceiver.onCaptureRemove((data) => {
-    removeCaptureLayer(data.id);
-  });
-
-  useDirectCapture = true;
-  console.log('[DirectCapture] Electron IPC直接受信モード有効');
-  // main.jsに準備完了を通知 → 既存キャプチャ一覧がIPCで送られてくる
-  window.captureReceiver.notifyReady();
-  return true;
-}
-
-// キャプチャインデックスマッピング（IPC直接受信のcapture_addで使用）
+// キャプチャインデックスマッピング
 const captureIndexToId = {};   // index -> capture_id
 
 // snapshotポーリング（プレビュー用フォールバック）
@@ -1383,7 +1242,7 @@ function addCaptureLayer(id, streamUrl, label, layout) {
   captureImgMap[id] = img;
 
   if (!useDirectCapture && streamUrl) {
-    // プレビュー / 非Electron環境: snapshotポーリングでフレーム受信
+    // snapshotポーリングでフレーム受信
     try {
       const httpUrl = new URL(streamUrl);
       startSnapshotPolling(httpUrl.host);
@@ -1874,12 +1733,7 @@ async function init() {
     if (av.url) setAvatarStream(av.url);
   } catch (e) {}
 
-  // キャプチャIPC直接受信（Electronオフスクリーン配信時）
-  setupDirectCapture();
-
-  // キャプチャソース読み込み（プレビュー / 非Electron環境用）
-  // IPC直接受信モードではbroadcastWindow起動時にIPCでキャプチャ一覧が来るが、
-  // API経由のレイアウト情報も必要なので両方から読み込む
+  // キャプチャソース読み込み
   try {
     const res = await fetch('/api/capture/sources');
     const sources = await res.json();
@@ -1887,11 +1741,6 @@ async function init() {
       addCaptureLayer(s.id, s.stream_url, s.label || s.name || s.id, s.layout);
     }
   } catch (e) { console.log('キャプチャ読み込みスキップ:', e.message); }
-
-  // メインプロセスのミキサーが音声を処理するため、ブラウザ側AudioCaptureは不要
-  // setupElectronAudioCapture()はAudioContext+ScriptProcessorを生成し、
-  // オフスクリーンレンダリングに負荷をかけるため無効化
-  console.log('[AudioCapture] スキップ（メインプロセスミキサーが音声処理を担当）');
 
   // 音量メーター（プレビューウィンドウのiframe内で動作時）
   setupAudioMeter();

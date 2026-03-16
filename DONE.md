@@ -1,5 +1,16 @@
 # DONE
 
+## Electron完全削除（Phase 8）
+
+- [x] win-capture-app/ ディレクトリ削除
+- [x] capture.py からElectronビルド・デプロイ・管理コードを削除（1362行→約500行）
+- [x] stream_control.py 簡素化（_use_native_app()・Electron分岐削除）
+- [x] index.html からElectron UI要素削除（サーバー起動/停止・ビルド進捗・ワンクリックプレビュー）
+- [x] broadcast.html からElectron IPC死コード削除（audioCapture・captureReceiver・setupDirectCapture）
+- [x] .env.example から USE_NATIVE_APP 設定削除
+- [x] .gitignore から win-capture-app 関連行削除
+- [x] CLAUDE.md・README.md をネイティブアプリに統一更新
+
 ## プロセス終了しない問題の修正
 
 - [x] HttpServer.Dispose に _listenTask.Wait(2000) 追加（ListenLoopが残り続ける問題）

@@ -4,12 +4,12 @@ AIを活用し、プログラムで全自動Twitch配信を行うプロジェク
 
 ## プロジェクト概要
 
-Electron配信パイプライン（Windows側でbroadcast.htmlをオフスクリーンレンダリング→FFmpegでTwitch直接配信）、Twitch API連携、画像生成・収集、テキスト生成、音声合成など、配信に必要な要素をすべてプログラムで生成・制御する。
+C#ネイティブ配信アプリ（Windows側でbroadcast.htmlをオフスクリーンレンダリング→FFmpegでTwitch直接配信）、Twitch API連携、画像生成・収集、テキスト生成、音声合成など、配信に必要な要素をすべてプログラムで生成・制御する。
 
 ## 主要コンポーネント
 
-- **Electron配信パイプライン** - Windows側Electronアプリ（`win-capture-app/`）でbroadcast.htmlをオフスクリーンレンダリング→FFmpegでTwitch直接配信（OBS/xvfb不要）
-- **ウィンドウキャプチャ** - 同Electronアプリでウィンドウをキャプチャ→MJPEGストリーム配信→broadcast.htmlで表示
+- **C#ネイティブ配信アプリ** - Windows側C#アプリ（`win-native-app/`）でbroadcast.htmlをWebView2でレンダリング→FFmpegでTwitch直接配信（OBS/xvfb不要）
+- **ウィンドウキャプチャ** - 同アプリでWindows Graphics Capture APIによりウィンドウをキャプチャ→MJPEGストリーム配信→broadcast.htmlで表示
 - **Twitch API** - チャット読み取り・配信管理・視聴者インタラクション
 - **テキスト生成** - LLMによる台本・コメント・ナレーション生成
 - **音声合成** - TTS（Text-to-Speech）によるナレーション音声生成
@@ -53,14 +53,7 @@ ai-twitch-cast/
 │   ├── 3d-model-research.md # 3Dモデル調査
 │   ├── vrm-conversion-log.md # VRM変換作業ログ
 │   └── window-capture.md   # ウィンドウキャプチャシステム設計
-├── win-capture-app/          # Windows側Electronキャプチャ＋配信アプリ（フォールバック）
-│   ├── main.js              # メインプロセス（HTTPサーバー+キャプチャ管理+FFmpeg配信）
-│   ├── preload.js           # IPC bridge
-│   ├── capture.html         # 非表示レンダラーページ
-│   ├── capture-renderer.js  # レンダラー（getUserMedia+canvas+JPEG書き出し）
-│   ├── package.json         # Electron+electron-builder設定
-│   └── build.sh             # ビルドスクリプト
-├── win-native-app/           # C#ネイティブ配信アプリ（メイン、Electron後継）
+├── win-native-app/           # C#ネイティブ配信アプリ
 │   └── WinNativeApp/        # .NET 8 WinForms + WebView2 + WGC
 │       ├── Program.cs       # エントリポイント（Serilog初期化）
 │       ├── MainForm.cs      # WebView2フォーム + キャプチャ管理 + HTTPサーバー + システムトレイ
@@ -102,8 +95,7 @@ ai-twitch-cast/
 ├── DONE.md                   # 完了タスク
 ├── TODO.md                   # タスク一覧
 ├── plans/                    # 作業プラン（詳細な実装計画）
-│   ├── electron-streaming.md  # Electron配信移行プラン
-│   └── websocket-optimization.md # サーバ↔Electron WebSocket統合プラン
+│   └── websocket-optimization.md # サーバ↔配信アプリ WebSocket統合プラン
 ├── LICENSE
 └── README.md
 ```
@@ -121,9 +113,9 @@ ai-twitch-cast/
 
 ## WSL2環境について
 
-- **開発はWSL2上で行い、配信はWindows側Electronアプリが担当する**
+- **開発はWSL2上で行い、配信はWindows側C#ネイティブアプリが担当する**
 - WebサーバーはWSL2内で起動（API/TTS/AI生成のバックエンド）
-- Electronアプリがbroadcast.htmlをオフスクリーンレンダリングし、FFmpegでTwitchに直接配信
+- C#ネイティブアプリがbroadcast.htmlをWebView2でレンダリングし、FFmpegでTwitchに直接配信
 - Webサーバーのポートは環境変数 `WEB_PORT` で設定（デフォルト: 8080）
 
 ## Webサーバー運用注意
@@ -162,10 +154,10 @@ curl -s http://localhost:$WEB_PORT/api/todo    # TODOが返るか
 | 字幕表示 | コメント応答時に下部に字幕が出る |
 | TTS音声 | コメント応答時にbroadcast.html経由で音声が再生される |
 | アバター表示 | 配信画面にアバターが表示される |
-| ウィンドウキャプチャ | Electronアプリ起動→ウィンドウ選択→broadcast.htmlにMJPEGストリーム表示 |
+| ウィンドウキャプチャ | 配信アプリ起動→ウィンドウ選択→broadcast.htmlにMJPEGストリーム表示 |
 | レイアウト編集 | `/broadcast` でドラッグ＆リサイズ→保存→配信画面に反映（常時編集可能） |
 | WebSocket接続 | broadcast.htmlがWebSocketで接続している |
-| Go Live | Go Liveボタンで配信開始（Electron経由）、トースト通知が出る |
+| Go Live | Go Liveボタンで配信開始、トースト通知が出る |
 
 ## メモリ（実装記録）
 

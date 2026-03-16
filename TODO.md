@@ -3,6 +3,8 @@
 ## 機能追加
 
 ### Windowsアプリ
+- [ ] コントロールパネルのStopボタンが効かない（stopStreamメッセージがOnPanelMessageで処理されない）
+- [ ] Twitch配信時に音声がとぎれとぎれになる（WASAPI→FFmpegの音声パイプライン問題）
 - [ ] 右クリックメニューからWeb UIで設定できる上も編集可能に。
         サーバからjsonなどで項目の情報を受け取ってそれに合わせて設定画面を表示するようにする
 - [ ] 未配信中でも会話をアバターに送れるようにチャット欄を追加
@@ -13,11 +15,9 @@
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
 - [ ] あきらと他のユーザーに返すプロンプトを変える。あきらには英語多め。他の視聴者にはその人のコメントの言語をメインに。ちょっとだけ日本語入れる感じで
 - [ ] 汎用的なGitリポジトリをベースにした開発配信機能を入れる。外部のリポジトリをcloneして、その操作を実況する
-- [ ] 英語の読み上げが英語っぽくする 
+- [ ] Web UI で Youtube から音楽をDLして一覧に表示したらタイトルをオリジナルのURLにリンクする
 
 ### その他
 - [ ] テストの充実
 - [ ] リファクタリング
 - [ ] 配信中に位置調整しても繁栄されない
-- [ ] Electronをネイティブ実装に変更（C#+WebView2+WGC+WASAPI） → [plans/native-implementation.md](plans/native-implementation.md)
-        - [ ] Phase 8: Electron完全削除（capture.pyのElectronコード・win-capture-app/・Web UI削除）

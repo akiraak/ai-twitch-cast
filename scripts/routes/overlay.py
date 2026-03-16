@@ -17,7 +17,7 @@ from src.scene_config import load_config_value, load_config_json
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# broadcast.htmlアクセス用トークン（Electronオフスクリーンウィンドウ+プレビュー用）
+# broadcast.htmlアクセス用トークン（配信アプリ+プレビュー用）
 BROADCAST_TOKEN = secrets.token_urlsafe(16)
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -113,11 +113,11 @@ async def broadcast_ws(websocket: WebSocket):
 
 @router.get("/broadcast")
 async def broadcast_page(request: Request):
-    """broadcast.htmlを返す（トークン認証必須、Electronオフスクリーンレンダリング用）"""
+    """broadcast.htmlを返す（トークン認証必須、配信アプリレンダリング用）"""
     token = request.query_params.get("token")
     if token != BROADCAST_TOKEN:
         return PlainTextResponse(
-            "配信合成ページはElectronアプリで表示されます。Web UIからプレビューや編集を行ってください。",
+            "配信合成ページは配信アプリで表示されます。Web UIからプレビューや編集を行ってください。",
             status_code=403,
         )
     return HTMLResponse((STATIC_DIR / "broadcast.html").read_text(encoding="utf-8"))
@@ -125,7 +125,7 @@ async def broadcast_page(request: Request):
 
 @router.get("/preview")
 async def preview_page(request: Request):
-    """preview.htmlを返す（トークン認証必須、Electronプレビュー用）"""
+    """preview.htmlを返す（トークン認証必須、プレビュー用）"""
     token = request.query_params.get("token")
     if token != BROADCAST_TOKEN:
         return PlainTextResponse("認証エラー", status_code=403)

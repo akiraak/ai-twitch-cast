@@ -1,4 +1,4 @@
-"""配信制御ルート - Windows配信アプリ（C#ネイティブ or Electron）経由でTwitch配信"""
+"""配信制御ルート - Windows配信アプリ経由でTwitch配信"""
 
 import logging
 import os
@@ -22,21 +22,13 @@ _is_streaming = False
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def _use_native_app() -> bool:
-    """ネイティブアプリ（C#）を使用するかどうか"""
-    return os.environ.get("USE_NATIVE_APP", "1").lower() in ("1", "true", "yes")
-
-
 async def _ensure_capture_app():
-    """配信アプリ（ネイティブ or Electron）が起動していなければ自動起動し、接続を待つ"""
+    """配信アプリが起動していなければ自動起動し、接続を待つ"""
     import asyncio
     import httpx
-    from scripts.routes.capture import (
-        _capture_base_url, _ws_request,
-        capture_preview_oneclick, capture_preview_oneclick_status,
-    )
+    from scripts.routes.capture import _capture_base_url, _ws_request
 
-    # HTTPサーバーが起動しているか確認（ネイティブもElectronも同じポート）
+    # HTTPサーバーが起動しているか確認
     app_http_ok = False
     try:
         resp = httpx.get(f"{_capture_base_url()}/status", timeout=2.0)
@@ -57,18 +49,15 @@ async def _ensure_capture_app():
         raise RuntimeError("配信アプリのWebSocket接続に失敗しました。アプリを再起動してください。")
 
     # アプリが起動していない → 自動起動
-    if _use_native_app():
-        await _launch_native_app()
-    else:
-        await _launch_electron_app()
+    await _launch_native_app()
 
 
 async def _launch_native_app():
-    """C#ネイティブアプリをstream.sh経由で自動起動"""
+    """配信アプリをstream.sh経由で自動起動"""
     import asyncio
     from scripts.routes.capture import _ws_request
 
-    logger.info("ネイティブアプリ未起動 → stream.sh で自動起動")
+    logger.info("配信アプリ未起動 → stream.sh で自動起動")
     stream_sh = _PROJECT_ROOT / "stream.sh"
     if not stream_sh.exists():
         raise RuntimeError(f"stream.sh が見つかりません: {stream_sh}")
@@ -86,44 +75,11 @@ async def _launch_native_app():
         await asyncio.sleep(0.5)
         try:
             await _ws_request("stream_status")
-            logger.info("ネイティブアプリ起動完了（%d秒）", (i + 1) // 2)
+            logger.info("配信アプリ起動完了（%d秒）", (i + 1) // 2)
             return
         except Exception:
             pass
-    raise RuntimeError("ネイティブアプリの起動がタイムアウトしました（90秒）")
-
-
-async def _launch_electron_app():
-    """Electronアプリをワンクリックプレビューで自動起動"""
-    import asyncio
-    from scripts.routes.capture import (
-        _ws_request,
-        capture_preview_oneclick, capture_preview_oneclick_status,
-    )
-
-    logger.info("Electronアプリ未起動 → ワンクリックプレビューを自動開始")
-    await capture_preview_oneclick()
-
-    # 完了を待つ（最大60秒）
-    for _ in range(120):
-        await asyncio.sleep(0.5)
-        st = await capture_preview_oneclick_status()
-        if st.get("status") == "done":
-            break
-        if st.get("status") == "error":
-            raise RuntimeError(f"Electron自動起動失敗: {st.get('message', '不明なエラー')}")
-    else:
-        raise RuntimeError("Electron自動起動タイムアウト")
-
-    # WebSocket接続を待つ（最大10秒）
-    for _ in range(20):
-        await asyncio.sleep(0.5)
-        try:
-            await _ws_request("stream_status")
-            return
-        except Exception:
-            pass
-    raise RuntimeError("Electron起動後のWebSocket接続に失敗しました")
+    raise RuntimeError("配信アプリの起動がタイムアウトしました（90秒）")
 
 
 async def _capture_stream_start():
@@ -180,7 +136,7 @@ async def _capture_stream_status() -> dict:
 
 @router.post("/api/broadcast/go-live")
 async def broadcast_go_live():
-    """配信開始（ネイティブ or Electron自動選択）"""
+    """配信開始"""
     global _is_streaming
     try:
         st = await _capture_stream_status()
@@ -371,7 +327,6 @@ async def broadcast_status():
         "framerate": (app_st.get("config") or {}).get("framerate", 30),
         "audio_stream_connected": app_st.get("audio_stream_connected", False),
         "audio_receiving_pcm": app_st.get("audio_receiving_pcm", False),
-        "native_app": _use_native_app(),
         "app": app_st,
     }
     return result
@@ -382,20 +337,18 @@ async def broadcast_diag():
     """配信アプリのヘルスチェック"""
     errors = []
     app_st = await _capture_stream_status()
-    app_type = "ネイティブ" if _use_native_app() else "Electron"
 
     if _is_streaming and not app_st.get("streaming"):
-        errors.append(f"{app_type}配信が停止しています")
+        errors.append("配信が停止しています")
 
     if not app_st.get("streaming") and app_st == {"streaming": False}:
-        errors.append(f"{app_type}アプリに接続できません")
+        errors.append("配信アプリに接続できません")
 
     if app_st.get("ffmpeg_exists") is False:
         errors.append(f"FFmpegが見つかりません: {app_st.get('ffmpeg_path', '不明')}")
 
     return {
         "streaming": app_st.get("streaming", False),
-        "native_app": _use_native_app(),
         "app": app_st,
         "ffmpeg_log": app_st.get("ffmpeg_log", []),
         "errors": errors,

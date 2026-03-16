@@ -181,19 +181,7 @@
     <div class="grid">
       <div class="card" style="grid-column: 1 / -1;">
         <h2><span class="status-dot off" id="capture-dot"></span> ウィンドウキャプチャ</h2>
-        <div class="btn-row">
-          <button onclick="captureLaunch()">サーバー起動</button>
-          <button class="danger" onclick="captureShutdown()">サーバー停止</button>
-        </div>
         <div class="status" id="capture-server-status"></div>
-        <div id="capture-build-status" style="display:none; margin-top:8px; padding:8px 12px; background:#f0e8ff; border-radius:6px; font-size:0.85rem;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span id="capture-build-msg"></span>
-          </div>
-          <div style="margin-top:6px; background:#d0c0e8; border-radius:3px; height:6px; overflow:hidden;">
-            <div id="capture-build-bar" style="height:100%; background:#7b1fa2; width:0%; transition:width 0.3s;"></div>
-          </div>
-        </div>
         <div style="margin-top:12px;">
           <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
             <select id="capture-window-list" style="flex:1; padding:6px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.85rem;">
@@ -203,29 +191,6 @@
             <button onclick="captureStartWindow()">キャプチャ</button>
           </div>
           <div id="capture-list" style="font-size:0.85rem;"></div>
-        </div>
-        <div style="margin-top:12px;">
-          <button onclick="previewOneClick()" style="width:100%; background:#7b1fa2; color:white; font-weight:bold; padding:10px;">ワンクリックプレビュー</button>
-        </div>
-        <style>
-          @keyframes oneclick-spin { to { transform: rotate(360deg); } }
-          @keyframes oneclick-pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
-          .oneclick-spinner { display:inline-block; width:14px; height:14px; border:2px solid #d0c0e8; border-top-color:#7b1fa2; border-radius:50%; animation:oneclick-spin 0.8s linear infinite; }
-          .oneclick-stage { display:inline-flex; align-items:center; gap:2px; padding:2px 6px; border-radius:3px; }
-          .oneclick-stage.done { color:#4caf50; }
-          .oneclick-stage.skipped { color:#999; }
-          .oneclick-stage.running { color:#7b1fa2; font-weight:bold; animation:oneclick-pulse 1.2s ease-in-out infinite; }
-          .oneclick-stage.error { color:#f44336; }
-        </style>
-        <div id="oneclick-status" style="display:none; margin-top:8px; padding:8px 12px; background:#f0e8ff; border-radius:6px; font-size:0.85rem;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span id="oneclick-spinner" class="oneclick-spinner"></span>
-            <span id="oneclick-msg"></span>
-          </div>
-          <div style="margin-top:6px; background:#d0c0e8; border-radius:3px; height:6px; overflow:hidden;">
-            <div id="oneclick-bar" style="height:100%; background:#7b1fa2; width:0%; transition:width 0.3s;"></div>
-          </div>
-          <div id="oneclick-stages" style="margin-top:6px; font-size:0.75rem; display:flex; flex-wrap:wrap; gap:2px 8px;"></div>
         </div>
         <div class="btn-row" style="margin-top:12px;">
           <button onclick="capturePreviewOpen()">プレビュー / 配信画面編集</button>
@@ -723,27 +688,6 @@ async function refreshStatus() {
 }
 
 // --- ウィンドウキャプチャ ---
-async function captureLaunch() {
-  const data = await api('POST', '/api/capture/launch');
-  if (data) {
-    if (data.ok) {
-      document.getElementById('capture-server-status').textContent = '起動中';
-      captureRefreshWindows();
-    } else if (data.error) {
-      document.getElementById('capture-server-status').textContent = data.error;
-    }
-    captureRefreshStatus();
-  }
-}
-
-async function captureShutdown() {
-  await api('POST', '/api/capture/shutdown');
-  document.getElementById('capture-server-status').textContent = '停止';
-  document.getElementById('capture-dot').className = 'status-dot off';
-}
-
-let _captureBuildPolling = null;
-
 async function captureRefreshStatus() {
   try {
     const data = await (await fetch('/api/capture/status')).json();
@@ -755,38 +699,6 @@ async function captureRefreshStatus() {
     } else {
       dot.className = 'status-dot off';
       status.textContent = '停止';
-    }
-
-    // ビルド状態表示
-    const buildEl = document.getElementById('capture-build-status');
-    const buildMsg = document.getElementById('capture-build-msg');
-    const buildBar = document.getElementById('capture-build-bar');
-    const build = data.build;
-    if (build && build.status === 'building') {
-      buildEl.style.display = 'block';
-      buildMsg.textContent = build.message || 'ビルド中...';
-      buildBar.style.width = build.progress + '%';
-      // ビルド中は高速ポーリング
-      if (!_captureBuildPolling) {
-        _captureBuildPolling = setInterval(captureRefreshStatus, 2000);
-      }
-    } else if (build && build.status === 'error') {
-      buildEl.style.display = 'block';
-      buildEl.style.background = '#fff0f0';
-      buildMsg.textContent = build.message || 'ビルドエラー';
-      buildBar.style.width = '0%';
-      if (_captureBuildPolling) { clearInterval(_captureBuildPolling); _captureBuildPolling = null; }
-    } else if (build && build.status === 'done') {
-      buildEl.style.display = 'block';
-      buildEl.style.background = '#f0fff0';
-      buildMsg.textContent = 'ビルド完了';
-      buildBar.style.width = '100%';
-      if (_captureBuildPolling) { clearInterval(_captureBuildPolling); _captureBuildPolling = null; }
-      setTimeout(() => { buildEl.style.display = 'none'; buildEl.style.background = '#f0e8ff'; }, 5000);
-    } else {
-      buildEl.style.display = 'none';
-      buildEl.style.background = '#f0e8ff';
-      if (_captureBuildPolling) { clearInterval(_captureBuildPolling); _captureBuildPolling = null; }
     }
   } catch (e) {}
 }
@@ -928,80 +840,6 @@ async function captureSavedDelete(windowName) {
   captureRefreshSaved();
 }
 
-// ワンクリックプレビュー
-let _oneclickPolling = null;
-const _stageLabels = {
-  check_build: 'ビルド確認', npm_install: 'npm install', build: 'electron-builder',
-  update_asar: 'asar更新', stop: '停止', deploy: 'デプロイ',
-  launch: '起動', wait_server: 'サーバー待ち', restore_captures: 'キャプチャ復元', open_preview: 'プレビュー表示',
-};
-
-async function previewOneClick() {
-  const data = await api('POST', '/api/capture/preview-oneclick');
-  if (!data || !data.ok) {
-    log(data?.message || 'ワンクリックプレビュー開始失敗');
-    return;
-  }
-  const statusEl = document.getElementById('oneclick-status');
-  statusEl.style.display = 'block';
-  document.getElementById('oneclick-spinner').style.display = 'inline-block';
-  document.getElementById('oneclick-msg').style.color = '';
-  document.getElementById('oneclick-bar').style.background = '#7b1fa2';
-  document.getElementById('oneclick-bar').style.width = '0%';
-  document.getElementById('oneclick-stages').innerHTML = '';
-  if (_oneclickPolling) clearInterval(_oneclickPolling);
-  _oneclickPolling = setInterval(pollOneClick, 1000);
-  pollOneClick();
-}
-
-async function pollOneClick() {
-  try {
-    const s = await (await fetch('/api/capture/preview-oneclick/status')).json();
-    const msgEl = document.getElementById('oneclick-msg');
-    const barEl = document.getElementById('oneclick-bar');
-    const stagesEl = document.getElementById('oneclick-stages');
-    const spinnerEl = document.getElementById('oneclick-spinner');
-    msgEl.textContent = s.message;
-    barEl.style.width = s.progress + '%';
-    // ステージ表示: done=✓ skipped=⏭ running=● (現在のステージ)
-    const doneSet = new Set(s.stages_done || []);
-    const skipSet = new Set(s.stages_skipped || []);
-    const html = [];
-    for (const [key, label] of Object.entries(_stageLabels)) {
-      if (doneSet.has(key)) {
-        html.push(`<span class="oneclick-stage done">✓ ${label}</span>`);
-      } else if (skipSet.has(key)) {
-        html.push(`<span class="oneclick-stage skipped">⏭ ${label}</span>`);
-      } else if (s.status === 'running' && s.stage === key) {
-        html.push(`<span class="oneclick-stage running">● ${label}</span>`);
-      } else if (s.status === 'error' && s.stage === key) {
-        html.push(`<span class="oneclick-stage error">✗ ${label}</span>`);
-      }
-    }
-    stagesEl.innerHTML = html.join('');
-    if (s.status === 'done') {
-      barEl.style.background = '#4caf50';
-      spinnerEl.style.display = 'none';
-      msgEl.style.color = '#4caf50';
-      if (_oneclickPolling) { clearInterval(_oneclickPolling); _oneclickPolling = null; }
-      captureRefreshStatus();
-      captureRefreshSources();
-      log('プレビュー起動完了');
-    } else if (s.status === 'error') {
-      barEl.style.background = '#f44336';
-      spinnerEl.style.display = 'none';
-      msgEl.style.color = '#f44336';
-      if (_oneclickPolling) { clearInterval(_oneclickPolling); _oneclickPolling = null; }
-      log('プレビュー起動エラー: ' + s.message);
-    } else if (s.status === 'idle') {
-      if (_oneclickPolling) { clearInterval(_oneclickPolling); _oneclickPolling = null; }
-      document.getElementById('oneclick-status').style.display = 'none';
-    } else {
-      spinnerEl.style.display = 'inline-block';
-      msgEl.style.color = '';
-    }
-  } catch (e) {}
-}
 
 async function captureRemove(id) {
   await fetch(`/api/capture/${id}`, { method: 'DELETE' });
@@ -1916,17 +1754,6 @@ captureRefreshStatus();
 captureRefreshSources();
 setInterval(captureRefreshStatus, 10000);
 
-// プレビュー自動起動（無効化: ネイティブアプリ移行後はstream.shで起動するため）
-// (async () => {
-//   try {
-//     const ps = await (await fetch('/api/capture/preview/status')).json();
-//     if (!ps.open) {
-//       previewOneClick();
-//     }
-//   } catch (e) {
-//     previewOneClick();
-//   }
-// })();
 </script>
 </body>
 </html>

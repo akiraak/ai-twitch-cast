@@ -14,9 +14,6 @@ tmp/
 .server.pid
 .server_state
 .pending_commit
-win-capture-app/node_modules/
-win-capture-app/package-lock.json
-win-capture-app/dist/
 win-native-app/WinNativeApp/bin/
 win-native-app/WinNativeApp/obj/
 win-native-app/WinNativeApp/resources/ffmpeg/

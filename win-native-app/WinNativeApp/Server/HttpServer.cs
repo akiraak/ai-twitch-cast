@@ -622,19 +622,12 @@ public class HttpServer : IDisposable
     {
         Log.Information("[HttpServer] Dispose: cancelling...");
         _cts.Cancel();
-        // WebSocket接続をクローズ
-        Log.Information("[HttpServer] Dispose: closing {Count} WebSocket(s)...", _controlClients.Count);
+        // WebSocket接続を強制切断（CloseAsyncはハングするためAbortのみ）
+        Log.Information("[HttpServer] Dispose: aborting {Count} WebSocket(s)...", _controlClients.Count);
         lock (_wsLock)
         {
             foreach (var ws in _controlClients)
             {
-                try
-                {
-                    using var wsCts = new CancellationTokenSource(1000);
-                    ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server shutdown", wsCts.Token).Wait(1500);
-                }
-                catch { }
-                // CloseAsyncがハングする場合に備えてAbortで強制切断
                 try { ws.Abort(); } catch { }
             }
             _controlClients.Clear();
