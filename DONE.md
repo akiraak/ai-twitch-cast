@@ -1,5 +1,15 @@
 # DONE
 
+## コントロールパネルをタブ化（Stream / Sound / Chat）
+
+- [x] タブバー追加（Stream / Sound / Chat の3タブ）
+- [x] Stream タブ: 配信制御 + キャプチャ + ログ
+- [x] Sound タブ: 音量スライダー + 音量メーター
+- [x] Chat タブ: プレースホルダー（Coming soon）
+- [x] UIラベルを英語表記に統一
+- [x] C#側の変更不要（WebView2メッセージインターフェース維持）
+- [x] プラン: plans/control-panel-tabs.md
+
 ## 音量メーター危険ゾーン表示
 
 - [x] control-panel.htmlにHot(-12dB〜-3dB)・Danger(-3dB〜0dB)ゾーン背景と境界ラインを追加
