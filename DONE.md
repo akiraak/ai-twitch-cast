@@ -1,5 +1,9 @@
 # DONE
 
+## UIラベル「TTS」→「Voice」に変更
+
+- [x] control-panel.html（音量スライダー・メーターソース）とpreview.html（メーターソース）の表示を「Voice」に統一
+
 ## アバターライティング起動時復元修正
 
 - [x] broadcast.htmlの`<script type="module">`（Three.js+VRM）と`<script>`（init/applySettings）の実行順序レースコンディションを修正。module scriptのCDN読み込み遅延により`window.avatarLighting`未定義のままライティング適用がスキップされていた問題を、pending settingsパターンで解決
