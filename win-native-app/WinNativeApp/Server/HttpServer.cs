@@ -620,18 +620,31 @@ public class HttpServer : IDisposable
 
     public void Dispose()
     {
+        Log.Information("[HttpServer] Dispose: cancelling...");
         _cts.Cancel();
         // WebSocket接続をクローズ
+        Log.Information("[HttpServer] Dispose: closing {Count} WebSocket(s)...", _controlClients.Count);
         lock (_wsLock)
         {
             foreach (var ws in _controlClients)
             {
-                try { ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server shutdown", CancellationToken.None).Wait(1000); }
+                try
+                {
+                    using var wsCts = new CancellationTokenSource(1000);
+                    ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server shutdown", wsCts.Token).Wait(1500);
+                }
                 catch { }
+                // CloseAsyncがハングする場合に備えてAbortで強制切断
+                try { ws.Abort(); } catch { }
             }
             _controlClients.Clear();
         }
+        Log.Information("[HttpServer] Dispose: stopping listener...");
         try { _listener?.Stop(); } catch { }
         try { _listener?.Close(); } catch { }
+        // ListenLoopタスクの完了を待つ（最大2秒）
+        Log.Information("[HttpServer] Dispose: waiting for listenTask...");
+        try { _listenTask?.Wait(2000); } catch { }
+        Log.Information("[HttpServer] Dispose: done");
     }
 }

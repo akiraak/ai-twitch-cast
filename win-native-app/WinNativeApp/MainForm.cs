@@ -955,12 +955,15 @@ public class MainForm : Form
         Log.Information("[MainForm] Streaming stopped");
     }
 
-    private async void OnFormClosing(object? sender, FormClosingEventArgs e)
+    private void OnFormClosing(object? sender, FormClosingEventArgs e)
     {
+        Log.Information("[MainForm] OnFormClosing: reason={Reason} closing={Closing} forceClose={Force}",
+            e.CloseReason, _closing, _forceClose);
+
         if (_closing)
         {
-            // Second pass after async cleanup
-            CleanupResources();
+            // Second pass — skip (Environment.Exit handles actual exit)
+            Log.Information("[MainForm] OnFormClosing: second pass, skipping");
             return;
         }
 
@@ -981,49 +984,77 @@ public class MainForm : Form
         Hide();
         try { _webView.CoreWebView2.IsMuted = true; } catch { }
 
-        // バックグラウンドでクリーンアップ
+        // 安全タイマー: クリーンアップが何秒かかっても5秒後に強制終了
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(5000);
+            Log.Warning("[MainForm] Safety timeout: forcing exit after 5s");
+            Log.CloseAndFlush();
+            Environment.Exit(1);
+        });
+
+        Log.Information("[MainForm] Closing: starting cleanup (ffmpeg={HasFfmpeg})...",
+            _ffmpeg != null);
+
+        // タイムアウト付きストリーミング停止（最大3秒）
         if (_ffmpeg != null)
         {
-            try
+            var stopTask = Task.Run(async () =>
             {
-                await StopStreamingAsync();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "[MainForm] Error stopping stream during close");
-                try { _ffmpeg?.Dispose(); } catch { }
-                _ffmpeg = null;
-                _audio?.Dispose();
-                _audio = null;
-            }
+                try
+                {
+                    Log.Information("[MainForm] Closing: StopStreamingAsync...");
+                    await StopStreamingAsync();
+                    Log.Information("[MainForm] Closing: StopStreamingAsync done");
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "[MainForm] Error stopping stream during close");
+                    try { _ffmpeg?.Dispose(); } catch { }
+                    _ffmpeg = null;
+                    _audio?.Dispose();
+                    _audio = null;
+                }
+            });
+            stopTask.Wait(3000);
         }
 
+        Log.Information("[MainForm] Closing: CleanupResources...");
         CleanupResources();
-        Close();
+        Log.Information("[MainForm] Exit");
+        Log.CloseAndFlush();
+        Environment.Exit(0);
     }
 
     private void CleanupResources()
     {
+        Log.Information("[Cleanup] trayUpdateTimer...");
         _trayUpdateTimer?.Stop();
         _trayUpdateTimer?.Dispose();
         if (_trayIcon != null)
         {
+            Log.Information("[Cleanup] trayIcon...");
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
         }
         // 配信パイプラインが残っていたら強制クリーンアップ
         if (_ffmpeg != null)
         {
+            Log.Information("[Cleanup] ffmpeg.Dispose...");
             try { _ffmpeg.Dispose(); } catch { }
             _ffmpeg = null;
         }
+        Log.Information("[Cleanup] audio...");
         _audio?.Stop();
         _audio?.Dispose();
         _audio = null;
+        Log.Information("[Cleanup] capture...");
         _capture?.Stop();
         _capture?.Dispose();
+        Log.Information("[Cleanup] captureManager...");
         _captureManager?.Dispose();
+        Log.Information("[Cleanup] httpServer...");
         _httpServer?.Dispose();
-        Log.Information("[MainForm] Closed");
+        Log.Information("[Cleanup] done");
     }
 }

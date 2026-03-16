@@ -287,7 +287,8 @@ public sealed class FfmpegProcess : IDisposable
             catch (OperationCanceledException)
             {
                 Log.Warning("[FFmpeg] Kill after 5s timeout");
-                _process.Kill();
+                try { _process.Kill(); } catch { }
+                try { _process.WaitForExit(3000); } catch { }
             }
         }
         catch (Exception ex)
@@ -308,14 +309,12 @@ public sealed class FfmpegProcess : IDisposable
             var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "ffmpeg.log");
             Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
             await using var writer = new StreamWriter(logPath, append: false);
-            while (_process is { HasExited: false })
+            while (_process is { HasExited: false } && !_stopping)
             {
                 var line = await _process.StandardError.ReadLineAsync();
-                if (line != null)
-                {
-                    await writer.WriteLineAsync(line);
-                    await writer.FlushAsync();
-                }
+                if (line == null) break; // EOF
+                await writer.WriteLineAsync(line);
+                await writer.FlushAsync();
             }
         }
         catch { /* process ended */ }

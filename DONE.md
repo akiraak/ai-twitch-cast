@@ -1,5 +1,13 @@
 # DONE
 
+## プロセス終了しない問題の修正
+
+- [x] HttpServer.Dispose に _listenTask.Wait(2000) 追加（ListenLoopが残り続ける問題）
+- [x] FfmpegProcess.StopAsync で Kill() 後に WaitForExit(3000) 追加
+- [x] FfmpegProcess.LogStderrAsync に _stopping チェックと EOF break 追加
+- [x] AudioLoopback.Stop でタイマーコールバック完了を待機（ManualResetEvent）
+- [x] MainForm.OnFormClosing をタイムアウト付き同期処理に変更 + Environment.Exit(0) で確実終了
+
 ## コントロールパネルをタブ化（Stream / Sound / Chat）
 
 - [x] タブバー追加（Stream / Sound / Chat の3タブ）

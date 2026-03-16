@@ -19,6 +19,5 @@
 - [ ] テストの充実
 - [ ] リファクタリング
 - [ ] 配信中に位置調整しても繁栄されない
-- [>] Electronをネイティブ実装に変更（C#+WebView2+WGC+WASAPI） → [plans/native-implementation.md](plans/native-implementation.md)
+- [ ] Electronをネイティブ実装に変更（C#+WebView2+WGC+WASAPI） → [plans/native-implementation.md](plans/native-implementation.md)
         - [ ] Phase 8: Electron完全削除（capture.pyのElectronコード・win-capture-app/・Web UI削除）
-        - [ ] 閉じるボタンを押してもプロセスがずっと消えない時がある。./stream.sh --stop で消える

@@ -64,8 +64,13 @@ public sealed class AudioLoopback : IDisposable
 
     public void Stop()
     {
-        _silenceTimer?.Dispose();
-        _silenceTimer = null;
+        if (_silenceTimer != null)
+        {
+            using var waitHandle = new ManualResetEvent(false);
+            _silenceTimer.Dispose(waitHandle);
+            waitHandle.WaitOne(1000);
+            _silenceTimer = null;
+        }
         try { _capture?.StopRecording(); }
         catch (Exception ex) { Log.Debug("[Audio] Stop error: {Msg}", ex.Message); }
     }
