@@ -51,6 +51,7 @@ public sealed class FfmpegProcess : IDisposable
 
     // タイマーベース音声ジェネレータ（WASAPI不要、TTS+BGMをPCM合成→FFmpegパイプ）
     private System.Threading.Timer? _audioGenTimer;
+    private long _audioGenLastTick;
 
     public bool IsRunning => _process is { HasExited: false };
     public long FrameCount => Interlocked.Read(ref _frameCount);
@@ -327,18 +328,29 @@ public sealed class FfmpegProcess : IDisposable
 
     /// <summary>
     /// タイマーベースの音声ジェネレータを開始する。
-    /// 10msごとにサイレンスチャンク（48kHz stereo f32le）を生成し、
-    /// BGM+TTSをミックスしてからキューに追加する。WASAPI不要。
+    /// 壁時計時間を追跡し、実際の経過時間分の音声を生成する。
+    /// Windowsタイマー解像度（15.6ms）に依存せずリアルタイムレートを維持。
     /// </summary>
     public void StartAudioGenerator()
     {
-        // 10ms of 48kHz stereo f32le = 48000 * 2 * 4 / 100 = 3840 bytes
-        const int chunkSize = 3840;
+        // 48kHz stereo f32le = 384 bytes per ms
+        const int bytesPerMs = 48000 * 2 * 4 / 1000;
+        _audioGenLastTick = Environment.TickCount64;
         _audioGenTimer = new System.Threading.Timer(_ =>
         {
             if (_stopping || _audioPipe is not { IsConnected: true }) return;
             try
             {
+                var now = Environment.TickCount64;
+                var elapsedMs = (int)(now - _audioGenLastTick);
+                _audioGenLastTick = now;
+
+                // 経過時間をクランプ（1〜50ms、異常値防止）
+                elapsedMs = Math.Clamp(elapsedMs, 1, 50);
+
+                // 経過時間に応じたチャンクサイズ（f32leサンプル境界に揃える）
+                var chunkSize = (elapsedMs * bytesPerMs / 4) * 4;
+
                 var chunk = new byte[chunkSize]; // all zeros = silence
                 MixBgmInto(chunk);
                 MixTtsInto(chunk);
@@ -356,7 +368,7 @@ public sealed class FfmpegProcess : IDisposable
                 Log.Debug("[FFmpeg] AudioGen error: {Msg}", ex.Message);
             }
         }, null, 0, 10);
-        Log.Information("[FFmpeg] Audio generator started (10ms timer, {ChunkSize} bytes/chunk)", chunkSize);
+        Log.Information("[FFmpeg] Audio generator started (time-tracked, {BytesPerMs} bytes/ms)", bytesPerMs);
     }
 
     /// <summary>
