@@ -18,12 +18,7 @@
 ### その他
 - [ ] テストの充実
 - [ ] リファクタリング
-- [ ] 配信中に Electron で位置調整しても繁栄されない
-- [ ] 画像保蔵機能と同様にElectron画面の動画撮影 → [plans/video-recording.md](plans/video-recording.md)
-- [ ] Electronを別の実装に置き換えられるか検討（軽量化・柔軟な実装が行えるかの観点） → [plans/electron-alternative.md](plans/electron-alternative.md)
+- [ ] 配信中に位置調整しても繁栄されない
 - [>] Electronをネイティブ実装に変更（C#+WebView2+WGC+WASAPI） → [plans/native-implementation.md](plans/native-implementation.md)
         - [ ] Phase 8: Electron完全削除（capture.pyのElectronコード・win-capture-app/・Web UI削除）
-        - [ ] ネイティブアプリ起動時に旧Electronアプリ等のポート9090競合を検出・解決する仕組み
-        - [ ] ネイティブアプリにffmpegが同梱されているか確認（現状はElectronダウンロード済みのものを流用）
-        - [ ] broadcast.html, control-panel.htmlをサーバから受け取るメリットとデメリットの検討 → [plans/server-served-html.md](plans/server-served-html.md)
         - [ ] 閉じるボタンを押してもプロセスがずっと消えない時がある。./stream.sh --stop で消える

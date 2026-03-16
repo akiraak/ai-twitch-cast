@@ -438,6 +438,14 @@
 - [x] Go Live API: WebSocket /ws/control経由での配信開始が正常動作確認
 - [x] ウィンドウ閉じ修正: OnFormClosingにtry-catch追加+CleanupResourcesで_ffmpeg強制クリーンアップ（配信停止失敗時もウィンドウが閉じるように）
 
+## FFmpegビルド時自動ダウンロード・同梱
+
+- [x] ビルド前にffmpeg.exeが無ければBtbN/FFmpeg-Buildsから自動DL（download-ffmpeg.ps1）
+- [x] csprojのMSBuild TargetでDL→ビルド出力にコピー（resources/ffmpeg/ffmpeg.exe）
+- [x] FindFfmpeg()が自動検出するためstream.shの--ffmpeg-path指定不要に
+- [x] Electron FFmpegフォールバック（ハードコードパス）を削除
+- [x] .gitignoreにresources/ffmpeg/追加
+
 ## WebSocket SendAsync同時呼び出しエラー修正
 
 - [x] SendWsResponseにSemaphoreSlimによる排他制御を追加（起動時の同時リクエストによるSendAsync競合を解消）

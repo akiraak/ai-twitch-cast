@@ -87,7 +87,7 @@ fi
 # ソースをWindows FSにコピー（ビルド高速化）
 echo "ソースを同期中..."
 mkdir -p "$BUILD_DIR/Capture" "$BUILD_DIR/Streaming" "$BUILD_DIR/Server"
-cp "$SRC_DIR"/*.cs "$SRC_DIR"/*.csproj "$BUILD_DIR/" 2>/dev/null
+cp "$SRC_DIR"/*.cs "$SRC_DIR"/*.csproj "$SRC_DIR"/*.ps1 "$BUILD_DIR/" 2>/dev/null
 cp "$SRC_DIR"/Capture/*.cs "$BUILD_DIR/Capture/"
 cp "$SRC_DIR"/Streaming/*.cs "$BUILD_DIR/Streaming/"
 cp "$SRC_DIR"/Server/*.cs "$BUILD_DIR/Server/"
@@ -110,13 +110,9 @@ echo "ビルド完了"
 # EXEパス
 EXE_PATH="$BUILD_DIR/bin/Release/net8.0-windows10.0.22621.0/${APP_NAME}.exe"
 
-# FFmpegパス（Electronアプリがダウンロード済みのものを優先）
-if [ -z "$FFMPEG_PATH" ]; then
-    ELECTRON_FFMPEG="/mnt/c/Users/akira/AppData/Local/ai-twitch-cast-capture/ffmpeg/ffmpeg.exe"
-    if [ -f "$ELECTRON_FFMPEG" ]; then
-        FFMPEG_PATH=$(wslpath -w "$ELECTRON_FFMPEG")
-    fi
-fi
+# FFmpegパス（ビルド時に自動DL済みのものを使用、FFMPEG_PATH環境変数で上書き可能）
+# ネイティブアプリのresources/ffmpeg/ffmpeg.exeはビルド時に自動コピーされるため
+# 通常は--ffmpeg-pathの指定は不要（FindFfmpeg()が自動検出する）
 
 # broadcast.html URL（トークン付き）
 URL="${SERVER_URL}/broadcast?token=${TOKEN}"

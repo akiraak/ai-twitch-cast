@@ -16,6 +16,24 @@
     </Content>
   </ItemGroup>
 
+  <!-- FFmpeg同梱: ビルド前に未存在ならダウンロード、出力にコピー -->
+  <PropertyGroup>
+    <FfmpegDir>resources\ffmpeg</FfmpegDir>
+    <FfmpegExe>$(FfmpegDir)\ffmpeg.exe</FfmpegExe>
+  </PropertyGroup>
+
+  <Target Name="DownloadFfmpeg" BeforeTargets="Build" Condition="!Exists('$(FfmpegExe)')">
+    <Message Importance="high" Text="FFmpeg not found. Downloading..." />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\download-ffmpeg.ps1&quot; -OutDir &quot;$(MSBuildProjectDirectory)\$(FfmpegDir)&quot;" />
+  </Target>
+
+  <ItemGroup>
+    <None Include="resources\ffmpeg\ffmpeg.exe" Condition="Exists('resources\ffmpeg\ffmpeg.exe')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>resources\ffmpeg\ffmpeg.exe</Link>
+    </None>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3800.47" />
     <PackageReference Include="Serilog" Version="4.3.1" />
