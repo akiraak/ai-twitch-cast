@@ -14,6 +14,14 @@
 - [x] 診断ログ追加（Panel送受信・Stop各ステップ・Audio統計）
 - [x] プラン: plans/post-electron-bugs.md
 
+## Twitch配信音声途切れ修正
+
+- [x] サイレンスタイマーの二重書き込み防止（lastDataTickフラグで実データ受信200ms以内はサイレンス送信スキップ）
+- [x] _silenceTimer.Change()リセット廃止（フラグ方式に置換）
+- [x] WebView2バックグラウンドスロットリング無効化（--disable-background-timer-throttling等3フラグ追加）
+- [x] Audio統計ログ追加（10秒ごとdata/silence/bytesカウント）
+- [x] プラン: plans/post-electron-bugs.md
+
 ## Electron完全削除（Phase 8）
 
 - [x] win-capture-app/ ディレクトリ削除

@@ -36,8 +36,13 @@ public sealed class AudioLoopback : IDisposable
         long silenceCount = 0;
         long dataCount = 0;
         long lastLogTick = Environment.TickCount64;
+        // 実データ受信時刻（サイレンスと実データの二重書き込みを防止）
+        long lastDataTick = 0;
         _silenceTimer = new System.Threading.Timer(_ =>
         {
+            // 実データが最近届いている間はサイレンスを送らない（二重書き込み防止）
+            var elapsed = Environment.TickCount64 - Interlocked.Read(ref lastDataTick);
+            if (elapsed < 200) return; // 200ms以内に実データがあればスキップ
             Interlocked.Increment(ref silenceCount);
             try { onData(silenceBuf, 0, silenceBuf.Length); }
             catch { /* pipe closed */ }
@@ -48,9 +53,7 @@ public sealed class AudioLoopback : IDisposable
             if (e.BytesRecorded > 0)
             {
                 Interlocked.Increment(ref dataCount);
-                // _silenceTimer?.Change()はDispose後にObjectDisposedExceptionを投げうる
-                try { _silenceTimer?.Change(100, 100); }
-                catch (ObjectDisposedException) { }
+                Interlocked.Exchange(ref lastDataTick, Environment.TickCount64);
                 try { onData(e.Buffer, 0, e.BytesRecorded); }
                 catch (Exception ex) { Log.Debug("[Audio] Write error: {Msg}", ex.Message); }
 

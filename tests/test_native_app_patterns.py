@@ -61,11 +61,15 @@ def test_audio_stop_nulls_timer_before_dispose():
     )
 
 
-def test_audio_data_available_catches_timer_disposed():
-    """DataAvailableで_silenceTimer?.Change()のObjectDisposedExceptionをcatchすること。"""
+def test_audio_silence_timer_skips_when_data_active():
+    """サイレンスタイマーが実データ受信中にサイレンスを送らないこと。
+
+    サイレンスと実データの二重書き込みはFFmpegに余分なデータを送り、
+    音声途切れの原因となる。
+    """
     source = read_cs("Streaming/AudioLoopback.cs")
-    assert "catch (ObjectDisposedException)" in source, (
-        "_silenceTimer?.Change()のObjectDisposedExceptionがcatchされていない"
+    assert "lastDataTick" in source, (
+        "サイレンスタイマーにlastDataTickガードがない。二重書き込みで音声が途切れる"
     )
 
 
