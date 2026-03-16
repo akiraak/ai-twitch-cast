@@ -343,16 +343,20 @@ public class MainForm : Form
         if (string.IsNullOrEmpty(key))
         {
             PanelLog("ストリームキーが未設定です", "error");
+            SendPanelMessage(new { type = "streamResult", action = "goLive", ok = false });
             return;
         }
         try
         {
             await StartStreamingWithKeyAsync(key);
             PanelLog("配信を開始しました", "success");
+            SendPanelMessage(new { type = "streamResult", action = "goLive", ok = true });
+            OnTrayUpdate(null, EventArgs.Empty);
         }
         catch (Exception ex)
         {
             PanelLog($"配信開始失敗: {ex.Message}", "error");
+            SendPanelMessage(new { type = "streamResult", action = "goLive", ok = false });
         }
     }
 
@@ -364,12 +368,15 @@ public class MainForm : Form
         {
             await StopStreamingAsync();
             PanelLog("配信を停止しました", "success");
+            SendPanelMessage(new { type = "streamResult", action = "stop", ok = true });
+            OnTrayUpdate(null, EventArgs.Empty);
             Log.Information("[Panel] HandlePanelStopStream completed successfully");
         }
         catch (Exception ex)
         {
             Log.Error(ex, "[Panel] HandlePanelStopStream failed");
             PanelLog($"配信停止失敗: {ex.Message}", "error");
+            SendPanelMessage(new { type = "streamResult", action = "stop", ok = false });
         }
     }
 

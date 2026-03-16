@@ -1,5 +1,12 @@
 # DONE
 
+## Go Live / Stop ボタンの即時フィードバック
+
+- [x] ボタン押下直後にテキスト変更（「準備中…」「停止中…」）+ CSSスピナー + disabled化で押した感を実現
+- [x] C#側から処理完了/失敗時に `streamResult` メッセージをパネルに送信してボタン復帰
+- [x] 処理完了後 `OnTrayUpdate` 即時呼び出しでステータス即時反映（3秒タイマー待ち解消）
+- [x] プラン: plans/button-instant-feedback.md
+
 ## リップシンクと音声の4秒ずれ修正（暫定対応）
 
 - [x] 原因特定: 映像（WGC即座キャプチャ）と音声（WASAPI Loopback回収、~500ms遅延）の経路差

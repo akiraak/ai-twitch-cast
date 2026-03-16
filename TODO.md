@@ -21,4 +21,3 @@
 - [ ] 配信中に位置調整しても繁栄されない
 - [ ] リップシンク完全同期: TTS音声を直接FFmpegパイプに書き込み、WASAPI迂回による500ms遅延を根本解消 → [plans/direct-tts-audio-pipe.md](plans/direct-tts-audio-pipe.md)
 - [ ] 配信を始めてもTwitchの配信画面が真っ黒のままのときがある。ブラウザリロードで表示される
-- [ ] Go Live ボタン押したら押した感が欲しい。今は間がある。STOPボタンも同様に間があるから押したかどうか迷ってしまう
