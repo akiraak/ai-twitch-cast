@@ -166,6 +166,32 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
 .meter-container {
   position: relative; height: 8px; background: #0a0a14;
   border-radius: 3px; overflow: hidden; border: 1px solid var(--border);
+  transition: border-color 0.3s;
+}
+.meter-container.clipping {
+  border-color: var(--red);
+  box-shadow: 0 0 6px rgba(201, 64, 64, 0.5);
+}
+/* 危険ゾーン */
+.meter-zone {
+  position: absolute; top: 0; height: 100%; pointer-events: none;
+}
+.meter-zone.hot {
+  left: 80%; width: 15%;  /* -12dB ~ -3dB */
+  background: rgba(244, 162, 97, 0.35);
+}
+.meter-zone.danger {
+  left: 95%; width: 5%;   /* -3dB ~ 0dB */
+  background: rgba(201, 64, 64, 0.5);
+}
+.meter-zone-line {
+  position: absolute; top: 0; height: 100%; width: 1px; z-index: 4;
+}
+.meter-zone-line.hot-line {
+  left: 80%; background: rgba(244, 162, 97, 0.7);
+}
+.meter-zone-line.danger-line {
+  left: 95%; background: rgba(201, 64, 64, 0.9);
 }
 .meter-bar {
   position: absolute; top: 0; left: 0; height: 100%; width: 0%;
@@ -259,7 +285,11 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
     <span class="meter-src bgm" id="meterBgm">BGM</span>
     <span class="meter-src tts" id="meterTts">Voice</span>
   </div>
-  <div class="meter-container">
+  <div class="meter-container" id="meterContainer">
+    <div class="meter-zone hot"></div>
+    <div class="meter-zone danger"></div>
+    <div class="meter-zone-line hot-line"></div>
+    <div class="meter-zone-line danger-line"></div>
     <div class="meter-bar level" id="meterLevel"></div>
     <div class="meter-bar peak" id="meterPeak"></div>
   </div>
@@ -386,6 +416,7 @@ function appendLog(text, level) {
 // 音量メーター
 const METER_MIN_DB = -60;
 let meterSmooth = METER_MIN_DB;
+let clipTimer = null;
 
 function meterDbToPct(db) {
   if (db <= METER_MIN_DB) return 0;
@@ -406,6 +437,13 @@ function updateMeter(data) {
   $('meterDb').textContent = dbStr;
   $('meterPeakDb').textContent = pkStr;
   $('meterDb').className = 'meter-db' + (meterSmooth > -3 ? ' clip' : meterSmooth > -12 ? ' hot' : '');
+
+  // クリッピング警告
+  if (peak > -3) {
+    $('meterContainer').classList.add('clipping');
+    clearTimeout(clipTimer);
+    clipTimer = setTimeout(() => $('meterContainer').classList.remove('clipping'), 500);
+  }
 
   $('meterBgm').classList.toggle('active', !!data.bgm);
   $('meterTts').classList.toggle('active', !!data.tts);

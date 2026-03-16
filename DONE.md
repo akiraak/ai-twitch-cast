@@ -1,5 +1,11 @@
 # DONE
 
+## 音量メーター危険ゾーン表示
+
+- [x] control-panel.htmlにHot(-12dB〜-3dB)・Danger(-3dB〜0dB)ゾーン背景と境界ラインを追加
+- [x] ピークが-3dB超でメーター枠が赤く光るクリッピング警告を追加
+- [x] プラン作成: plans/volume-danger-zone.md
+
 ## UIラベル「TTS」→「Voice」に変更
 
 - [x] control-panel.html（音量スライダー・メーターソース）とpreview.html（メーターソース）の表示を「Voice」に統一
