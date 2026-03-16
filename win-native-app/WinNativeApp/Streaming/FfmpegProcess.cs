@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
 using NAudio.Wave;
@@ -19,6 +20,7 @@ public sealed class FfmpegProcess : IDisposable
     private DateTime _startTime;
     private volatile bool _stopping;
     private volatile bool _writingVideo;
+    private volatile bool _encodingStarted; // FFmpegエンコード開始検知フラグ
     private bool _disposed;
 
     // ダブルバッファ: BGRA入力コピー用
@@ -29,9 +31,17 @@ public sealed class FfmpegProcess : IDisposable
     // NV12変換用バッファ（BGRA 3.7MB → NV12 1.4MB @1280x720）
     private byte[]? _nv12Buf;
 
+    // 音声バッファキュー（WASAPIコールバックをブロックしない非同期書き込み）
+    private readonly ConcurrentQueue<byte[]> _audioQueue = new();
+    private Thread? _audioWriter;
+    private long _audioDropCount;
+    // キュー上限: 約1秒分（エンコード開始時にフラッシュするため、起動後は低水位を維持）
+    private const int MaxAudioQueueChunks = 100;
+
     public bool IsRunning => _process is { HasExited: false };
     public long FrameCount => Interlocked.Read(ref _frameCount);
     public long DropCount => Interlocked.Read(ref _dropCount);
+    public long AudioDropCount => Interlocked.Read(ref _audioDropCount);
     public TimeSpan Uptime => IsRunning ? DateTime.UtcNow - _startTime : TimeSpan.Zero;
 
     public FfmpegProcess(StreamConfig config, WaveFormat audioFormat)
@@ -55,11 +65,11 @@ public sealed class FfmpegProcess : IDisposable
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
             outBufferSize: 8 * 1024 * 1024, inBufferSize: 0);
 
-        // 音声用名前付きパイプ（1MBバッファ）
+        // 音声用名前付きパイプ（64KBバッファ — 映像パイプとの遅延差を最小化）
         _audioPipe = new NamedPipeServerStream(
             _audioPipeName, PipeDirection.Out, 1,
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
-            outBufferSize: 1024 * 1024, inBufferSize: 0);
+            outBufferSize: 64 * 1024, inBufferSize: 0);
 
         // ダブルバッファ事前確保（BGRA入力コピー用）
         var bgraFrameSize = _config.Width * _config.Height * 4;
@@ -76,7 +86,7 @@ public sealed class FfmpegProcess : IDisposable
         // エンコーダ選択（auto=HW自動検出→libx264フォールバック）
         var encoder = ResolveEncoder(_config.Encoder, FindFfmpeg());
         var encoderArgs = BuildEncoderArgs(encoder, _config);
-        Log.Information("[FFmpeg] Encoder: {Encoder}", encoder);
+        Log.Information("[FFmpeg] Encoder: {Encoder}, AudioOffset: {Offset}s", encoder, _config.AudioOffset);
 
         var args = string.Join(" ",
             "-y -nostdin",
@@ -87,7 +97,7 @@ public sealed class FfmpegProcess : IDisposable
             $"-framerate {_config.Framerate}",
             $@"-i \\.\pipe\{_videoPipeName}",
             // Audio input (named pipe)
-            "-thread_queue_size 512",
+            "-thread_queue_size 1024",
             _ffmpegAudioFormat,
             $@"-i \\.\pipe\{_audioPipeName}",
             // Video encode (encoder-specific)
@@ -101,7 +111,7 @@ public sealed class FfmpegProcess : IDisposable
             // Audio encode
             $"-c:a aac -b:a {_config.AudioBitrate} -ar 44100",
             // Output
-            $"-f flv \"{rtmpTarget}\""
+            $"-f flv -flvflags no_duration_filesize \"{rtmpTarget}\""
         );
 
         Log.Information("[FFmpeg] Command: ffmpeg {Args}", args);
@@ -127,6 +137,7 @@ public sealed class FfmpegProcess : IDisposable
         _startTime = DateTime.UtcNow;
         _frameCount = 0;
         _dropCount = 0;
+        _audioDropCount = 0;
         _stopping = false;
 
         // Log stderr to file
@@ -158,19 +169,36 @@ public sealed class FfmpegProcess : IDisposable
         await _audioPipe.WaitForConnectionAsync(ct);
         Log.Information("[FFmpeg] Audio pipe connected");
 
-        // 初期サイレンスを送信（FFmpegが音声入力を待ってブロックしないように）
-        // 1秒分のサイレンス（f32le, 48kHz, stereo = 48000 * 2 * 4 = 384000 bytes）
-        var silenceBytes = new byte[384000];
+        // 初期サイレンスを送信（FFmpegのAAC encoder + resamplerのプライミング用）
+        // 300ms分を100msチャンクで送信（最小限のプライミング、パイプバッファを満杯にしない）
+        // f32le, 48kHz, stereo: 100ms = 48000 * 2 * 4 / 10 = 38400 bytes
+        var silenceChunk = new byte[38400];
+        var totalSilenceBytes = 0;
         try
         {
-            _audioPipe.Write(silenceBytes, 0, silenceBytes.Length);
+            for (var i = 0; i < 3; i++) // 3 × 100ms = 300ms
+            {
+                _audioPipe.Write(silenceChunk, 0, silenceChunk.Length);
+                totalSilenceBytes += silenceChunk.Length;
+            }
             _audioPipe.Flush();
-            Log.Information("[FFmpeg] Initial silence sent ({Bytes} bytes)", silenceBytes.Length);
+            Log.Information("[FFmpeg] Initial silence sent ({Bytes} bytes, {Sec:F1}s)",
+                totalSilenceBytes, totalSilenceBytes / 384000.0);
         }
         catch (IOException ex)
         {
-            Log.Warning("[FFmpeg] Initial silence error: {Msg}", ex.Message);
+            Log.Warning("[FFmpeg] Initial silence error (sent {Bytes} bytes): {Msg}",
+                totalSilenceBytes, ex.Message);
         }
+
+        // 音声バッファキュー書き込みスレッド開始
+        _audioWriter = new Thread(AudioWriterLoop)
+        {
+            IsBackground = true,
+            Name = "AudioPipeWriter",
+        };
+        _audioWriter.Start();
+        Log.Information("[FFmpeg] Audio writer thread started");
 
         // ヘルスチェック: 5秒後にFFmpegの状態を確認
         _ = Task.Run(async () =>
@@ -180,8 +208,8 @@ public sealed class FfmpegProcess : IDisposable
             if (_process.HasExited)
                 Log.Error("[FFmpeg] Process exited after 5s! ExitCode={Code}", _process.ExitCode);
             else
-                Log.Information("[FFmpeg] Health check: running, frames={F} drops={D}",
-                    FrameCount, DropCount);
+                Log.Information("[FFmpeg] Health check: running, frames={F} drops={D} audioDrops={AD}",
+                    FrameCount, DropCount, AudioDropCount);
         });
     }
 
@@ -245,18 +273,87 @@ public sealed class FfmpegProcess : IDisposable
         });
     }
 
+    /// <summary>
+    /// 音声データをキューに追加（WASAPIコールバックから呼ばれる、絶対にブロックしない）。
+    /// バックグラウンドスレッドがキューからパイプに書き込む。
+    /// FFmpeg起動直後はパイプ書き込みが遅い（RTMP接続確立中）ため、
+    /// 直接書き込むとWASAPIコールバックがブロックされて音声途切れが発生する。
+    /// </summary>
     public void WriteAudioData(byte[] data, int offset, int count)
     {
         if (_audioPipe is not { IsConnected: true } || _stopping) return;
 
-        try
+        // WASAPIバッファは再利用されるのでコピーが必要
+        var copy = new byte[count];
+        Buffer.BlockCopy(data, offset, copy, 0, count);
+        _audioQueue.Enqueue(copy);
+
+        // キュー上限超過時は古いチャンクを破棄（FFmpegが追いつけない分）
+        while (_audioQueue.Count > MaxAudioQueueChunks)
         {
-            _audioPipe.Write(data, offset, count);
+            if (_audioQueue.TryDequeue(out _))
+                Interlocked.Increment(ref _audioDropCount);
         }
-        catch (IOException ex)
+    }
+
+    /// <summary>
+    /// バックグラウンドスレッド: キューから音声データを読み取りパイプに書き込む。
+    /// パイプが満杯のときはこのスレッドだけがブロックされ、WASAPIは影響を受けない。
+    /// </summary>
+    private void AudioWriterLoop()
+    {
+        var logTick = Environment.TickCount64;
+        long written = 0;
+        long dropped = 0;
+        var flushed = false; // エンコード開始時のキューフラッシュ済みフラグ
+
+        while (!_stopping)
         {
-            Log.Debug("[FFmpeg] Audio pipe error: {Msg}", ex.Message);
+            var pipe = _audioPipe;
+            if (pipe is not { IsConnected: true }) break;
+
+            // FFmpegエンコード開始検知 → 溜まったキューをフラッシュ（起動遅延を除去）
+            if (_encodingStarted && !flushed)
+            {
+                flushed = true;
+                var flushedCount = 0;
+                while (_audioQueue.TryDequeue(out _))
+                    flushedCount++;
+                Log.Information("[FFmpeg] Audio queue flushed on encoding start: {Count} chunks discarded", flushedCount);
+            }
+
+            if (_audioQueue.TryDequeue(out var chunk))
+            {
+                try
+                {
+                    pipe.Write(chunk, 0, chunk.Length);
+                    written++;
+                }
+                catch (Exception) // IOException, OperationCanceledException, ObjectDisposedException
+                {
+                    break; // パイプ切断 or 停止
+                }
+            }
+            else
+            {
+                Thread.Sleep(1); // キュー空 → 1ms待機
+            }
+
+            // 10秒ごとにキュー状態をログ
+            var now = Environment.TickCount64;
+            if (now - logTick > 10_000)
+            {
+                var ad = Interlocked.Read(ref _audioDropCount);
+                var newDrops = ad - dropped;
+                Log.Information("[FFmpeg] Audio queue: depth={Depth} written={W} drops={D} (+{New})",
+                    _audioQueue.Count, written, ad, newDrops);
+                dropped = ad;
+                written = 0;
+                logTick = now;
+            }
         }
+
+        Log.Information("[FFmpeg] Audio writer thread exiting (queue={Depth})", _audioQueue.Count);
     }
 
     public async Task StopAsync()
@@ -264,12 +361,12 @@ public sealed class FfmpegProcess : IDisposable
         if (_process == null) return;
         _stopping = true;
 
-        Log.Information("[FFmpeg] Stopping (frames={F}, drops={D})...",
-            FrameCount, DropCount);
+        Log.Information("[FFmpeg] Stopping (frames={F}, drops={D}, audioDrops={AD})...",
+            FrameCount, DropCount, AudioDropCount);
 
         try
         {
-            // 映像・音声パイプを閉じる → FFmpegがEOFを検知して終了
+            // パイプを先に閉じる → AudioWriterLoopのブロック中Write()を解除
             try { _videoPipe?.Dispose(); }
             catch { /* already closed */ }
             _videoPipe = null;
@@ -277,6 +374,10 @@ public sealed class FfmpegProcess : IDisposable
             try { _audioPipe?.Dispose(); }
             catch { /* already closed */ }
             _audioPipe = null;
+
+            // パイプ閉鎖後に音声書き込みスレッドの終了を待つ
+            _audioWriter?.Join(2000);
+            _audioWriter = null;
 
             // Wait up to 5 seconds for graceful exit
             using var cts = new CancellationTokenSource(5000);
@@ -309,12 +410,24 @@ public sealed class FfmpegProcess : IDisposable
             var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "ffmpeg.log");
             Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
             await using var writer = new StreamWriter(logPath, append: false);
+            var startTick = Environment.TickCount64;
             while (_process is { HasExited: false } && !_stopping)
             {
                 var line = await _process.StandardError.ReadLineAsync();
                 if (line == null) break; // EOF
                 await writer.WriteLineAsync(line);
                 await writer.FlushAsync();
+
+                // エンコード開始検知: "frame=" が出たらフラグセット
+                if (!_encodingStarted && line.Contains("frame="))
+                {
+                    _encodingStarted = true;
+                    Log.Information("[FFmpeg] Encoding started detected (audio queue will flush)");
+                }
+
+                // 起動後60秒間はSerilogにも出力（音声途切れ診断用）
+                if (Environment.TickCount64 - startTick < 60_000)
+                    Log.Debug("[FFmpeg:stderr] {Line}", line);
             }
         }
         catch { /* process ended */ }

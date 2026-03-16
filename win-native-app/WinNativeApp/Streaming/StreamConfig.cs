@@ -18,6 +18,13 @@ public class StreamConfig
     public string? FfmpegPath { get; set; }
 
     /// <summary>
+    /// 音声タイムスタンプのオフセット（秒）。音声パイプライン遅延を補正する。
+    /// 負の値=音声を早める。環境のオーディオドライバやエンコーダに依存するため調整可能。
+    /// デフォルト: -0.5（NVENC + Windows共有モードで典型的な値）
+    /// </summary>
+    public double AudioOffset { get; set; } = -0.5;
+
+    /// <summary>
     /// CLI args優先、環境変数フォールバック。
     /// </summary>
     public static StreamConfig FromArgs(string[] args)
@@ -50,6 +57,11 @@ public class StreamConfig
                 case "--encoder" when i + 1 < args.Length:
                     config.Encoder = args[++i];
                     break;
+                case "--audio-offset" when i + 1 < args.Length:
+                    if (double.TryParse(args[++i], System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var offset))
+                        config.AudioOffset = offset;
+                    break;
             }
         }
 
@@ -59,6 +71,12 @@ public class StreamConfig
 
         if (config.FfmpegPath == null)
             config.FfmpegPath = Environment.GetEnvironmentVariable("FFMPEG_PATH");
+
+        var audioOffsetEnv = Environment.GetEnvironmentVariable("AUDIO_OFFSET");
+        if (audioOffsetEnv != null && double.TryParse(audioOffsetEnv,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var envOffset))
+            config.AudioOffset = envOffset;
 
         return config;
     }

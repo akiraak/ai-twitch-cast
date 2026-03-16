@@ -794,6 +794,9 @@ public class MainForm : Form
         // 3. Start FFmpeg (creates named pipe, starts process, waits for pipe connection)
         await _ffmpeg.StartAsync();
 
+        // 3.5. FFmpegがパイプの読み取りを開始するまで待機（音声途切れ防止）
+        await Task.Delay(500);
+
         // 4. Connect audio loopback → FFmpeg audio pipe
         _audio.Start((data, offset, count) => _ffmpeg.WriteAudioData(data, offset, count));
 

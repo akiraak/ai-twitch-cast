@@ -560,6 +560,10 @@ let earTwitchDuration = 0.2;
 // リップシンク状態
 let lipsyncFrames = null;
 let lipsyncStart = 0;
+let pendingLipsyncFrames = null;  // 音声再生開始まで保持
+// 音声パイプライン遅延補正（ms）: 音声がWASAPI→FFmpegに到達するまでの追加遅延分、
+// リップシンク開始を遅らせて映像と音声を同期させる。環境に合わせて調整。
+window.window.LIPSYNC_DELAY_MS = 500;
 
 // 外部BlendShape（感情等）
 let externalShapes = {};
@@ -567,8 +571,19 @@ let externalShapes = {};
 // グローバル公開
 window.avatarVRM = {
   setBlendShapes(shapes) { externalShapes = shapes; },
-  setLipsync(frames) { lipsyncFrames = frames; lipsyncStart = performance.now() / 1000; },
-  stopLipsync() { lipsyncFrames = null; },
+  setLipsync(frames) {
+    // フレームデータを保存のみ。アニメーションはplay_audio再生開始時に開始
+    pendingLipsyncFrames = frames;
+  },
+  startLipsync() {
+    // 音声再生開始時に呼ばれる
+    if (pendingLipsyncFrames) {
+      lipsyncFrames = pendingLipsyncFrames;
+      lipsyncStart = performance.now() / 1000;
+      pendingLipsyncFrames = null;
+    }
+  },
+  stopLipsync() { lipsyncFrames = null; pendingLipsyncFrames = null; },
   setIdleScale(s) { idleScale = s; },
 };
 
@@ -1083,7 +1098,15 @@ function connectWS() {
         ttsAudio.oncanplaythrough = () => {
           ttsAudio.oncanplaythrough = null;
           console.log('[Audio] TTS canplaythrough → play()');
-          ttsAudio.play().catch(e => console.log('[Audio] TTS再生エラー:', e.name, e.message));
+          const playStart = performance.now();
+          ttsAudio.play().then(() => {
+            const elapsed = (performance.now() - playStart).toFixed(0);
+            console.log(`[Audio] TTS play() resolved in ${elapsed}ms, lipsync in ${window.LIPSYNC_DELAY_MS}ms`);
+            // 音声パイプライン遅延を補正してリップシンク開始を遅らせる
+            setTimeout(() => {
+              if (window.avatarVRM) window.avatarVRM.startLipsync();
+            }, window.LIPSYNC_DELAY_MS);
+          }).catch(e => console.log('[Audio] TTS再生エラー:', e.name, e.message));
         };
         ttsAudio.onerror = () => console.log('[Audio] TTS読み込みエラー:', ttsAudio.error?.message);
         break;
@@ -1122,6 +1145,7 @@ function connectWS() {
         break;
       case 'lipsync':
         if (window.avatarVRM && data.frames) {
+          console.log(`[Audio] lipsync received: ${data.frames.length} frames`);
           window.avatarVRM.setLipsync(data.frames);
         }
         break;

@@ -38,11 +38,14 @@ public sealed class AudioLoopback : IDisposable
         long lastLogTick = Environment.TickCount64;
         // 実データ受信時刻（サイレンスと実データの二重書き込みを防止）
         long lastDataTick = 0;
+        long startTick = Environment.TickCount64;
         _silenceTimer = new System.Threading.Timer(_ =>
         {
             // 実データが最近届いている間はサイレンスを送らない（二重書き込み防止）
             var elapsed = Environment.TickCount64 - Interlocked.Read(ref lastDataTick);
-            if (elapsed < 200) return; // 200ms以内に実データがあればスキップ
+            // 起動後5秒間はガード短縮（100ms）— 実データ安定前のギャップ補填
+            var guard = (Environment.TickCount64 - startTick < 5000) ? 100 : 200;
+            if (elapsed < guard) return;
             Interlocked.Increment(ref silenceCount);
             try { onData(silenceBuf, 0, silenceBuf.Length); }
             catch { /* pipe closed */ }
@@ -57,15 +60,17 @@ public sealed class AudioLoopback : IDisposable
                 try { onData(e.Buffer, 0, e.BytesRecorded); }
                 catch (Exception ex) { Log.Debug("[Audio] Write error: {Msg}", ex.Message); }
 
-                // 10秒ごとに統計ログ
+                // 統計ログ（起動後30秒は2秒間隔、以降は10秒間隔 — 音声途切れ診断用）
                 var now = Environment.TickCount64;
                 var last = Interlocked.Read(ref lastLogTick);
-                if (now - last > 10000 && Interlocked.CompareExchange(ref lastLogTick, now, last) == last)
+                var interval = (now - startTick < 30_000) ? 2000 : 10000;
+                if (now - last > interval && Interlocked.CompareExchange(ref lastLogTick, now, last) == last)
                 {
                     var sc = Interlocked.Exchange(ref silenceCount, 0);
                     var dc = Interlocked.Exchange(ref dataCount, 0);
-                    Log.Information("[Audio] Stats (10s): data={Data} silence={Silence} bytes={Bytes}",
-                        dc, sc, e.BytesRecorded);
+                    var sec = (now - startTick) / 1000;
+                    Log.Information("[Audio] Stats ({Sec}s): data={Data} silence={Silence} bytes={Bytes}",
+                        sec, dc, sc, e.BytesRecorded);
                 }
             }
         };

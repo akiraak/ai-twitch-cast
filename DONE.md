@@ -1,5 +1,31 @@
 # DONE
 
+## リップシンクと音声の4秒ずれ修正（暫定対応）
+
+- [x] 原因特定: 映像（WGC即座キャプチャ）と音声（WASAPI Loopback回収、~500ms遅延）の経路差
+- [x] Phase 1: broadcast.htmlリップシンク同期修正 — 口パク開始を`play().then()`に同期（WebSocketイベント受信時ではなく音声再生開始時）
+- [x] Phase 2: 音声パイプバッファ縮小 — 1MB→64KB（遅延2.7秒→170ms）
+- [x] Phase 3: 初期サイレンス縮小 — 3秒→300ms（パイプバッファ満杯防止）
+- [x] FFmpegエンコード開始検知→音声キューフラッシュ（起動時蓄積50チャンクの遅延を除去）
+- [x] `LIPSYNC_DELAY_MS = 500` で口パク開始を遅延（音声パイプライン遅延と一致させる暫定補正）
+- [x] `AudioOffset` 設定をStreamConfigに追加（CLI `--audio-offset` / 環境変数 `AUDIO_OFFSET` で調整可能）
+- [x] 根本解消プラン作成: TTS音声を直接FFmpegパイプに書き込み、WASAPI迂回を解消 → plans/direct-tts-audio-pipe.md
+- [x] プラン: plans/lipsync-delay-fix.md
+
+## 配信開始後の音声途切れ修正
+
+- [x] 原因特定: FFmpegのRTMP接続確立中（speed=0.45x→1.0x、約40秒）にパイプ書き込みがブロック → WASAPIコールバック停止 → 音声データ消失
+- [x] 音声書き込みを非同期化: ConcurrentQueue + バックグラウンドスレッド（AudioPipeWriter）でWASAPIコールバックを絶対にブロックしない設計に変更
+- [x] キュー上限500チャンク（約5秒）超過時は古いデータを破棄（最新音声を優先）
+- [x] FFmpeg thread_queue_size 512→1024に増大
+- [x] 初期サイレンス1秒→3秒に増量（AAC encoder + resamplerプライミング）
+- [x] WASAPI開始前に500ms待機（FFmpegパイプ読み取り安定化）
+- [x] AudioLoopback統計ログを起動後30秒間は2秒間隔に変更（診断用）
+- [x] FFmpeg stderr起動後60秒間をSerilogにも出力（診断用）
+- [x] AudioWriterLoop停止時のOperationCanceledException catchで停止クラッシュ修正
+- [x] StopAsync順序改善: パイプ閉鎖→スレッドJoin（ブロック解除を先に行う）
+- [x] プラン: plans/audio-startup-fix.md
+
 ## コントロールパネルStopボタン修正
 
 - [x] StopStreamingAsyncでフィールド（_ffmpeg/_audio/_activeStreamKey）を即座にクリア→UI即時反映
