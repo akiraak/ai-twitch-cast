@@ -60,6 +60,7 @@
 - [x] 音量メーター: MeteringWaveProviderでBGM/TTS再生パイプラインのRMS/peakをリアルタイム測定。配信中はFfmpegProcess.MeasureLevelで実測。50msタイマーでパネルに送信。JS側ピークホールド1.5秒
 
 - [x] リップシンク同期: 配信時は字幕・口パクをlipsyncDelay(ms)遅延させて音声と同期。非配信時はリアルタイム(0ms)。遅延値はcontrol-panel/Web UIから設定可能、DB永続化。broadcast.htmlが設定の真のソース（_volumeSync経由でパネルに転送）
+- [x] 音声先行送信: TTS音声をC#アプリに先に送信しFFmpegキュー投入完了を待ってから字幕・口パクを発火するよう変更。lipsyncDelayを500ms→100msに削減（音声パイプライン遅延が大幅に縮小）
 
 ## Go Live / Stop ボタンの即時フィードバック
 

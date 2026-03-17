@@ -93,9 +93,13 @@ class SpeechPipeline:
                             (time.monotonic() - t_prep) * 1000,
                             (time.monotonic() - t_start) * 1000)
 
-                # === 同時発火（字幕+リップシンク+音声を一斉送信） ===
+                # === 音声先行送信 → 字幕・口パク発火 ===
+                # C#アプリにTTS送信し、デコード+FFmpegキュー投入完了を待つ
                 t_fire = time.monotonic()
+                await self.send_tts_to_native_app(wav_path)
+                logger.info("[tts] C#音声投入完了: %.0fms", (time.monotonic() - t_fire) * 1000)
 
+                # 音声がFFmpegに投入されたので、字幕・口パクを発火
                 if subtitle:
                     await self.notify_overlay(
                         subtitle["author"], subtitle["message"], subtitle["result"],
@@ -106,10 +110,9 @@ class SpeechPipeline:
                         "frames": lipsync_frames,
                         "autostart": True,
                     })
-                # C#アプリにTTS送信（配信中→FFmpegパイプ、非配信→ローカル再生）
-                await self.send_tts_to_native_app(wav_path)
 
-                logger.info("[tts] 同時発火完了: %.0fms", (time.monotonic() - t_fire) * 1000)
+                logger.info("[tts] 字幕・口パク発火完了: %.0fms（音声投入から）",
+                            (time.monotonic() - t_fire) * 1000)
 
                 # チャット投稿（音声再生の2秒後）
                 if chat_result and post_to_chat:

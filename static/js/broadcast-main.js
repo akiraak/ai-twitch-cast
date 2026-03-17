@@ -11,7 +11,7 @@ let volumes = { master: 0.8, tts: 0.8, bgm: 1.0 };
 
 // === リップシンク同期（配信時は遅延、非配信時はリアルタイム） ===
 let _isStreaming = false;
-let _lipsyncDelay = 500; // 配信時の遅延(ms)、非配信時は0
+let _lipsyncDelay = 100; // 配信時の遅延(ms)、非配信時は0（音声先行送信により大幅削減）
 let _syncTimer = null;   // 遅延タイマー（キャンセル用）
 let _pendingSubtitle = null; // 遅延表示待ちの字幕データ
 
