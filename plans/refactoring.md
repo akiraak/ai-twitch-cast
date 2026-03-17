@@ -155,7 +155,7 @@
 **やらないこと**:
 - `ui-toast.js`, `ui-modal.js`, `dom-utils.js` の独立ファイル化（index.htmlでしか使わないため、Step 2-4のindex.html分割時にまとめて外部化する）
 
-### Step 2-3: broadcast.html JS分割
+### Step 2-3: broadcast.html JS分割 ✅完了
 
 **目的**: 1,231行のインラインJSをモジュール分割
 
