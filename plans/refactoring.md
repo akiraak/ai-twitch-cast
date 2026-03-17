@@ -83,7 +83,7 @@
 **やらないこと**:
 - `character_manager.py` の新規作成（キャラクター読み込み・キャッシュはai_responderの本質的機能。120行の小ファイルにする意義が薄い）
 
-### Step 1-3: speech_pipeline.py 抽出
+### Step 1-3: speech_pipeline.py 抽出 ✅完了
 
 **目的**: comment_reader.py のGod classから音声パイプラインを分離
 
