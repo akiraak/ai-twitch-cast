@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>AI Twitch Cast</title>
-<link rel="stylesheet" href="/static/css/index.css?v=2">
-<script src="/static/js/lib/api-client.js?v=2"></script>
+<link rel="stylesheet" href="/static/css/index.css?v=4">
+<script src="/static/js/lib/api-client.js?v=4"></script>
 </head>
 <body>
 
@@ -86,7 +86,6 @@
           <div class="layout-row"><span class="layout-label">Z順序</span><input type="range" class="vol-slider layout-slider" min="0" max="100" step="1" data-key="topic.zIndex" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-zIndex" min="0" max="100" step="1" data-key="topic.zIndex" oninput="onLayoutNum(this)"></div>
         </fieldset>
       </div>
-      <div id="capture-layout-list"></div>
       <div class="status" id="layout-status" style="margin-top:8px; font-size:0.75rem;">変更は自動保存されます</div>
     </div>
     <div class="card" style="margin-top:16px;">
@@ -379,6 +378,6 @@ topics      1──N  topic_scripts (topic_id)</div>
 
 </div>
 
-<script src="/static/js/index-app.js?v=2"></script>
+<script src="/static/js/index-app.js?v=4"></script>
 </body>
 </html>

@@ -131,39 +131,26 @@
   .db-er { font-size: 0.75rem; color: #6a5590; line-height: 1.6; font-family: monospace; white-space: pre; overflow-x: auto; padding: 10px; background: #faf8ff; border-radius: 6px; border: 1px solid #e0d8f0; }
   /* キャプチャ一覧 */
   .cap-item {
-    padding: 8px 10px; border-bottom: 1px solid #e8e0f0;
+    padding: 10px 12px; border: 1px solid #e8e0f0; border-radius: 6px; margin-bottom: 8px;
+    border-left: 3px solid #d0c0e8;
   }
+  .cap-item.active { border-left-color: #2e7d32; background: #f8fff8; }
+  .cap-item.inactive { opacity: 0.7; }
   .cap-item-header {
     display: flex; align-items: center; gap: 8px;
   }
   .cap-item-label {
     flex: 1; font-size: 0.85rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .cap-item-meta {
-    display: flex; gap: 12px; margin-top: 4px; font-size: 0.7rem; color: #9a88b5;
-  }
-  .cap-item-meta span { white-space: nowrap; }
+  .cap-item-status { font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
   .cap-btn-vis {
     padding: 2px 8px; font-size: 0.7rem; border-radius: 4px; border: 1px solid #d0c0e8;
     background: #e8ddf5; color: #2a1f40; cursor: pointer; white-space: nowrap;
   }
   .cap-btn-vis:hover { background: #d0c0e8; }
   .cap-btn-vis.hidden { background: #f5f0ff; color: #9a88b5; border-color: #e0d8f0; }
-
-  /* キャプチャレイアウト折りたたみ */
-  .cap-layout-details { margin-top: 12px; }
-  .cap-layout-details summary {
-    font-size: 0.85rem; color: #7b1fa2; font-weight: 600; cursor: pointer;
-    padding: 6px; list-style: none;
-  }
-  .cap-layout-details summary::before {
-    content: '\25B6'; display: inline-block; margin-right: 6px; font-size: 0.7rem;
-    transition: transform 0.15s;
-  }
-  .cap-layout-details[open] summary::before { transform: rotate(90deg); }
-  .cap-layout-details .layout-inner {
-    padding: 12px; border: 1px solid #d0c0e8; border-radius: 6px; margin-top: 6px;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px;
+  .cap-item-layout {
+    margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px;
   }
 
   .todo-copy-btn {

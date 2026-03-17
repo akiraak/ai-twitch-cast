@@ -90,6 +90,16 @@ async def capture_saved_delete(request: Request):
     return {"ok": True}
 
 
+@router.post("/api/capture/saved/layout")
+async def capture_saved_update_layout(request: Request):
+    """保存済みキャプチャウィンドウのレイアウトを更新（非アクティブ時用）"""
+    body = await request.json()
+    window_name = body.pop("window_name", "")
+    if window_name:
+        db.update_capture_window_layout(window_name, body)
+    return {"ok": True}
+
+
 @router.post("/api/capture/restore")
 async def capture_restore():
     """保存済み設定からウィンドウ名マッチングでキャプチャを復元"""
@@ -112,6 +122,8 @@ async def capture_restore():
     restored = 0
     for row in saved:
         wname = row["window_name"]
+        if not row["visible"]:
+            continue
         if wname in active_names:
             continue
 

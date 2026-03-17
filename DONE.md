@@ -1,5 +1,16 @@
 # DONE
 
+## WebUIウィンドウキャプチャ管理の改善
+
+- [x] WebUI: キャプチャ一覧を保存済みウィンドウベースに変更、各項目にレイアウトスライダー統合
+- [x] WebUI: アクティブなキャプチャは緑ボーダー+表示/非表示トグル、非アクティブは半透明表示
+- [x] capture_windowsテーブル新設（settings JSONから専用テーブルに移行）
+- [x] C#アプリ: キャプチャ追加/停止時にWebSocketでPython側に即時通知（BroadcastWsEvent）
+- [x] サーバー: C# WebSocket接続時にキャプチャ自動復元（visible=falseはスキップ）
+- [x] DB閲覧: 全テーブル自動検出対応（settingsテーブル等も閲覧可能に）
+- [x] 前回のウィンドウキャプチャを覚えておき次回も最初から表示
+- [x] staticファイルにno-cacheヘッダー追加
+
 ## テスト充実フェーズ1 — DB・設定・TTS・テスト基盤
 
 - [x] conftest.py拡張: test_db / mock_gemini / mock_env フィクスチャ追加

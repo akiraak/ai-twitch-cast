@@ -106,6 +106,19 @@ async def restore_captures_to_app():
     except Exception as e:
         logger.warning("キャプチャ復元失敗: %s", e)
 
+    # C#側で既にアクティブなキャプチャをDBにvisible=trueで同期
+    try:
+        from src import db
+        captures = await proxy_request("GET", "/captures")
+        active_names = {c.get("name", "") for c in captures}
+        for row in db.get_capture_windows():
+            wname = row["window_name"]
+            if wname in active_names and not row["visible"]:
+                db.update_capture_window_layout(wname, {"visible": True})
+                logger.info("キャプチャvisible復元: %s", wname)
+    except Exception:
+        pass
+
 
 async def _handle_capture_changed(data):
     """C#アプリからのキャプチャ変更通知を処理する"""
@@ -113,12 +126,32 @@ async def _handle_capture_changed(data):
     action = data.get("action")
     name = data.get("name", "")
     if action == "add" and name:
-        if not db.get_capture_window_by_name(name):
+        existing = db.get_capture_window_by_name(name)
+        if not existing:
             layout = {"x": 5, "y": 10, "width": 40, "height": 50, "zIndex": 10, "visible": True}
             db.upsert_capture_window(name, name, layout)
             logger.info("キャプチャ保存: %s", name)
+        elif not existing["visible"]:
+            db.update_capture_window_layout(name, {"visible": True})
+            logger.info("キャプチャ再表示: %s", name)
     elif action == "remove":
-        logger.info("キャプチャ停止通知: id=%s", data.get("id"))
+        # idからウィンドウ名を取得してvisible=falseに
+        cap_id = data.get("id", "")
+        removed_name = data.get("name", "")
+        if not removed_name and cap_id:
+            # capture.sourcesからウィンドウ名を逆引き
+            import json
+            raw = db.get_setting("capture.sources")
+            if raw:
+                for s in json.loads(raw):
+                    if s.get("id") == cap_id:
+                        removed_name = s.get("window_name", "")
+                        break
+        if removed_name:
+            db.update_capture_window_layout(removed_name, {"visible": False})
+            logger.info("キャプチャ非表示に設定: %s", removed_name)
+        else:
+            logger.info("キャプチャ停止通知: id=%s (名前不明)", cap_id)
 
 
 async def _read_capture_ws():
