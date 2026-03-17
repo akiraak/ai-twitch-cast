@@ -348,6 +348,14 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
       <span class="volume-value" id="volBgmVal">50%</span>
     </div>
   </div>
+  <div class="section">
+    <div class="section-title">Sync</div>
+    <div class="volume-row">
+      <span class="volume-label">Delay</span>
+      <input type="range" min="0" max="3000" step="50" value="500" id="syncDelay" oninput="onSyncDelay(this.value)">
+      <span class="volume-value" id="syncDelayVal">500ms</span>
+    </div>
+  </div>
   <div class="section" id="bgmStatus" style="display:none;">
     <div class="section-title">BGM</div>
     <div id="bgmStatusText" style="font-size:11px;color:var(--text-dim);"></div>
@@ -436,6 +444,11 @@ function startCapture() {
   const opt = sel.options[sel.selectedIndex];
   if (!opt?.dataset?.hwnd) return;
   send({action:'startCapture', hwnd: opt.dataset.hwnd, title: opt.textContent});
+}
+
+function onSyncDelay(val) {
+  $('syncDelayVal').textContent = val + 'ms';
+  send({action:'syncDelay', value: parseInt(val)});
 }
 
 function onVolume(type, val) {
@@ -539,6 +552,10 @@ function setVolumes(v) {
     $('vol'+key).value = v[t];
     $('vol'+key+'Val').textContent = v[t]+'%';
   });
+  if (v.syncDelay !== undefined) {
+    $('syncDelay').value = v.syncDelay;
+    $('syncDelayVal').textContent = v.syncDelay + 'ms';
+  }
 }
 
 function appendLog(text, level) {

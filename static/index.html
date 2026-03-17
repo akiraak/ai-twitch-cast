@@ -366,6 +366,12 @@
         </select>
         <button onclick="ttsTest()" style="font-size:0.75rem;">テスト再生</button>
       </div>
+      <div class="vol-row" style="margin-top:10px;">
+        <span class="vol-label">配信遅延</span>
+        <input type="range" id="sync-delay" min="0" max="3000" step="50" value="500" class="vol-slider"
+          oninput="onSyncDelay(this)">
+        <span class="vol-pct" id="sync-delay-pct">500ms</span>
+      </div>
     </div>
     <div class="card">
       <h2>BGM</h2>
@@ -659,18 +665,33 @@ function onVolume(source, slider) {
   }, 150);
 }
 
+function onSyncDelay(slider) {
+  document.getElementById('sync-delay-pct').textContent = slider.value + 'ms';
+  clearTimeout(_syncDelayTimer);
+  _syncDelayTimer = setTimeout(() => {
+    api('POST', '/api/overlay/settings', { sync: { lipsyncDelay: parseInt(slider.value) } });
+  }, 150);
+}
+let _syncDelayTimer;
+
 async function loadVolumes() {
   try {
     const data = await (await fetch('/api/broadcast/volume')).json();
     for (const key of ['master', 'tts', 'bgm']) {
       const slider = document.getElementById(`vol-${key}`);
-      // スライダー操作中は上書きしない
       if (document.activeElement === slider) continue;
       const val = data[key] ?? 1.0;
       const pct = Math.round(val * 100);
       slider.value = pct;
       document.getElementById(`vol-${key}-pct`).textContent = pct + '%';
     }
+  } catch (e) {}
+  // syncDelay読み込み
+  try {
+    const s = await (await fetch('/api/overlay/settings')).json();
+    const delay = s?.sync?.lipsyncDelay ?? 500;
+    document.getElementById('sync-delay').value = delay;
+    document.getElementById('sync-delay-pct').textContent = delay + 'ms';
   } catch (e) {}
 }
 

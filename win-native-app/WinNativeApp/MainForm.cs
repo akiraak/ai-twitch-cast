@@ -295,35 +295,8 @@ public class MainForm : Form
                         windows = windows.Select(w => new { title = w.Title, hwnd = $"0x{w.Hwnd.ToInt64():X}" }).ToArray()
                     });
                     SendPanelCaptures();
-                    // サーバーから現在の音量を取得してパネル + C#音声に反映
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var serverUrl = _url.Contains("/broadcast")
-                                ? _url[.._url.IndexOf("/broadcast", StringComparison.Ordinal)]
-                                : "http://localhost:8080";
-                            var json = await _sharedHttp.GetStringAsync($"{serverUrl}/api/broadcast/volume");
-                            var vol = JsonSerializer.Deserialize<JsonElement>(json);
-                            BeginInvoke(() =>
-                            {
-                                UpdateVolume("master", (float)vol.GetProperty("master").GetDouble());
-                                UpdateVolume("tts", (float)vol.GetProperty("tts").GetDouble());
-                                UpdateVolume("bgm", (float)vol.GetProperty("bgm").GetDouble());
-                                SendPanelMessage(new
-                                {
-                                    type = "volume",
-                                    master = (int)(vol.GetProperty("master").GetDouble() * 100),
-                                    tts = (int)(vol.GetProperty("tts").GetDouble() * 100),
-                                    bgm = (int)(vol.GetProperty("bgm").GetDouble() * 100),
-                                });
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Debug("[MainForm] Volume fetch failed: {Error}", ex.Message);
-                        }
-                    });
+                    // 音量・syncDelayはbroadcast.htmlからの_volumeSync/_syncDelay通知で反映
+                    // （broadcast.htmlがinit()でサーバーfetchし、postMessageでMainForm経由でパネルに転送）
                     break;
 
                 case "goLive":
@@ -354,6 +327,10 @@ public class MainForm : Form
 
                 case "volume":
                     HandlePanelVolume(msg);
+                    break;
+
+                case "syncDelay":
+                    HandlePanelSyncDelay(msg);
                     break;
             }
         }
@@ -470,6 +447,28 @@ public class MainForm : Form
         _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
     }
 
+    private void HandlePanelSyncDelay(JsonElement msg)
+    {
+        var value = msg.GetProperty("value").GetInt32();
+        if (_webView.CoreWebView2 == null) return;
+
+        // broadcast.htmlの遅延値を更新 + DB保存
+        var js = $@"
+            _lipsyncDelay = {value};
+            console.log('[Sync] delay updated:', {value});
+            clearTimeout(window._delaySaveTimer);
+            window._delaySaveTimer = setTimeout(function() {{
+                if (window._ws && window._ws.readyState === 1) {{
+                    window._ws.send(JSON.stringify({{
+                        type: 'save_volume',
+                        source: 'overlay.sync.lipsyncDelay',
+                        volume: {value}
+                    }}));
+                }}
+            }}, 200);";
+        _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+    }
+
     /// <summary>音量値を更新し、C#音声パイプラインに反映する。</summary>
     private void UpdateVolume(string type, float vol)
     {
@@ -560,13 +559,23 @@ public class MainForm : Form
                         UpdateVolume("master", m);
                         UpdateVolume("tts", t);
                         UpdateVolume("bgm", b);
-                        SendPanelMessage(new
+                        var syncDelay = volSync.TryGetProperty("lipsyncDelay", out var ld) ? (int)ld.GetDouble() : -1;
+                        var panelMsg = new Dictionary<string, object>
                         {
-                            type = "volume",
-                            master = (int)(m * 100),
-                            tts = (int)(volSync.GetProperty("tts").GetDouble() * 100),
-                            bgm = (int)(b * 100),
-                        });
+                            ["type"] = "volume",
+                            ["master"] = (int)(m * 100),
+                            ["tts"] = (int)(t * 100),
+                            ["bgm"] = (int)(b * 100),
+                        };
+                        if (syncDelay >= 0) panelMsg["syncDelay"] = syncDelay;
+                        SendPanelMessage(panelMsg);
+                    }
+                    // broadcast.htmlからのsyncDelay通知 → パネルに転送
+                    if (msg.TryGetProperty("_syncDelay", out var syncDelayEl))
+                    {
+                        var delay = (int)syncDelayEl.GetDouble();
+                        SendPanelMessage(new { type = "volume", syncDelay = delay });
+                        Log.Debug("[Sync] Delay from broadcast.html: {Delay}ms", delay);
                     }
                     // broadcast.htmlからの音量レベル → パネルに転送
                     if (msg.TryGetProperty("_audioLevel", out var audioLevel))

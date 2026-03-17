@@ -22,8 +22,7 @@
 - [x] ボリューム調整: waveOutSetVolumeがアプリセッション共有でBGM⇔TTS干渉→WaveChannel32でサンプルレベル音量制御に移行。パネル/Web UI/起動時取得の全経路でC#音声パイプラインに即時反映。TTS/BGM再生中のリアルタイム音量変更対応。FFmpegミキサーもSetTtsVolume/SetBgmVolumeでリアルタイム反映
 - [x] 音量メーター: MeteringWaveProviderでBGM/TTS再生パイプラインのRMS/peakをリアルタイム測定。配信中はFfmpegProcess.MeasureLevelで実測。50msタイマーでパネルに送信。JS側ピークホールド1.5秒
 
-### 未検証
-- [ ] リップシンク同期（配信時のTTS直接パイプとアニメーションの同期）
+- [x] リップシンク同期: 配信時は字幕・口パクをlipsyncDelay(ms)遅延させて音声と同期。非配信時はリアルタイム(0ms)。遅延値はcontrol-panel/Web UIから設定可能、DB永続化。broadcast.htmlが設定の真のソース（_volumeSync経由でパネルに転送）
 
 ## Go Live / Stop ボタンの即時フィードバック
 

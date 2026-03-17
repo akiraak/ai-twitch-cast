@@ -761,9 +761,15 @@ let todoSettings = {};
 // === 音量管理（C#アプリに送信用、ブラウザでは音声再生しない） ===
 let volumes = { master: 0.8, tts: 0.8, bgm: 1.0 };
 
+// === リップシンク同期（配信時は遅延、非配信時はリアルタイム） ===
+let _isStreaming = false;
+let _lipsyncDelay = 500; // 配信時の遅延(ms)、非配信時は0
+let _syncTimer = null;   // 遅延タイマー（キャンセル用）
+let _pendingSubtitle = null; // 遅延表示待ちの字幕データ
+
 function applyVolume() {
-  // WebView2パネルに音量同期通知
-  try { window.chrome?.webview?.postMessage({_volumeSync: volumes}); } catch(e){}
+  // WebView2パネルに音量+syncDelay同期通知
+  try { window.chrome?.webview?.postMessage({_volumeSync: {...volumes, lipsyncDelay: _lipsyncDelay}}); } catch(e){}
 }
 
 
@@ -866,6 +872,13 @@ function applySettings(s) {
     }
     if (s.topic.bgOpacity != null) setBgOpacity(topicPanelEl, s.topic.bgOpacity);
     if (s.topic.zIndex != null) topicPanelEl.style.zIndex = s.topic.zIndex;
+  }
+  if (s.sync) {
+    if (s.sync.lipsyncDelay != null) {
+      _lipsyncDelay = s.sync.lipsyncDelay;
+      // C#パネルに同期通知
+      try { window.chrome?.webview?.postMessage({_syncDelay: _lipsyncDelay}); } catch(e){}
+    }
   }
 }
 
@@ -981,7 +994,9 @@ function connectWS() {
     switch (data.type) {
       // オーバーレイイベント
       case 'comment':
-        showSubtitle(data);
+        _pendingSubtitle = data;
+        if (!_isStreaming) { showSubtitle(data); }
+        // 配信時は lipsync と同時に遅延表示（下の lipsync case で処理）
         break;
       case 'speaking_end':
         fadeSubtitle();
@@ -991,6 +1006,12 @@ function connectWS() {
         break;
       case 'settings_update':
         if (!_saving) applySettings(data);
+        break;
+
+      // 配信状態（リップシンク遅延切替用）
+      case 'stream_status':
+        _isStreaming = !!data.streaming;
+        console.log('[Sync] streaming:', _isStreaming);
         break;
 
       // 音声はすべてC#アプリが再生（play_audio / bgm_play / bgm_stop はブラウザ不使用）
@@ -1012,9 +1033,18 @@ function connectWS() {
         break;
       case 'lipsync':
         if (window.avatarVRM && data.frames) {
-          console.log(`[Audio] lipsync: ${data.frames.length} frames`);
+          const delay = _isStreaming ? _lipsyncDelay : 0;
           window.avatarVRM.setLipsync(data.frames);
-          window.avatarVRM.startLipsync();
+          clearTimeout(_syncTimer);
+          if (delay > 0) {
+            _syncTimer = setTimeout(() => {
+              if (_pendingSubtitle) { showSubtitle(_pendingSubtitle); _pendingSubtitle = null; }
+              window.avatarVRM.startLipsync();
+            }, delay);
+          } else {
+            window.avatarVRM.startLipsync();
+          }
+          console.log(`[Sync] lipsync: ${data.frames.length} frames, delay=${delay}ms`);
         }
         break;
       case 'lipsync_stop':
@@ -1617,6 +1647,14 @@ async function init() {
   } catch (e) {
     console.log('音量設定読み込みスキップ:', e.message);
   }
+
+  // 配信状態を取得（リップシンク遅延切替用）
+  try {
+    const res = await fetch('/api/broadcast/status');
+    const st = await res.json();
+    _isStreaming = !!st.streaming;
+    console.log('[Sync] init streaming:', _isStreaming);
+  } catch (e) {}
 
   // アバターストリーム復元
   try {
