@@ -396,6 +396,8 @@ public class MainForm : Form
             InjectAddCaptureLayer(id, title);
             SendPanelCaptures();
             PanelLog($"キャプチャ開始: {title}", "success");
+            // Pythonサーバーにキャプチャ追加を通知
+            _ = _httpServer?.BroadcastWsEvent(new { type = "capture_changed", action = "add", id, name = title });
         }
         catch (Exception ex)
         {
@@ -413,6 +415,7 @@ public class MainForm : Form
             InjectRemoveCaptureLayer(id);
             SendPanelCaptures();
             PanelLog($"キャプチャ停止: {id}", "info");
+            _ = _httpServer?.BroadcastWsEvent(new { type = "capture_changed", action = "remove", id });
         }
     }
 

@@ -54,6 +54,14 @@ app.mount("/bgm", StaticFiles(directory=str(BGM_DIR)), name="bgm")
 app.mount("/resources", StaticFiles(directory=str(RESOURCES_DIR)), name="resources")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
 # ルーターを登録
 app.include_router(stream_control_router)
 app.include_router(capture_router)

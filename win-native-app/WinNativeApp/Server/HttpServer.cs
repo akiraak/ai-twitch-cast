@@ -231,10 +231,12 @@ public class HttpServer : IDisposable
         try
         {
             var id = OnStartCapture(sourceId, fps, quality);
+            var name = OnListCaptures?.Invoke().FirstOrDefault(c => c.Id == id)?.Name ?? "";
             await WriteJson(res, new
             {
                 ok = true,
                 id,
+                name,
                 stream_url = $"http://localhost:{_port}/snapshot/{id}"
             });
         }
@@ -509,10 +511,12 @@ public class HttpServer : IDisposable
             return new { ok = false, error = "Capture not available" };
 
         var id = OnStartCapture(sourceId, fps, quality);
+        var name = OnListCaptures?.Invoke().FirstOrDefault(c => c.Id == id)?.Name ?? "";
         return new
         {
             ok = true,
             id,
+            name,
             stream_url = $"http://localhost:{_port}/snapshot/{id}"
         };
     }
@@ -662,6 +666,38 @@ public class HttpServer : IDisposable
         {
             if (ws.State == WebSocketState.Open)
                 await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+        }
+        finally
+        {
+            _wsSendLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// 全WebSocketクライアントにPush通知を送信する（リクエストIDなし）
+    /// </summary>
+    public async Task BroadcastWsEvent(object eventData)
+    {
+        List<WebSocket> clients;
+        lock (_wsLock)
+        {
+            clients = _controlClients.Where(ws => ws.State == WebSocketState.Open).ToList();
+        }
+        if (clients.Count == 0) return;
+
+        var json = JsonSerializer.Serialize(eventData);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        await _wsSendLock.WaitAsync();
+        try
+        {
+            foreach (var ws in clients)
+            {
+                try
+                {
+                    await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+                catch { }
+            }
         }
         finally
         {

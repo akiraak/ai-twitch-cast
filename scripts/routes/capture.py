@@ -75,24 +75,25 @@ class CaptureStartRequest(BaseModel):
 
 @router.get("/api/capture/saved")
 async def capture_saved_list():
-    """保存済みキャプチャ設定一覧"""
-    return _load_saved_configs()
+    """保存済みキャプチャウィンドウ一覧"""
+    rows = db.get_capture_windows()
+    return [_row_to_config(r) for r in rows]
 
 
 @router.delete("/api/capture/saved")
 async def capture_saved_delete(request: Request):
-    """保存済みキャプチャ設定を削除"""
+    """保存済みキャプチャウィンドウを削除"""
     body = await request.json()
     window_name = body.get("window_name", "")
     if window_name:
-        _remove_saved_config(window_name)
+        db.delete_capture_window(window_name)
     return {"ok": True}
 
 
 @router.post("/api/capture/restore")
 async def capture_restore():
     """保存済み設定からウィンドウ名マッチングでキャプチャを復元"""
-    saved = _load_saved_configs()
+    saved = db.get_capture_windows()
     if not saved:
         return {"ok": True, "restored": 0, "message": "保存済み設定なし"}
 
@@ -109,8 +110,8 @@ async def capture_restore():
         active_names = set()
 
     restored = 0
-    for config in saved:
-        wname = config["window_name"]
+    for row in saved:
+        wname = row["window_name"]
         if wname in active_names:
             continue
 
@@ -130,15 +131,15 @@ async def capture_restore():
             continue
 
         try:
-            data = await proxy_request("POST", "/capture", {"sourceId": match["sourceId"]})
+            data = await proxy_request("POST", "/capture", {"sourceId": match.get("sourceId") or match["id"]})
             if data.get("ok"):
                 cid = data["id"]
-                layout = config.get("layout", {"x": 5, "y": 10, "width": 40, "height": 50, "zIndex": 10, "visible": True})
-                label = config.get("label", wname)
+                layout = _row_to_layout(row)
+                label = row.get("label", wname)
                 _save_capture_layout(cid, layout, label, window_name=match["name"])
                 # 名前が変わっていたら保存済み設定も更新
                 if match["name"] != wname:
-                    _upsert_saved_config(match["name"], label, layout)
+                    db.upsert_capture_window(match["name"], label, layout)
                 await state.broadcast_to_broadcast({
                     "type": "capture_add",
                     "id": cid,
@@ -249,20 +250,29 @@ async def capture_start(body: CaptureStartRequest):
 
     cid = data["id"]
     window_name = data.get("name", "")
+    # C#旧バージョン対応: nameがなければcaptures一覧から取得
+    if not window_name:
+        try:
+            captures = await proxy_request("GET", "/captures")
+            for c in captures:
+                if c.get("id") == cid:
+                    window_name = c.get("name", "")
+                    break
+        except Exception:
+            pass
     stream_url = f"{capture_base_url()}/stream/{cid}"
 
     # 保存済み設定があればレイアウトを復元、なければデフォルト
     label = body.label or window_name
     layout = {"x": 5, "y": 10, "width": 40, "height": 50, "zIndex": 10, "visible": True}
-    for c in _load_saved_configs():
-        if c["window_name"] == window_name:
-            layout = c.get("layout", layout)
-            label = c.get("label", label)
-            break
+    saved_row = db.get_capture_window_by_name(window_name) if window_name else None
+    if saved_row:
+        layout = _row_to_layout(saved_row)
+        label = saved_row.get("label", label)
 
     # DBにレイアウト保存（アクティブ + 永続）
     _save_capture_layout(cid, layout, label, window_name=window_name)
-    _upsert_saved_config(window_name, label, layout)
+    db.upsert_capture_window(window_name, label, layout)
 
     # broadcast.htmlに通知
     await state.broadcast_to_broadcast(
@@ -309,6 +319,7 @@ async def capture_sources():
     for c in captures:
         cid = c["id"]
         info = saved.get(cid, {})
+        window_name = c.get("name", "")
         layout = info.get(
             "layout",
             {
@@ -320,10 +331,12 @@ async def capture_sources():
                 "visible": True,
             },
         )
+        label = info.get("label", window_name or cid)
+
         result.append(
             {
                 **c,
-                "label": info.get("label", c.get("name", cid)),
+                "label": label,
                 "stream_url": f"{capture_base_url()}/stream/{cid}",
                 "layout": layout,
             }
@@ -398,14 +411,9 @@ def _update_capture_layout(capture_id, layout_update):
             window_name = s.get("window_name", "")
             _save_capture_sources(sources)
             break
-    # 保存済み設定のレイアウトも同期更新
+    # 保存済みテーブルも同期更新
     if window_name:
-        configs = _load_saved_configs()
-        for c in configs:
-            if c["window_name"] == window_name:
-                c.setdefault("layout", {}).update(layout_update)
-                _save_saved_configs(configs)
-                break
+        db.update_capture_window_layout(window_name, layout_update)
 
 
 def _remove_capture_layout(capture_id):
@@ -415,43 +423,29 @@ def _remove_capture_layout(capture_id):
 
 
 # =====================================================
-# DB管理（保存済みキャプチャ設定 - 永続化）
+# ヘルパー（capture_windowsテーブル → API形式変換）
 # =====================================================
 
 
-def _load_saved_configs():
-    raw = db.get_setting("capture.saved_configs")
-    if raw:
-        try:
-            return json.loads(raw)
-        except Exception:
-            pass
-    return []
+def _row_to_layout(row):
+    """capture_windowsテーブルの行からlayout dictを生成"""
+    return {
+        "x": row["x"],
+        "y": row["y"],
+        "width": row["width"],
+        "height": row["height"],
+        "zIndex": row["z_index"],
+        "visible": bool(row["visible"]),
+    }
 
 
-def _save_saved_configs(configs):
-    db.set_setting("capture.saved_configs", json.dumps(configs, ensure_ascii=False))
-
-
-def _upsert_saved_config(window_name, label, layout):
-    """window_nameで保存済み設定を追加/更新"""
-    if not window_name:
-        return
-    configs = _load_saved_configs()
-    for c in configs:
-        if c["window_name"] == window_name:
-            c["label"] = label
-            c["layout"] = layout
-            _save_saved_configs(configs)
-            return
-    configs.append({"window_name": window_name, "label": label, "layout": layout})
-    _save_saved_configs(configs)
-
-
-def _remove_saved_config(window_name):
-    configs = _load_saved_configs()
-    configs = [c for c in configs if c["window_name"] != window_name]
-    _save_saved_configs(configs)
+def _row_to_config(row):
+    """capture_windowsテーブルの行からAPI応答形式に変換"""
+    return {
+        "window_name": row["window_name"],
+        "label": row["label"],
+        "layout": _row_to_layout(row),
+    }
 
 
 # =====================================================

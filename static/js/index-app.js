@@ -16,7 +16,7 @@ function switchTab(name, el) {
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
   if (name === 'files') loadFilesList();
-  if (name === 'debug') { loadScreenshots(); captureRefreshSaved(); }
+  if (name === 'debug') { loadScreenshots(); }
   if (name === 'todo') loadTodoList();
 }
 
@@ -152,80 +152,80 @@ async function refreshStatus() {
 }
 
 // --- ウィンドウキャプチャ ---
-async function captureRefreshStatus() {
-  try {
-    const data = await (await fetch('/api/capture/status')).json();
-    const dot = document.getElementById('capture-dot');
-    const status = document.getElementById('capture-server-status');
-    if (data.running) {
-      dot.className = 'status-dot on';
-      status.textContent = `稼働中 (キャプチャ: ${data.captures || 0})`;
-    } else {
-      dot.className = 'status-dot off';
-      status.textContent = '停止';
-    }
-  } catch (e) {}
-}
-
-async function captureRefreshWindows() {
-  const sel = document.getElementById('capture-window-list');
-  sel.innerHTML = '<option value="">-- ウィンドウ選択 --</option>';
-  try {
-    const data = await (await fetch('/api/capture/windows')).json();
-    for (const w of data) {
-      const opt = document.createElement('option');
-      opt.value = w.sourceId;
-      opt.textContent = w.name.substring(0, 60);
-      opt.dataset.name = w.name;
-      sel.appendChild(opt);
-    }
-  } catch (e) {}
-}
-
-async function captureStartWindow() {
-  const sel = document.getElementById('capture-window-list');
-  const sourceId = sel.value;
-  if (!sourceId) return;
-  const label = sel.selectedOptions[0]?.dataset.name?.substring(0, 30) || '';
-  await api('POST', '/api/capture/start', { sourceId, label });
-  captureRefreshSources();
-  captureRefreshStatus();
-  captureRefreshSaved();
-}
-
 async function captureRefreshSources() {
   try {
-    const data = await (await fetch('/api/capture/sources')).json();
-    const el = document.getElementById('capture-list');
-    const layoutEl = document.getElementById('capture-layout-list');
-    if (!data.length) {
-      el.innerHTML = '<span style="color:#9a88b5;">キャプチャなし</span>';
-      layoutEl.innerHTML = '';
-      return;
-    }
-    el.innerHTML = data.map(c =>
-      `<div style="display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px solid #e8e0f0;">
-        <span style="flex:1;">${c.label || c.name || c.id}</span>
-        <button class="danger" style="padding:2px 10px; font-size:0.75rem;" onclick="captureRemove('${c.id}')">停止</button>
-      </div>`
-    ).join('');
-    // キャプチャレイアウトコントロール生成
-    layoutEl.innerHTML = data.map(c => {
-      const l = c.layout || {};
-      const id = c.id;
-      const label = escHtml(c.label || c.name || c.id);
-      return `<fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px; margin-top:12px;">
-        <legend style="font-size:0.85rem; color:#7b1fa2; font-weight:600; padding:0 6px;">キャプチャ: ${label}</legend>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 16px;">
-          <div class="layout-row"><span class="layout-label">X位置 (%)</span><input type="range" class="vol-slider" min="0" max="100" step="0.5" value="${l.x ?? 5}" oninput="onCaptureLayout('${id}','x',this)"><input type="number" class="layout-num" min="0" max="100" step="0.5" value="${l.x ?? 5}" data-cap="${id}" data-prop="x" oninput="onCaptureLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">Y位置 (%)</span><input type="range" class="vol-slider" min="0" max="100" step="0.5" value="${l.y ?? 10}" oninput="onCaptureLayout('${id}','y',this)"><input type="number" class="layout-num" min="0" max="100" step="0.5" value="${l.y ?? 10}" data-cap="${id}" data-prop="y" oninput="onCaptureLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">幅 (%)</span><input type="range" class="vol-slider" min="5" max="100" step="0.5" value="${l.width ?? 40}" oninput="onCaptureLayout('${id}','width',this)"><input type="number" class="layout-num" min="5" max="100" step="0.5" value="${l.width ?? 40}" data-cap="${id}" data-prop="width" oninput="onCaptureLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">高さ (%)</span><input type="range" class="vol-slider" min="5" max="100" step="0.5" value="${l.height ?? 50}" oninput="onCaptureLayout('${id}','height',this)"><input type="number" class="layout-num" min="5" max="100" step="0.5" value="${l.height ?? 50}" data-cap="${id}" data-prop="height" oninput="onCaptureLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">Z順序</span><input type="range" class="vol-slider" min="0" max="100" step="1" value="${l.zIndex ?? 10}" oninput="onCaptureLayout('${id}','zIndex',this)"><input type="number" class="layout-num" min="0" max="100" step="1" value="${l.zIndex ?? 10}" data-cap="${id}" data-prop="zIndex" oninput="onCaptureLayoutNum(this)"></div>
-        </div>
-      </fieldset>`;
-    }).join('');
+    const saved = await (await fetch('/api/capture/saved')).json();
+    _renderCaptureList(saved, []);
+    const active = await (await fetch('/api/capture/sources')).json().catch(() => []);
+    _renderCaptureList(saved, active);
   } catch (e) {}
+}
+
+function _renderCaptureList(saved, active) {
+  const el = document.getElementById('capture-list');
+  const layoutEl = document.getElementById('capture-layout-list');
+  if (!saved.length) {
+    el.innerHTML = '<span style="color:#9a88b5;">保存済みウィンドウなし</span>';
+    layoutEl.innerHTML = '';
+    return;
+  }
+  const activeByName = {};
+  for (const a of active) {
+    if (a.name) activeByName[a.name] = a;
+  }
+  el.innerHTML = saved.map(s => {
+    const wname = s.window_name || '';
+    const a = activeByName[wname];
+    const isActive = !!a;
+    const l = (isActive ? a.layout : s.layout) || {};
+    const vis = l.visible !== false;
+    const label = escHtml(s.label || wname);
+    const wnameHtml = escHtml(wname);
+    const layoutInfo = `X:${Math.round(l.x ?? 0)} Y:${Math.round(l.y ?? 0)} W:${Math.round(l.width ?? 0)} H:${Math.round(l.height ?? 0)}`;
+    const statusBadge = isActive
+      ? '<span style="font-size:0.7rem; color:#2e7d32; font-weight:600;">配信中</span>'
+      : '<span style="font-size:0.7rem; color:#9a88b5;">停止</span>';
+    let buttons = '';
+    if (isActive) {
+      buttons += `<button class="cap-btn-vis${vis ? '' : ' hidden'}" onclick="captureToggleVis('${a.id}',${vis})">${vis ? '表示中' : '非表示'}</button>`;
+    }
+    buttons += `<button class="danger" style="padding:2px 8px; font-size:0.7rem;" onclick="captureSavedDeleteConfirm('${wnameHtml}')">削除</button>`;
+    return `<div class="cap-item">
+      <div class="cap-item-header">
+        <span class="cap-item-label">${label}</span>
+        ${statusBadge}
+        ${buttons}
+      </div>
+      <div class="cap-item-meta"><span title="${wnameHtml}">${wnameHtml}</span><span>${layoutInfo}</span></div>
+    </div>`;
+  }).join('');
+  const activeItems = saved.filter(s => activeByName[s.window_name]).map(s => activeByName[s.window_name]);
+  layoutEl.innerHTML = activeItems.map(c => {
+    const l = c.layout || {};
+    const id = c.id;
+    const label = escHtml(c.label || c.name || c.id);
+    return `<details class="cap-layout-details">
+      <summary>キャプチャ: ${label}</summary>
+      <div class="layout-inner">
+        <div class="layout-row"><span class="layout-label">X位置 (%)</span><input type="range" class="vol-slider" min="0" max="100" step="0.5" value="${l.x ?? 5}" oninput="onCaptureLayout('${id}','x',this)"><input type="number" class="layout-num" min="0" max="100" step="0.5" value="${l.x ?? 5}" data-cap="${id}" data-prop="x" oninput="onCaptureLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">Y位置 (%)</span><input type="range" class="vol-slider" min="0" max="100" step="0.5" value="${l.y ?? 10}" oninput="onCaptureLayout('${id}','y',this)"><input type="number" class="layout-num" min="0" max="100" step="0.5" value="${l.y ?? 10}" data-cap="${id}" data-prop="y" oninput="onCaptureLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">幅 (%)</span><input type="range" class="vol-slider" min="5" max="100" step="0.5" value="${l.width ?? 40}" oninput="onCaptureLayout('${id}','width',this)"><input type="number" class="layout-num" min="5" max="100" step="0.5" value="${l.width ?? 40}" data-cap="${id}" data-prop="width" oninput="onCaptureLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">高さ (%)</span><input type="range" class="vol-slider" min="5" max="100" step="0.5" value="${l.height ?? 50}" oninput="onCaptureLayout('${id}','height',this)"><input type="number" class="layout-num" min="5" max="100" step="0.5" value="${l.height ?? 50}" data-cap="${id}" data-prop="height" oninput="onCaptureLayoutNum(this)"></div>
+        <div class="layout-row"><span class="layout-label">Z順序</span><input type="range" class="vol-slider" min="0" max="100" step="1" value="${l.zIndex ?? 10}" oninput="onCaptureLayout('${id}','zIndex',this)"><input type="number" class="layout-num" min="0" max="100" step="1" value="${l.zIndex ?? 10}" data-cap="${id}" data-prop="zIndex" oninput="onCaptureLayoutNum(this)"></div>
+      </div>
+    </details>`;
+  }).join('');
+}
+
+async function captureToggleVis(id, currentlyVisible) {
+  await api('POST', `/api/capture/${id}/layout`, { visible: !currentlyVisible });
+  captureRefreshSources();
+}
+
+async function captureSavedDeleteConfirm(windowName) {
+  if (!await showConfirm(`「${windowName}」を削除しますか？`, { title: '削除', okLabel: '削除', danger: true })) return;
+  await fetch('/api/capture/saved', { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ window_name: windowName }) });
+  captureRefreshSources();
 }
 
 let _capLayoutTimers = {};
@@ -250,65 +250,11 @@ function onCaptureLayoutNum(input) {
   }, 200);
 }
 
-async function capturePreviewOpen() {
-  const data = await api('POST', '/api/capture/preview');
-  if (data && !data.ok) {
-    log(data.detail || 'プレビューを開けません。サーバーが起動しているか確認してください。');
-  }
-}
-
-async function capturePreviewClose() {
-  await api('POST', '/api/capture/preview/close');
-}
-
-// --- 保存済みキャプチャ設定 ---
-async function captureRefreshSaved() {
-  try {
-    const data = await (await fetch('/api/capture/saved')).json();
-    const el = document.getElementById('capture-saved-list');
-    if (!data.length) {
-      el.innerHTML = '<span style="color:#9a88b5;">保存済み設定なし</span>';
-      return;
-    }
-    el.innerHTML = data.map(c => {
-      const l = c.layout || {};
-      const layoutInfo = `X:${l.x?.toFixed?.(0) ?? '-'} Y:${l.y?.toFixed?.(0) ?? '-'} W:${l.width?.toFixed?.(0) ?? '-'} H:${l.height?.toFixed?.(0) ?? '-'}`;
-      return `<div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #e8e0f0;">
-        <span style="flex:1; font-size:0.85rem; font-weight:500;">${escHtml(c.label || c.window_name)}</span>
-        <span style="font-size:0.7rem; color:#9a88b5; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHtml(c.window_name)}">${escHtml(c.window_name)}</span>
-        <span style="font-size:0.7rem; color:#b0a0c8;">${layoutInfo}</span>
-        <button class="danger" style="padding:2px 10px; font-size:0.75rem;" onclick="captureSavedDelete('${escHtml(c.window_name)}')">削除</button>
-      </div>`;
-    }).join('');
-  } catch (e) {}
-}
-
-async function captureRestoreAll() {
-  const data = await api('POST', '/api/capture/restore');
-  if (data) {
-    if (data.restored > 0) {
-      showToast(`${data.restored}件のキャプチャを復元しました`);
-    } else if (data.error) {
-      showToast(data.error, 'error');
-    } else {
-      showToast('復元対象なし（一致するウィンドウが見つかりません）', 'info');
-    }
-    captureRefreshSources();
-    captureRefreshStatus();
-  }
-}
-
-async function captureSavedDelete(windowName) {
-  if (!await showConfirm(`「${windowName}」の保存済み設定を削除しますか？`, { title: '削除', okLabel: '削除', danger: true })) return;
-  await fetch('/api/capture/saved', { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ window_name: windowName }) });
-  captureRefreshSaved();
-}
 
 
 async function captureRemove(id) {
   await fetch(`/api/capture/${id}`, { method: 'DELETE' });
   captureRefreshSources();
-  captureRefreshStatus();
 }
 
 // --- キャラクター設定 ---
@@ -1214,7 +1160,6 @@ refreshStatus();
 setInterval(refreshStatus, 5000);
 checkServerUpdate();
 setInterval(checkServerUpdate, 3000);
-captureRefreshStatus();
 captureRefreshSources();
-setInterval(captureRefreshStatus, 10000);
+setInterval(captureRefreshSources, 10000);
 

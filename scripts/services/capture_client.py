@@ -69,8 +69,9 @@ async def ensure_capture_ws():
     _ws_reader_task = asyncio.create_task(_read_capture_ws())
     logger.info("配信アプリ制御WebSocket接続: %s", url)
 
-    # C#アプリ接続時にBGM状態を復元
+    # C#アプリ接続時に状態を復元
     asyncio.create_task(restore_bgm_to_app())
+    asyncio.create_task(restore_captures_to_app())
 
     return _capture_ws
 
@@ -91,12 +92,45 @@ async def restore_bgm_to_app():
         logger.warning("BGM復元失敗: %s", e)
 
 
+async def restore_captures_to_app():
+    """C#アプリ接続時に保存済みキャプチャを復元する"""
+    await asyncio.sleep(2)  # WebSocket接続安定待ち
+    try:
+        from scripts.routes.capture import capture_restore
+        result = await capture_restore()
+        restored = result.get("restored", 0)
+        if restored:
+            logger.info("キャプチャ復元OK: %d件", restored)
+        else:
+            logger.info("キャプチャ復元: 対象なし (%s)", result.get("message", ""))
+    except Exception as e:
+        logger.warning("キャプチャ復元失敗: %s", e)
+
+
+async def _handle_capture_changed(data):
+    """C#アプリからのキャプチャ変更通知を処理する"""
+    from src import db
+    action = data.get("action")
+    name = data.get("name", "")
+    if action == "add" and name:
+        if not db.get_capture_window_by_name(name):
+            layout = {"x": 5, "y": 10, "width": 40, "height": 50, "zIndex": 10, "visible": True}
+            db.upsert_capture_window(name, name, layout)
+            logger.info("キャプチャ保存: %s", name)
+    elif action == "remove":
+        logger.info("キャプチャ停止通知: id=%s", data.get("id"))
+
+
 async def _read_capture_ws():
     """WebSocketからのレスポンスを読み取り、pendingリクエストを解決する"""
     global _capture_ws
     try:
         async for msg in _capture_ws:
             data = json.loads(msg)
+            # Push通知（requestIdなし）の処理
+            if data.get("type") == "capture_changed":
+                asyncio.create_task(_handle_capture_changed(data))
+                continue
             rid = data.get("requestId")
             if rid and rid in _pending_requests:
                 _pending_requests[rid].set_result(data)

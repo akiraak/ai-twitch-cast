@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>AI Twitch Cast</title>
-<link rel="stylesheet" href="/static/css/index.css">
-<script src="/static/js/lib/api-client.js"></script>
+<link rel="stylesheet" href="/static/css/index.css?v=2">
+<script src="/static/js/lib/api-client.js?v=2"></script>
 </head>
 <body>
 
@@ -41,27 +42,7 @@
 
   <!-- ===== 配信画面 ===== -->
   <div class="tab-content active" id="tab-layout">
-    <div class="grid">
-      <div class="card" style="grid-column: 1 / -1;">
-        <h2><span class="status-dot off" id="capture-dot"></span> ウィンドウキャプチャ</h2>
-        <div class="status" id="capture-server-status"></div>
-        <div style="margin-top:12px;">
-          <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-            <select id="capture-window-list" style="flex:1; padding:6px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.85rem;">
-              <option value="">-- ウィンドウ選択 --</option>
-            </select>
-            <button class="secondary" onclick="captureRefreshWindows()">更新</button>
-            <button onclick="captureStartWindow()">キャプチャ</button>
-          </div>
-          <div id="capture-list" style="font-size:0.85rem;"></div>
-        </div>
-        <div class="btn-row" style="margin-top:12px;">
-          <button onclick="capturePreviewOpen()">プレビュー / 配信画面編集</button>
-          <button class="secondary" onclick="capturePreviewClose()">プレビュー閉じる</button>
-        </div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:16px;">
+    <div class="card">
       <h2>配信画面</h2>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
         <fieldset style="border:1px solid #d0c0e8; border-radius:6px; padding:12px;">
@@ -107,6 +88,10 @@
       </div>
       <div id="capture-layout-list"></div>
       <div class="status" id="layout-status" style="margin-top:8px; font-size:0.75rem;">変更は自動保存されます</div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <h2>ウィンドウキャプチャ</h2>
+      <div id="capture-list" style="margin-top:12px; font-size:0.85rem;"></div>
     </div>
   </div>
 
@@ -378,13 +363,6 @@ topics      1──N  topic_scripts (topic_id)</div>
   <!-- ===== Debug ===== -->
   <div class="tab-content" id="tab-debug">
     <div class="grid">
-      <div class="card" style="grid-column: 1 / -1;">
-        <h2>保存済みキャプチャ</h2>
-        <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:8px;">次回起動時に自動復元されます</p>
-        <div id="capture-saved-list" style="font-size:0.85rem;">
-          <span style="color:#9a88b5;">読み込み中...</span>
-        </div>
-      </div>
       <div class="card">
         <h2>スクリーンショット</h2>
         <div class="btn-row">
@@ -401,6 +379,6 @@ topics      1──N  topic_scripts (topic_id)</div>
 
 </div>
 
-<script src="/static/js/index-app.js"></script>
+<script src="/static/js/index-app.js?v=2"></script>
 </body>
 </html>

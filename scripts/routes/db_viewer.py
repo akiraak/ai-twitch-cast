@@ -13,37 +13,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# 閲覧可能テーブルとカラム定義
-TABLES = {
+# カスタムクエリ（JOINなど特別な表示が必要なテーブル）
+CUSTOM_QUERIES = {
     "comments": {
         "query": """
             SELECT c.id, u.name as user, c.message, c.response, c.emotion, c.created_at
             FROM comments c JOIN users u ON c.user_id = u.id
             ORDER BY c.id DESC LIMIT ? OFFSET ?
         """,
-        "count": "SELECT COUNT(*) as cnt FROM comments",
-    },
-    "users": {
-        "query": "SELECT id, name, note, comment_count, first_seen, last_seen FROM users ORDER BY comment_count DESC LIMIT ? OFFSET ?",
-        "count": "SELECT COUNT(*) as cnt FROM users",
-    },
-    "episodes": {
-        "query": "SELECT id, show_id, character_id, title, started_at, ended_at FROM episodes ORDER BY id DESC LIMIT ? OFFSET ?",
-        "count": "SELECT COUNT(*) as cnt FROM episodes",
-    },
-    "topics": {
-        "query": "SELECT id, title, description, status, created_at FROM topics ORDER BY id DESC LIMIT ? OFFSET ?",
-        "count": "SELECT COUNT(*) as cnt FROM topics",
     },
     "topic_scripts": {
-        "query": "SELECT ts.id, t.title as topic, ts.content, ts.emotion, ts.spoken_at FROM topic_scripts ts JOIN topics t ON ts.topic_id = t.id ORDER BY ts.id DESC LIMIT ? OFFSET ?",
-        "count": "SELECT COUNT(*) as cnt FROM topic_scripts",
-    },
-    "bgm_tracks": {
-        "query": "SELECT id, filename, volume FROM bgm_tracks ORDER BY id LIMIT ? OFFSET ?",
-        "count": "SELECT COUNT(*) as cnt FROM bgm_tracks",
+        "query": """
+            SELECT ts.id, t.title as topic, ts.content, ts.emotion, ts.spoken_at
+            FROM topic_scripts ts JOIN topics t ON ts.topic_id = t.id
+            ORDER BY ts.id DESC LIMIT ? OFFSET ?
+        """,
     },
 }
+
+
+def _get_all_tables(conn):
+    """DBから全テーブル名を取得（sqlite内部テーブルを除外）"""
+    rows = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ).fetchall()
+    return [r["name"] for r in rows]
 
 
 @router.get("/api/db/tables")
@@ -51,8 +45,8 @@ async def list_tables():
     """テーブル一覧を返す"""
     conn = db.get_connection()
     result = []
-    for name in TABLES:
-        row = conn.execute(TABLES[name]["count"]).fetchone()
+    for name in _get_all_tables(conn):
+        row = conn.execute(f"SELECT COUNT(*) as cnt FROM [{name}]").fetchone()
         result.append({"name": name, "count": row["cnt"]})
     return {"tables": result}
 
@@ -109,11 +103,14 @@ async def update_notes():
 @router.get("/api/db/{table}")
 async def get_table(table: str, limit: int = 50, offset: int = 0):
     """テーブルデータを返す"""
-    if table not in TABLES:
-        return {"error": f"テーブル '{table}' は閲覧できません"}
     conn = db.get_connection()
-    count_row = conn.execute(TABLES[table]["count"]).fetchone()
-    rows = conn.execute(TABLES[table]["query"], (limit, offset)).fetchall()
+    if table not in _get_all_tables(conn):
+        return {"error": f"テーブル '{table}' は閲覧できません"}
+    count_row = conn.execute(f"SELECT COUNT(*) as cnt FROM [{table}]").fetchone()
+    if table in CUSTOM_QUERIES:
+        rows = conn.execute(CUSTOM_QUERIES[table]["query"], (limit, offset)).fetchall()
+    else:
+        rows = conn.execute(f"SELECT * FROM [{table}] LIMIT ? OFFSET ?", (limit, offset)).fetchall()
     return {
         "table": table,
         "total": count_row["cnt"],

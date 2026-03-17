@@ -114,6 +114,18 @@ def _create_tables(conn):
             spoken_at TEXT,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS capture_windows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            window_name TEXT UNIQUE NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            x REAL NOT NULL DEFAULT 5,
+            y REAL NOT NULL DEFAULT 10,
+            width REAL NOT NULL DEFAULT 40,
+            height REAL NOT NULL DEFAULT 50,
+            z_index INTEGER NOT NULL DEFAULT 10,
+            visible INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        );
     """)
     conn.commit()
     # Migration: add updated_at to characters
@@ -535,3 +547,77 @@ def get_settings_by_prefix(prefix):
         "SELECT key, value FROM settings WHERE key LIKE ?", (prefix + "%",)
     ).fetchall()
     return {row["key"]: row["value"] for row in rows}
+
+
+# --- capture_windows ---
+
+def get_capture_windows():
+    """保存済みキャプチャウィンドウ一覧を返す"""
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM capture_windows ORDER BY id").fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_capture_window(window_name, label="", layout=None):
+    """キャプチャウィンドウを追加/更新（window_nameで一意）"""
+    if not window_name:
+        return
+    conn = get_connection()
+    layout = layout or {}
+    conn.execute(
+        """INSERT INTO capture_windows (window_name, label, x, y, width, height, z_index, visible, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(window_name) DO UPDATE SET
+             label = excluded.label,
+             x = excluded.x, y = excluded.y,
+             width = excluded.width, height = excluded.height,
+             z_index = excluded.z_index, visible = excluded.visible""",
+        (
+            window_name,
+            label or window_name,
+            layout.get("x", 5),
+            layout.get("y", 10),
+            layout.get("width", 40),
+            layout.get("height", 50),
+            layout.get("zIndex", 10),
+            1 if layout.get("visible", True) else 0,
+            _now(),
+        ),
+    )
+    conn.commit()
+
+
+def update_capture_window_layout(window_name, layout_update):
+    """キャプチャウィンドウのレイアウトを部分更新"""
+    if not window_name:
+        return
+    conn = get_connection()
+    col_map = {"x": "x", "y": "y", "width": "width", "height": "height", "zIndex": "z_index", "visible": "visible"}
+    sets = []
+    vals = []
+    for key, val in layout_update.items():
+        col = col_map.get(key)
+        if col:
+            if key == "visible":
+                val = 1 if val else 0
+            sets.append(f"{col} = ?")
+            vals.append(val)
+    if not sets:
+        return
+    vals.append(window_name)
+    conn.execute(f"UPDATE capture_windows SET {', '.join(sets)} WHERE window_name = ?", vals)
+    conn.commit()
+
+
+def delete_capture_window(window_name):
+    """キャプチャウィンドウを削除"""
+    conn = get_connection()
+    conn.execute("DELETE FROM capture_windows WHERE window_name = ?", (window_name,))
+    conn.commit()
+
+
+def get_capture_window_by_name(window_name):
+    """ウィンドウ名でキャプチャウィンドウを取得"""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM capture_windows WHERE window_name = ?", (window_name,)).fetchone()
+    return dict(row) if row else None
