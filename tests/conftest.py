@@ -39,12 +39,21 @@ def test_db(tmp_path, monkeypatch):
 
 @pytest.fixture
 def mock_gemini(monkeypatch):
-    """Gemini APIモッククライアント"""
+    """Gemini APIモッククライアント
+
+    get_clientをfrom importしているモジュールすべてにパッチする。
+    """
     client = MagicMock()
     client.models.generate_content.return_value.text = '{"response": "テスト応答", "emotion": "neutral", "english": "test"}'
 
+    getter = lambda: client
     import src.gemini_client as gc
-    monkeypatch.setattr(gc, "get_client", lambda: client)
+    monkeypatch.setattr(gc, "get_client", getter)
+    # from ... import get_client しているモジュールにもパッチ
+    import src.ai_responder as ar
+    monkeypatch.setattr(ar, "get_client", getter)
+    import src.tts as tts_mod
+    monkeypatch.setattr(tts_mod, "get_client", getter)
     return client
 
 

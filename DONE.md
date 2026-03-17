@@ -9,6 +9,15 @@
 - [x] plans/testing-strategy.md: テスト充実プラン作成
 - [x] テスト数: 39 → 114（+75テスト）
 
+## テスト充実フェーズ2+3 — AI応答・WSL・Git監視・トピック
+
+- [x] test_ai_responder.py拡張: +22テスト（キャラクター管理・generate_response/event/notes/self_noteのGeminiモック）
+- [x] test_wsl_path.py拡張: +10テスト（is_wsl・IP取得・パス変換）
+- [x] test_git_watcher.py: 11テスト（コミット解析・バッチ通知・ライフサイクル）
+- [x] test_topic_talker.py: 15テスト（プロパティ・should_speak・トピック管理・get_next）
+- [x] conftest.py: mock_geminiがfrom import先にもパッチするよう改善
+- [x] テスト数: 114 → 177（+63テスト）
+
 ## 音声アーキテクチャ刷新: C#アプリ直接パイプ（WASAPI廃止）— 作業中
 
 ### 完了
