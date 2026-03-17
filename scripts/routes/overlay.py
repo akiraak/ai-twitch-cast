@@ -108,6 +108,12 @@ async def broadcast_ws(websocket: WebSocket):
                     elif source.startswith("overlay."):
                         db.set_setting(source, volume)
                         logger.debug("設定保存(WS): %s = %s", source, volume)
+                elif msg.get("type") == "save_track_volume":
+                    file = msg.get("file", "")
+                    volume = msg.get("volume", 1.0)
+                    if file:
+                        db.set_bgm_track_volume(file, volume)
+                        logger.debug("曲別音量保存(WS): %s = %.2f", file, volume)
             except (ValueError, KeyError) as e:
                 logger.debug("WSメッセージ処理失敗: %s", e)
     except WebSocketDisconnect:

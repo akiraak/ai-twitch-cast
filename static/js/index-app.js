@@ -506,6 +506,25 @@ async function setTrackVolume(file, pct) {
   await api('POST', '/api/bgm/track-volume', { file, volume: parseInt(pct) / 100 });
 }
 
+// C#プレビューパネルからの曲音量変更をWebUIに反映（定期同期）
+async function syncBgmVolumes() {
+  try {
+    const res = await fetch('/api/bgm/list');
+    const data = await res.json();
+    for (const t of data.tracks) {
+      const row = bgmTracksEl.querySelector(`[data-file="${CSS.escape(t.file)}"]`);
+      if (!row) continue;
+      const slider = row.querySelector('.vol-slider');
+      const label = row.querySelector('.vol-pct');
+      const newVal = Math.round((t.volume ?? 1) * 100);
+      if (slider && slider.value != newVal && !slider.matches(':active')) {
+        slider.value = newVal;
+        if (label) label.textContent = newVal + '%';
+      }
+    }
+  } catch {}
+}
+
 async function bgmPlay(file) {
   const res = await api('POST', '/api/bgm', { action: 'play', track: file });
   if (res && res.ok) loadBgmTracks();
@@ -1175,4 +1194,5 @@ checkServerUpdate();
 setInterval(checkServerUpdate, 3000);
 captureRefreshSources();
 setInterval(captureRefreshSources, 10000);
+setInterval(syncBgmVolumes, 3000);
 

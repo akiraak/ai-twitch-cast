@@ -60,12 +60,14 @@ class BGMControl(BaseModel):
 
 @router.post("/api/bgm")
 async def bgm_control(body: BGMControl):
-    """BGM制御（専用ブラウザソース経由で再生、音量はOBSミキサーで制御）"""
+    """BGM制御（C#アプリ経由で再生、曲別ボリューム付き）"""
     if body.action == "play":
         _save_bgm(track=body.track)
+        track_volume = db.get_bgm_track_volume(body.track)
         await state.broadcast_bgm({
             "type": "bgm_play",
             "url": f"/bgm/{body.track}",
+            "volume": track_volume,
         })
         return {"ok": True}
     elif body.action == "stop":
@@ -82,8 +84,16 @@ class BGMTrackVolume(BaseModel):
 
 @router.post("/api/bgm/track-volume")
 async def bgm_track_volume(body: BGMTrackVolume):
-    """曲別音量を設定する（DBに保存、再生中ならOBSに即反映）"""
+    """曲別音量を設定する（DBに保存、再生中ならC#アプリに即反映）"""
     db.set_bgm_track_volume(body.file, body.volume)
+    # 再生中の曲なら即時反映
+    settings = load_bgm_settings()
+    if settings.get("track") == body.file:
+        await state.broadcast_bgm({
+            "type": "bgm_volume",
+            "source": "track",
+            "volume": body.volume,
+        })
     return {"ok": True}
 
 

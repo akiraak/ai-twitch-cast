@@ -41,7 +41,7 @@ public class HttpServer : IDisposable
     public Action<byte[], float>? OnTtsAudio { get; set; }  // (wavData, volume)
 
     // BGM制御コールバック（MainFormが設定）
-    public Action<string>? OnBgmPlay { get; set; }     // (url)
+    public Action<string, float>? OnBgmPlay { get; set; }     // (url, trackVolume)
     public Action? OnBgmStop { get; set; }
     public Action<string, float>? OnBgmVolume { get; set; }  // (source, volume)
 
@@ -608,7 +608,8 @@ public class HttpServer : IDisposable
         if (OnBgmPlay == null)
             return new { ok = false, error = "BGM handler not available" };
 
-        Task.Run(() => { try { OnBgmPlay(url); } catch (Exception ex) { Log.Error(ex, "[BGM] Play callback failed"); } });
+        var trackVolume = msg.TryGetProperty("volume", out var v) ? (float)v.GetDouble() : 1.0f;
+        Task.Run(() => { try { OnBgmPlay(url, trackVolume); } catch (Exception ex) { Log.Error(ex, "[BGM] Play callback failed"); } });
         return new { ok = true };
     }
 

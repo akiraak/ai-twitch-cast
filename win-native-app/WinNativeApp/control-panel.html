@@ -347,22 +347,15 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
       <input type="range" min="0" max="100" value="50" id="volBgm" oninput="onVolume('bgm',this.value)">
       <span class="volume-value" id="volBgmVal">50%</span>
     </div>
-  </div>
-  <div class="section">
-    <div class="section-title">Sync</div>
-    <div class="volume-row">
-      <span class="volume-label">Delay</span>
-      <input type="range" min="0" max="3000" step="50" value="500" id="syncDelay" oninput="onSyncDelay(this.value)">
-      <span class="volume-value" id="syncDelayVal">500ms</span>
+    <div id="bgmTrackInfo" style="display:none;">
+      <div id="bgmStatusText" style="font-size:11px; color:#4ade80; margin:4px 0 2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
+      <div class="volume-row" id="trackVolRow">
+        <span class="volume-label">Track</span>
+        <input type="range" min="0" max="100" value="100" id="volTrack" oninput="onVolume('track',this.value)">
+        <span class="volume-value" id="volTrackVal">100%</span>
+      </div>
     </div>
-  </div>
-  <div class="section" id="bgmStatus" style="display:none;">
-    <div class="section-title">BGM</div>
-    <div id="bgmStatusText" style="font-size:11px;color:var(--text-dim);"></div>
-  </div>
-  <div class="section">
-    <div class="section-title">Meter</div>
-    <div class="meter-sources">
+    <div class="meter-sources" style="margin-top:8px;">
       <span class="meter-src bgm" id="meterBgm">BGM</span>
       <span class="meter-src tts" id="meterTts">Voice</span>
     </div>
@@ -377,6 +370,14 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
     <div class="meter-info">
       <span class="meter-db" id="meterDb">-∞ dB</span>
       <span class="meter-peak" id="meterPeakDb">pk -∞</span>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title">Sync</div>
+    <div class="volume-row">
+      <span class="volume-label">Delay</span>
+      <input type="range" min="0" max="3000" step="50" value="500" id="syncDelay" oninput="onSyncDelay(this.value)">
+      <span class="volume-value" id="syncDelayVal">500ms</span>
     </div>
   </div>
 </div>
@@ -413,6 +414,7 @@ wv?.addEventListener('message', e => {
     case 'audioLevel': updateMeter(m); break;
     case 'streamResult': handleStreamResult(m); break;
     case 'bgm_status': updateBgmStatus(m); break;
+    case 'track_volume': setTrackVolume(m.volume); break;
   }
 });
 
@@ -525,24 +527,33 @@ function updateCaptures(caps) {
 }
 
 function updateBgmStatus(m) {
-  const el = $('bgmStatus');
+  const info = $('bgmTrackInfo');
   const text = $('bgmStatusText');
+  const trackRow = $('trackVolRow');
   if (m.state === 'downloading') {
-    el.style.display = '';
+    info.style.display = '';
     const mb = (m.size / 1024 / 1024).toFixed(1);
     text.textContent = '⏳ Downloading... ' + mb + ' MB';
     text.style.color = 'var(--accent)';
+    trackRow.style.display = 'none';
   } else if (m.state === 'playing') {
-    el.style.display = '';
+    info.style.display = '';
     text.textContent = '♪ ' + (m.name || 'Playing');
     text.style.color = '#4ade80';
+    trackRow.style.display = '';
   } else if (m.state === 'stopped') {
-    el.style.display = 'none';
+    info.style.display = 'none';
   } else if (m.state === 'error') {
-    el.style.display = '';
+    info.style.display = '';
     text.textContent = '⚠ ' + (m.error || 'Error');
     text.style.color = '#f87171';
+    trackRow.style.display = 'none';
   }
+}
+
+function setTrackVolume(pct) {
+  $('volTrack').value = pct;
+  $('volTrackVal').textContent = pct + '%';
 }
 
 function setVolumes(v) {

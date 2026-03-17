@@ -65,6 +65,7 @@ public class MainForm : Form
     private float _volumeMaster = 0.8f;
     private float _volumeTts = 0.8f;
     private float _volumeBgm = 1.0f;
+    private float _volumeTrack = 1.0f;  // 曲別ボリューム（bgm_playで受信）
 
     // 音量メータータイマー（50ms間隔で音声レベルをパネルに送信）
     private System.Windows.Forms.Timer? _meterTimer;
@@ -431,8 +432,31 @@ public class MainForm : Form
 
         if (_webView.CoreWebView2 == null) return;
 
+        // track音量はbroadcast.htmlのvolumes変数には含めず、サーバーDBに曲別音量として保存
+        if (volumeType == "track")
+        {
+            var bgmFile = _currentBgmUrl != null ? Uri.UnescapeDataString(Path.GetFileName(_currentBgmUrl)) : null;
+            if (bgmFile != null)
+            {
+                var escapedFile = EscapeJs(bgmFile);
+                var js = $@"
+                    clearTimeout(window._trackVolSaveTimer);
+                    window._trackVolSaveTimer = setTimeout(function() {{
+                        if (window._ws && window._ws.readyState === 1) {{
+                            window._ws.send(JSON.stringify({{
+                                type: 'save_track_volume',
+                                file: '{escapedFile}',
+                                volume: {volStr}
+                            }}));
+                        }}
+                    }}, 200);";
+                _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+            }
+            return;
+        }
+
         // broadcast.htmlのJS変数を更新 + WebSocket経由でサーバーDBに保存（デバウンス200ms）
-        var js = $@"
+        var jsVol = $@"
             if (typeof volumes !== 'undefined') {{
                 volumes.{EscapeJs(volumeType)} = {volStr};
                 if (typeof applyVolume === 'function') applyVolume();
@@ -447,7 +471,7 @@ public class MainForm : Form
                     }}));
                 }}
             }}, 200);";
-        _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+        _ = _webView.CoreWebView2.ExecuteScriptAsync(jsVol);
     }
 
     private void HandlePanelSyncDelay(JsonElement msg)
@@ -478,9 +502,10 @@ public class MainForm : Form
         if (type == "master") _volumeMaster = vol;
         else if (type == "tts") _volumeTts = vol;
         else if (type == "bgm") _volumeBgm = vol;
+        else if (type == "track") _volumeTrack = vol;
 
-        // master or bgm変更時: BGMローカル再生 + FFmpegミキサーに反映
-        if (type == "master" || type == "bgm")
+        // master or bgm or track変更時: BGMローカル再生 + FFmpegミキサーに反映
+        if (type == "master" || type == "bgm" || type == "track")
             ApplyBgmVolume();
 
         // master or tts変更時: 再生中TTSの音量をリアルタイム更新
@@ -511,14 +536,14 @@ public class MainForm : Form
         if (_bgmChannel != null)
             _bgmChannel.Volume = Math.Clamp(effectiveVol, 0f, 1f);
         _ffmpeg?.SetBgmVolume(effectiveVol);
-        Log.Debug("[BGM] Volume applied: master={M:F2} bgm={B:F2} effective={E:F3}",
-            _volumeMaster, _volumeBgm, effectiveVol);
+        Log.Debug("[BGM] Volume applied: master={M:F2} bgm={B:F2} track={T:F2} effective={E:F3}",
+            _volumeMaster, _volumeBgm, _volumeTrack, effectiveVol);
     }
 
-    /// <summary>BGM実効音量: perceptual gain（二乗カーブ） — TTS計算式と同じ</summary>
+    /// <summary>BGM実効音量: perceptual gain（二乗カーブ） — TTS計算式と同じ + 曲別ボリューム</summary>
     private float EffectiveBgmVolume()
     {
-        return Math.Min(1.0f, _volumeBgm * _volumeBgm) * (_volumeMaster * _volumeMaster);
+        return Math.Min(1.0f, _volumeBgm * _volumeBgm) * (_volumeMaster * _volumeMaster) * _volumeTrack;
     }
 
     private async void OnLoad(object? sender, EventArgs e)
@@ -708,9 +733,14 @@ public class MainForm : Form
         };
 
         // BGM制御コールバック（Task.Runから呼ばれるためBeginInvokeでUIスレッドに移動）
-        _httpServer.OnBgmPlay = (url) =>
+        _httpServer.OnBgmPlay = (url, trackVolume) =>
         {
-            BeginInvoke(() => PlayBgm(url));
+            BeginInvoke(() =>
+            {
+                _volumeTrack = Math.Clamp(trackVolume, 0f, 1f);
+                SendPanelMessage(new { type = "track_volume", volume = (int)(_volumeTrack * 100) });
+                PlayBgm(url);
+            });
         };
 
         _httpServer.OnBgmStop = () =>
@@ -726,7 +756,13 @@ public class MainForm : Form
 
         _httpServer.OnBgmVolume = (source, volume) =>
         {
-            BeginInvoke(() => UpdateVolume(source, Math.Clamp(volume, 0f, 1f)));
+            BeginInvoke(() =>
+            {
+                var clamped = Math.Clamp(volume, 0f, 1f);
+                UpdateVolume(source, clamped);
+                if (source == "track")
+                    SendPanelMessage(new { type = "track_volume", volume = (int)(clamped * 100) });
+            });
         };
 
         try

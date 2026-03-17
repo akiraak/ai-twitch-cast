@@ -81,11 +81,13 @@ async def restore_bgm_to_app():
     await asyncio.sleep(1)  # WebSocket接続安定待ち
     try:
         from scripts.routes.bgm import load_bgm_settings
+        from src import db as _db
         bgm = load_bgm_settings()
         track = bgm.get("track", "")
         if track:
-            result = await ws_request("bgm_play", url=f"/bgm/{track}")
-            logger.info("C#アプリにBGM復元: %s result=%s", track, result)
+            track_volume = _db.get_bgm_track_volume(track)
+            result = await ws_request("bgm_play", url=f"/bgm/{track}", volume=track_volume)
+            logger.info("C#アプリにBGM復元: %s volume=%.2f result=%s", track, track_volume, result)
         else:
             logger.info("BGM復元: トラック未設定")
     except Exception as e:

@@ -51,11 +51,18 @@ async def broadcast_bgm(event: dict):
         from scripts.services.capture_client import ws_request
         event_type = event.get("type", "")
         if event_type == "bgm_play":
-            result = await ws_request("bgm_play", url=event.get("url", ""))
-            _logger.info("[BGM] C#アプリに送信: bgm_play url=%s result=%s", event.get("url"), result)
+            result = await ws_request("bgm_play", url=event.get("url", ""), volume=event.get("volume", 1.0))
+            _logger.info("[BGM] C#アプリに送信: bgm_play url=%s volume=%.2f result=%s",
+                         event.get("url"), event.get("volume", 1.0), result)
         elif event_type == "bgm_stop":
             await ws_request("bgm_stop")
             _logger.info("[BGM] C#アプリに送信: bgm_stop")
+        elif event_type == "bgm_volume":
+            result = await ws_request("bgm_volume",
+                                      source=event.get("source", ""),
+                                      volume=event.get("volume", 1.0))
+            _logger.info("[BGM] C#アプリに送信: bgm_volume source=%s volume=%.2f",
+                         event.get("source"), event.get("volume", 1.0))
     except Exception as e:
         _logger.warning("[BGM] C#アプリへの送信失敗: %s", e)
 
