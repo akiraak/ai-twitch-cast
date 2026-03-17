@@ -121,7 +121,7 @@ async def restart_server():
         await asyncio.sleep(0.5)
         os.kill(os.getpid(), signal.SIGTERM)
 
-    asyncio.ensure_future(_kill())
+    asyncio.create_task(_kill())
     return {"ok": True}
 
 
@@ -165,7 +165,7 @@ async def startup():
         return
 
     # 復旧処理はバックグラウンドで実行（サーバーを即座に応答可能にする）
-    asyncio.ensure_future(_restore_session())
+    asyncio.create_task(_restore_session())
 
 
 async def _restore_session():

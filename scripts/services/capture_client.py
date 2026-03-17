@@ -100,8 +100,9 @@ async def _read_capture_ws():
             rid = data.get("requestId")
             if rid and rid in _pending_requests:
                 _pending_requests[rid].set_result(data)
-    except Exception:
-        pass
+    except Exception as e:
+        if str(e):  # 正常切断時はメッセージなし
+            logger.debug("WebSocket読み取り終了: %s", e)
     finally:
         _capture_ws = None
         for fut in _pending_requests.values():

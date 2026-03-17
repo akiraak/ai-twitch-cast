@@ -49,8 +49,8 @@ async def _watch_todo_file():
             if mtime != _todo_last_mtime:
                 _todo_last_mtime = mtime
                 await broadcast_todo()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("TODO監視エラー: %s", e)
 
 
 def start_todo_watcher():
@@ -76,8 +76,8 @@ async def broadcast_ws(websocket: WebSocket):
                 "type": "bgm_play",
                 "url": f"/bgm/{track}",
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("WS初期BGM送信失敗: %s", e)
     # 音量設定を送信（DB優先 → scenes.json → デフォルト）
     try:
         for source, fallback in [("master", 0.8), ("tts", 0.8), ("bgm", 1.0)]:
@@ -92,8 +92,8 @@ async def broadcast_ws(websocket: WebSocket):
                 "source": source,
                 "volume": vol,
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("WS初期音量送信失敗: %s", e)
     try:
         while True:
             text = await websocket.receive_text()
@@ -108,8 +108,8 @@ async def broadcast_ws(websocket: WebSocket):
                     elif source.startswith("overlay."):
                         db.set_setting(source, volume)
                         logger.debug("設定保存(WS): %s = %s", source, volume)
-            except Exception:
-                pass
+            except (ValueError, KeyError) as e:
+                logger.debug("WSメッセージ処理失敗: %s", e)
     except WebSocketDisconnect:
         state.broadcast_clients.discard(websocket)
 
@@ -279,7 +279,7 @@ async def start_todo(request: Request):
 
     # アバターに読み上げさせる
     if state.reader:
-        asyncio.ensure_future(state.reader.speak_event("作業開始", task_text))
+        asyncio.create_task(state.reader.speak_event("作業開始", task_text))
 
     return {"ok": True}
 

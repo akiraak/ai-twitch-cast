@@ -25,7 +25,7 @@ async def avatar_speak(body: SpeakRequest):
         "type": "current_task",
         "task": body.detail,
     })
-    asyncio.ensure_future(state.reader.speak_event(body.event_type, body.detail, voice=body.voice))
+    asyncio.create_task(state.reader.speak_event(body.event_type, body.detail, voice=body.voice))
     return {"ok": True}
 
 
@@ -48,7 +48,7 @@ async def tts_test(body: TtsTestRequest):
         f"Say a short greeting (1 sentence) mixing {body.primary_lang} and {body.secondary_lang}."
         f"{restriction}"
     )
-    asyncio.ensure_future(state.reader.speak_event("TTSテスト", detail))
+    asyncio.create_task(state.reader.speak_event("TTSテスト", detail))
     return {"ok": True}
 
 

@@ -187,8 +187,8 @@ class CommentReader:
             info = await api.get_channel_info()
             if info.get("title"):
                 context["title"] = info["title"]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("配信タイトル取得失敗: %s", e)
         # 現在のトピック
         if self._topic_talker:
             status = self._topic_talker.get_status()
@@ -207,8 +207,8 @@ class CommentReader:
                         items.append(m.group(1).strip())
                 if items:
                     context["todo_items"] = items
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("TODO取得失敗: %s", e)
         return context if context else None
 
     async def _save_to_db(self, user, message, result):
@@ -261,7 +261,8 @@ class CommentReader:
             char_name = get_character().get("name", "ちょビ")
             user = await asyncio.to_thread(db.get_or_create_user, char_name)
             return user.get("note", "") or None
-        except Exception:
+        except Exception as e:
+            logger.debug("アバターメモ取得失敗: %s", e)
             return None
 
     async def _update_self_note(self):
