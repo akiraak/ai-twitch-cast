@@ -65,3 +65,38 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("TWITCH_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("TWITCH_CHANNEL", "test-channel")
     monkeypatch.setenv("WEB_PORT", "8888")
+
+
+@pytest.fixture
+def api_client(test_db, mock_env, mock_gemini, monkeypatch):
+    """FastAPI TestClient（全外部依存をモック化）"""
+    from unittest.mock import AsyncMock
+
+    import scripts.state as st
+    # stateのグローバルオブジェクトをモック化
+    monkeypatch.setattr(st, "broadcast_overlay", AsyncMock())
+    monkeypatch.setattr(st, "broadcast_tts", AsyncMock())
+    monkeypatch.setattr(st, "broadcast_bgm", AsyncMock())
+    monkeypatch.setattr(st, "broadcast_to_broadcast", AsyncMock())
+
+    # topic_talkerは実物（test_dbを使う）
+    from src.topic_talker import TopicTalker
+    tt = TopicTalker()
+    monkeypatch.setattr(st, "topic_talker", tt)
+
+    # reader/git_watcherはモック
+    mock_reader = MagicMock()
+    mock_reader.is_running = False
+    mock_reader.queue_size = 0
+    monkeypatch.setattr(st, "reader", mock_reader)
+
+    mock_gw = MagicMock()
+    mock_gw.start = AsyncMock()
+    mock_gw.stop = AsyncMock()
+    monkeypatch.setattr(st, "git_watcher", mock_gw)
+
+    monkeypatch.setattr(st, "current_episode", None)
+
+    from scripts.web import app
+    from fastapi.testclient import TestClient
+    return TestClient(app, raise_server_exceptions=False)

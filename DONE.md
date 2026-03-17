@@ -18,6 +18,14 @@
 - [x] conftest.py: mock_geminiがfrom import先にもパッチするよう改善
 - [x] テスト数: 114 → 177（+63テスト）
 
+## テスト充実フェーズ4 — APIエンドポイントテスト
+
+- [x] conftest.py: api_clientフィクスチャ追加（FastAPI TestClient + stateモック）
+- [x] test_api_character.py: 6テスト（キャラクター取得・更新・言語モード取得・変更）
+- [x] test_api_topic.py: 11テスト（トピックCRUD・スクリプト・一時停止・設定）
+- [x] test_api_stream.py: 13テスト（シーン切替・音量制御・アバター・ステータス・環境変数マスク）
+- [x] テスト数: 177 → 207（+30テスト）
+
 ## 音声アーキテクチャ刷新: C#アプリ直接パイプ（WASAPI廃止）— 作業中
 
 ### 完了
