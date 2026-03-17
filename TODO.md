@@ -16,7 +16,6 @@
 
 
 ### その他
-- [>] テストの充実 → [plans/testing-strategy.md](plans/testing-strategy.md)
 - [ ] リファクタリング
         - [ ] プレビューアプリではTTSという名前をVOICEに変更したい。BGMとVOICEで意味が分かりやすいように
 - [ ] 配信中に位置調整しても繁栄されない
