@@ -26,12 +26,12 @@ async def _ensure_capture_app():
     """配信アプリが起動していなければ自動起動し、接続を待つ"""
     import asyncio
     import httpx
-    from scripts.routes.capture import _capture_base_url, _ws_request
+    from scripts.services.capture_client import capture_base_url, ws_request
 
     # HTTPサーバーが起動しているか確認
     app_http_ok = False
     try:
-        resp = httpx.get(f"{_capture_base_url()}/status", timeout=2.0)
+        resp = httpx.get(f"{capture_base_url()}/status", timeout=2.0)
         app_http_ok = resp.status_code == 200
     except Exception:
         pass
@@ -42,7 +42,7 @@ async def _ensure_capture_app():
         for i in range(20):
             await asyncio.sleep(0.5)
             try:
-                await _ws_request("stream_status")
+                await ws_request("stream_status")
                 return
             except Exception:
                 pass
@@ -55,7 +55,7 @@ async def _ensure_capture_app():
 async def _launch_native_app():
     """配信アプリをstream.sh経由で自動起動"""
     import asyncio
-    from scripts.routes.capture import _ws_request
+    from scripts.services.capture_client import ws_request
 
     logger.info("配信アプリ未起動 → stream.sh で自動起動")
     stream_sh = _PROJECT_ROOT / "stream.sh"
@@ -74,7 +74,7 @@ async def _launch_native_app():
     for i in range(180):
         await asyncio.sleep(0.5)
         try:
-            await _ws_request("stream_status")
+            await ws_request("stream_status")
             logger.info("配信アプリ起動完了（%d秒）", (i + 1) // 2)
             return
         except Exception:
@@ -84,7 +84,7 @@ async def _launch_native_app():
 
 async def _capture_stream_start():
     """配信アプリ経由でTwitch配信を開始"""
-    from scripts.routes.capture import _ws_request
+    from scripts.services.capture_client import ws_request
     from src.wsl_path import get_wsl_ip
 
     stream_key = os.environ.get("TWITCH_STREAM_KEY", "")
@@ -101,7 +101,7 @@ async def _capture_stream_start():
         host = "localhost"
     server_url = f"http://{host}:{web_port}"
 
-    result = await _ws_request(
+    result = await ws_request(
         "start_stream",
         timeout=120.0,
         streamKey=stream_key,
@@ -113,18 +113,18 @@ async def _capture_stream_start():
 
 async def _capture_stream_stop():
     """配信を停止"""
-    from scripts.routes.capture import _ws_request
+    from scripts.services.capture_client import ws_request
     try:
-        await _ws_request("stop_stream")
+        await ws_request("stop_stream")
     except Exception as e:
         logger.warning("配信停止エラー（無視）: %s", e)
 
 
 async def _capture_stream_status() -> dict:
     """配信の状態を取得"""
-    from scripts.routes.capture import _ws_request
+    from scripts.services.capture_client import ws_request
     try:
-        return await _ws_request("stream_status")
+        return await ws_request("stream_status")
     except Exception:
         return {"streaming": False}
 
@@ -365,10 +365,10 @@ async def broadcast_diag():
 async def broadcast_audio_log():
     """配信アプリの音声診断ログを取得"""
     import httpx
-    from scripts.routes.capture import _capture_base_url
+    from scripts.services.capture_client import capture_base_url
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{_capture_base_url()}/audio/log")
+            resp = await client.get(f"{capture_base_url()}/audio/log")
             return resp.json()
     except Exception as e:
         return {"error": str(e), "log": []}

@@ -348,7 +348,7 @@ class CommentReader:
         t0 = time.monotonic()
         try:
             from scripts.routes.stream_control import _get_volume
-            from scripts.routes.capture import _ws_request
+            from scripts.services.capture_client import ws_request
 
             import base64
             wav_data = wav_path.read_bytes()
@@ -361,7 +361,7 @@ class CommentReader:
             tts_vol = _get_volume("tts")
             volume = min(1.0, tts_vol * tts_vol) * (master * master)
 
-            await _ws_request("tts_audio", timeout=10.0, data=wav_b64, volume=volume)
+            await ws_request("tts_audio", timeout=10.0, data=wav_b64, volume=volume)
             t3 = time.monotonic()
             logger.info(
                 "[tts] C#アプリにTTS直接送信完了: %d bytes, vol=%.2f, "
