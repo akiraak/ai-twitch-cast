@@ -1,4 +1,7 @@
-"""ai_responder の純粋ロジックテスト"""
+"""ai_responder のテスト（キャラクター管理・AI応答生成）
+
+注: 言語モード・プロンプト構築のテストは test_prompt_builder.py を参照
+"""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -14,84 +17,7 @@ from src.ai_responder import (
     load_character,
     seed_character,
 )
-from src.prompt_builder import (
-    LANGUAGE_MODES,
-    build_system_prompt,
-    get_language_mode,
-    set_language_mode,
-)
-
-
-class TestLanguageMode:
-    def setup_method(self):
-        set_language_mode("ja")
-
-    def test_default_mode_is_ja(self):
-        set_language_mode("ja")
-        assert get_language_mode() == "ja"
-
-    def test_set_valid_mode(self):
-        for mode in LANGUAGE_MODES:
-            set_language_mode(mode)
-            assert get_language_mode() == mode
-
-    def test_set_invalid_mode_raises(self):
-        import pytest
-        with pytest.raises(ValueError):
-            set_language_mode("nonexistent")
-
-    def test_all_modes_have_required_fields(self):
-        for name, mode in LANGUAGE_MODES.items():
-            assert "name" in mode, f"{name} missing 'name'"
-            assert "rules" in mode, f"{name} missing 'rules'"
-            assert "english_label" in mode, f"{name} missing 'english_label'"
-            assert "tts_style" in mode, f"{name} missing 'tts_style'"
-
-
-class TestBuildSystemPrompt:
-    def setup_method(self):
-        set_language_mode("ja")
-
-    def test_contains_system_prompt(self):
-        prompt = build_system_prompt(DEFAULT_CHARACTER)
-        assert DEFAULT_CHARACTER["system_prompt"] in prompt
-
-    def test_contains_rules(self):
-        prompt = build_system_prompt(DEFAULT_CHARACTER)
-        for rule in DEFAULT_CHARACTER["rules"]:
-            assert rule in prompt
-
-    def test_contains_emotions(self):
-        prompt = build_system_prompt(DEFAULT_CHARACTER)
-        for emotion in DEFAULT_CHARACTER["emotions"]:
-            assert emotion in prompt
-
-    def test_contains_language_rules(self):
-        set_language_mode("en_bilingual")
-        prompt = build_system_prompt(DEFAULT_CHARACTER)
-        assert "English" in prompt
-
-    def test_stream_context_included(self):
-        ctx = {"title": "テスト配信", "topic": "Python", "todo_items": ["バグ修正"]}
-        prompt = build_system_prompt(DEFAULT_CHARACTER, stream_context=ctx)
-        assert "テスト配信" in prompt
-        assert "Python" in prompt
-        assert "バグ修正" in prompt
-
-    def test_output_format_includes_english_label(self):
-        set_language_mode("en_mixed")
-        prompt = build_system_prompt(DEFAULT_CHARACTER)
-        label = LANGUAGE_MODES["en_mixed"]["english_label"]
-        assert label in prompt
-
-    def test_self_note_included(self):
-        prompt = build_system_prompt(DEFAULT_CHARACTER, self_note="今日はPythonの話で盛り上がった")
-        assert "今日はPythonの話で盛り上がった" in prompt
-        assert "記憶メモ" in prompt
-
-    def test_no_self_note_no_section(self):
-        prompt = build_system_prompt(DEFAULT_CHARACTER, self_note=None)
-        assert "記憶メモ" not in prompt
+from src.prompt_builder import set_language_mode
 
 
 class TestCharacterManagement:
