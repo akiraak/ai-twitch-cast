@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Twitch Cast</title>
 <link rel="stylesheet" href="/static/css/index.css">
+<script src="/static/js/lib/api-client.js"></script>
 </head>
 <body>
 
@@ -476,29 +477,13 @@ function setStatus(id, msg, type) {
   el.style.color = type === 'err' ? '#c62828' : type === 'ok' ? '#2e7d32' : '#6a5590';
 }
 
-async function api(method, url, body) {
-  try {
-    const opts = { method };
-    if (body) {
-      opts.headers = { 'Content-Type': 'application/json' };
-      opts.body = JSON.stringify(body);
-    }
-    const r = await fetch(url, opts);
-    const data = await r.json();
-    if (!r.ok) {
-      const msg = data.detail || JSON.stringify(data);
-      log(`ERROR ${url}: ${msg}`);
-      showToast(msg, 'error');
-      return null;
-    }
-    log(`OK ${url}`);
-    return data;
-  } catch (e) {
-    log(`ERROR ${url}: ${e.message}`);
-    showToast(e.message, 'error');
-    return null;
-  }
-}
+// api() は /static/js/lib/api-client.js から読み込み済み
+// index.html 用ラッパー: log + showToast 付き
+const _apiBase = api;
+api = (method, url, body) => _apiBase(method, url, body, {
+  onError: msg => showToast(msg, 'error'),
+  onLog: msg => log(msg),
+});
 
 // --- 配信制御 ---
 async function doGoLive() {
