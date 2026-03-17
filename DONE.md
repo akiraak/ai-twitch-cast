@@ -1,5 +1,14 @@
 # DONE
 
+## テスト充実フェーズ1 — DB・設定・TTS・テスト基盤
+
+- [x] conftest.py拡張: test_db / mock_gemini / mock_env フィクスチャ追加
+- [x] test_db.py: 44テスト（スキーマ・チャンネル・キャラクター・番組・エピソード・ユーザー・コメント・設定・BGM・トピック・スクリプト）
+- [x] test_scene_config.py: 12テスト（DB/JSON優先順位・保存読み込み）
+- [x] test_tts.py: 11テスト（言語タグ変換・TTSスタイル取得）
+- [x] plans/testing-strategy.md: テスト充実プラン作成
+- [x] テスト数: 39 → 114（+75テスト）
+
 ## 音声アーキテクチャ刷新: C#アプリ直接パイプ（WASAPI廃止）— 作業中
 
 ### 完了
