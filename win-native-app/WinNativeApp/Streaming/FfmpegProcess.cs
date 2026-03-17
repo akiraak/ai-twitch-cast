@@ -54,6 +54,14 @@ public sealed class FfmpegProcess : IDisposable
     private System.Threading.Timer? _audioGenTimer;
     private long _audioGenLastTick;
 
+    // 音声レベルメーター（ミキシング済みチャンクから計算、瞬時値）
+    private volatile float _lastRmsDb = -100f;
+    private volatile float _lastPeakDb = -100f;
+    public float LastRmsDb => _lastRmsDb;
+    public float LastPeakDb => _lastPeakDb;
+    public bool IsBgmActive => _bgmPlaying;
+    public bool IsTtsActive => _ttsCurrentChunk != null || !_ttsQueue.IsEmpty;
+
     public bool IsRunning => _process is { HasExited: false };
     public long FrameCount => Interlocked.Read(ref _frameCount);
     public long DropCount => Interlocked.Read(ref _dropCount);
@@ -364,6 +372,9 @@ public sealed class FfmpegProcess : IDisposable
                 MixTtsInto(chunk);
                 _audioQueue.Enqueue(chunk);
 
+                // RMS/peakメーター計算（f32leサンプルから）
+                MeasureLevel(chunk, now);
+
                 // キュー上限超過時は古いチャンクを破棄
                 while (_audioQueue.Count > MaxAudioQueueChunks)
                 {
@@ -467,6 +478,26 @@ public sealed class FfmpegProcess : IDisposable
             _ttsCurrentOffset += toMix;
             pos += toMix;
         }
+    }
+
+    /// <summary>ミキシング済みf32leチャンクからRMS/瞬時peakを計算する。</summary>
+    private void MeasureLevel(byte[] chunk, long nowTick)
+    {
+        float sumSq = 0;
+        float maxAbs = 0;
+        int numSamples = chunk.Length / 4;
+        if (numSamples == 0) return;
+
+        for (int i = 0; i + 3 < chunk.Length; i += 4)
+        {
+            float s = BitConverter.ToSingle(chunk, i);
+            sumSq += s * s;
+            float abs = Math.Abs(s);
+            if (abs > maxAbs) maxAbs = abs;
+        }
+
+        _lastRmsDb = MathF.Sqrt(sumSq / numSamples) is var rms and > 0 ? 20f * MathF.Log10(rms) : -100f;
+        _lastPeakDb = maxAbs > 0 ? 20f * MathF.Log10(maxAbs) : -100f;
     }
 
     /// <summary>

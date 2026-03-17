@@ -52,18 +52,23 @@ public class MainForm : Form
     // BGM state
     private WaveOutEvent? _bgmWaveOut;
     private WaveChannel32? _bgmChannel;
+    private MeteringWaveProvider? _bgmMeter;
     private MediaFoundationReader? _bgmReader;
     private string? _currentBgmUrl;
     private string? _currentBgmCachePath;
     private string _serverBaseUrl = "http://localhost:8080";
 
-    // TTS再生中のサンプルレベル音量制御用
+    // TTS再生中のサンプルレベル音量制御 + メータリング
     private WaveChannel32? _ttsChannel;
+    private MeteringWaveProvider? _ttsMeter;
 
     // 音量トラッキング（0.0〜2.0 for master, 0.0〜1.0 for others）
     private float _volumeMaster = 0.8f;
     private float _volumeTts = 0.8f;
     private float _volumeBgm = 1.0f;
+
+    // 音量メータータイマー（50ms間隔で音声レベルをパネルに送信）
+    private System.Windows.Forms.Timer? _meterTimer;
 
     // サーバーAPI用共有HttpClient（初期音量取得用）
     private static readonly HttpClient _sharedHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
@@ -721,7 +726,64 @@ public class MainForm : Form
         {
             Log.Error(ex, "[MainForm] HTTP server start failed on port {Port}", _httpPort);
         }
+
+        // 音量メータータイマー開始（50ms間隔 = 20Hz更新）
+        _meterTimer = new System.Windows.Forms.Timer { Interval = 50 };
+        _meterTimer.Tick += (_, _) => UpdateAudioMeter();
+        _meterTimer.Start();
     }
+
+    /// <summary>音声レベルを測定し、パネルに送信する。</summary>
+    private void UpdateAudioMeter()
+    {
+        float db, peak;
+        bool bgmActive, ttsActive;
+
+        if (_ffmpeg is { IsRunning: true })
+        {
+            // 配信中: FFmpegミキサーの実測値
+            db = _ffmpeg.LastRmsDb;
+            peak = _ffmpeg.LastPeakDb;
+            bgmActive = _ffmpeg.IsBgmActive;
+            ttsActive = _ffmpeg.IsTtsActive;
+        }
+        else
+        {
+            // 非配信: MeteringWaveProviderの実測値を合成
+            bgmActive = _bgmMeter != null && _bgmWaveOut?.PlaybackState == PlaybackState.Playing;
+            ttsActive = _ttsMeter != null;
+            var bgmDb = bgmActive ? _bgmMeter!.RmsDb : -100f;
+            var ttsDb = ttsActive ? _ttsMeter!.RmsDb : -100f;
+            var bgmPeak = bgmActive ? _bgmMeter!.PeakDb : -100f;
+            var ttsPeak = ttsActive ? _ttsMeter!.PeakDb : -100f;
+            // 2ソースのdBを線形加算（パワー合算）
+            double bgmPow = Math.Pow(10, bgmDb / 10.0);
+            double ttsPow = Math.Pow(10, ttsDb / 10.0);
+            db = (float)(10.0 * Math.Log10(bgmPow + ttsPow));
+            peak = Math.Max(bgmPeak, ttsPeak);
+        }
+
+        var dbVal = double.IsFinite(db) ? Math.Max(-60.0, (double)db) : -60.0;
+        var peakVal = double.IsFinite(peak) ? Math.Max(-60.0, (double)peak) : -60.0;
+
+        // 初回のみログ出力（デバッグ用）
+        if (_meterLogCount < 5 || (bgmActive && _meterLogCount % 100 == 0))
+        {
+            Log.Debug("[Meter] db={Db:F1} peak={Peak:F1} bgm={Bgm} tts={Tts} streaming={S}",
+                dbVal, peakVal, bgmActive, ttsActive, _ffmpeg is { IsRunning: true });
+        }
+        _meterLogCount++;
+
+        SendPanelMessage(new
+        {
+            type = "audioLevel",
+            db = dbVal,
+            peak = peakVal,
+            bgm = bgmActive,
+            tts = ttsActive,
+        });
+    }
+    private int _meterLogCount;
 
     // =====================================================
     // 配信制御（WebSocket/HTTP共通）
@@ -1104,15 +1166,17 @@ public class MainForm : Form
                 var ms = new MemoryStream(wavData);
                 var reader = new WaveFileReader(ms);
                 var channel = new WaveChannel32(reader) { Volume = Math.Clamp(volume, 0f, 1f) };
+                var meter = new MeteringWaveProvider(channel);
                 _ttsChannel = channel; // 再生中の音量変更用に参照保持
+                _ttsMeter = meter;
                 var waveOut = new WaveOutEvent();
-                waveOut.Init(channel);
+                waveOut.Init(meter);
                 waveOut.Volume = 1.0f; // デバイスレベルは常にmax（音量制御はWaveChannel32で行う）
                 waveOut.Play();
                 Log.Debug("[TTS] Local playback started ({Size} bytes, vol={Vol:F2})", wavData.Length, volume);
                 waveOut.PlaybackStopped += (_, _) =>
                 {
-                    if (_ttsChannel == channel) _ttsChannel = null;
+                    if (_ttsChannel == channel) { _ttsChannel = null; _ttsMeter = null; }
                     waveOut.Dispose();
                     reader.Dispose();
                     ms.Dispose();
@@ -1190,8 +1254,9 @@ public class MainForm : Form
             _bgmReader = new MediaFoundationReader(localPath);
             // WaveChannel32でサンプルレベル音量（waveOut.Volumeはデバイスレベルで他WaveOutに干渉するため不使用）
             _bgmChannel = new WaveChannel32(_bgmReader) { Volume = Math.Clamp(EffectiveBgmVolume(), 0f, 1f) };
+            _bgmMeter = new MeteringWaveProvider(_bgmChannel);
             _bgmWaveOut = new WaveOutEvent();
-            _bgmWaveOut.Init(_bgmChannel);
+            _bgmWaveOut.Init(_bgmMeter);
             _bgmWaveOut.Volume = 1.0f; // デバイスレベルは常にmax（音量制御はWaveChannel32で行う）
             _bgmWaveOut.Play();
             Log.Information("[BGM] Playback started: {Format}, vol={Vol:F3}, file={Path}",
@@ -1239,6 +1304,7 @@ public class MainForm : Form
         var waveOut = _bgmWaveOut;
         _bgmReader = null;
         _bgmChannel = null;
+        _bgmMeter = null;
         _bgmWaveOut = null;
         _currentBgmUrl = null;
         _currentBgmCachePath = null;
@@ -1325,6 +1391,7 @@ public class MainForm : Form
         // ★ 即座にウィンドウを隠す（クリーンアップ中の「間」を解消）
         e.Cancel = true;
         _closing = true;
+        _meterTimer?.Stop();
         Hide();
         try { _webView.CoreWebView2.IsMuted = true; } catch { }
 

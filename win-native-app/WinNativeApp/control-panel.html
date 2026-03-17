@@ -554,6 +554,8 @@ function appendLog(text, level) {
 // Audio meter
 const METER_MIN_DB = -60;
 let meterSmooth = METER_MIN_DB;
+let meterPeakHold = METER_MIN_DB;
+let meterPeakTime = 0;
 let clipTimer = null;
 
 function meterDbToPct(db) {
@@ -564,20 +566,28 @@ function meterDbToPct(db) {
 
 function updateMeter(data) {
   const db = isFinite(data.db) ? Math.max(METER_MIN_DB, data.db) : METER_MIN_DB;
-  const peak = isFinite(data.peak) ? Math.max(METER_MIN_DB, data.peak) : METER_MIN_DB;
+  const instantPeak = isFinite(data.peak) ? Math.max(METER_MIN_DB, data.peak) : METER_MIN_DB;
   meterSmooth = db > meterSmooth ? db : meterSmooth * 0.85 + db * 0.15;
 
+  // ピークホールド: 瞬時ピークかスムージングRMSの大きい方で更新、1.5秒でリセット
+  const effectivePeak = Math.max(instantPeak, meterSmooth);
+  const now = Date.now();
+  if (effectivePeak > meterPeakHold || now - meterPeakTime > 1500) {
+    meterPeakHold = effectivePeak;
+    meterPeakTime = now;
+  }
+
   $('meterLevel').style.width = meterDbToPct(meterSmooth) + '%';
-  $('meterPeak').style.left = meterDbToPct(peak) + '%';
+  $('meterPeak').style.left = meterDbToPct(meterPeakHold) + '%';
 
   const dbStr = meterSmooth <= METER_MIN_DB ? '-∞ dB' : meterSmooth.toFixed(1) + ' dB';
-  const pkStr = peak <= METER_MIN_DB ? 'pk -∞' : 'pk ' + peak.toFixed(0);
+  const pkStr = meterPeakHold <= METER_MIN_DB ? 'pk -∞' : 'pk ' + meterPeakHold.toFixed(0);
   $('meterDb').textContent = dbStr;
   $('meterPeakDb').textContent = pkStr;
   $('meterDb').className = 'meter-db' + (meterSmooth > -3 ? ' clip' : meterSmooth > -12 ? ' hot' : '');
 
   // Clipping warning
-  if (peak > -3) {
+  if (meterPeakHold > -3) {
     $('meterContainer').classList.add('clipping');
     clearTimeout(clipTimer);
     clipTimer = setTimeout(() => $('meterContainer').classList.remove('clipping'), 500);
