@@ -150,7 +150,7 @@ async def startup():
     try:
         lang = scene_config.load_config_value("language_mode")
         if lang:
-            from src.ai_responder import set_language_mode
+            from src.prompt_builder import set_language_mode
             set_language_mode(lang)
             logger.info("言語モード復元: %s", lang)
     except Exception:

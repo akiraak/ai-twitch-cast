@@ -51,13 +51,13 @@ class TestGetTtsStyle:
         assert len(style) > 0
 
     def test_ja_mode_returns_ja_style(self):
-        from src.ai_responder import set_language_mode, LANGUAGE_MODES
+        from src.prompt_builder import set_language_mode, LANGUAGE_MODES
         set_language_mode("ja")
         style = _get_tts_style()
         assert style == LANGUAGE_MODES["ja"]["tts_style"]
 
     def test_en_mode_returns_en_style(self):
-        from src.ai_responder import set_language_mode, LANGUAGE_MODES
+        from src.prompt_builder import set_language_mode, LANGUAGE_MODES
         set_language_mode("en_bilingual")
         style = _get_tts_style()
         assert style == LANGUAGE_MODES["en_bilingual"]["tts_style"]

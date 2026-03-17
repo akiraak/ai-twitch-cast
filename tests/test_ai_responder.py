@@ -5,17 +5,19 @@ from unittest.mock import MagicMock, patch
 
 from src.ai_responder import (
     DEFAULT_CHARACTER,
-    LANGUAGE_MODES,
-    _build_system_prompt,
     generate_response,
     generate_event_response,
     generate_user_notes,
     generate_self_note,
     get_character,
-    get_language_mode,
     invalidate_character_cache,
     load_character,
     seed_character,
+)
+from src.prompt_builder import (
+    LANGUAGE_MODES,
+    build_system_prompt,
+    get_language_mode,
     set_language_mode,
 )
 
@@ -50,53 +52,45 @@ class TestBuildSystemPrompt:
     def setup_method(self):
         set_language_mode("ja")
 
-    @patch("src.ai_responder.get_character", return_value=DEFAULT_CHARACTER)
-    def test_contains_system_prompt(self, _mock):
-        prompt = _build_system_prompt()
+    def test_contains_system_prompt(self):
+        prompt = build_system_prompt(DEFAULT_CHARACTER)
         assert DEFAULT_CHARACTER["system_prompt"] in prompt
 
-    @patch("src.ai_responder.get_character", return_value=DEFAULT_CHARACTER)
-    def test_contains_rules(self, _mock):
-        prompt = _build_system_prompt()
+    def test_contains_rules(self):
+        prompt = build_system_prompt(DEFAULT_CHARACTER)
         for rule in DEFAULT_CHARACTER["rules"]:
             assert rule in prompt
 
-    @patch("src.ai_responder.get_character", return_value=DEFAULT_CHARACTER)
-    def test_contains_emotions(self, _mock):
-        prompt = _build_system_prompt()
+    def test_contains_emotions(self):
+        prompt = build_system_prompt(DEFAULT_CHARACTER)
         for emotion in DEFAULT_CHARACTER["emotions"]:
             assert emotion in prompt
 
-    @patch("src.ai_responder.get_character", return_value=DEFAULT_CHARACTER)
-    def test_contains_language_rules(self, _mock):
+    def test_contains_language_rules(self):
         set_language_mode("en_bilingual")
-        prompt = _build_system_prompt()
+        prompt = build_system_prompt(DEFAULT_CHARACTER)
         assert "English" in prompt
 
-    @patch("src.ai_responder.get_character", return_value=DEFAULT_CHARACTER)
-    def test_stream_context_included(self, _mock):
+    def test_stream_context_included(self):
         ctx = {"title": "テスト配信", "topic": "Python", "todo_items": ["バグ修正"]}
-        prompt = _build_system_prompt(stream_context=ctx)
+        prompt = build_system_prompt(DEFAULT_CHARACTER, stream_context=ctx)
         assert "テスト配信" in prompt
         assert "Python" in prompt
         assert "バグ修正" in prompt
 
-    @patch("src.ai_responder.get_character", return_value=DEFAULT_CHARACTER)
-    def test_output_format_includes_english_label(self, _mock):
+    def test_output_format_includes_english_label(self):
         set_language_mode("en_mixed")
-        prompt = _build_system_prompt()
+        prompt = build_system_prompt(DEFAULT_CHARACTER)
         label = LANGUAGE_MODES["en_mixed"]["english_label"]
         assert label in prompt
 
-    @patch("src.ai_responder.get_character", return_value=DEFAULT_CHARACTER)
-    def test_self_note_included(self, _mock):
-        prompt = _build_system_prompt(self_note="今日はPythonの話で盛り上がった")
+    def test_self_note_included(self):
+        prompt = build_system_prompt(DEFAULT_CHARACTER, self_note="今日はPythonの話で盛り上がった")
         assert "今日はPythonの話で盛り上がった" in prompt
         assert "記憶メモ" in prompt
 
-    @patch("src.ai_responder.get_character", return_value=DEFAULT_CHARACTER)
-    def test_no_self_note_no_section(self, _mock):
-        prompt = _build_system_prompt(self_note=None)
+    def test_no_self_note_no_section(self):
+        prompt = build_system_prompt(DEFAULT_CHARACTER, self_note=None)
         assert "記憶メモ" not in prompt
 
 

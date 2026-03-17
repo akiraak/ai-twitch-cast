@@ -24,7 +24,7 @@ DEFAULT_STYLE = "終始にこにこしているような、柔らかく楽しげ
 def _get_tts_style():
     """現在の言語モードに応じたTTSスタイルを返す"""
     try:
-        from src.ai_responder import get_language_mode, LANGUAGE_MODES
+        from src.prompt_builder import get_language_mode, LANGUAGE_MODES
         mode = get_language_mode()
         lang = LANGUAGE_MODES.get(mode, {})
         return lang.get("tts_style", DEFAULT_STYLE)

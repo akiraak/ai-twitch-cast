@@ -1,6 +1,6 @@
 """キャラクター・言語モード APIのテスト"""
 
-from src.ai_responder import set_language_mode
+from src.prompt_builder import set_language_mode
 
 
 class TestGetCharacter:

@@ -62,7 +62,7 @@
 - scripts/state.py（CaptureAppClient インスタンス保持）
 - scripts/web.py（import先変更）
 
-### Step 1-2: prompt_builder.py 抽出
+### Step 1-2: prompt_builder.py 抽出 ✅完了
 
 **目的**: ai_responder.py からプロンプト組み立てロジックを分離
 

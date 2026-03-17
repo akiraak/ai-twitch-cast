@@ -9,10 +9,10 @@ from pydantic import BaseModel
 from src import db
 from src import scene_config
 from src.ai_responder import (
-    LANGUAGE_MODES,
-    get_character, get_character_id, get_language_mode,
-    invalidate_character_cache, set_language_mode,
+    get_character, get_character_id,
+    invalidate_character_cache,
 )
+from src.prompt_builder import LANGUAGE_MODES, get_language_mode, set_language_mode
 
 router = APIRouter()
 
