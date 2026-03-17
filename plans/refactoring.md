@@ -174,7 +174,7 @@
 - `broadcast-settings.js` の独立ファイル化（broadcast-ui.js と密結合なのでまとめる）
 - 100行を目標にしない（300行程度が現実的なゴール）
 
-### Step 2-4: index.html JS分割
+### Step 2-4: index.html JS分割 ✅完了
 
 **目的**: 1,238行のインラインJSをタブごとに分割
 
