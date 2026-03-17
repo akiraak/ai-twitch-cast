@@ -43,7 +43,6 @@ public class MainForm : Form
 
     // Streaming pipeline
     private FfmpegProcess? _ffmpeg;
-    private AudioLoopback? _audio;  // 旧WASAPI（未使用、互換性のため残す）
     private bool _closing;
     private bool _forceClose;
     private DateTime _streamStartTime;
@@ -1344,7 +1343,6 @@ public class MainForm : Form
         // → UI更新（OnTrayUpdate）と×ボタン（OnFormClosing）が即座に正しく動作する
         var ffmpeg = _ffmpeg;
         _ffmpeg = null;
-        _audio = null;  // 互換性のためフィールドクリア（実際は未使用）
         _activeStreamKey = null;
         Text = "AI Twitch Cast - 待機中";
         Log.Information("[Stop] State cleared. Starting cleanup...");
