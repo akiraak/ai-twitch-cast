@@ -471,7 +471,11 @@ async function loadBgmTracks() {
     row.innerHTML = `
       <div style="display:flex; gap:8px; align-items:center;">
         ${isPlaying ? '<span style="font-size:0.8rem; margin-right:2px;">▶</span>' : ''}
-        <span style="flex:1; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${isPlaying ? ' font-weight:600; color:#7b1fa2;' : ''}">${esc(t.name)}</span>
+        <span style="flex:1; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${isPlaying ? ' font-weight:600; color:#7b1fa2;' : ''}">${
+          t.source_url
+            ? `<a href="${escHtml(t.source_url)}" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline dotted; text-underline-offset:3px;" title="${escHtml(t.source_url)}">${esc(t.name)}</a>`
+            : esc(t.name)
+        }</span>
         ${isPlaying
           ? `<button class="secondary" data-bgm-stop style="font-size:0.75rem;">停止</button>`
           : `<button data-bgm-play="${esc(t.file)}" style="font-size:0.75rem;">再生</button>`}

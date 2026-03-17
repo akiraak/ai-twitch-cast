@@ -94,7 +94,8 @@ def _create_tables(conn):
         CREATE TABLE IF NOT EXISTS bgm_tracks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT UNIQUE NOT NULL,
-            volume REAL NOT NULL DEFAULT 1.0
+            volume REAL NOT NULL DEFAULT 1.0,
+            source_url TEXT
         );
 
         CREATE TABLE IF NOT EXISTS topics (
@@ -131,6 +132,12 @@ def _create_tables(conn):
     # Migration: add updated_at to characters
     try:
         conn.execute("ALTER TABLE characters ADD COLUMN updated_at TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    # Migration: add source_url to bgm_tracks
+    try:
+        conn.execute("ALTER TABLE bgm_tracks ADD COLUMN source_url TEXT")
         conn.commit()
     except sqlite3.OperationalError:
         pass
@@ -394,6 +401,13 @@ def get_all_bgm_track_volumes():
     return {row["filename"]: row["volume"] for row in rows}
 
 
+def get_all_bgm_tracks():
+    """全BGMトラック情報を返す（filename → {volume, source_url}）"""
+    conn = get_connection()
+    rows = conn.execute("SELECT filename, volume, source_url FROM bgm_tracks").fetchall()
+    return {row["filename"]: {"volume": row["volume"], "source_url": row["source_url"]} for row in rows}
+
+
 def set_bgm_track_volume(filename, volume):
     """BGMトラックの個別ボリュームを保存する"""
     conn = get_connection()
@@ -401,6 +415,17 @@ def set_bgm_track_volume(filename, volume):
         "INSERT INTO bgm_tracks (filename, volume) VALUES (?, ?) "
         "ON CONFLICT(filename) DO UPDATE SET volume = excluded.volume",
         (filename, volume),
+    )
+    conn.commit()
+
+
+def set_bgm_track_source_url(filename, source_url):
+    """BGMトラックのソースURLを保存する"""
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO bgm_tracks (filename, volume, source_url) VALUES (?, 1.0, ?) "
+        "ON CONFLICT(filename) DO UPDATE SET source_url = excluded.source_url",
+        (filename, source_url),
     )
     conn.commit()
 

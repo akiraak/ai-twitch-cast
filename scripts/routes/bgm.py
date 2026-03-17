@@ -36,16 +36,18 @@ def _save_bgm(track: str | None = None):
 
 @router.get("/api/bgm/list")
 async def bgm_list():
-    """BGMトラック一覧を返す（曲別音量付き）"""
+    """BGMトラック一覧を返す（曲別音量・ソースURL付き）"""
     BGM_DIR.mkdir(parents=True, exist_ok=True)
-    volumes = db.get_all_bgm_track_volumes()
+    all_tracks = db.get_all_bgm_tracks()
     tracks = []
     for f in sorted(BGM_DIR.iterdir()):
         if f.suffix.lower() in (".mp3", ".wav", ".ogg", ".m4a"):
+            info = all_tracks.get(f.name, {})
             tracks.append({
                 "name": f.stem,
                 "file": f.name,
-                "volume": volumes.get(f.name, 1.0),
+                "volume": info.get("volume", 1.0),
+                "source_url": info.get("source_url"),
             })
     settings = load_bgm_settings()
     return {"tracks": tracks, "track": settings.get("track", "")}
@@ -127,6 +129,8 @@ async def bgm_youtube(body: YouTubeDownload):
         output_path = BGM_DIR / f"{safe_name}.mp3"
 
         if output_path.exists():
+            # URLが未保存なら保存する（既存トラックへの補完）
+            db.set_bgm_track_source_url(output_path.name, url)
             return {"ok": True, "file": output_path.name, "title": title, "message": "既にダウンロード済み"}
 
         # ダウンロード
@@ -134,6 +138,9 @@ async def bgm_youtube(body: YouTubeDownload):
 
         if not output_path.exists():
             return {"ok": False, "error": "ダウンロードに失敗しました"}
+
+        # ソースURLをDBに保存
+        db.set_bgm_track_source_url(output_path.name, url)
 
         logger.info("YouTube BGMダウンロード完了: %s → %s", title, output_path.name)
         return {"ok": True, "file": output_path.name, "title": title}

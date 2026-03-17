@@ -447,6 +447,13 @@
 - [x] 配信BGM音声修正: createScriptProcessorNode→createScriptProcessor修正（WebSocket接続阻害の根本原因）、MP3デコード対応、BGM+TTSミキサー、pendingBgmUrlタイミング問題解決、broadcastWindow embedded修正
 - [x] 配信定期停止修正: ミキサーを壁時計追従+自己補正タイマーに改修（setInterval→setTimeout）、常時データ書き込み（無音時もギャップなし）、AudioCapture無効化、初期サイレンス縮小、TCP Nagle無効化
 
+## BGMトラックにYouTubeソースURLリンク追加
+
+- [x] bgm_tracksテーブルにsource_urlカラム追加（マイグレーション付き）
+- [x] YouTubeダウンロード時にソースURLをDBに保存（既存トラックへの再ダウンロードでも補完）
+- [x] BGM一覧APIがsource_urlを返すよう変更
+- [x] Web UIのBGMトラック名をYouTubeリンク化（source_urlがある場合のみ、点線下線付き）
+
 ## 素材ファイル管理（著作権物のWebUI管理）
 
 - [x] 素材管理API追加（`scripts/routes/files.py`: アバターVRM・背景画像のアップロード/一覧/選択/削除）
