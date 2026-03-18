@@ -1282,7 +1282,7 @@ async function dsCheckRepo(id) {
 }
 
 async function dsDeleteRepo(id, name) {
-  if (!confirm(`「${name}」を削除しますか？`)) return;
+  if (!await showConfirm(`「${name}」を削除しますか？`, { title: '削除', okLabel: '削除', danger: true })) return;
   await fetch(`/api/dev-stream/repos/${id}`, { method: 'DELETE' });
   await loadDevstream();
 }
