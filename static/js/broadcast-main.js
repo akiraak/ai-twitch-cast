@@ -127,6 +127,7 @@ function applySettings(s) {
       if (s.version.visible != null) vp.style.display = s.version.visible ? 'block' : 'none';
       if (s.version.positionX != null) vp.style.left = s.version.positionX + '%';
       if (s.version.positionY != null) vp.style.top = s.version.positionY + '%';
+      if (s.version.format != null) { window._versionFormat = s.version.format; _applyVersionFormat(); }
       if (s.version.fontSize != null) document.getElementById('version-text').style.fontSize = s.version.fontSize + 'vw';
       const vText = document.getElementById('version-text');
       if (s.version.strokeSize != null || s.version.strokeOpacity != null) {
@@ -203,6 +204,25 @@ async function loadTopicPanel() {
     const data = await res.json();
     updateTopicPanel(data);
   } catch (e) {}
+}
+
+// === バージョンフォーマット ===
+function _applyVersionFormat() {
+  const vEl = document.getElementById('version-text');
+  const info = window._versionInfo;
+  if (!vEl || !info || !info.version) return;
+  const fmt = window._versionFormat || 'Chobi v{version} ({date})';
+  const d = info.updated_at ? new Date(info.updated_at) : null;
+  const year = d ? String(d.getFullYear()) : '';
+  const month = d ? String(d.getMonth() + 1).padStart(2, '0') : '';
+  const day = d ? String(d.getDate()).padStart(2, '0') : '';
+  const date = d ? `${year}-${month}-${day}` : '';
+  vEl.textContent = fmt
+    .replace(/\{version}/g, info.version)
+    .replace(/\{date}/g, date)
+    .replace(/\{year}/g, year)
+    .replace(/\{month}/g, month)
+    .replace(/\{day}/g, day);
 }
 
 // === 開発アクティビティ ===
@@ -987,15 +1007,8 @@ async function init() {
   try {
     const res = await fetch('/api/status');
     const st = await res.json();
-    const vEl = document.getElementById('version-text');
-    if (vEl && st.version) {
-      let text = `v${st.version}`;
-      if (st.updated_at) {
-        const d = new Date(st.updated_at);
-        text += ` (${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')})`;
-      }
-      vEl.textContent = text;
-    }
+    window._versionInfo = st;
+    _applyVersionFormat();
   } catch (e) {}
 
   await loadTodo();

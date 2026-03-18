@@ -1030,11 +1030,17 @@ async function loadLayout() {
         if (slider) slider.value = val;
       }
     });
-    // バージョン表示トグル初期化
-    const vToggle = document.getElementById('lv-version-visible');
-    if (vToggle && data.version) {
-      vToggle.checked = !!data.version.visible;
-      _updateVersionToggleStyle(vToggle);
+    // バージョン表示トグル・フォーマット初期化
+    if (data.version) {
+      const vToggle = document.getElementById('lv-version-visible');
+      if (vToggle) {
+        vToggle.checked = !!data.version.visible;
+        _updateVersionToggleStyle(vToggle);
+      }
+      const vFormat = document.getElementById('lv-version-format');
+      if (vFormat && data.version.format) {
+        vFormat.value = data.version.format;
+      }
     }
   } catch (e) {}
 }
@@ -1042,6 +1048,14 @@ async function loadLayout() {
 function onVersionToggle(cb) {
   _updateVersionToggleStyle(cb);
   _updateLayout('version.visible', cb.checked ? 1 : 0);
+}
+
+let _versionFormatTimer = null;
+function onVersionFormatChange(input) {
+  clearTimeout(_versionFormatTimer);
+  _versionFormatTimer = setTimeout(() => {
+    _updateLayout('version.format', input.value);
+  }, 500);
 }
 
 function _updateVersionToggleStyle(cb) {
