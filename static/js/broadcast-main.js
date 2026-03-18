@@ -185,6 +185,35 @@ async function loadTopicPanel() {
   } catch (e) {}
 }
 
+// === 開発アクティビティ ===
+let _devActivityTimer = null;
+function showDevActivity(data) {
+  const panel = document.getElementById('dev-activity-panel');
+  const content = document.getElementById('dev-activity-content');
+  if (!panel || !content) return;
+  const commits = data.commits || [];
+  const repo = data.repo || '';
+  let html = '';
+  if (repo) html += `<div style="color:#81d4fa; font-weight:600; margin-bottom:2px;">${repo}</div>`;
+  for (const c of commits.slice(0, 5)) {
+    const hash = (c.hash || '').substring(0, 8);
+    const msg = c.message || '';
+    const author = c.author || '';
+    html += `<div style="margin-bottom:2px;"><span style="color:#ffb74d;">${hash}</span> ${msg}`;
+    if (author) html += ` <span style="color:#888; font-size:0.55vw;">— ${author}</span>`;
+    html += `</div>`;
+  }
+  content.innerHTML = html;
+  panel.style.display = 'block';
+  panel.style.opacity = '1';
+  if (_devActivityTimer) clearTimeout(_devActivityTimer);
+  _devActivityTimer = setTimeout(() => {
+    panel.style.transition = 'opacity 2s';
+    panel.style.opacity = '0';
+    setTimeout(() => { panel.style.display = 'none'; panel.style.transition = ''; }, 2000);
+  }, 15000);
+}
+
 // === TODO読み込み ===
 function renderTodoItems(items) {
   todoListEl.innerHTML = '';
@@ -312,6 +341,11 @@ function connectWS() {
       // TODO更新（WebSocket push）
       case 'todo_update':
         renderTodoItems(data.items || []);
+        break;
+
+      // 開発アクティビティ
+      case 'dev_commit':
+        showDevActivity(data);
         break;
 
       // ウィンドウキャプチャ

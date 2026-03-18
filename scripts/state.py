@@ -102,6 +102,13 @@ git_watcher = GitWatcher(on_commit=_on_git_commit)
 
 async def _on_dev_stream_event(repo_name, commits_info):
     """外部リポジトリのコミット検知時のコールバック"""
+    # Overlay に開発アクティビティを表示
+    await broadcast_overlay({
+        "type": "dev_commit",
+        "repo": repo_name,
+        "commits": [{"hash": c["hash"], "message": c["message"], "author": c.get("author", "")} for c in commits_info],
+    })
+    # AI実況
     if len(commits_info) == 1:
         c = commits_info[0]
         detail = f"{repo_name} — {c['hash'][:8]}: {c['message']}"

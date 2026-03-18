@@ -458,6 +458,7 @@
 - [x] APIルート実装（scripts/routes/dev_stream.py: repos CRUD・toggle・check・status・start/stop）
 - [x] WebUI「開発実況」タブ追加（監視ON/OFF・リポジトリ追加フォーム・一覧表示・toggle/check/削除）
 - [x] TODOソース切り替え（自プロジェクト/外部リポジトリ選択、overlay.py汎用化、WebUIセレクトボックス）
+- [x] Overlay開発アクティビティパネル（broadcast.htmlにDEV ACTIVITYパネル、15秒表示→フェードアウト）
 - [x] テスト追加（test_db.py: 12、test_dev_stream.py: 20、test_api_dev_stream.py: 11）
 - [x] CLAUDE.mdにテストセクション追加（実行方法・構成一覧・規約）
 - [x] プラン: plans/dev-stream.md

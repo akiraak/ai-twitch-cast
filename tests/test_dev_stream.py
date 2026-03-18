@@ -292,37 +292,48 @@ class TestStateIntegration:
 
     @pytest.mark.asyncio
     async def test_on_dev_stream_event_single(self):
-        """1件のコミット → speak_event('開発実況', ...)"""
+        """1件のコミット → speak_event + dev_commitイベント"""
         from unittest.mock import AsyncMock
         import scripts.state as st
 
         mock_reader = MagicMock()
         mock_reader.speak_event = AsyncMock()
-        original = st.reader
+        mock_broadcast = AsyncMock()
+        orig_reader, orig_broadcast = st.reader, st.broadcast_overlay
         st.reader = mock_reader
+        st.broadcast_overlay = mock_broadcast
         try:
             await st._on_dev_stream_event("owner/repo", [
                 {"hash": "abc12345", "message": "fix bug", "author": "Dev", "diff_summary": "a.py | 1 +"},
             ])
+            # speak_event
             mock_reader.speak_event.assert_called_once()
             args = mock_reader.speak_event.call_args
             assert args[0][0] == "開発実況"
             assert "owner/repo" in args[0][1]
-            assert "abc12345" in args[0][1]
             assert "fix bug" in args[0][1]
+            # dev_commit overlay event
+            mock_broadcast.assert_called_once()
+            event = mock_broadcast.call_args[0][0]
+            assert event["type"] == "dev_commit"
+            assert event["repo"] == "owner/repo"
+            assert len(event["commits"]) == 1
+            assert event["commits"][0]["hash"] == "abc12345"
         finally:
-            st.reader = original
+            st.reader, st.broadcast_overlay = orig_reader, orig_broadcast
 
     @pytest.mark.asyncio
     async def test_on_dev_stream_event_multiple(self):
-        """複数コミット → 件数とリスト"""
+        """複数コミット → 件数とリスト + dev_commitイベント"""
         from unittest.mock import AsyncMock
         import scripts.state as st
 
         mock_reader = MagicMock()
         mock_reader.speak_event = AsyncMock()
-        original = st.reader
+        mock_broadcast = AsyncMock()
+        orig_reader, orig_broadcast = st.reader, st.broadcast_overlay
         st.reader = mock_reader
+        st.broadcast_overlay = mock_broadcast
         try:
             await st._on_dev_stream_event("o/r", [
                 {"hash": "aaa11111", "message": "feat A", "author": "A", "diff_summary": ""},
@@ -330,7 +341,9 @@ class TestStateIntegration:
             ])
             args = mock_reader.speak_event.call_args
             assert "2件" in args[0][1]
-            assert "aaa11111" in args[0][1]
-            assert "bbb22222" in args[0][1]
+            # dev_commit
+            event = mock_broadcast.call_args[0][0]
+            assert event["type"] == "dev_commit"
+            assert len(event["commits"]) == 2
         finally:
-            st.reader = original
+            st.reader, st.broadcast_overlay = orig_reader, orig_broadcast

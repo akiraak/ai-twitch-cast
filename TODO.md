@@ -12,8 +12,5 @@
 ### サーバ
 - [ ] 表示が煩雑なので整理する
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
-- [ ] 汎用的なGitリポジトリをベースにした開発配信機能を入れる。外部のリポジトリをcloneして、その操作を実況する → [plans/dev-stream.md](plans/dev-stream.md)
-  - [ ] Phase 7: Overlay開発アクティビティパネル（オプション）
-
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証
