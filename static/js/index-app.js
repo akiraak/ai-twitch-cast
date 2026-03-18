@@ -1096,7 +1096,7 @@ function cssColorToHex(color) {
 }
 
 function _commonPropsHTML(s) {
-  const row = (label, body) => `<div class="layout-row"><span class="layout-label">${label}</span>${body}</div>`;
+  const row = (label, body) => `<div class="layout-row common-row"><span class="layout-label">${label}</span>${body}</div>`;
   const slider = (key, min, max, step) =>
     `<input type="range" class="vol-slider layout-slider" min="${min}" max="${max}" step="${step}" data-key="${s}.${key}" oninput="onLayoutSlider(this)">` +
     `<input type="number" class="layout-num" id="lv-${s}-${key}" min="${min}" max="${max}" step="${step}" data-key="${s}.${key}" oninput="onLayoutNum(this)">`;
@@ -1106,27 +1106,48 @@ function _commonPropsHTML(s) {
     `<input type="checkbox" class="layout-toggle" data-key="${s}.${key}" onchange="onLayoutToggle(this)" style="opacity:0; width:0; height:0;">` +
     `<span style="position:absolute; cursor:pointer; inset:0; background:#ccc; border-radius:20px; transition:.2s;"></span>` +
     `<span class="toggle-knob" style="position:absolute; left:2px; top:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:.2s;"></span></label>`;
-  return `<details style="margin-top:8px; border-top:1px solid #e0d0f0; padding-top:6px;">
-    <summary style="cursor:pointer; font-size:0.78rem; color:#7b1fa2; user-select:none;">詳細設定</summary>
+  const group = (title) => `<div style="font-size:0.7rem; color:#7b1fa2; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(124,77,255,0.06); border-radius:3px; border-left:2px solid #7b1fa2;">${title}</div>`;
+  return `
     ${row('表示', toggle('visible'))}
-    ${row('背景色', color('bgColor'))}
+    ${group('配置')}
+    ${row('X位置 (%)', slider('positionX', 0, 100, 0.5))}
+    ${row('Y位置 (%)', slider('positionY', 0, 100, 0.5))}
+    ${row('幅 (%)', slider('width', 5, 100, 0.5))}
+    ${row('高さ (%)', slider('height', 5, 100, 0.5))}
+    ${row('Z順序', slider('zIndex', 0, 100, 1))}
+    ${group('背景')}
+    ${row('色', color('bgColor'))}
+    ${row('透明度', slider('bgOpacity', 0, 1, 0.05))}
     ${row('角丸 (px)', slider('borderRadius', 0, 30, 1))}
-    ${row('ふち枠', toggle('borderEnabled'))}
-    ${row('枠色', color('borderColor'))}
     ${row('枠サイズ', slider('borderSize', 0, 10, 0.5))}
-    ${row('文字色', color('textColor'))}
-    ${row('文字縁取り', slider('textStrokeSize', 0, 10, 0.5))}
-    ${row('パディング (px)', slider('padding', 0, 30, 1))}
-  </details>`;
+    ${row('枠色', color('borderColor'))}
+    ${group('文字')}
+    ${row('サイズ (vw)', slider('fontSize', 0.3, 5, 0.05))}
+    ${row('色', color('textColor'))}
+    ${row('縁取りサイズ', slider('textStrokeSize', 0, 10, 0.5))}
+    ${row('縁取り色', color('textStrokeColor'))}
+    ${row('縁取り透明度', slider('textStrokeOpacity', 0, 1, 0.05))}
+    ${row('内余白 (px)', slider('padding', 0, 30, 1))}
+  `;
 }
 
 function initCommonProps() {
   const sections = ['avatar', 'subtitle', 'todo', 'topic', 'version', 'dev_activity'];
   for (const s of sections) {
     const fs = document.querySelector(`fieldset[data-section="${s}"]`);
-    if (fs) fs.insertAdjacentHTML('beforeend', _commonPropsHTML(s));
+    if (!fs) continue;
+    // legendの直後（先頭）に共通コントロールを挿入
+    const legend = fs.querySelector('legend');
+    if (legend) legend.insertAdjacentHTML('afterend', _commonPropsHTML(s));
+    else fs.insertAdjacentHTML('afterbegin', _commonPropsHTML(s));
+    // 固有パラメータがあればグループヘッダーを追加
+    const specificRows = fs.querySelectorAll('.layout-row:not(.common-row)');
+    if (specificRows.length > 0) {
+      specificRows[0].insertAdjacentHTML('beforebegin',
+        '<div style="font-size:0.7rem; color:#e67e22; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(230,126,34,0.06); border-radius:3px; border-left:2px solid #e67e22;">固有設定</div>');
+    }
   }
-  // トグルの見た目更新（checked時に背景色を変更）
+  // トグルの見た目更新
   document.querySelectorAll('.layout-toggle').forEach(cb => {
     cb.addEventListener('change', () => {
       const track = cb.nextElementSibling;
@@ -1150,13 +1171,8 @@ async function loadLayout() {
         if (slider) slider.value = val;
       }
     });
-    // バージョン表示トグル・フォーマット初期化
+    // バージョンフォーマット初期化
     if (data.version) {
-      const vToggle = document.getElementById('lv-version-visible');
-      if (vToggle) {
-        vToggle.checked = !!data.version.visible;
-        _updateVersionToggleStyle(vToggle);
-      }
       const vFormat = document.getElementById('lv-version-format');
       if (vFormat && data.version.format) {
         vFormat.value = data.version.format;
@@ -1182,29 +1198,12 @@ async function loadLayout() {
   } catch (e) {}
 }
 
-function onVersionToggle(cb) {
-  _updateVersionToggleStyle(cb);
-  _updateLayout('version.visible', cb.checked ? 1 : 0);
-}
-
 let _versionFormatTimer = null;
 function onVersionFormatChange(input) {
   clearTimeout(_versionFormatTimer);
   _versionFormatTimer = setTimeout(() => {
     _updateLayout('version.format', input.value);
   }, 500);
-}
-
-function _updateVersionToggleStyle(cb) {
-  const track = cb.nextElementSibling;
-  const knob = document.getElementById('lv-version-visible-knob');
-  if (cb.checked) {
-    track.style.background = '#7b1fa2';
-    knob.style.left = '20px';
-  } else {
-    track.style.background = '#ccc';
-    knob.style.left = '2px';
-  }
 }
 
 // --- 再起動 ---
@@ -1417,14 +1416,6 @@ setInterval(syncBgmVolumes, 3000);
             numEl.value = val;
             const slider = numEl.closest('.layout-row')?.querySelector('.layout-slider');
             if (slider) slider.value = val;
-          }
-          // バージョン表示トグル
-          if (section === 'version' && prop === 'visible') {
-            const vToggle = document.getElementById('lv-version-visible');
-            if (vToggle) {
-              vToggle.checked = !!val;
-              _updateVersionToggleStyle(vToggle);
-            }
           }
           // バージョンフォーマット
           if (section === 'version' && prop === 'format') {

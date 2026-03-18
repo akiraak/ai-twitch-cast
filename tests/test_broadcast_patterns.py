@@ -97,22 +97,22 @@ class TestApplyCommonStyle:
         body = func_match.group(0)
         assert "props.bgOpacity" in body
 
-    def test_sets_css_variables(self):
-        """新規共通プロパティがCSS変数として設定されること"""
+    def test_applies_styles_directly(self):
+        """共通プロパティが直接スタイル適用されること"""
         js = read_js()
         func_match = re.search(
             r"function applyCommonStyle\(.*?\n\}", js, re.DOTALL
         )
         body = func_match.group(0)
-        expected_vars = [
-            "--item-bg-color",
-            "--item-border-radius",
-            "--item-text-color",
-            "--item-font-size",
-            "--item-padding",
-        ]
-        for var in expected_vars:
-            assert var in body, f"applyCommonStyle に CSS変数 {var} の設定がない"
+        # 直接適用
+        assert "el.style.borderRadius" in body, "borderRadiusが直接適用されていない"
+        assert "el.style.color" in body, "textColorが直接適用されていない"
+        assert "el.style.padding" in body, "paddingが直接適用されていない"
+        assert "el.style.border" in body, "borderが直接適用されていない"
+        assert "el.style.webkitTextStroke" in body, "textStrokeが直接適用されていない"
+        # CSS変数も並行設定
+        assert "--item-bg-color" in body
+        assert "--item-border-radius" in body
 
 
 # === applySettings が applyCommonStyle を使用 ===
@@ -243,12 +243,43 @@ class TestWebUICommonProps:
         )
         assert func_match
         body = func_match.group(0)
-        assert "bgColor" in body
-        assert "borderRadius" in body
-        assert "borderEnabled" in body
-        assert "textColor" in body
-        assert "textStrokeSize" in body
-        assert "padding" in body
+        # 共通コントロール（17項目: 配置6 + 背景6 + 文字5）
+        for key in ["visible", "positionX", "positionY", "width", "height", "zIndex",
+                     "bgColor", "bgOpacity", "borderRadius",
+                     "borderColor", "borderSize",
+                     "textColor", "textStrokeSize", "textStrokeColor",
+                     "textStrokeOpacity", "padding"]:
+            assert key in body, f"_commonPropsHTML に {key} がない"
+
+    def test_common_props_has_groups(self):
+        """共通コントロールがグループ分けされていること"""
+        js = read_js_index()
+        func_match = re.search(
+            r"function _commonPropsHTML\(.*?\n\}", js, re.DOTALL
+        )
+        body = func_match.group(0)
+        assert "配置" in body, "配置グループがない"
+        assert "背景" in body, "背景グループがない"
+        assert "文字" in body, "文字グループがない"
+
+    def test_no_details_folding(self):
+        """折りたたみ<details>が使われていないこと"""
+        js = read_js_index()
+        func_match = re.search(
+            r"function _commonPropsHTML\(.*?\n\}", js, re.DOTALL
+        )
+        body = func_match.group(0)
+        assert "<details" not in body, "_commonPropsHTML に <details> が残っている"
+
+    def test_common_inserted_at_top(self):
+        """共通コントロールがfieldset先頭（legend直後）に挿入されること"""
+        js = read_js_index()
+        func_match = re.search(
+            r"function initCommonProps\(\)\s*\{(.*?)\n\}", js, re.DOTALL
+        )
+        assert func_match
+        body = func_match.group(1)
+        assert "afterend" in body, "legend.afterend への挿入がない"
 
     def test_color_handler_exists(self):
         js = read_js_index()

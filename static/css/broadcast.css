@@ -227,6 +227,24 @@
     white-space: pre-wrap;
   }
 
+  /* === 共通テキスト色オーバーライド（WebUIから設定時に適用、!importantでID詳細度に勝つ） === */
+  .custom-text-color,
+  .custom-text-color .response,
+  .custom-text-color .english,
+  .custom-text-color .todo-item,
+  .custom-text-color .todo-title,
+  .custom-text-color .todo-section,
+  .custom-text-color .topic-title,
+  .custom-text-color .topic-desc,
+  .custom-text-color .topic-stats,
+  .custom-text-color .topic-label,
+  .custom-text-color .custom-text-content,
+  .custom-text-color #version-text,
+  .custom-text-color #dev-activity-content,
+  .custom-text-color .dev-activity-title {
+    color: var(--item-text-color) !important;
+  }
+
   /* === 編集モード === */
   [data-editable] {
     cursor: pointer;

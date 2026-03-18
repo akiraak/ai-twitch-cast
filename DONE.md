@@ -1,5 +1,16 @@
 # DONE
 
+## アイテム共通化バグ修正
+
+- [x] applyCommonStyleを直接適用に変更（bgColor→background、border、textColor、textStroke、padding）
+- [x] WebUI全面刷新: details廃止、共通UI(17項目)→固有UIの2段構成、配置/背景/文字のグループ化
+- [x] 背景色: hex→rgba変換してbgOpacityと合成し直接適用
+- [x] ふち枠: borderEnabled廃止→borderSize=0で非表示に統一
+- [x] 文字色: custom-text-colorクラス+!importantでID詳細度に勝つCSS追加
+- [x] 文字縁取り: 色/透明度をCSS変数に保存し全値読み出して合成適用
+- [x] 幅/高さ/文字サイズを共通UIに移行、重複する固有スライダー削除
+- [x] border_enabledをDB/デフォルト/マッピングから削除
+
 ## アイテム共通化 Phase 7: 動的アイテム移行
 
 - [x] custom_textsのCRUDをbroadcast_items経由に全面書き換え（ID体系: customtext:{n}）

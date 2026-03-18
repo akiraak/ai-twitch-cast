@@ -234,7 +234,6 @@ _COMMON_DEFAULTS = {
     "bgColor": "rgba(20,20,35,1)",
     "bgOpacity": 0.85,
     "borderRadius": 8,
-    "borderEnabled": 0,
     "borderColor": "rgba(255,255,255,0.5)",
     "borderSize": 1,
     "borderOpacity": 1.0,

@@ -36,7 +36,15 @@ const ITEM_REGISTRY = [
   { id: 'dev-activity-panel', prefix: 'dev_activity', hasSize: false, defaultZ: 15, skipVisible: true },
 ];
 
-// === 共通スタイル適用 ===
+// === hex色をrgbaに変換 ===
+function _hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3), 16) || 0;
+  const g = parseInt(hex.slice(3,5), 16) || 0;
+  const b = parseInt(hex.slice(5,7), 16) || 0;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// === 共通スタイル適用（直接適用 + CSS変数並行設定） ===
 function applyCommonStyle(el, props) {
   if (!el || !props) return;
   // 表示
@@ -48,20 +56,66 @@ function applyCommonStyle(el, props) {
   if (props.positionX != null) el.style.left = props.positionX + '%';
   if (props.positionY != null) el.style.top = props.positionY + '%';
   if (props.zIndex != null) el.style.zIndex = props.zIndex;
-  // 背景透明度（既存のCSS変数パターン）
-  if (props.bgOpacity != null) setBgOpacity(el, props.bgOpacity);
-  // 新規共通プロパティ → CSS変数として設定（Phase 3でCSSから参照）
-  if (props.bgColor != null) el.style.setProperty('--item-bg-color', props.bgColor);
-  if (props.borderRadius != null) el.style.setProperty('--item-border-radius', props.borderRadius + 'px');
-  if (props.borderEnabled != null) el.style.setProperty('--item-border-enabled', String(props.borderEnabled));
+  // 背景色（hex色 → rgbaに変換してbackground直接適用）
+  if (props.bgColor != null) {
+    el.style.setProperty('--item-bg-color', props.bgColor);
+    if (props.bgColor.startsWith('#')) {
+      const a = parseFloat(el.style.getPropertyValue('--bg-opacity')) || 0.85;
+      el.style.background = _hexToRgba(props.bgColor, a);
+    }
+  }
+  // 背景透明度
+  if (props.bgOpacity != null) {
+    setBgOpacity(el, props.bgOpacity);
+    // bgColorが直接適用されている場合、backgroundも更新
+    const bgColor = el.style.getPropertyValue('--item-bg-color');
+    if (bgColor && bgColor.startsWith('#')) {
+      el.style.background = _hexToRgba(bgColor, props.bgOpacity);
+    }
+  }
+  // 角丸
+  if (props.borderRadius != null) {
+    el.style.borderRadius = props.borderRadius + 'px';
+    el.style.setProperty('--item-border-radius', props.borderRadius + 'px');
+  }
+  // ふち枠（borderSize=0で非表示、>0で表示）
   if (props.borderColor != null) el.style.setProperty('--item-border-color', props.borderColor);
-  if (props.borderSize != null) el.style.setProperty('--item-border-size', props.borderSize + 'px');
-  if (props.borderOpacity != null) el.style.setProperty('--item-border-opacity', String(props.borderOpacity));
-  if (props.textColor != null) el.style.setProperty('--item-text-color', props.textColor);
-  if (props.fontSize != null) el.style.setProperty('--item-font-size', props.fontSize + 'vw');
+  if (props.borderSize != null) el.style.setProperty('--item-border-size', String(props.borderSize));
+  if (props.borderColor != null || props.borderSize != null) {
+    const bs = parseFloat(props.borderSize ?? el.style.getPropertyValue('--item-border-size')) || 0;
+    if (bs > 0) {
+      const bc = props.borderColor || el.style.getPropertyValue('--item-border-color') || 'rgba(255,255,255,0.5)';
+      el.style.border = bs + 'px solid ' + bc;
+    } else {
+      el.style.border = 'none';
+    }
+  }
+  // 文字色（親要素 + custom-text-colorクラスで子要素にも伝播）
+  if (props.textColor != null) {
+    el.style.color = props.textColor;
+    el.style.setProperty('--item-text-color', props.textColor);
+    el.classList.add('custom-text-color');
+  }
+  // 文字縁取り（CSS変数に保存 + 全プロパティを読み出して適用）
+  if (props.textStrokeSize != null) el.style.setProperty('--item-text-stroke-size', String(props.textStrokeSize));
   if (props.textStrokeColor != null) el.style.setProperty('--item-text-stroke-color', props.textStrokeColor);
-  if (props.textStrokeSize != null) el.style.setProperty('--item-text-stroke-size', props.textStrokeSize + 'px');
   if (props.textStrokeOpacity != null) el.style.setProperty('--item-text-stroke-opacity', String(props.textStrokeOpacity));
+  if (props.textStrokeSize != null || props.textStrokeColor != null || props.textStrokeOpacity != null) {
+    const size = Number(props.textStrokeSize ?? el.style.getPropertyValue('--item-text-stroke-size')) || 0;
+    if (size > 0) {
+      let color = props.textStrokeColor || el.style.getPropertyValue('--item-text-stroke-color') || 'rgba(0,0,0,0.8)';
+      const opacity = parseFloat(props.textStrokeOpacity ?? el.style.getPropertyValue('--item-text-stroke-opacity') ?? 0.8);
+      if (color.startsWith('#') && opacity < 1) color = _hexToRgba(color, opacity);
+      el.style.webkitTextStroke = size + 'px ' + color;
+      el.style.paintOrder = 'stroke fill';
+    } else {
+      el.style.webkitTextStroke = '';
+    }
+  }
+  // パディング
+  if (props.padding != null) el.style.padding = props.padding + 'px';
+  // CSS変数（CSS参照用）
+  if (props.fontSize != null) el.style.setProperty('--item-font-size', props.fontSize + 'vw');
   if (props.padding != null) el.style.setProperty('--item-padding', props.padding + 'px');
 }
 
