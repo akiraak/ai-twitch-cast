@@ -43,6 +43,18 @@ function _hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// === Google Fonts動的読み込み ===
+const _loadedGoogleFonts = new Set();
+const _GOOGLE_FONT_NAMES = ['M PLUS Rounded 1c', 'Kosugi Maru'];
+function _loadGoogleFont(name) {
+  if (!name || _loadedGoogleFonts.has(name) || !_GOOGLE_FONT_NAMES.includes(name)) return;
+  _loadedGoogleFonts.add(name);
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}&display=swap`;
+  document.head.appendChild(link);
+}
+
 // === 共通スタイル適用（直接適用 + CSS変数並行設定） ===
 function applyCommonStyle(el, props) {
   if (!el || !props) return;
@@ -154,6 +166,12 @@ function applyCommonStyle(el, props) {
   if (props.verticalAlign != null) {
     const ct = el.querySelector('.custom-text-content') || el;
     ct.style.justifyContent = props.verticalAlign === 'center' ? 'center' : props.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
+  }
+  // フォント
+  if (props.fontFamily != null) {
+    const ct = el.querySelector('.custom-text-content') || el;
+    ct.style.fontFamily = props.fontFamily || '';
+    _loadGoogleFont(props.fontFamily);
   }
 }
 
@@ -689,6 +707,7 @@ function addCustomTextLayer(id, label, content, layout) {
   if (layout) {
     if (layout.textAlign) textEl.style.textAlign = layout.textAlign;
     if (layout.verticalAlign) textEl.style.justifyContent = layout.verticalAlign === 'center' ? 'center' : layout.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
+    if (layout.fontFamily) { textEl.style.fontFamily = layout.fontFamily; _loadGoogleFont(layout.fontFamily); }
   }
   div.appendChild(textEl);
 

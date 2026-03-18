@@ -221,6 +221,12 @@ def _create_tables(conn):
             conn.commit()
         except sqlite3.OperationalError:
             pass
+    # Migration: add font_family to broadcast_items
+    try:
+        conn.execute("ALTER TABLE broadcast_items ADD COLUMN font_family TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     # Migration: overlay.* settings → broadcast_items
     try:
         migrate_overlay_to_items()
@@ -913,6 +919,7 @@ _ITEM_COMMON_COLS = {
     "textStrokeColor": "text_stroke_color", "textStrokeSize": "text_stroke_size",
     "textStrokeOpacity": "text_stroke_opacity", "padding": "padding",
     "textAlign": "text_align", "verticalAlign": "vertical_align",
+    "fontFamily": "font_family",
 }
 
 # 逆マッピング（DB列名→APIキー名）

@@ -1,5 +1,11 @@
 # DONE
 
+## テキストパネル フォント変更
+
+- [x] fontFamilyを共通プロパティとして追加（DB migration、broadcast.html描画、WebUIセレクトボックス）
+- [x] システムフォント6種＋Google Fonts 2種＋等幅の計9選択肢
+- [x] Google Fonts（M PLUS Rounded 1c、小杉丸ゴシック）は選択時に動的読み込み
+
 ## テキストパネル文字揃え（水平・垂直）
 
 - [x] textAlign（左/中央/右）・verticalAlign（上/中央/下）を共通プロパティとして追加

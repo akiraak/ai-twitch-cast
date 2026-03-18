@@ -1145,6 +1145,7 @@ function _commonPropsHTML(s) {
     ${row('枠色', color('borderColor'))}
     ${row('枠透明度', slider('borderOpacity', 0, 1, 0.05))}
     ${group('文字')}
+    ${row('フォント', select('fontFamily', [['', 'デフォルト'], ['Noto Sans JP', 'Noto Sans JP'], ['Yu Gothic UI', 'Yu Gothic UI'], ['Meiryo', 'メイリオ'], ['Yu Mincho', '游明朝'], ['BIZ UDPGothic', 'BIZ UDPゴシック'], ['M PLUS Rounded 1c', 'M PLUS Rounded 1c'], ['Kosugi Maru', '小杉丸ゴシック'], ['monospace', '等幅']]))}
     ${row('サイズ (vw)', slider('fontSize', 0.3, 5, 0.05))}
     ${row('色', color('textColor'))}
     ${row('水平揃え', select('textAlign', [['left', '左'], ['center', '中央'], ['right', '右']]))}
