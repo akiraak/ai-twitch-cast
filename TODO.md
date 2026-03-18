@@ -13,7 +13,6 @@
 - [ ] 表示が煩雑なので整理する
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
 - [ ] 汎用的なGitリポジトリをベースにした開発配信機能を入れる。外部のリポジトリをcloneして、その操作を実況する → [plans/dev-stream.md](plans/dev-stream.md)
-  - [ ] Phase 4: APIルート（リポジトリCRUD・監視制御）
   - [ ] Phase 5: WebUI「開発実況」タブ
   - [ ] Phase 6: 外部リポジトリTODO表示（TODOソース切り替え）
   - [ ] Phase 7: Overlay開発アクティビティパネル（オプション）

@@ -95,6 +95,15 @@ def api_client(test_db, mock_env, mock_gemini, monkeypatch):
     mock_gw.stop = AsyncMock()
     monkeypatch.setattr(st, "git_watcher", mock_gw)
 
+    mock_dsm = MagicMock()
+    mock_dsm.start = AsyncMock()
+    mock_dsm.stop = AsyncMock()
+    mock_dsm.is_running = False
+    mock_dsm.add_repo = AsyncMock()
+    mock_dsm.remove_repo = AsyncMock()
+    mock_dsm.check_repo = AsyncMock(return_value=[])
+    monkeypatch.setattr(st, "dev_stream_manager", mock_dsm)
+
     monkeypatch.setattr(st, "current_episode", None)
 
     from scripts.web import app

@@ -32,6 +32,7 @@ from scripts.routes.capture import router as capture_router
 from scripts.routes.bgm import router as bgm_router
 from scripts.routes.character import router as character_router
 from scripts.routes.db_viewer import router as db_viewer_router
+from scripts.routes.dev_stream import router as dev_stream_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream_control import router as stream_control_router
 from scripts.routes.topic import router as topic_router
@@ -69,6 +70,7 @@ app.include_router(avatar_router)
 app.include_router(bgm_router)
 app.include_router(character_router)
 app.include_router(db_viewer_router)
+app.include_router(dev_stream_router)
 app.include_router(files_router)
 app.include_router(overlay_router)
 app.include_router(topic_router)
