@@ -114,6 +114,113 @@ class TestItemsAPI:
         assert item["visible"] == 1
 
 
+class TestCustomTextViaBroadcastItems:
+    """custom_textsがbroadcast_items経由で動作すること"""
+
+    def test_create_custom_text(self, test_db):
+        item = test_db.create_custom_text(label="テスト", content="Hello")
+        assert item["id"] == 1
+        assert item["label"] == "テスト"
+        assert item["content"] == "Hello"
+        assert "layout" in item
+        assert item["layout"]["x"] == 5
+
+    def test_get_custom_texts(self, test_db):
+        test_db.create_custom_text(label="A", content="aaa")
+        test_db.create_custom_text(label="B", content="bbb")
+        items = test_db.get_custom_texts()
+        assert len(items) >= 2
+        labels = [i["label"] for i in items]
+        assert "A" in labels
+        assert "B" in labels
+
+    def test_update_custom_text(self, test_db):
+        item = test_db.create_custom_text(label="Original", content="text")
+        test_db.update_custom_text(item["id"], label="Updated", content="new text")
+        items = test_db.get_custom_texts()
+        updated = [i for i in items if i["id"] == item["id"]][0]
+        assert updated["label"] == "Updated"
+        assert updated["content"] == "new text"
+
+    def test_update_custom_text_layout(self, test_db):
+        item = test_db.create_custom_text(label="L", content="t")
+        test_db.update_custom_text_layout(item["id"], {
+            "x": 10, "y": 20, "zIndex": 30,
+        })
+        items = test_db.get_custom_texts()
+        updated = [i for i in items if i["id"] == item["id"]][0]
+        assert updated["layout"]["x"] == 10
+        assert updated["layout"]["y"] == 20
+        assert updated["layout"]["zIndex"] == 30
+
+    def test_delete_custom_text(self, test_db):
+        item = test_db.create_custom_text(label="Del", content="x")
+        test_db.delete_custom_text(item["id"])
+        items = test_db.get_custom_texts()
+        assert all(i["id"] != item["id"] for i in items)
+
+    def test_stored_in_broadcast_items(self, test_db):
+        """custom_textがbroadcast_itemsテーブルに格納されていること"""
+        item = test_db.create_custom_text(label="Check", content="data")
+        bi = test_db.get_broadcast_item(f"customtext:{item['id']}")
+        assert bi is not None
+        assert bi["type"] == "custom_text"
+        assert bi["content"] == "data"
+
+    def test_api_create(self, api_client):
+        resp = api_client.post("/api/overlay/custom-texts", json={
+            "label": "APIテスト", "content": "テキスト内容",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["label"] == "APIテスト"
+        assert data["content"] == "テキスト内容"
+
+    def test_api_get_list(self, api_client):
+        api_client.post("/api/overlay/custom-texts", json={
+            "label": "List", "content": "c",
+        })
+        resp = api_client.get("/api/overlay/custom-texts")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+
+class TestMigration:
+    """マイグレーションのテスト"""
+
+    def test_migrate_custom_texts(self, test_db):
+        """custom_textsテーブルからbroadcast_itemsへの移行"""
+        conn = test_db.get_connection()
+        # 旧テーブルにデータを直接挿入
+        conn.execute(
+            "INSERT INTO custom_texts (label, content, x, y, width, height, font_size, bg_opacity, z_index, visible, created_at) "
+            "VALUES ('old', 'old content', 1, 2, 30, 40, 1.5, 0.9, 20, 1, '2024-01-01')"
+        )
+        conn.commit()
+        # 移行実行
+        from src.db import _migrate_custom_texts_to_items
+        _migrate_custom_texts_to_items()
+        # broadcast_itemsに移行されたか確認
+        bi = test_db.get_broadcast_item("customtext:1")
+        assert bi is not None
+        assert bi["type"] == "custom_text"
+        assert bi["content"] == "old content"
+
+    def test_migrate_capture_windows(self, test_db):
+        """capture_windowsテーブルからbroadcast_itemsへの移行"""
+        conn = test_db.get_connection()
+        conn.execute(
+            "INSERT INTO capture_windows (window_name, label, x, y, width, height, z_index, visible, created_at) "
+            "VALUES ('Terminal', 'Term', 5, 10, 40, 50, 10, 1, '2024-01-01')"
+        )
+        conn.commit()
+        from src.db import _migrate_capture_windows_to_items
+        _migrate_capture_windows_to_items()
+        bi = test_db.get_broadcast_item("capture:1")
+        assert bi is not None
+        assert bi["type"] == "capture"
+
+
 class TestOverlaySettingsCompat:
     """旧API /api/overlay/settings の互換性テスト"""
 

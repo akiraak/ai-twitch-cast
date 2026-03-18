@@ -1,5 +1,12 @@
 # DONE
 
+## アイテム共通化 Phase 7: 動的アイテム移行
+
+- [x] custom_textsのCRUDをbroadcast_items経由に全面書き換え（ID体系: customtext:{n}）
+- [x] custom_texts/capture_windowsテーブル → broadcast_itemsへの自動マイグレーション
+- [x] 旧テーブルはフォールバック用に残留（capture.pyの全面書き換えは別タスクに分離）
+- [x] テスト10件追加（custom_text CRUD、API互換、マイグレーション）
+
 ## アイテム共通化 Phase 6: broadcast_itemsテーブル + 固定アイテム移行
 
 - [x] broadcast_itemsテーブル作成（共通22カラム + properties JSON）

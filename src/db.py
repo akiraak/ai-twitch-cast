@@ -772,24 +772,25 @@ def delete_dev_repo(repo_id):
     conn.commit()
 
 
-# --- custom_texts ---
+# --- custom_texts (broadcast_items経由) ---
 
-def _custom_text_to_dict(row):
-    """custom_textsの行をAPI用dictに変換"""
-    d = dict(row)
+def _item_to_custom_text_dict(item):
+    """broadcast_itemをcustom_text API形式に変換"""
+    item_id = item["id"]
+    num_id = int(item_id.split(":")[1]) if ":" in str(item_id) else item_id
     return {
-        "id": d["id"],
-        "label": d["label"],
-        "content": d["content"],
+        "id": num_id,
+        "label": item.get("label", ""),
+        "content": item.get("content", ""),
         "layout": {
-            "x": d["x"],
-            "y": d["y"],
-            "width": d["width"],
-            "height": d["height"],
-            "fontSize": d["font_size"],
-            "bgOpacity": d["bg_opacity"],
-            "zIndex": d["z_index"],
-            "visible": bool(d["visible"]),
+            "x": item.get("positionX", 5),
+            "y": item.get("positionY", 5),
+            "width": item.get("width", 20),
+            "height": item.get("height", 15),
+            "fontSize": item.get("fontSize", 1.2),
+            "bgOpacity": item.get("bgOpacity", 0.85),
+            "zIndex": item.get("zIndex", 15),
+            "visible": bool(item.get("visible", 1)),
         },
     }
 
@@ -797,77 +798,90 @@ def _custom_text_to_dict(row):
 def get_custom_texts():
     """全カスタムテキストアイテムを返す"""
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM custom_texts ORDER BY id").fetchall()
-    return [_custom_text_to_dict(r) for r in rows]
+    rows = conn.execute(
+        "SELECT * FROM broadcast_items WHERE type = 'custom_text' ORDER BY id"
+    ).fetchall()
+    return [_item_to_custom_text_dict(_item_row_to_dict(r)) for r in rows]
 
 
 def create_custom_text(label="", content="", layout=None):
     """カスタムテキストを作成し、作成されたレコードを返す"""
     conn = get_connection()
     layout = layout or {}
-    cur = conn.execute(
-        """INSERT INTO custom_texts (label, content, x, y, width, height, font_size, bg_opacity, z_index, visible, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            label,
-            content,
-            layout.get("x", 5),
-            layout.get("y", 5),
-            layout.get("width", 20),
-            layout.get("height", 15),
-            layout.get("fontSize", 1.2),
-            layout.get("bgOpacity", 0.85),
-            layout.get("zIndex", 15),
-            1 if layout.get("visible", True) else 0,
-            _now(),
-        ),
+    # 次のIDを算出
+    row = conn.execute(
+        "SELECT MAX(CAST(SUBSTR(id, 12) AS INTEGER)) as max_id "
+        "FROM broadcast_items WHERE type = 'custom_text'"
+    ).fetchone()
+    next_id = (row["max_id"] or 0) + 1 if row and row["max_id"] else 1
+    item_id = f"customtext:{next_id}"
+
+    data = {
+        "positionX": layout.get("x", 5),
+        "positionY": layout.get("y", 5),
+        "width": layout.get("width", 20),
+        "height": layout.get("height", 15),
+        "fontSize": layout.get("fontSize", 1.2),
+        "bgOpacity": layout.get("bgOpacity", 0.85),
+        "zIndex": layout.get("zIndex", 15),
+        "visible": 1 if layout.get("visible", True) else 0,
+        "content": content,
+    }
+    upsert_broadcast_item(item_id, "custom_text", data)
+    # label を直接更新
+    conn.execute(
+        "UPDATE broadcast_items SET label = ? WHERE id = ?", (label, item_id)
     )
     conn.commit()
-    row = conn.execute("SELECT * FROM custom_texts WHERE id = ?", (cur.lastrowid,)).fetchone()
-    return _custom_text_to_dict(row)
+    item = get_broadcast_item(item_id)
+    return _item_to_custom_text_dict(item)
 
 
 def update_custom_text(text_id, **kwargs):
     """カスタムテキストを部分更新（label, content, layout properties）"""
-    conn = get_connection()
-    col_map = {
-        "label": "label", "content": "content",
-        "x": "x", "y": "y", "width": "width", "height": "height",
-        "fontSize": "font_size", "bgOpacity": "bg_opacity",
-        "zIndex": "z_index", "visible": "visible",
+    item_id = f"customtext:{text_id}"
+    data = {}
+    key_map = {
+        "x": "positionX", "y": "positionY",
+        "width": "width", "height": "height",
+        "fontSize": "fontSize", "bgOpacity": "bgOpacity",
+        "zIndex": "zIndex", "visible": "visible",
     }
-    sets = []
-    vals = []
     for key, val in kwargs.items():
-        col = col_map.get(key)
-        if col:
-            if key == "visible":
-                val = 1 if val else 0
-            sets.append(f"{col} = ?")
-            vals.append(val)
-    if not sets:
-        return
-    vals.append(text_id)
-    conn.execute(f"UPDATE custom_texts SET {', '.join(sets)} WHERE id = ?", vals)
-    conn.commit()
+        if key in key_map:
+            data[key_map[key]] = val
+        elif key in ("label", "content"):
+            data[key] = val
+    if data:
+        upsert_broadcast_item(item_id, "custom_text", data)
+        # label は直接カラムなので個別更新
+        if "label" in data:
+            conn = get_connection()
+            conn.execute(
+                "UPDATE broadcast_items SET label = ? WHERE id = ?",
+                (data["label"], item_id),
+            )
+            conn.commit()
 
 
 def update_custom_text_layout(text_id, layout_update):
     """レイアウトのみ部分更新（broadcast.htmlドラッグ保存用）"""
-    col_map = {"x": "x", "y": "y", "width": "width", "height": "height",
-               "zIndex": "z_index", "visible": "visible"}
-    update_args = {}
+    item_id = f"customtext:{text_id}"
+    data = {}
+    key_map = {"x": "positionX", "y": "positionY", "width": "width",
+               "height": "height", "zIndex": "zIndex", "visible": "visible"}
     for key, val in layout_update.items():
-        if key in col_map:
-            update_args[key] = val
-    if update_args:
-        update_custom_text(text_id, **update_args)
+        if key in key_map:
+            data[key_map[key]] = val
+    if data:
+        update_broadcast_item_layout(item_id, data)
 
 
 def delete_custom_text(text_id):
     """カスタムテキストを削除"""
     conn = get_connection()
-    conn.execute("DELETE FROM custom_texts WHERE id = ?", (text_id,))
+    item_id = f"customtext:{text_id}"
+    conn.execute("DELETE FROM broadcast_items WHERE id = ?", (item_id,))
     conn.commit()
 
 
@@ -1004,6 +1018,66 @@ def update_broadcast_item_layout(item_id, layout):
     conn.commit()
 
 
+def _migrate_custom_texts_to_items():
+    """custom_textsテーブル → broadcast_items に移行"""
+    conn = get_connection()
+    # 既に移行済みなら何もしない
+    existing = conn.execute(
+        "SELECT id FROM broadcast_items WHERE type = 'custom_text' LIMIT 1"
+    ).fetchone()
+    if existing:
+        return
+    try:
+        rows = conn.execute("SELECT * FROM custom_texts").fetchall()
+    except Exception:
+        return
+    now = _now()
+    for row in rows:
+        d = dict(row)
+        item_id = f"customtext:{d['id']}"
+        props = _json.dumps({"content": d.get("content", "")}, ensure_ascii=False)
+        conn.execute(
+            """INSERT OR IGNORE INTO broadcast_items
+               (id, type, label, x, y, width, height, z_index, visible,
+                font_size, bg_opacity, properties, created_at, updated_at)
+               VALUES (?, 'custom_text', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (item_id, d.get("label", ""), d.get("x", 5), d.get("y", 5),
+             d.get("width", 20), d.get("height", 15), d.get("z_index", 15),
+             d.get("visible", 1), d.get("font_size", 1.2), d.get("bg_opacity", 0.85),
+             props, d.get("created_at", now), now),
+        )
+    conn.commit()
+
+
+def _migrate_capture_windows_to_items():
+    """capture_windowsテーブル → broadcast_items に移行"""
+    conn = get_connection()
+    existing = conn.execute(
+        "SELECT id FROM broadcast_items WHERE type = 'capture' LIMIT 1"
+    ).fetchone()
+    if existing:
+        return
+    try:
+        rows = conn.execute("SELECT * FROM capture_windows").fetchall()
+    except Exception:
+        return
+    now = _now()
+    for row in rows:
+        d = dict(row)
+        item_id = f"capture:{d['id']}"
+        props = _json.dumps({"window_name": d.get("window_name", "")}, ensure_ascii=False)
+        conn.execute(
+            """INSERT OR IGNORE INTO broadcast_items
+               (id, type, label, x, y, width, height, z_index, visible,
+                properties, created_at, updated_at)
+               VALUES (?, 'capture', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (item_id, d.get("label", ""), d.get("x", 5), d.get("y", 10),
+             d.get("width", 40), d.get("height", 50), d.get("z_index", 10),
+             d.get("visible", 1), props, d.get("created_at", now), now),
+        )
+    conn.commit()
+
+
 def migrate_overlay_to_items():
     """overlay.* settings → broadcast_items に移行（初回起動時に自動実行）"""
     conn = get_connection()
@@ -1011,6 +1085,9 @@ def migrate_overlay_to_items():
         "SELECT id FROM broadcast_items WHERE id = 'avatar'"
     ).fetchone()
     if existing:
+        # 固定アイテム移行済み、動的アイテムの移行もチェック
+        _migrate_custom_texts_to_items()
+        _migrate_capture_windows_to_items()
         return
 
     from scripts.routes.overlay import _OVERLAY_DEFAULTS, _COMMON_DEFAULTS
@@ -1055,3 +1132,6 @@ def migrate_overlay_to_items():
             vals,
         )
     conn.commit()
+    # 動的アイテムも移行
+    _migrate_custom_texts_to_items()
+    _migrate_capture_windows_to_items()

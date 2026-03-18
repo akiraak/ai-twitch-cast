@@ -14,7 +14,7 @@
         - [x] Phase 4: Web UI設定パネル
         - [x] Phase 3: CSS統一
         - [x] Phase 6: broadcast_itemsテーブル作成 + 固定アイテム移行
-        - [ ] Phase 7: 動的アイテム移行（custom_texts/capture_windows → 統合テーブル）+ 旧構造廃止
+        - [x] Phase 7: 動的アイテム移行（custom_texts → broadcast_items書き換え、capture_windowsデータ移行）
         共通プロパティ:
                 表示: ON/OFF
                 配置: XY座標、WHサイズ, Z値
