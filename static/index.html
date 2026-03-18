@@ -33,6 +33,7 @@
   <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
   <div class="tab" onclick="switchTab('topic', this)">トピック</div>
+  <div class="tab" onclick="switchTab('devstream', this)">開発実況</div>
   <div class="tab" onclick="switchTab('todo', this)">TODO</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
   <div class="tab" onclick="switchTab('db', this)">DB</div>
@@ -347,6 +348,37 @@ topics      1──N  topic_scripts (topic_id)</div>
         </div>
         <div id="background-files-list"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== 開発実況 ===== -->
+  <div class="tab-content" id="tab-devstream">
+    <div class="card">
+      <h2>監視状態</h2>
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+        <span id="ds-status-dot" class="status-dot off" style="width:10px; height:10px;"></span>
+        <span id="ds-status-text" style="font-size:0.9rem;">停止中</span>
+        <button id="ds-toggle-btn" onclick="dsToggleWatch()" style="margin-left:auto; padding:4px 16px;">開始</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>リポジトリ追加</h2>
+      <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+        <div style="flex:1; min-width:200px;">
+          <label style="font-size:0.75rem; color:#9a88b5;">リポジトリURL</label>
+          <input type="text" id="ds-url" class="text-input" placeholder="https://github.com/owner/repo.git" style="margin:0;">
+        </div>
+        <div style="width:100px;">
+          <label style="font-size:0.75rem; color:#9a88b5;">ブランチ</label>
+          <input type="text" id="ds-branch" class="text-input" placeholder="main" value="main" style="margin:0;">
+        </div>
+        <button onclick="dsAddRepo()" id="ds-add-btn" style="padding:6px 16px; white-space:nowrap;">追加</button>
+      </div>
+      <div id="ds-add-error" style="color:#e53935; font-size:0.8rem; margin-top:4px; display:none;"></div>
+    </div>
+    <div class="card">
+      <h2>リポジトリ一覧</h2>
+      <div id="ds-repos"></div>
     </div>
   </div>
 

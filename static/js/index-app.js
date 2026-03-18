@@ -1,5 +1,5 @@
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'db', 'files', 'debug', 'todo'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'devstream', 'db', 'files', 'debug', 'todo'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -18,6 +18,7 @@ function switchTab(name, el) {
   if (name === 'files') loadFilesList();
   if (name === 'debug') { loadScreenshots(); }
   if (name === 'todo') loadTodoList();
+  if (name === 'devstream') loadDevstream();
 }
 
 
@@ -1196,3 +1197,122 @@ captureRefreshSources();
 setInterval(captureRefreshSources, 10000);
 setInterval(syncBgmVolumes, 3000);
 
+
+// ===== 開発実況 =====
+
+async function loadDevstream() {
+  // ステータス
+  try {
+    const r = await fetch('/api/dev-stream/status');
+    const d = await r.json();
+    const dot = document.getElementById('ds-status-dot');
+    const text = document.getElementById('ds-status-text');
+    const btn = document.getElementById('ds-toggle-btn');
+    if (d.running) {
+      dot.className = 'status-dot on';
+      text.textContent = `監視中（${d.active_repos}リポジトリ）`;
+      btn.textContent = '停止';
+      btn.className = 'danger';
+    } else {
+      dot.className = 'status-dot off';
+      text.textContent = '停止中';
+      btn.textContent = '開始';
+      btn.className = 'success';
+    }
+  } catch (e) { console.error('devstream status error', e); }
+
+  // リポジトリ一覧
+  try {
+    const r = await fetch('/api/dev-stream/repos');
+    const d = await r.json();
+    const el = document.getElementById('ds-repos');
+    if (!d.repos.length) {
+      el.innerHTML = '<span style="color:#9a88b5;">リポジトリなし</span>';
+      return;
+    }
+    el.innerHTML = d.repos.map(repo => {
+      const active = repo.active ? true : false;
+      const hash = repo.last_commit_hash ? repo.last_commit_hash.substring(0, 8) : '-';
+      const toggleLabel = active ? 'ON' : 'OFF';
+      const toggleColor = active ? '#2e7d32' : '#999';
+      const opacity = active ? '1' : '0.5';
+      return `<div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #e8e0f0; opacity:${opacity};">
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(repo.name)}</div>
+          <div style="font-size:0.75rem; color:#9a88b5;">
+            ${esc(repo.branch)} / ${hash}
+          </div>
+        </div>
+        <button onclick="dsToggleRepo(${repo.id}, ${!active})" style="padding:2px 10px; font-size:0.75rem; background:${toggleColor}; color:#fff; border:none; border-radius:4px; cursor:pointer;">${toggleLabel}</button>
+        <button onclick="dsCheckRepo(${repo.id})" style="padding:2px 10px; font-size:0.75rem; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer;">Check</button>
+        <button onclick="dsDeleteRepo(${repo.id}, '${esc(repo.name)}')" style="padding:2px 10px; font-size:0.75rem; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer;">削除</button>
+      </div>`;
+    }).join('');
+  } catch (e) { console.error('devstream repos error', e); }
+}
+
+async function dsToggleWatch() {
+  const btn = document.getElementById('ds-toggle-btn');
+  const isRunning = btn.textContent === '停止';
+  btn.disabled = true;
+  try {
+    await fetch(`/api/dev-stream/${isRunning ? 'stop' : 'start'}`, { method: 'POST' });
+    await loadDevstream();
+  } finally { btn.disabled = false; }
+}
+
+async function dsAddRepo() {
+  const url = document.getElementById('ds-url').value.trim();
+  const branch = document.getElementById('ds-branch').value.trim() || 'main';
+  const errEl = document.getElementById('ds-add-error');
+  const btn = document.getElementById('ds-add-btn');
+  errEl.style.display = 'none';
+  if (!url) { errEl.textContent = 'URLを入力してください'; errEl.style.display = 'block'; return; }
+  btn.disabled = true;
+  btn.textContent = 'clone中...';
+  try {
+    const r = await fetch('/api/dev-stream/repos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, branch }),
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      errEl.textContent = d.error || '追加に失敗しました';
+      errEl.style.display = 'block';
+      return;
+    }
+    document.getElementById('ds-url').value = '';
+    await loadDevstream();
+  } catch (e) {
+    errEl.textContent = '通信エラー';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '追加';
+  }
+}
+
+async function dsToggleRepo(id, active) {
+  await fetch(`/api/dev-stream/repos/${id}/toggle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active }),
+  });
+  await loadDevstream();
+}
+
+async function dsCheckRepo(id) {
+  const r = await fetch(`/api/dev-stream/repos/${id}/check`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) {
+    log(`チェック完了: ${d.commits}件のコミット`);
+  }
+  await loadDevstream();
+}
+
+async function dsDeleteRepo(id, name) {
+  if (!confirm(`「${name}」を削除しますか？`)) return;
+  await fetch(`/api/dev-stream/repos/${id}`, { method: 'DELETE' });
+  await loadDevstream();
+}
