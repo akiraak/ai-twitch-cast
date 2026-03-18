@@ -285,3 +285,52 @@ class TestGetDiffSummary:
         assert "以下省略" in summary
         # 500文字 + 省略メッセージ以内
         assert len(summary) < 600
+
+
+class TestStateIntegration:
+    """state.pyとの統合テスト"""
+
+    @pytest.mark.asyncio
+    async def test_on_dev_stream_event_single(self):
+        """1件のコミット → speak_event('開発実況', ...)"""
+        from unittest.mock import AsyncMock
+        import scripts.state as st
+
+        mock_reader = MagicMock()
+        mock_reader.speak_event = AsyncMock()
+        original = st.reader
+        st.reader = mock_reader
+        try:
+            await st._on_dev_stream_event("owner/repo", [
+                {"hash": "abc12345", "message": "fix bug", "author": "Dev", "diff_summary": "a.py | 1 +"},
+            ])
+            mock_reader.speak_event.assert_called_once()
+            args = mock_reader.speak_event.call_args
+            assert args[0][0] == "開発実況"
+            assert "owner/repo" in args[0][1]
+            assert "abc12345" in args[0][1]
+            assert "fix bug" in args[0][1]
+        finally:
+            st.reader = original
+
+    @pytest.mark.asyncio
+    async def test_on_dev_stream_event_multiple(self):
+        """複数コミット → 件数とリスト"""
+        from unittest.mock import AsyncMock
+        import scripts.state as st
+
+        mock_reader = MagicMock()
+        mock_reader.speak_event = AsyncMock()
+        original = st.reader
+        st.reader = mock_reader
+        try:
+            await st._on_dev_stream_event("o/r", [
+                {"hash": "aaa11111", "message": "feat A", "author": "A", "diff_summary": ""},
+                {"hash": "bbb22222", "message": "feat B", "author": "B", "diff_summary": ""},
+            ])
+            args = mock_reader.speak_event.call_args
+            assert "2件" in args[0][1]
+            assert "aaa11111" in args[0][1]
+            assert "bbb22222" in args[0][1]
+        finally:
+            st.reader = original

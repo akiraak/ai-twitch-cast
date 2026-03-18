@@ -7,6 +7,7 @@ from fastapi import WebSocket
 from src import db
 from src.ai_responder import get_character_id, seed_character
 from src.comment_reader import CommentReader
+from src.dev_stream import DevStreamManager
 from src.git_watcher import GitWatcher
 from src.topic_talker import TopicTalker
 from src.twitch_api import TwitchAPI
@@ -97,6 +98,23 @@ async def _on_git_commit(commit_hash, message):
 
 # Git監視
 git_watcher = GitWatcher(on_commit=_on_git_commit)
+
+
+async def _on_dev_stream_event(repo_name, commits_info):
+    """外部リポジトリのコミット検知時のコールバック"""
+    if len(commits_info) == 1:
+        c = commits_info[0]
+        detail = f"{repo_name} — {c['hash'][:8]}: {c['message']}"
+        if c.get("diff_summary"):
+            detail += f"\n{c['diff_summary']}"
+    else:
+        lines = [f"- {c['hash'][:8]}: {c['message']}" for c in commits_info]
+        detail = f"{repo_name} — {len(commits_info)}件のコミット\n" + "\n".join(lines)
+    await reader.speak_event("開発実況", detail)
+
+
+# 外部リポジトリ監視
+dev_stream_manager = DevStreamManager(on_event=_on_dev_stream_event)
 
 
 async def ensure_reader():

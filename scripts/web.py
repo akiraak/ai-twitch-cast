@@ -139,6 +139,7 @@ async def restart_server():
 async def start():
     await state.ensure_reader()
     await state.git_watcher.start()
+    await state.dev_stream_manager.start()
 
     # 状態ファイルを作成（再起動時の自動復旧用）
     STATE_FILE.touch()
@@ -191,6 +192,12 @@ async def _restore_session():
         logger.info("Git監視復旧OK")
     except Exception as e:
         logger.warning("Git監視復旧失敗: %s", e)
+
+    try:
+        await state.dev_stream_manager.start()
+        logger.info("開発リポジトリ監視復旧OK")
+    except Exception as e:
+        logger.warning("開発リポジトリ監視復旧失敗: %s", e)
 
     # C#アプリの配信状態確認（タイムアウト3秒 — アプリ未起動時にブロックしない）
     try:
@@ -263,6 +270,10 @@ async def shutdown():
         pass
     try:
         await state.git_watcher.stop()
+    except Exception:
+        pass
+    try:
+        await state.dev_stream_manager.stop()
     except Exception:
         pass
     logger.info("シャットダウン完了")
