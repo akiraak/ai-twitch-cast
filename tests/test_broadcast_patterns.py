@@ -18,6 +18,14 @@ def read_html() -> str:
     return (STATIC_DIR / "broadcast.html").read_text(encoding="utf-8")
 
 
+def read_html_index() -> str:
+    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+
+def read_js_index() -> str:
+    return (STATIC_DIR / "js" / "index-app.js").read_text(encoding="utf-8")
+
+
 # === ITEM_REGISTRY ===
 
 EXPECTED_ITEMS = ["avatar", "subtitle", "todo", "topic", "version", "dev_activity"]
@@ -211,6 +219,55 @@ class TestEditSaveUsesRegistry:
 
 
 # === broadcast.html の data-editable 属性 ===
+
+
+class TestWebUICommonProps:
+    """Web UI (index.html/index-app.js) の共通プロパティUI検証"""
+
+    def test_all_fieldsets_have_data_section(self):
+        html = read_html_index()
+        for section in EXPECTED_ITEMS:
+            assert f'data-section="{section}"' in html, (
+                f'index.html に data-section="{section}" の fieldset がない'
+            )
+
+    def test_init_common_props_exists(self):
+        js = read_js_index()
+        assert "function initCommonProps()" in js
+        assert "function _commonPropsHTML(" in js
+
+    def test_common_props_generates_controls(self):
+        js = read_js_index()
+        func_match = re.search(
+            r"function _commonPropsHTML\(.*?\n\}", js, re.DOTALL
+        )
+        assert func_match
+        body = func_match.group(0)
+        assert "bgColor" in body
+        assert "borderRadius" in body
+        assert "borderEnabled" in body
+        assert "textColor" in body
+        assert "textStrokeSize" in body
+        assert "padding" in body
+
+    def test_color_handler_exists(self):
+        js = read_js_index()
+        assert "function onLayoutColor(" in js
+        assert "function cssColorToHex(" in js
+
+    def test_toggle_handler_exists(self):
+        js = read_js_index()
+        assert "function onLayoutToggle(" in js
+
+    def test_load_layout_handles_colors_and_toggles(self):
+        js = read_js_index()
+        func_match = re.search(
+            r"async function loadLayout\(\)\s*\{(.*?)\n\}", js, re.DOTALL
+        )
+        assert func_match
+        body = func_match.group(1)
+        assert "layout-color" in body, "loadLayout がカラーピッカーを初期化していない"
+        assert "layout-toggle" in body, "loadLayout がトグルを初期化していない"
 
 
 class TestDataEditableAttributes:

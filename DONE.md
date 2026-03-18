@@ -1,5 +1,13 @@
 # DONE
 
+## アイテム共通化 Phase 4: Web UI設定パネル
+
+- [x] 全fieldsetに`data-section`属性追加、dev_activityフィールドセット新規追加
+- [x] `_commonPropsHTML()`で折りたたみ「詳細設定」UI動的生成（visible, bgColor, borderRadius, border, textColor, textStroke, padding）
+- [x] `onLayoutColor()`/`onLayoutToggle()`/`cssColorToHex()`ハンドラ追加
+- [x] `loadLayout()`拡張（カラー・トグル初期値）、WebSocket同期にカラー・トグル対応追加
+- [x] テスト6件追加
+
 ## アイテム共通化 Phase 5: 保存漏れバグ修正 + visible対応 + リアルタイム同期
 
 - [x] editSave()保存漏れ修正: subtitle(bottom/fontSize/maxWidth/fadeDuration/bgOpacity), topic(maxWidth/titleFontSize), version(fontSize/strokeSize/strokeOpacity/format)

@@ -1074,6 +1074,69 @@ function onLayoutNum(input) {
   _updateLayout(input.dataset.key, val);
 }
 
+function onLayoutColor(input) {
+  _updateLayout(input.dataset.key, input.value);
+}
+
+function onLayoutToggle(cb) {
+  _updateLayout(cb.dataset.key, cb.checked ? 1 : 0);
+}
+
+function cssColorToHex(color) {
+  if (!color) return '#000000';
+  if (color.startsWith('#')) return color.substring(0, 7);
+  const m = color.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/);
+  if (m) {
+    const r = parseInt(m[1]).toString(16).padStart(2, '0');
+    const g = parseInt(m[2]).toString(16).padStart(2, '0');
+    const b = parseInt(m[3]).toString(16).padStart(2, '0');
+    return `#${r}${g}${b}`;
+  }
+  return '#000000';
+}
+
+function _commonPropsHTML(s) {
+  const row = (label, body) => `<div class="layout-row"><span class="layout-label">${label}</span>${body}</div>`;
+  const slider = (key, min, max, step) =>
+    `<input type="range" class="vol-slider layout-slider" min="${min}" max="${max}" step="${step}" data-key="${s}.${key}" oninput="onLayoutSlider(this)">` +
+    `<input type="number" class="layout-num" id="lv-${s}-${key}" min="${min}" max="${max}" step="${step}" data-key="${s}.${key}" oninput="onLayoutNum(this)">`;
+  const color = (key) => `<input type="color" class="layout-color" data-key="${s}.${key}" oninput="onLayoutColor(this)" style="width:40px; height:24px; border:1px solid #ccc; border-radius:4px; cursor:pointer;">`;
+  const toggle = (key) =>
+    `<label style="position:relative; display:inline-block; width:36px; height:20px; margin-left:8px;">` +
+    `<input type="checkbox" class="layout-toggle" data-key="${s}.${key}" onchange="onLayoutToggle(this)" style="opacity:0; width:0; height:0;">` +
+    `<span style="position:absolute; cursor:pointer; inset:0; background:#ccc; border-radius:20px; transition:.2s;"></span>` +
+    `<span class="toggle-knob" style="position:absolute; left:2px; top:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:.2s;"></span></label>`;
+  return `<details style="margin-top:8px; border-top:1px solid #e0d0f0; padding-top:6px;">
+    <summary style="cursor:pointer; font-size:0.78rem; color:#7b1fa2; user-select:none;">詳細設定</summary>
+    ${row('表示', toggle('visible'))}
+    ${row('背景色', color('bgColor'))}
+    ${row('角丸 (px)', slider('borderRadius', 0, 30, 1))}
+    ${row('ふち枠', toggle('borderEnabled'))}
+    ${row('枠色', color('borderColor'))}
+    ${row('枠サイズ', slider('borderSize', 0, 10, 0.5))}
+    ${row('文字色', color('textColor'))}
+    ${row('文字縁取り', slider('textStrokeSize', 0, 10, 0.5))}
+    ${row('パディング (px)', slider('padding', 0, 30, 1))}
+  </details>`;
+}
+
+function initCommonProps() {
+  const sections = ['avatar', 'subtitle', 'todo', 'topic', 'version', 'dev_activity'];
+  for (const s of sections) {
+    const fs = document.querySelector(`fieldset[data-section="${s}"]`);
+    if (fs) fs.insertAdjacentHTML('beforeend', _commonPropsHTML(s));
+  }
+  // トグルの見た目更新（checked時に背景色を変更）
+  document.querySelectorAll('.layout-toggle').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const track = cb.nextElementSibling;
+      const knob = track?.nextElementSibling;
+      if (track) track.style.background = cb.checked ? '#7b1fa2' : '#ccc';
+      if (knob) knob.style.left = cb.checked ? '16px' : '2px';
+    });
+  });
+}
+
 async function loadLayout() {
   try {
     const data = await (await fetch('/api/overlay/settings')).json();
@@ -1099,6 +1162,23 @@ async function loadLayout() {
         vFormat.value = data.version.format;
       }
     }
+    // 共通プロパティ: カラーピッカー・トグル初期化
+    document.querySelectorAll('.layout-color[data-key]').forEach(el => {
+      const [section, prop] = el.dataset.key.split('.');
+      const val = data[section]?.[prop];
+      if (val) el.value = cssColorToHex(String(val));
+    });
+    document.querySelectorAll('.layout-toggle[data-key]').forEach(el => {
+      const [section, prop] = el.dataset.key.split('.');
+      const val = data[section]?.[prop];
+      if (val != null) {
+        el.checked = !!Number(val);
+        const track = el.nextElementSibling;
+        const knob = track?.nextElementSibling;
+        if (track) track.style.background = el.checked ? '#7b1fa2' : '#ccc';
+        if (knob) knob.style.left = el.checked ? '16px' : '2px';
+      }
+    });
   } catch (e) {}
 }
 
@@ -1296,6 +1376,7 @@ async function deleteFile(category, file) {
 const initTab = location.hash.slice(1);
 if (TAB_NAMES.includes(initTab)) switchTab(initTab);
 
+initCommonProps();
 loadVolumes();
 loadLayout();
 loadCharacter();
@@ -1349,6 +1430,18 @@ setInterval(syncBgmVolumes, 3000);
           if (section === 'version' && prop === 'format') {
             const vFormat = document.getElementById('lv-version-format');
             if (vFormat) vFormat.value = val;
+          }
+          // カラーピッカー
+          const colorEl = document.querySelector(`.layout-color[data-key="${key}"]`);
+          if (colorEl) colorEl.value = cssColorToHex(String(val));
+          // トグル
+          const toggleEl = document.querySelector(`.layout-toggle[data-key="${key}"]`);
+          if (toggleEl) {
+            toggleEl.checked = !!Number(val);
+            const track = toggleEl.nextElementSibling;
+            const knob = track?.nextElementSibling;
+            if (track) track.style.background = toggleEl.checked ? '#7b1fa2' : '#ccc';
+            if (knob) knob.style.left = toggleEl.checked ? '16px' : '2px';
           }
         }
       }
