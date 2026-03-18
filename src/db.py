@@ -978,7 +978,16 @@ def upsert_broadcast_item(item_id, item_type, data):
         old_props.update(props)
         props = old_props
 
-    label = data.get("label", _ITEM_LABELS.get(item_type, item_id))
+    # labelはdata指定 → 既存値 → デフォルト の優先順
+    if "label" in data:
+        label = data["label"]
+    elif existing:
+        existing_row = conn.execute(
+            "SELECT label FROM broadcast_items WHERE id = ?", (item_id,)
+        ).fetchone()
+        label = existing_row["label"] if existing_row else _ITEM_LABELS.get(item_type, item_id)
+    else:
+        label = _ITEM_LABELS.get(item_type, item_id)
     cols = ["id", "type", "label", "properties", "updated_at"]
     vals = [item_id, item_type, label, _json.dumps(props, ensure_ascii=False), now]
     for col, val in common.items():

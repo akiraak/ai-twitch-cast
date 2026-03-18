@@ -159,6 +159,15 @@ class TestCustomTextViaBroadcastItems:
         items = test_db.get_custom_texts()
         assert all(i["id"] != item["id"] for i in items)
 
+    def test_update_without_label_preserves_label(self, test_db):
+        """labelなしの更新で既存labelが上書きされないこと"""
+        item = test_db.create_custom_text(label="元ラベル", content="text")
+        test_db.update_custom_text(item["id"], content="新内容")
+        items = test_db.get_custom_texts()
+        updated = [i for i in items if i["id"] == item["id"]][0]
+        assert updated["label"] == "元ラベル"
+        assert updated["content"] == "新内容"
+
     def test_stored_in_broadcast_items(self, test_db):
         """custom_textがbroadcast_itemsテーブルに格納されていること"""
         item = test_db.create_custom_text(label="Check", content="data")
