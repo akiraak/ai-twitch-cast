@@ -1023,7 +1023,30 @@ async function loadLayout() {
         if (slider) slider.value = val;
       }
     });
+    // バージョン表示トグル初期化
+    const vToggle = document.getElementById('lv-version-visible');
+    if (vToggle && data.version) {
+      vToggle.checked = !!data.version.visible;
+      _updateVersionToggleStyle(vToggle);
+    }
   } catch (e) {}
+}
+
+function onVersionToggle(cb) {
+  _updateVersionToggleStyle(cb);
+  _updateLayout('version.visible', cb.checked ? 1 : 0);
+}
+
+function _updateVersionToggleStyle(cb) {
+  const track = cb.nextElementSibling;
+  const knob = document.getElementById('lv-version-visible-knob');
+  if (cb.checked) {
+    track.style.background = '#7b1fa2';
+    knob.style.left = '20px';
+  } else {
+    track.style.background = '#ccc';
+    knob.style.left = '2px';
+  }
 }
 
 // --- 再起動 ---
