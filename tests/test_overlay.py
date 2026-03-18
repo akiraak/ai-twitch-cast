@@ -146,7 +146,7 @@ class TestCommonDefaults:
         expected_keys = {
             "visible", "positionX", "positionY", "width", "height", "zIndex",
             "bgColor", "bgOpacity", "borderRadius",
-            "borderColor", "borderSize", "borderOpacity",
+            "borderColor", "borderSize", "borderOpacity", "backdropBlur",
             "textColor", "fontSize",
             "textStrokeColor", "textStrokeSize", "textStrokeOpacity",
             "padding",

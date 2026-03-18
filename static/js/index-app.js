@@ -210,6 +210,10 @@ function _renderCaptureList(saved, active) {
   });
   _initToggles(el);
   el.onclick = _capListClick;
+  // layoutSettingsに値があればUIに反映（loadLayout完了後の再描画対応）
+  if (Object.keys(layoutSettings).length > 0) {
+    _applyLayoutToUI(layoutSettings);
+  }
 }
 
 let _capSavedList = [];
@@ -305,6 +309,10 @@ function _renderCustomTextList(items) {
     _injectCommonProps(detail, biId);
   });
   _initToggles(el);
+  // layoutSettingsに値があればUIに反映（loadLayout完了後の再描画対応）
+  if (Object.keys(layoutSettings).length > 0) {
+    _applyLayoutToUI(layoutSettings);
+  }
 }
 
 async function addCustomText() {
@@ -1122,6 +1130,7 @@ function _commonPropsHTML(s) {
     ${group('背景')}
     ${row('色', color('bgColor'))}
     ${row('透明度', slider('bgOpacity', 0, 1, 0.05))}
+    ${row('ぼかし (px)', slider('backdropBlur', 0, 30, 1))}
     ${row('角丸 (px)', slider('borderRadius', 0, 30, 1))}
     ${row('枠サイズ', slider('borderSize', 0, 10, 0.5))}
     ${row('枠色', color('borderColor'))}

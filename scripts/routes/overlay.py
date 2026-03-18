@@ -237,6 +237,7 @@ _COMMON_DEFAULTS = {
     "borderColor": "rgba(255,255,255,0.5)",
     "borderSize": 1,
     "borderOpacity": 1.0,
+    "backdropBlur": 6,
     "textColor": "#e0e0e0",
     "fontSize": 1.0,
     "textStrokeColor": "rgba(0,0,0,0.8)",

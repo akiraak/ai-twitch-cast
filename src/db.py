@@ -172,6 +172,7 @@ def _create_tables(conn):
             border_color TEXT NOT NULL DEFAULT 'rgba(255,255,255,0.5)',
             border_size REAL NOT NULL DEFAULT 1,
             border_opacity REAL NOT NULL DEFAULT 1.0,
+            backdrop_blur REAL NOT NULL DEFAULT 6,
             text_color TEXT NOT NULL DEFAULT '#e0e0e0',
             font_size REAL NOT NULL DEFAULT 1.0,
             text_stroke_color TEXT NOT NULL DEFAULT 'rgba(0,0,0,0.8)',
@@ -207,6 +208,12 @@ def _create_tables(conn):
             conn.commit()
         except sqlite3.OperationalError:
             pass
+    # Migration: add backdrop_blur to broadcast_items
+    try:
+        conn.execute("ALTER TABLE broadcast_items ADD COLUMN backdrop_blur REAL NOT NULL DEFAULT 6")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     # Migration: overlay.* settings → broadcast_items
     try:
         migrate_overlay_to_items()
@@ -894,6 +901,7 @@ _ITEM_COMMON_COLS = {
     "borderRadius": "border_radius",
     "borderColor": "border_color", "borderSize": "border_size",
     "borderOpacity": "border_opacity",
+    "backdropBlur": "backdrop_blur",
     "textColor": "text_color", "fontSize": "font_size",
     "textStrokeColor": "text_stroke_color", "textStrokeSize": "text_stroke_size",
     "textStrokeOpacity": "text_stroke_opacity", "padding": "padding",

@@ -70,9 +70,16 @@ function applyCommonStyle(el, props) {
     if (bgColor && bgColor.startsWith('#')) {
       el.style.background = _hexToRgba(bgColor, props.bgOpacity);
     }
-    // 透明度0でbackdrop-filterを無効化（ぼかしが残るのを防ぐ）
-    el.style.backdropFilter = props.bgOpacity > 0 ? '' : 'none';
-    el.style.webkitBackdropFilter = props.bgOpacity > 0 ? '' : 'none';
+  }
+  // 背景ぼかし（backdrop-filter: blur）
+  // bgOpacity=0なら強制無効、それ以外はbackdropBlur値で制御
+  if (props.backdropBlur != null) el.style.setProperty('--item-backdrop-blur', String(props.backdropBlur));
+  if (props.bgOpacity != null || props.backdropBlur != null) {
+    const opacity = parseFloat(props.bgOpacity ?? el.style.getPropertyValue('--bg-opacity') ?? 0.85);
+    const bv = parseFloat(props.backdropBlur ?? el.style.getPropertyValue('--item-backdrop-blur') ?? 6);
+    const filter = (opacity > 0 && bv > 0) ? `blur(${bv}px)` : 'none';
+    el.style.backdropFilter = filter;
+    el.style.webkitBackdropFilter = filter;
   }
   // 角丸
   if (props.borderRadius != null) {
@@ -206,7 +213,7 @@ function applySettings(s) {
   // === todo ===
   if (s.todo) {
     applyCommonStyle(todoPanelEl, s.todo);
-    todoSettings = s.todo;
+    todoSettings = Object.assign(todoSettings, s.todo);
     // todo固有: サイズ + maxHeight + transform
     if (s.todo.width != null) todoPanelEl.style.width = s.todo.width + '%';
     if (s.todo.height != null) {
