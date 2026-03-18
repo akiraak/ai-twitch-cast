@@ -41,6 +41,16 @@
     <div class="card">
       <h2>配信画面</h2>
       <div id="panel-list">
+        <details class="panel-item"><summary>背景</summary><div class="panel-body">
+          <div style="margin-bottom:8px;">
+            <label style="display:inline-block; padding:4px 12px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.8rem;">
+              画像を追加
+              <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple onchange="uploadFile('background', this)" style="display:none;">
+            </label>
+            <span class="status" id="background-upload-status" style="display:inline; margin-left:8px;"></span>
+          </div>
+          <div id="background-files-list"></div>
+        </div></details>
         <details data-section="avatar" class="panel-item"><summary>アバター</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">スケール</span><input type="range" class="vol-slider layout-slider" min="0.1" max="3" step="0.05" data-key="avatar.scale" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-avatar-scale" min="0.1" max="3" step="0.05" data-key="avatar.scale" oninput="onLayoutNum(this)"></div>
         </div></details>
@@ -311,17 +321,6 @@ topics      1──N  topic_scripts (topic_id)</div>
           <span class="status" id="avatar-upload-status" style="display:inline; margin-left:8px;"></span>
         </div>
         <div id="avatar-files-list"></div>
-      </div>
-      <div class="card">
-        <h2>背景画像</h2>
-        <div style="margin-bottom:12px;">
-          <label style="display:inline-block; padding:6px 14px; background:#7b1fa2; color:#fff; border-radius:6px; cursor:pointer; font-size:0.85rem; font-weight:500;">
-            ファイルを選択
-            <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple onchange="uploadFile('background', this)">
-          </label>
-          <span class="status" id="background-upload-status" style="display:inline; margin-left:8px;"></span>
-        </div>
-        <div id="background-files-list"></div>
       </div>
     </div>
   </div>

@@ -15,7 +15,6 @@
 - [ ] 表示が煩雑なので整理する
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
 - [ ] capture.pyのbroadcast_items全面移行（二重管理解消） → [plans/capture-broadcast-items-migration.md](plans/capture-broadcast-items-migration.md)
-- [ ] WebUIの素材の背景の機能を配信画面に移す。配信画面の一番上に「背景」を追加した、折り畳みを開いたら現在の背景画像の追加と選択ができる
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証

@@ -1274,7 +1274,7 @@ function _formatSize(bytes) {
 }
 
 async function loadFilesList() {
-  await Promise.all([loadCategoryFiles('avatar'), loadCategoryFiles('background')]);
+  await loadCategoryFiles('avatar');
 }
 
 async function loadCategoryFiles(category) {
@@ -1374,9 +1374,10 @@ if (TAB_NAMES.includes(initTab)) switchTab(initTab);
 
 // 固定アイテムの共通コントロール注入
 initCommonProps();
-// キャプチャ・カスタムテキストをロード（パネル生成+共通コントロール注入）
+// キャプチャ・カスタムテキスト・背景をロード（パネル生成+共通コントロール注入）
 captureRefreshSources();
 loadCustomTexts();
+loadCategoryFiles('background');
 // 全パネルの値を読み込み
 loadVolumes();
 loadLayout();
