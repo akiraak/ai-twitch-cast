@@ -1193,11 +1193,6 @@ function _applyLayoutToUI(data) {
       if (slider) slider.value = val;
     }
   });
-  // バージョンフォーマット初期化
-  if (data.version) {
-    const vFormat = document.getElementById('lv-version-format');
-    if (vFormat && data.version.format) vFormat.value = data.version.format;
-  }
   // カラーピッカー・トグル初期化
   document.querySelectorAll('.layout-color[data-key]').forEach(el => {
     const key = el.dataset.key;
@@ -1223,13 +1218,6 @@ function _applyLayoutToUI(data) {
   });
 }
 
-let _versionFormatTimer = null;
-function onVersionFormatChange(input) {
-  clearTimeout(_versionFormatTimer);
-  _versionFormatTimer = setTimeout(() => {
-    _updateLayout('version.format', input.value);
-  }, 500);
-}
 
 // --- 再起動 ---
 async function doRestart() {
@@ -1444,11 +1432,6 @@ setInterval(syncBgmVolumes, 3000);
             numEl.value = val;
             const slider = numEl.closest('.layout-row')?.querySelector('.layout-slider');
             if (slider) slider.value = val;
-          }
-          // バージョンフォーマット
-          if (section === 'version' && prop === 'format') {
-            const vFormat = document.getElementById('lv-version-format');
-            if (vFormat) vFormat.value = val;
           }
           // カラーピッカー
           const colorEl = document.querySelector(`.layout-color[data-key="${key}"]`);

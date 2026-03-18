@@ -148,26 +148,6 @@
     50% { transform: translateX(0.15vw); }
   }
 
-  /* === バージョンパネル（右下） === */
-  #version-panel {
-    position: absolute;
-    display: none;
-    left: 1%; top: 95%;
-    z-index: 10;
-    --bg-opacity: 0.85;
-    background: rgba(20, 20, 35, var(--bg-opacity));
-    border-radius: var(--item-border-radius, 6px);
-    padding: var(--item-padding, 4px 10px);
-    color: var(--item-text-color, #ccc);
-    font-family: 'Segoe UI', sans-serif;
-    pointer-events: none;
-  }
-  #version-text {
-    font-size: var(--item-font-size, 0.6vw);
-    -webkit-text-stroke: 2px rgba(0, 0, 0, 0.8);
-    paint-order: stroke fill;
-  }
-
   /* === 開発アクティビティパネル === */
   #dev-activity-panel {
     position: absolute;
@@ -221,7 +201,7 @@
   }
   .custom-text-content {
     color: rgba(255,255,255,0.9);
-    font-size: 1.2vw;
+    font-size: var(--item-font-size, 1.2vw);
     line-height: 1.5;
     word-break: break-word;
     white-space: pre-wrap;

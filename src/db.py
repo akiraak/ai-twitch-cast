@@ -907,7 +907,6 @@ _ITEM_SPECIFIC_KEYS = {
     "subtitle": {"bottom", "maxWidth", "fadeDuration"},
     "todo": {"titleFontSize"},
     "topic": {"maxWidth", "titleFontSize"},
-    "version": {"format", "strokeSize", "strokeOpacity"},
 }
 
 _ITEM_LABELS = {
@@ -915,7 +914,6 @@ _ITEM_LABELS = {
     "subtitle": "字幕",
     "todo": "TODOパネル",
     "topic": "トピックパネル",
-    "version": "バージョン表示",
     "dev_activity": "開発アクティビティ",
 }
 
@@ -1101,7 +1099,7 @@ def migrate_overlay_to_items():
     from scripts.routes.overlay import _OVERLAY_DEFAULTS, _COMMON_DEFAULTS
 
     now = _now()
-    fixed_items = ["avatar", "subtitle", "todo", "topic", "version", "dev_activity"]
+    fixed_items = ["avatar", "subtitle", "todo", "topic", "dev_activity"]
     for item_type in fixed_items:
         defaults = _OVERLAY_DEFAULTS.get(item_type, {})
         # overlay.* settingsからDB値を読み込み

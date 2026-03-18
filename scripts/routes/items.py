@@ -31,7 +31,7 @@ async def update_item(item_id: str, request: Request):
     if not item:
         return {"error": "not found"}
     result = db.upsert_broadcast_item(item_id, item["type"], body)
-    await state.broadcast_overlay({"type": "settings_update", item["type"]: body})
+    await state.broadcast_overlay({"type": "settings_update", item_id: body})
     return result
 
 

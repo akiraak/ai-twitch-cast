@@ -28,7 +28,7 @@ def read_js_index() -> str:
 
 # === ITEM_REGISTRY ===
 
-EXPECTED_ITEMS = ["avatar", "subtitle", "todo", "topic", "version", "dev_activity"]
+EXPECTED_ITEMS = ["avatar", "subtitle", "todo", "topic", "dev_activity"]
 
 
 class TestItemRegistry:
@@ -135,7 +135,6 @@ class TestApplySettingsUsesCommon:
             "applyCommonStyle(subtitleEl",
             "applyCommonStyle(todoPanelEl",
             "applyCommonStyle(topicPanelEl",
-            "applyCommonStyle(vp, s.version",
             "applyCommonStyle(dap, s.dev_activity",
         ]
         for call in expected_calls:
@@ -192,18 +191,14 @@ class TestEditSaveUsesRegistry:
         assert "overlaySettings.topic" in body
         assert "topic.maxWidth" in body or "topic].maxWidth" in body
 
-    def test_saves_version_specific_props(self):
-        """version固有プロパティ（fontSize, strokeSize, strokeOpacity, format）が保存されること"""
+    def test_custom_text_variable_expansion(self):
+        """カスタムテキストの変数展開関数が存在すること"""
         js = read_js()
-        func_match = re.search(
-            r"async function editSave\(\)\s*\{(.*?)\n\}", js, re.DOTALL
-        )
-        body = func_match.group(1)
-        assert "overlaySettings.version" in body
-        assert "version.fontSize" in body or "version].fontSize" in body
-        assert "strokeSize" in body
-        assert "strokeOpacity" in body
-        assert "_versionFormat" in body
+        assert "function _replaceVariables(" in js
+        func_match = re.search(r"function _replaceVariables\(.*?\n\}", js, re.DOTALL)
+        body = func_match.group(0)
+        assert "{version}" in body
+        assert "{date}" in body
 
     def test_dev_activity_skips_visible(self):
         """dev_activityはskipVisible: trueでvisibleを保存しないこと"""
@@ -308,11 +303,6 @@ class TestCssVariables:
     def _read_css(self):
         return (STATIC_DIR / "css" / "broadcast.css").read_text(encoding="utf-8")
 
-    def test_version_panel_in_css(self):
-        css = self._read_css()
-        assert "#version-panel" in css, "version-panelのCSSルールがない"
-        assert "#version-text" in css, "version-textのCSSルールがない"
-
     def test_dev_activity_panel_in_css(self):
         css = self._read_css()
         assert "#dev-activity-panel" in css, "dev-activity-panelのCSSルールがない"
@@ -326,12 +316,6 @@ class TestCssVariables:
         assert "var(--item-text-color" in css
         assert "var(--item-padding" in css
         assert "var(--item-font-size" in css
-
-    def test_version_panel_no_inline_styles(self):
-        html = read_html()
-        m = re.search(r'id="version-panel"[^>]*>', html)
-        assert m, "version-panelが見つからない"
-        assert 'style=' not in m.group(0), "version-panelにインラインスタイルが残っている"
 
     def test_dev_activity_panel_no_inline_styles(self):
         html = read_html()
@@ -364,7 +348,6 @@ class TestDataEditableAttributes:
             "subtitle": "subtitle",
             "todo": "todo-panel",
             "topic": "topic-panel",
-            "version": "version-panel",
             "dev_activity": "dev-activity-panel",
         }
         for editable_name, element_id in expected.items():

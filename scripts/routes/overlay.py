@@ -272,12 +272,6 @@ _OVERLAY_DEFAULTS = {
         "positionX": 1.04, "positionY": 1.85, "width": 31, "height": 20,
         "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95, "zIndex": 20,
     }),
-    "version": _make_item_defaults({
-        "visible": 0, "positionX": 1, "positionY": 95, "width": 20, "height": 5,
-        "fontSize": 0.6, "bgOpacity": 0.85, "strokeSize": 2, "strokeOpacity": 0.8,
-        "zIndex": 10, "format": "Chobi v{version} ({date})",
-        "borderRadius": 6, "padding": 4,
-    }),
     "dev_activity": _make_item_defaults({
         "visible": 0, "positionX": 1, "positionY": 75, "width": 35, "height": 15,
         "zIndex": 15, "bgOpacity": 0.9, "fontSize": 0.65, "padding": 8,
@@ -442,7 +436,7 @@ async def preview_overlay_settings(request: Request):
 async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
-    fixed_items = {"avatar", "subtitle", "todo", "topic", "version", "dev_activity"}
+    fixed_items = {"avatar", "subtitle", "todo", "topic", "dev_activity"}
     for section, props in body.items():
         if not isinstance(props, dict):
             continue

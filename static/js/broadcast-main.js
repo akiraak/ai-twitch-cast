@@ -32,7 +32,6 @@ const ITEM_REGISTRY = [
   { id: 'subtitle', prefix: 'subtitle', hasSize: false, defaultZ: 20 },
   { id: 'todo-panel', prefix: 'todo', hasSize: true, defaultZ: 20 },
   { id: 'topic-panel', prefix: 'topic', hasSize: false, defaultZ: 20 },
-  { id: 'version-panel', prefix: 'version', hasSize: false, defaultZ: 10 },
   { id: 'dev-activity-panel', prefix: 'dev_activity', hasSize: false, defaultZ: 15, skipVisible: true },
 ];
 
@@ -47,10 +46,9 @@ function _hexToRgba(hex, alpha) {
 // === 共通スタイル適用（直接適用 + CSS変数並行設定） ===
 function applyCommonStyle(el, props) {
   if (!el || !props) return;
-  // 表示
+  // 表示（CSS display:none を持つアイテムにも対応するため、block を明示指定）
   if (props.visible != null) {
-    if (!Number(props.visible)) el.style.display = 'none';
-    else if (el.style.display === 'none') el.style.display = '';
+    el.style.display = Number(props.visible) ? 'block' : 'none';
   }
   // 配置
   if (props.positionX != null) el.style.left = props.positionX + '%';
@@ -72,6 +70,9 @@ function applyCommonStyle(el, props) {
     if (bgColor && bgColor.startsWith('#')) {
       el.style.background = _hexToRgba(bgColor, props.bgOpacity);
     }
+    // 透明度0でbackdrop-filterを無効化（ぼかしが残るのを防ぐ）
+    el.style.backdropFilter = props.bgOpacity > 0 ? '' : 'none';
+    el.style.webkitBackdropFilter = props.bgOpacity > 0 ? '' : 'none';
   }
   // 角丸
   if (props.borderRadius != null) {
@@ -105,18 +106,29 @@ function applyCommonStyle(el, props) {
     if (size > 0) {
       let color = props.textStrokeColor || el.style.getPropertyValue('--item-text-stroke-color') || 'rgba(0,0,0,0.8)';
       const opacity = parseFloat(props.textStrokeOpacity ?? el.style.getPropertyValue('--item-text-stroke-opacity') ?? 0.8);
-      if (color.startsWith('#') && opacity < 1) color = _hexToRgba(color, opacity);
+      // 色に透明度を適用（hex → rgba変換、またはrgba のalpha値を差し替え）
+      if (color.startsWith('#')) {
+        color = _hexToRgba(color, opacity);
+      } else {
+        const m = color.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/);
+        if (m) color = `rgba(${m[1]},${m[2]},${m[3]},${opacity})`;
+      }
       el.style.webkitTextStroke = size + 'px ' + color;
       el.style.paintOrder = 'stroke fill';
     } else {
       el.style.webkitTextStroke = '';
     }
   }
+  // 文字サイズ
+  if (props.fontSize != null) {
+    el.style.fontSize = props.fontSize + 'vw';
+    el.style.setProperty('--item-font-size', props.fontSize + 'vw');
+  }
   // パディング
-  if (props.padding != null) el.style.padding = props.padding + 'px';
-  // CSS変数（CSS参照用）
-  if (props.fontSize != null) el.style.setProperty('--item-font-size', props.fontSize + 'vw');
-  if (props.padding != null) el.style.setProperty('--item-padding', props.padding + 'px');
+  if (props.padding != null) {
+    el.style.padding = props.padding + 'px';
+    el.style.setProperty('--item-padding', props.padding + 'px');
+  }
 }
 
 // === ライティング適用（applySettings・pending両方から呼ばれる） ===
@@ -208,25 +220,7 @@ function applySettings(s) {
       document.getElementById('topic-title-text').style.fontSize = s.topic.titleFontSize + 'vw';
     }
   }
-  // === version ===
-  if (s.version) {
-    const vp = document.getElementById('version-panel');
-    if (vp) {
-      applyCommonStyle(vp, s.version);
-      // version固有: format, fontSize(子要素), stroke
-      if (s.version.format != null) { window._versionFormat = s.version.format; _applyVersionFormat(); }
-      if (s.version.fontSize != null) document.getElementById('version-text').style.fontSize = s.version.fontSize + 'vw';
-      const vText = document.getElementById('version-text');
-      if (s.version.strokeSize != null || s.version.strokeOpacity != null) {
-        const size = s.version.strokeSize ?? parseFloat(vText.dataset.strokeSize || 2);
-        const opacity = s.version.strokeOpacity ?? parseFloat(vText.dataset.strokeOpacity || 0.8);
-        vText.dataset.strokeSize = size;
-        vText.dataset.strokeOpacity = opacity;
-        vText.style.webkitTextStroke = `${size}px rgba(0,0,0,${opacity})`;
-        vText.style.paintOrder = 'stroke fill';
-      }
-    }
-  }
+  // === version（廃止 → カスタムテキストで代替） ===
   // === dev_activity ===
   if (s.dev_activity) {
     const dap = document.getElementById('dev-activity-panel');
@@ -296,19 +290,17 @@ async function loadTopicPanel() {
   } catch (e) {}
 }
 
-// === バージョンフォーマット ===
-function _applyVersionFormat() {
-  const vEl = document.getElementById('version-text');
+// === テキスト変数展開（カスタムテキスト等で使用） ===
+function _replaceVariables(text) {
   const info = window._versionInfo;
-  if (!vEl || !info || !info.version) return;
-  const fmt = window._versionFormat || 'Chobi v{version} ({date})';
+  if (!info) return text;
   const d = info.updated_at ? new Date(info.updated_at) : null;
   const year = d ? String(d.getFullYear()) : '';
   const month = d ? String(d.getMonth() + 1).padStart(2, '0') : '';
   const day = d ? String(d.getDate()).padStart(2, '0') : '';
   const date = d ? `${year}-${month}-${day}` : '';
-  vEl.textContent = fmt
-    .replace(/\{version}/g, info.version)
+  return text
+    .replace(/\{version}/g, info.version || '')
     .replace(/\{date}/g, date)
     .replace(/\{year}/g, year)
     .replace(/\{month}/g, month)
@@ -412,7 +404,28 @@ function connectWS() {
         updateTopicPanel(data);
         break;
       case 'settings_update':
-        if (!_saving) applySettings(data);
+        if (!_saving) {
+          applySettings(data);
+          // customtext/captureアイテムの共通プロパティ適用
+          for (const [key, val] of Object.entries(data)) {
+            if (typeof val !== 'object' || key === 'type') continue;
+            if (key.startsWith('customtext:')) {
+              const id = parseInt(key.split(':')[1]);
+              const el = customTextLayers[id];
+              if (el) {
+                applyCommonStyle(el, val);
+                if (val.content != null) {
+                  const ct = el.querySelector('.custom-text-content');
+                  if (ct) { ct.dataset.rawContent = val.content; ct.textContent = _replaceVariables(val.content); }
+                }
+              }
+            } else if (key.startsWith('capture:')) {
+              const id = key.split(':')[1];
+              const el = captureLayers[id];
+              if (el) applyCommonStyle(el, val);
+            }
+          }
+        }
         break;
 
       // 配信状態（リップシンク遅延切替用）
@@ -645,7 +658,8 @@ function addCustomTextLayer(id, label, content, layout) {
 
   const textEl = document.createElement('div');
   textEl.className = 'custom-text-content';
-  textEl.textContent = content || '';
+  textEl.dataset.rawContent = content || '';
+  textEl.textContent = _replaceVariables(content || '');
   div.appendChild(textEl);
 
   customTextContainer.appendChild(div);
@@ -656,7 +670,11 @@ function addCustomTextLayer(id, label, content, layout) {
 function updateCustomTextLayer(id, data) {
   const el = customTextLayers[id];
   if (!el) return;
-  if (data.content != null) el.querySelector('.custom-text-content').textContent = data.content;
+  if (data.content != null) {
+    const ct = el.querySelector('.custom-text-content');
+    ct.dataset.rawContent = data.content;
+    ct.textContent = _replaceVariables(data.content);
+  }
   if (data.label != null) el.querySelector('.edit-label').textContent = data.label;
   if (data.layout) {
     applyLayoutToEl(el, data.layout);
@@ -1083,18 +1101,6 @@ async function editSave() {
     const titleFs = parseFloat(document.getElementById('topic-title-text')?.style.fontSize);
     if (!isNaN(titleFs)) overlaySettings.topic.titleFontSize = titleFs;
   }
-  if (overlaySettings.version) {
-    const vText = document.getElementById('version-text');
-    if (vText) {
-      const fs = parseFloat(vText.style.fontSize);
-      if (!isNaN(fs)) overlaySettings.version.fontSize = fs;
-      const ss = parseFloat(vText.dataset.strokeSize);
-      if (!isNaN(ss)) overlaySettings.version.strokeSize = ss;
-      const so = parseFloat(vText.dataset.strokeOpacity);
-      if (!isNaN(so)) overlaySettings.version.strokeOpacity = so;
-    }
-    if (window._versionFormat) overlaySettings.version.format = window._versionFormat;
-  }
 
   try {
     await fetch('/api/overlay/settings', {
@@ -1217,12 +1223,28 @@ async function init() {
     }
   } catch (e) { console.log('カスタムテキスト読み込みスキップ:', e.message); }
 
-  // バージョン情報取得
+  // broadcast_itemsから共通プロパティをカスタムテキスト・キャプチャに適用
+  try {
+    const allItems = await (await fetch('/api/items')).json();
+    for (const bi of allItems) {
+      if (bi.type === 'custom_text' && bi.id.startsWith('customtext:')) {
+        const numId = parseInt(bi.id.split(':')[1]);
+        const el = customTextLayers[numId];
+        if (el) applyCommonStyle(el, bi);
+      } else if (bi.type === 'capture' && bi.id.startsWith('capture:')) {
+        // captureはIDがセッション固有のためwindow_name経由では適用困難→スキップ
+      }
+    }
+  } catch (e) {}
+
+  // バージョン情報取得 → カスタムテキストの変数を再展開
   try {
     const res = await fetch('/api/status');
     const st = await res.json();
     window._versionInfo = st;
-    _applyVersionFormat();
+    document.querySelectorAll('.custom-text-content[data-raw-content]').forEach(el => {
+      el.textContent = _replaceVariables(el.dataset.rawContent);
+    });
   } catch (e) {}
 
   await loadTodo();
