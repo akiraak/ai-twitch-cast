@@ -83,23 +83,6 @@ api = (method, url, body) => _apiBase(method, url, body, {
   onLog: msg => log(msg),
 });
 
-// --- 配信制御 ---
-async function doGoLive() {
-  log('Go Live...');
-  showToast('配信準備中...', 'success', 10000);
-  const res = await api('POST', '/api/broadcast/go-live');
-  if (res?.ok) showToast('配信開始', 'success');
-  else showToast(res?.detail || '配信開始失敗', 'error');
-  refreshStatus();
-}
-
-async function doStop() {
-  log('配信停止...');
-  const res = await api('POST', '/api/broadcast/stop');
-  if (res?.ok) showToast('配信停止', 'success');
-  refreshStatus();
-}
-
 // --- 音量 ---
 function onVolume(source, slider) {
   const pct = slider.value;
@@ -1249,31 +1232,6 @@ function _applyLayoutToUI(data) {
   });
 }
 
-
-// --- 再起動 ---
-async function doRestart() {
-  if (!await showConfirm('サーバーを再起動しますか？', { title: '再起動' })) return;
-  log('再起動リクエスト送信...');
-  try {
-    await fetch('/api/restart', { method: 'POST' });
-  } catch (e) {}
-  showToast('再起動中...', 'success', 3000);
-  setTimeout(() => waitForRestart(), 2000);
-}
-
-function waitForRestart() {
-  const check = async () => {
-    try {
-      const r = await fetch('/api/status', { signal: AbortSignal.timeout(2000) });
-      if (r.ok) {
-        location.reload();
-        return;
-      }
-    } catch (e) {}
-    setTimeout(check, 1000);
-  };
-  check();
-}
 
 // --- サーバー更新検知 ---
 let _knownStartedAt = null;

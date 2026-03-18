@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-import signal
 import sys
 import time
 from pathlib import Path
@@ -135,19 +134,6 @@ async def get_status():
             "queue": state.reader.queue_size,
         },
     }
-
-
-@app.post("/api/restart")
-async def restart_server():
-    """サーバーを再起動する（run.shのループが自動的に再起動する）"""
-    logger.info("再起動リクエスト受信")
-
-    async def _kill():
-        await asyncio.sleep(0.5)
-        os.kill(os.getpid(), signal.SIGTERM)
-
-    asyncio.create_task(_kill())
-    return {"ok": True}
 
 
 # --- セットアップ & 配信開始 ---

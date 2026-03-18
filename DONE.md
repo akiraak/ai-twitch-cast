@@ -1,5 +1,11 @@
 # DONE
 
+## WebUI右上の配信制御ボタン削除
+
+- [x] 「配信開始」「配信停止」「再起動」ボタンをWebUIヘッダーから削除（C#パネル・preview.htmlに同等機能あり）
+- [x] `/api/restart` エンドポイント削除（コミット時にpost-commit hookで自動再起動されるため不要）
+- [x] 関連JS関数（doGoLive, doStop, doRestart, waitForRestart）削除
+
 ## テキストパネル フォント変更
 
 - [x] fontFamilyを共通プロパティとして追加（DB migration、broadcast.html描画、WebUIセレクトボックス）
