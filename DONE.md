@@ -1,5 +1,9 @@
 # DONE
 
+## テキストパネル変数ヘルプ表示
+
+- [x] WebUIのテキストパネルtextarea下に使える変数一覧（{version} {date} {year} {month} {day}）を表示
+
 ## アイテム共通化バグ修正
 
 - [x] applyCommonStyleを直接適用に変更（bgColor→background、border、textColor、textStroke、padding）

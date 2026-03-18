@@ -297,6 +297,7 @@ function _renderCustomTextList(items) {
         </div>
         <textarea rows="2" style="width:100%; box-sizing:border-box; padding:4px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px; resize:vertical;"
           onchange="updateCustomText(${item.id}, {content: this.value})">${escHtml(item.content)}</textarea>
+        <div style="font-size:0.7rem; color:#9a88b5; margin-top:2px;">変数: {version} {date} {year} {month} {day}</div>
       </div>
     </details>`;
   }).join('');
