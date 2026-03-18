@@ -33,5 +33,6 @@
 - [ ] 表示が煩雑なので整理する
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
 - [ ] capture.pyのbroadcast_items全面移行（二重管理解消） → [plans/capture-broadcast-items-migration.md](plans/capture-broadcast-items-migration.md)
+- [ ] WebUI 右上の「配信開始」「配信停止」を削除「再起動」は機能を調査してから不要なら削除
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証
