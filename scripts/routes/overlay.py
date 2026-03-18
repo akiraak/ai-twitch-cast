@@ -370,14 +370,17 @@ async def preview_overlay_settings(request: Request):
 async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
+    changed_sections = set()
     for section, props in body.items():
         if not isinstance(props, dict):
             continue
+        changed_sections.add(section)
         for prop, val in props.items():
             db.set_setting(f"overlay.{section}.{prop}", val)
-    # 全設定を読み直してブロードキャスト
+    # 変更されたセクションのみ読み直してブロードキャスト
     full = await get_overlay_settings()
-    await state.broadcast_overlay({"type": "settings_update", **full})
+    partial = {k: v for k, v in full.items() if k in changed_sections}
+    await state.broadcast_overlay({"type": "settings_update", **partial})
     return {"ok": True}
 
 
