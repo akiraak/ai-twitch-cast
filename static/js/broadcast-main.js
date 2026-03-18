@@ -886,6 +886,15 @@ async function editSave() {
     positionY: parseFloat(topicPanelEl.style.top) || 1.85,
     zIndex: getRealZIndex(topicPanelEl, 20),
   };
+  const vp = document.getElementById('version-panel');
+  if (vp) {
+    overlaySettings.version = {
+      visible: vp.style.display !== 'none' ? 1 : 0,
+      positionX: parseFloat(vp.style.left) || 1,
+      positionY: parseFloat(vp.style.top) || 95,
+      zIndex: getRealZIndex(vp, 10),
+    };
+  }
 
   try {
     await fetch('/api/overlay/settings', {
