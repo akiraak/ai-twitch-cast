@@ -9,6 +9,7 @@ data/*.db-shm
 resources/images/
 resources/audio/
 resources/vrm/
+repos/
 tmp/
 *.zip
 .server.pid
