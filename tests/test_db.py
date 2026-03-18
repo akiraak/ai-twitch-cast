@@ -16,6 +16,7 @@ class TestSchema:
             "channels", "characters", "shows", "episodes",
             "users", "comments", "actions", "settings",
             "bgm_tracks", "topics", "topic_scripts", "dev_repos",
+            "custom_texts",
         }
         assert expected.issubset(names)
 
@@ -439,3 +440,52 @@ class TestDevRepos:
         test_db.delete_dev_repo(repo["id"])
         assert test_db.get_dev_repo(repo["id"]) is None
         assert test_db.get_dev_repos() == []
+
+
+class TestCustomTexts:
+    """カスタムテキストのテスト"""
+
+    def test_create_and_list(self, test_db):
+        item = test_db.create_custom_text(label="test", content="hello")
+        assert item["id"] is not None
+        assert item["label"] == "test"
+        assert item["content"] == "hello"
+        assert item["layout"]["x"] == 5
+        items = test_db.get_custom_texts()
+        assert len(items) == 1
+        assert items[0]["label"] == "test"
+
+    def test_create_with_layout(self, test_db):
+        item = test_db.create_custom_text(
+            label="a", content="b",
+            layout={"x": 30, "y": 40, "width": 25, "fontSize": 2.0},
+        )
+        assert item["layout"]["x"] == 30
+        assert item["layout"]["y"] == 40
+        assert item["layout"]["width"] == 25
+        assert item["layout"]["fontSize"] == 2.0
+
+    def test_update(self, test_db):
+        item = test_db.create_custom_text(label="old", content="x")
+        test_db.update_custom_text(item["id"], label="new", content="updated")
+        items = test_db.get_custom_texts()
+        assert items[0]["label"] == "new"
+        assert items[0]["content"] == "updated"
+
+    def test_update_layout(self, test_db):
+        item = test_db.create_custom_text()
+        test_db.update_custom_text_layout(item["id"], {"x": 50, "y": 60})
+        items = test_db.get_custom_texts()
+        assert items[0]["layout"]["x"] == 50
+        assert items[0]["layout"]["y"] == 60
+
+    def test_delete(self, test_db):
+        item = test_db.create_custom_text(label="del")
+        test_db.delete_custom_text(item["id"])
+        assert test_db.get_custom_texts() == []
+
+    def test_multiple_items(self, test_db):
+        test_db.create_custom_text(label="a")
+        test_db.create_custom_text(label="b")
+        test_db.create_custom_text(label="c")
+        assert len(test_db.get_custom_texts()) == 3

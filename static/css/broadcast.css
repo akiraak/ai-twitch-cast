@@ -160,6 +160,26 @@
     pointer-events: none;
   }
 
+  /* === カスタムテキストレイヤー === */
+  .custom-text-layer {
+    position: absolute;
+    z-index: 15;
+    --bg-opacity: 0.85;
+    background: linear-gradient(135deg, rgba(0,0,0,var(--bg-opacity)), rgba(5,0,10,var(--bg-opacity)));
+    border: 1px solid rgba(124,77,255,0.3);
+    border-radius: 0.5vw;
+    padding: 0.6vw 0.8vw;
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+  }
+  .custom-text-content {
+    color: rgba(255,255,255,0.9);
+    font-size: 1.2vw;
+    line-height: 1.5;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
   /* === 編集モード === */
   [data-editable] {
     cursor: pointer;

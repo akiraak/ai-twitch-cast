@@ -399,6 +399,17 @@ function connectWS() {
         updateCaptureLayout(data.id, data.layout);
         break;
 
+      // カスタムテキスト
+      case 'custom_text_add':
+        addCustomTextLayer(data.id, data.label, data.content, data.layout);
+        break;
+      case 'custom_text_update':
+        updateCustomTextLayer(data.id, data);
+        break;
+      case 'custom_text_remove':
+        removeCustomTextLayer(data.id);
+        break;
+
       // 素材変更
       case 'avatar_vrm_change':
         if (data.url) loadVRM(data.url);
@@ -519,6 +530,56 @@ function applyLayoutToEl(el, layout) {
   if (layout.zIndex != null) el.style.zIndex = layout.zIndex;
   if (layout.visible === false) el.style.display = 'none';
   else el.style.display = '';
+}
+
+// === カスタムテキスト ===
+const customTextContainer = document.getElementById('custom-text-container');
+const customTextLayers = {};
+
+function addCustomTextLayer(id, label, content, layout) {
+  if (customTextLayers[id]) removeCustomTextLayer(id);
+  const div = document.createElement('div');
+  div.className = 'custom-text-layer';
+  div.dataset.editable = `customtext:${id}`;
+  div.dataset.customTextId = id;
+  if (layout) {
+    applyLayoutToEl(div, layout);
+    if (layout.fontSize != null) div.style.fontSize = layout.fontSize + 'vw';
+    if (layout.bgOpacity != null) setBgOpacity(div, layout.bgOpacity);
+  }
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'edit-label';
+  labelEl.textContent = label || `Text ${id}`;
+  div.appendChild(labelEl);
+
+  const textEl = document.createElement('div');
+  textEl.className = 'custom-text-content';
+  textEl.textContent = content || '';
+  div.appendChild(textEl);
+
+  customTextContainer.appendChild(div);
+  customTextLayers[id] = div;
+  setupEditable(div);
+}
+
+function updateCustomTextLayer(id, data) {
+  const el = customTextLayers[id];
+  if (!el) return;
+  if (data.content != null) el.querySelector('.custom-text-content').textContent = data.content;
+  if (data.label != null) el.querySelector('.edit-label').textContent = data.label;
+  if (data.layout) {
+    applyLayoutToEl(el, data.layout);
+    if (data.layout.fontSize != null) el.style.fontSize = data.layout.fontSize + 'vw';
+    if (data.layout.bgOpacity != null) setBgOpacity(el, data.layout.bgOpacity);
+  }
+  if (data.fontSize != null) el.style.fontSize = data.fontSize + 'vw';
+  if (data.bgOpacity != null) setBgOpacity(el, data.bgOpacity);
+}
+
+function removeCustomTextLayer(id) {
+  const el = customTextLayers[id];
+  if (el) { el.remove(); delete customTextLayers[id]; }
 }
 
 // === 編集モード（常時有効） ===
@@ -951,6 +1012,23 @@ async function editSave() {
       });
     } catch (e) {}
   }
+
+  for (const [id, el] of Object.entries(customTextLayers)) {
+    const layout = {
+      x: parseFloat(el.style.left) || 0,
+      y: parseFloat(el.style.top) || 0,
+      width: parseFloat(el.style.width) || 20,
+      height: parseFloat(el.style.height) || 15,
+      zIndex: getRealZIndex(el, 15),
+    };
+    try {
+      await fetch(`/api/overlay/custom-texts/${id}/layout`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(layout),
+      });
+    } catch (e) {}
+  }
   _saving = false;
 }
 
@@ -1020,6 +1098,15 @@ async function init() {
       addCaptureLayer(s.id, s.stream_url, s.label || s.name || s.id, s.layout);
     }
   } catch (e) { console.log('キャプチャ読み込みスキップ:', e.message); }
+
+  // カスタムテキスト読み込み
+  try {
+    const res = await fetch('/api/overlay/custom-texts');
+    const items = await res.json();
+    for (const item of items) {
+      addCustomTextLayer(item.id, item.label, item.content, item.layout);
+    }
+  } catch (e) { console.log('カスタムテキスト読み込みスキップ:', e.message); }
 
   // バージョン情報取得
   try {

@@ -127,6 +127,21 @@ def _create_tables(conn):
             updated_at TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS custom_texts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            label TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
+            x REAL NOT NULL DEFAULT 5,
+            y REAL NOT NULL DEFAULT 5,
+            width REAL NOT NULL DEFAULT 20,
+            height REAL NOT NULL DEFAULT 15,
+            font_size REAL NOT NULL DEFAULT 1.2,
+            bg_opacity REAL NOT NULL DEFAULT 0.85,
+            z_index INTEGER NOT NULL DEFAULT 15,
+            visible INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS capture_windows (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             window_name TEXT UNIQUE NOT NULL,
@@ -720,4 +735,103 @@ def delete_dev_repo(repo_id):
     """リポジトリをDBから削除する"""
     conn = get_connection()
     conn.execute("DELETE FROM dev_repos WHERE id = ?", (repo_id,))
+    conn.commit()
+
+
+# --- custom_texts ---
+
+def _custom_text_to_dict(row):
+    """custom_textsの行をAPI用dictに変換"""
+    d = dict(row)
+    return {
+        "id": d["id"],
+        "label": d["label"],
+        "content": d["content"],
+        "layout": {
+            "x": d["x"],
+            "y": d["y"],
+            "width": d["width"],
+            "height": d["height"],
+            "fontSize": d["font_size"],
+            "bgOpacity": d["bg_opacity"],
+            "zIndex": d["z_index"],
+            "visible": bool(d["visible"]),
+        },
+    }
+
+
+def get_custom_texts():
+    """全カスタムテキストアイテムを返す"""
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM custom_texts ORDER BY id").fetchall()
+    return [_custom_text_to_dict(r) for r in rows]
+
+
+def create_custom_text(label="", content="", layout=None):
+    """カスタムテキストを作成し、作成されたレコードを返す"""
+    conn = get_connection()
+    layout = layout or {}
+    cur = conn.execute(
+        """INSERT INTO custom_texts (label, content, x, y, width, height, font_size, bg_opacity, z_index, visible, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            label,
+            content,
+            layout.get("x", 5),
+            layout.get("y", 5),
+            layout.get("width", 20),
+            layout.get("height", 15),
+            layout.get("fontSize", 1.2),
+            layout.get("bgOpacity", 0.85),
+            layout.get("zIndex", 15),
+            1 if layout.get("visible", True) else 0,
+            _now(),
+        ),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM custom_texts WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _custom_text_to_dict(row)
+
+
+def update_custom_text(text_id, **kwargs):
+    """カスタムテキストを部分更新（label, content, layout properties）"""
+    conn = get_connection()
+    col_map = {
+        "label": "label", "content": "content",
+        "x": "x", "y": "y", "width": "width", "height": "height",
+        "fontSize": "font_size", "bgOpacity": "bg_opacity",
+        "zIndex": "z_index", "visible": "visible",
+    }
+    sets = []
+    vals = []
+    for key, val in kwargs.items():
+        col = col_map.get(key)
+        if col:
+            if key == "visible":
+                val = 1 if val else 0
+            sets.append(f"{col} = ?")
+            vals.append(val)
+    if not sets:
+        return
+    vals.append(text_id)
+    conn.execute(f"UPDATE custom_texts SET {', '.join(sets)} WHERE id = ?", vals)
+    conn.commit()
+
+
+def update_custom_text_layout(text_id, layout_update):
+    """レイアウトのみ部分更新（broadcast.htmlドラッグ保存用）"""
+    col_map = {"x": "x", "y": "y", "width": "width", "height": "height",
+               "zIndex": "z_index", "visible": "visible"}
+    update_args = {}
+    for key, val in layout_update.items():
+        if key in col_map:
+            update_args[key] = val
+    if update_args:
+        update_custom_text(text_id, **update_args)
+
+
+def delete_custom_text(text_id):
+    """カスタムテキストを削除"""
+    conn = get_connection()
+    conn.execute("DELETE FROM custom_texts WHERE id = ?", (text_id,))
     conn.commit()

@@ -19,6 +19,7 @@ function switchTab(name, el) {
   if (name === 'debug') { loadScreenshots(); }
   if (name === 'todo') loadTodoList();
   if (name === 'devstream') loadDevstream();
+  if (name === 'layout') loadCustomTexts();
 }
 
 
@@ -278,6 +279,62 @@ function _capListInput(e) {
 async function captureRemove(id) {
   await fetch(`/api/capture/${id}`, { method: 'DELETE' });
   captureRefreshSources();
+}
+
+// --- カスタムテキスト ---
+
+async function loadCustomTexts() {
+  try {
+    const items = await (await fetch('/api/overlay/custom-texts')).json();
+    _renderCustomTextList(items);
+  } catch (e) {}
+}
+
+function _renderCustomTextList(items) {
+  const el = document.getElementById('custom-text-list');
+  if (!items.length) {
+    el.innerHTML = '<span style="color:#9a88b5;">カスタムテキストなし</span>';
+    return;
+  }
+  el.innerHTML = items.map(item => {
+    const l = item.layout || {};
+    return `<div style="border:1px solid #d0c0e8; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <input type="text" value="${escHtml(item.label)}" placeholder="ラベル"
+          style="flex:1; padding:2px 6px; font-size:0.85rem; border:1px solid #ccc; border-radius:4px;"
+          onchange="updateCustomText(${item.id}, {label: this.value})">
+        <button onclick="deleteCustomText(${item.id})"
+          style="padding:2px 8px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">削除</button>
+      </div>
+      <textarea rows="2" style="width:100%; box-sizing:border-box; padding:4px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px; resize:vertical;"
+        onchange="updateCustomText(${item.id}, {content: this.value})">${escHtml(item.content)}</textarea>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px; font-size:0.75rem;">
+        <label>文字サイズ <input type="number" value="${l.fontSize ?? 1.2}" min="0.3" max="5" step="0.1"
+          style="width:50px;" onchange="updateCustomText(${item.id}, {fontSize: parseFloat(this.value)})"> vw</label>
+        <label>背景透明度 <input type="number" value="${l.bgOpacity ?? 0.85}" min="0" max="1" step="0.05"
+          style="width:50px;" onchange="updateCustomText(${item.id}, {bgOpacity: parseFloat(this.value)})"></label>
+        <label>Z順序 <input type="number" value="${l.zIndex ?? 15}" min="0" max="100" step="1"
+          style="width:50px;" onchange="updateCustomText(${item.id}, {zIndex: parseInt(this.value)})"></label>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addCustomText() {
+  await api('POST', '/api/overlay/custom-texts', { label: '新規テキスト', content: '' });
+  showToast('テキスト追加', 'success');
+  loadCustomTexts();
+}
+
+async function updateCustomText(id, changes) {
+  await api('PUT', `/api/overlay/custom-texts/${id}`, changes);
+}
+
+async function deleteCustomText(id) {
+  if (!await showConfirm('このテキストアイテムを削除しますか？', { title: '削除', okLabel: '削除', danger: true })) return;
+  await api('DELETE', `/api/overlay/custom-texts/${id}`);
+  showToast('テキスト削除', 'success');
+  loadCustomTexts();
 }
 
 // --- キャラクター設定 ---
@@ -1252,6 +1309,7 @@ checkServerUpdate();
 setInterval(checkServerUpdate, 3000);
 captureRefreshSources();
 setInterval(captureRefreshSources, 10000);
+loadCustomTexts();
 setInterval(syncBgmVolumes, 3000);
 
 

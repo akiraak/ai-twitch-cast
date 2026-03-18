@@ -447,3 +447,55 @@ async def overlay_info(request: Request):
         "label": body.get("label", ""),
     })
     return {"ok": True}
+
+
+# --- カスタムテキスト ---
+
+@router.get("/api/overlay/custom-texts")
+async def get_custom_texts():
+    """カスタムテキストアイテム一覧を返す"""
+    return db.get_custom_texts()
+
+
+@router.post("/api/overlay/custom-texts")
+async def create_custom_text(request: Request):
+    """カスタムテキストを新規作成"""
+    body = await request.json()
+    item = db.create_custom_text(
+        label=body.get("label", ""),
+        content=body.get("content", ""),
+        layout=body.get("layout"),
+    )
+    await state.broadcast_overlay({
+        "type": "custom_text_add", **item,
+    })
+    return item
+
+
+@router.put("/api/overlay/custom-texts/{text_id}")
+async def update_custom_text(text_id: int, request: Request):
+    """カスタムテキストを更新（label, content, layout properties）"""
+    body = await request.json()
+    db.update_custom_text(text_id, **body)
+    await state.broadcast_overlay({
+        "type": "custom_text_update", "id": text_id, **body,
+    })
+    return {"ok": True}
+
+
+@router.post("/api/overlay/custom-texts/{text_id}/layout")
+async def update_custom_text_layout(text_id: int, request: Request):
+    """カスタムテキストのレイアウトのみ更新（broadcast.htmlドラッグ保存用）"""
+    body = await request.json()
+    db.update_custom_text_layout(text_id, body)
+    return {"ok": True}
+
+
+@router.delete("/api/overlay/custom-texts/{text_id}")
+async def delete_custom_text(text_id: int):
+    """カスタムテキストを削除"""
+    db.delete_custom_text(text_id)
+    await state.broadcast_overlay({
+        "type": "custom_text_remove", "id": text_id,
+    })
+    return {"ok": True}
