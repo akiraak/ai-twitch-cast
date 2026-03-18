@@ -175,11 +175,8 @@ function _renderCaptureList(saved, active) {
       ? '<span style="color:#4caf50; font-size:0.7rem; margin-left:6px;">● 配信中</span>'
       : '<span style="color:#999; font-size:0.7rem; margin-left:6px;">○ 停止</span>';
     return `<details class="panel-item" data-cap-idx="${idx}">
-      <summary>キャプチャ - ${label}${statusBadge}</summary>
+      <summary>キャプチャ - ${label}${statusBadge}<button class="summary-delete-btn" data-action="delete" data-idx="${idx}" onclick="event.preventDefault()">削除</button></summary>
       <div class="panel-body">
-        <div style="text-align:right; margin-bottom:6px;">
-          <button class="danger" style="padding:2px 8px; font-size:0.7rem;" data-action="delete" data-idx="${idx}">削除</button>
-        </div>
       </div>
     </details>`;
   }).join('');
@@ -269,14 +266,12 @@ function _renderCustomTextList(items) {
   el.innerHTML = items.map(item => {
     const label = escHtml(item.label || `テキスト ${item.id}`);
     return `<details class="panel-item" data-ct-id="${item.id}">
-      <summary>テキスト - ${label}</summary>
+      <summary>テキスト - ${label}<button class="summary-delete-btn" onclick="event.preventDefault(); deleteCustomText(${item.id})">削除</button></summary>
       <div class="panel-body">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
           <input type="text" value="${escHtml(item.label)}" placeholder="ラベル"
             style="flex:1; padding:2px 6px; font-size:0.85rem; border:1px solid #ccc; border-radius:4px;"
             onchange="updateCustomText(${item.id}, {label: this.value})">
-          <button onclick="deleteCustomText(${item.id})"
-            style="padding:2px 8px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">削除</button>
         </div>
         <textarea rows="2" style="width:100%; box-sizing:border-box; padding:4px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px; resize:vertical;"
           onchange="updateCustomText(${item.id}, {content: this.value})">${escHtml(item.content)}</textarea>

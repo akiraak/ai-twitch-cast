@@ -16,7 +16,6 @@
 - [ ] 表示が煩雑なので整理する
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
 - [ ] capture.pyのbroadcast_items全面移行（二重管理解消） → [plans/capture-broadcast-items-migration.md](plans/capture-broadcast-items-migration.md)
-- [ ] WebUIの配置画面でキャプチャとテキストは折りたたんだ状態でも「削除」ボタンを表示
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証

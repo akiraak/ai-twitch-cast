@@ -116,6 +116,9 @@
   .panel-item > summary::before { content: '▶ '; font-size: 0.7rem; }
   .panel-item[open] > summary::before { content: '▼ '; }
   .panel-item > summary::-webkit-details-marker { display: none; }
+  .panel-item > summary { display: flex; align-items: center; }
+  .summary-delete-btn { margin-left: auto; padding: 1px 8px; font-size: 0.7rem; background: #c62828; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 400; }
+  .summary-delete-btn:hover { background: #b71c1c; }
   .panel-body { padding: 4px 12px 12px; }
 
   .text-input { width: 100%; padding: 6px 10px; background: #ece5fa; border: 1px solid #d0c0e8; border-radius: 6px; color: #2a1f40; font-size: 0.85rem; transition: border-color 0.15s; }
