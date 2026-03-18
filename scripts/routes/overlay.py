@@ -223,13 +223,66 @@ def _get_overlay_defaults():
     return load_config_json("overlay", {})
 
 
+# 全アイテム共通デフォルト
+_COMMON_DEFAULTS = {
+    "visible": 1,
+    "positionX": 0,
+    "positionY": 0,
+    "width": 50,
+    "height": 50,
+    "zIndex": 10,
+    "bgColor": "rgba(20,20,35,1)",
+    "bgOpacity": 0.85,
+    "borderRadius": 8,
+    "borderEnabled": 0,
+    "borderColor": "rgba(255,255,255,0.5)",
+    "borderSize": 1,
+    "borderOpacity": 1.0,
+    "textColor": "#e0e0e0",
+    "fontSize": 1.0,
+    "textStrokeColor": "rgba(0,0,0,0.8)",
+    "textStrokeSize": 0,
+    "textStrokeOpacity": 0.8,
+    "padding": 8,
+}
+
+
+def _make_item_defaults(overrides):
+    """共通デフォルトにアイテム固有のオーバーライドをマージ"""
+    return {**_COMMON_DEFAULTS, **overrides}
+
+
 _OVERLAY_DEFAULTS = {
-    "avatar": {"positionX": 46.5, "positionY": 24.3, "width": 53.5, "height": 75.7, "zIndex": 5},
-    "lighting": {"brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0, "ambient": 0.75, "directional": 1.0, "lightX": 0.5, "lightY": 1.5, "lightZ": 2.0},
-    "subtitle": {"bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3, "bgOpacity": 0.85, "zIndex": 20},
-    "todo": {"positionX": 36, "positionY": 2, "width": 28, "height": 70, "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20},
-    "topic": {"positionX": 1.04, "positionY": 1.85, "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95, "zIndex": 20},
-    "version": {"visible": 0, "positionX": 1, "positionY": 95, "fontSize": 0.6, "bgOpacity": 0.85, "strokeSize": 2, "strokeOpacity": 0.8, "zIndex": 10, "format": "Chobi v{version} ({date})"},
+    "avatar": _make_item_defaults({
+        "positionX": 46.5, "positionY": 24.3, "width": 53.5, "height": 75.7,
+        "zIndex": 5, "bgOpacity": 0, "borderRadius": 0, "padding": 0,
+    }),
+    "lighting": {
+        "brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0,
+        "ambient": 0.75, "directional": 1.0, "lightX": 0.5, "lightY": 1.5, "lightZ": 2.0,
+    },
+    "subtitle": _make_item_defaults({
+        "bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3,
+        "bgOpacity": 0.85, "zIndex": 20, "borderRadius": 12, "padding": 16,
+    }),
+    "todo": _make_item_defaults({
+        "positionX": 36, "positionY": 2, "width": 28, "height": 70,
+        "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20,
+    }),
+    "topic": _make_item_defaults({
+        "positionX": 1.04, "positionY": 1.85, "width": 31, "height": 20,
+        "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95, "zIndex": 20,
+    }),
+    "version": _make_item_defaults({
+        "visible": 0, "positionX": 1, "positionY": 95, "width": 20, "height": 5,
+        "fontSize": 0.6, "bgOpacity": 0.85, "strokeSize": 2, "strokeOpacity": 0.8,
+        "zIndex": 10, "format": "Chobi v{version} ({date})",
+        "borderRadius": 6, "padding": 4,
+    }),
+    "dev_activity": _make_item_defaults({
+        "visible": 0, "positionX": 1, "positionY": 75, "width": 35, "height": 15,
+        "zIndex": 15, "bgOpacity": 0.9, "fontSize": 0.65, "padding": 8,
+    }),
     "sync": {"lipsyncDelay": 100},
 }
 

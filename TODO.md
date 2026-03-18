@@ -7,12 +7,25 @@
         サーバからjsonなどで項目の情報を受け取ってそれに合わせて設定画面を表示するようにする
 - [ ] 未配信中でも会話をアバターに送れるようにチャット欄を追加
 - [ ] 表情や体の動きを入れる
-- [ ] プレビューアプリの各アイテムの背景の色や角丸のスタイルを設定可能に
+- [ ] プレビューアプリの各アイテムの共通化と機能追加 → [plans/item-commonization.md](plans/item-commonization.md)
+        - [ ] Phase 1: 共通プロパティのDB保存基盤（overlay.pyデフォルト統一、dev-activityのDB対応）
+        - [ ] Phase 2: broadcast.html JS共通化（applyCommonStyle、editSave統一、dev-activityのdata-editable対応）
+        - [ ] Phase 3: CSS統一（CSS変数ベース化、version/dev-activityのインラインスタイル除去）
+        - [ ] Phase 4: Web UI設定パネル（全アイテムの共通プロパティ編集UI）
+        - [ ] Phase 5: 保存漏れバグ修正 + 全アイテムvisible対応 + プレビュー→WebUIリアルタイム反映
+        - [ ] Phase 6: broadcast_itemsテーブル作成 + 固定アイテム移行（overlay.* settings → 統合テーブル）
+        - [ ] Phase 7: 動的アイテム移行（custom_texts/capture_windows → 統合テーブル）+ 旧構造廃止
+        共通プロパティ:
+                表示: ON/OFF
+                配置: XY座標、WHサイズ, Z値
+                背景: 色、透明度, 角丸、ふち枠の有無と色とサイズと透明度
+                文字: テキスト、色、サイズ、ふち枠の色とサイズと透明度, パディングサイズ
 
 ### サーバ
 - [ ] 各ウィンドウの表示のON/OFF
 - [ ] 表示が煩雑なので整理する
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
-- [ ] プレビューで位置をずらしたりZ値を変更してもWEbUIにリアルタイムで反映されない
+- [ ] プレビューで位置をずらしたりZ値を変更してもWebUIにリアルタイムで反映されない（Phase 5で対応予定）
+- [ ] capture_windowsテーブルとcapture.sources設定の二重管理を解消する（Phase 7で対応予定）
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証

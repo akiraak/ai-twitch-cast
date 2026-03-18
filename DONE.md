@@ -1,5 +1,13 @@
 # DONE
 
+## アイテム共通化 Phase 1: 共通プロパティのDB保存基盤
+
+- [x] `_COMMON_DEFAULTS` (20プロパティ) 定義（visible, 配置, 背景, 文字）
+- [x] `_make_item_defaults()` で共通デフォルト + アイテム固有オーバーライドをマージ
+- [x] 全6ビジュアルアイテムに共通プロパティ追加（avatar, subtitle, todo, topic, version, dev_activity）
+- [x] dev_activityをDB保存対応（`overlay.dev_activity.*` キー新設）
+- [x] テスト8件追加（共通プロパティ・API・dev_activity）
+
 ## バージョン表示
 
 - [x] VERSIONファイル新規作成（0.1.0）
