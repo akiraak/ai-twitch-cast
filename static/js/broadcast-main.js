@@ -954,6 +954,22 @@ async function editSave() {
 
 function initEditMode() {
   document.querySelectorAll('[data-editable]').forEach(setupEditable);
+
+  // カーソルキーで選択中の要素を微調整移動
+  document.addEventListener('keydown', (e) => {
+    if (!_editingEl) return;
+    const moves = { ArrowLeft: [-1,0], ArrowRight: [1,0], ArrowUp: [0,-1], ArrowDown: [0,1] };
+    const dir = moves[e.key];
+    if (!dir) return;
+    e.preventDefault();
+    const step = e.shiftKey ? 1.0 : 0.1; // %単位
+    const curLeft = parseFloat(_editingEl.style.left) || 0;
+    const curTop = parseFloat(_editingEl.style.top) || 0;
+    _editingEl.style.left = (curLeft + dir[0] * step) + '%';
+    _editingEl.style.top = (curTop + dir[1] * step) + '%';
+    _editingEl.style.transform = 'none';
+    scheduleSave();
+  });
 }
 
 // === 初期化 ===
