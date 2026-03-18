@@ -229,7 +229,7 @@ _OVERLAY_DEFAULTS = {
     "subtitle": {"bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3, "bgOpacity": 0.85, "zIndex": 20},
     "todo": {"positionX": 36, "positionY": 2, "width": 28, "height": 70, "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20},
     "topic": {"positionX": 1.04, "positionY": 1.85, "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95, "zIndex": 20},
-    "version": {"visible": 0, "positionX": 1, "positionY": 95, "fontSize": 0.6, "bgOpacity": 0.85, "zIndex": 10},
+    "version": {"visible": 0, "positionX": 1, "positionY": 95, "fontSize": 0.6, "bgOpacity": 0.85, "strokeSize": 3, "strokeOpacity": 0.8, "zIndex": 10},
     "sync": {"lipsyncDelay": 100},
 }
 
