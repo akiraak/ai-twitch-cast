@@ -1312,6 +1312,52 @@ setInterval(captureRefreshSources, 10000);
 loadCustomTexts();
 setInterval(syncBgmVolumes, 3000);
 
+// --- WebSocket接続（プレビュー→WebUIリアルタイム同期） ---
+(function connectLayoutWS() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${protocol}//${location.host}/ws/broadcast`);
+  ws.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type !== 'settings_update') return;
+      // レイアウトスライダーをリアルタイム更新（自身の変更中は除く）
+      if (_layoutTimer) return;
+      for (const [section, props] of Object.entries(data)) {
+        if (section === 'type') continue;
+        if (typeof props !== 'object') continue;
+        for (const [prop, val] of Object.entries(props)) {
+          const key = `${section}.${prop}`;
+          // layoutSettingsを更新
+          if (!layoutSettings[section]) layoutSettings[section] = {};
+          layoutSettings[section][prop] = val;
+          // UIのスライダー・数値入力を更新
+          const numEl = document.getElementById('lv-' + key.replace('.', '-'));
+          if (numEl) {
+            numEl.value = val;
+            const slider = numEl.closest('.layout-row')?.querySelector('.layout-slider');
+            if (slider) slider.value = val;
+          }
+          // バージョン表示トグル
+          if (section === 'version' && prop === 'visible') {
+            const vToggle = document.getElementById('lv-version-visible');
+            if (vToggle) {
+              vToggle.checked = !!val;
+              _updateVersionToggleStyle(vToggle);
+            }
+          }
+          // バージョンフォーマット
+          if (section === 'version' && prop === 'format') {
+            const vFormat = document.getElementById('lv-version-format');
+            if (vFormat) vFormat.value = val;
+          }
+        }
+      }
+    } catch (err) {}
+  };
+  ws.onclose = () => setTimeout(connectLayoutWS, 3000);
+  ws.onerror = () => ws.close();
+})();
+
 
 // ===== 開発実況 =====
 

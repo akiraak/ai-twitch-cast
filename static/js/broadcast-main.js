@@ -32,8 +32,8 @@ const ITEM_REGISTRY = [
   { id: 'subtitle', prefix: 'subtitle', hasSize: false, defaultZ: 20 },
   { id: 'todo-panel', prefix: 'todo', hasSize: true, defaultZ: 20 },
   { id: 'topic-panel', prefix: 'topic', hasSize: false, defaultZ: 20 },
-  { id: 'version-panel', prefix: 'version', hasSize: false, defaultZ: 10, saveVisible: true },
-  { id: 'dev-activity-panel', prefix: 'dev_activity', hasSize: false, defaultZ: 15 },
+  { id: 'version-panel', prefix: 'version', hasSize: false, defaultZ: 10 },
+  { id: 'dev-activity-panel', prefix: 'dev_activity', hasSize: false, defaultZ: 15, skipVisible: true },
 ];
 
 // === 共通スタイル適用 ===
@@ -999,7 +999,7 @@ async function editSave() {
       positionY: parseFloat(el.style.top) || 0,
       zIndex: getRealZIndex(el, item.defaultZ),
     };
-    if (item.saveVisible) {
+    if (!item.skipVisible) {
       data.visible = el.style.display !== 'none' ? 1 : 0;
     }
     if (item.hasSize) {
@@ -1009,6 +1009,37 @@ async function editSave() {
       if (!isNaN(h) && el.style.height !== 'auto') data.height = h;
     }
     overlaySettings[item.prefix] = data;
+  }
+
+  // アイテム固有プロパティの保存（保存漏れ修正）
+  if (overlaySettings.subtitle) {
+    const bottom = parseFloat(subtitleEl.style.bottom);
+    if (!isNaN(bottom)) overlaySettings.subtitle.bottom = bottom;
+    const respFs = parseFloat(subtitleEl.querySelector('.response')?.style.fontSize);
+    if (!isNaN(respFs)) overlaySettings.subtitle.fontSize = respFs;
+    const maxW = parseFloat(subtitleEl.style.maxWidth);
+    if (!isNaN(maxW)) overlaySettings.subtitle.maxWidth = maxW;
+    overlaySettings.subtitle.fadeDuration = parseFloat(subtitleEl.dataset.fadeDuration) || 3;
+    const bgOp = parseFloat(subtitleEl.style.getPropertyValue('--bg-opacity'));
+    if (!isNaN(bgOp)) overlaySettings.subtitle.bgOpacity = bgOp;
+  }
+  if (overlaySettings.topic) {
+    const maxW = parseFloat(topicPanelEl.style.maxWidth);
+    if (!isNaN(maxW)) overlaySettings.topic.maxWidth = maxW;
+    const titleFs = parseFloat(document.getElementById('topic-title-text')?.style.fontSize);
+    if (!isNaN(titleFs)) overlaySettings.topic.titleFontSize = titleFs;
+  }
+  if (overlaySettings.version) {
+    const vText = document.getElementById('version-text');
+    if (vText) {
+      const fs = parseFloat(vText.style.fontSize);
+      if (!isNaN(fs)) overlaySettings.version.fontSize = fs;
+      const ss = parseFloat(vText.dataset.strokeSize);
+      if (!isNaN(ss)) overlaySettings.version.strokeSize = ss;
+      const so = parseFloat(vText.dataset.strokeOpacity);
+      if (!isNaN(so)) overlaySettings.version.strokeOpacity = so;
+    }
+    if (window._versionFormat) overlaySettings.version.format = window._versionFormat;
   }
 
   try {

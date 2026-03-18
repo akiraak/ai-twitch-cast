@@ -1,5 +1,12 @@
 # DONE
 
+## アイテム共通化 Phase 5: 保存漏れバグ修正 + visible対応 + リアルタイム同期
+
+- [x] editSave()保存漏れ修正: subtitle(bottom/fontSize/maxWidth/fadeDuration/bgOpacity), topic(maxWidth/titleFontSize), version(fontSize/strokeSize/strokeOpacity/format)
+- [x] 全アイテムvisible対応: saveVisible(opt-in) → skipVisible(opt-out)に変更、dev_activity以外でvisible保存
+- [x] プレビュー→WebUIリアルタイム反映: index-app.jsに/ws/broadcast WebSocket接続追加、settings_updateイベントでスライダー自動更新
+- [x] テスト5件追加（visible保存・固有プロパティ保存・skipVisible検証）
+
 ## アイテム共通化 Phase 2: broadcast.html JS共通化
 
 - [x] `ITEM_REGISTRY` で6アイテムをレジストリ定義（hasSize/saveVisible/defaultZ）

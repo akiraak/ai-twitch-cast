@@ -150,6 +150,65 @@ class TestEditSaveUsesRegistry:
         assert "ITEM_REGISTRY" in body, "editSave が ITEM_REGISTRY を使用していない"
         assert "item.prefix" in body, "editSave が item.prefix でキーを生成していない"
 
+    def test_saves_visible_by_default(self):
+        """visibleがskipVisible以外の全アイテムで保存されること"""
+        js = read_js()
+        func_match = re.search(
+            r"async function editSave\(\)\s*\{(.*?)\n\}", js, re.DOTALL
+        )
+        body = func_match.group(1)
+        assert "skipVisible" in body, "editSave が skipVisible を参照していない"
+        assert "data.visible" in body, "editSave が visible を保存していない"
+
+    def test_saves_subtitle_specific_props(self):
+        """subtitle固有プロパティ（bottom, fontSize, maxWidth, fadeDuration, bgOpacity）が保存されること"""
+        js = read_js()
+        func_match = re.search(
+            r"async function editSave\(\)\s*\{(.*?)\n\}", js, re.DOTALL
+        )
+        body = func_match.group(1)
+        assert "overlaySettings.subtitle" in body
+        assert "subtitle.bottom" in body or ".bottom" in body
+        assert "subtitle.fontSize" in body or ".fontSize" in body
+        assert "subtitle.maxWidth" in body or ".maxWidth" in body
+        assert "subtitle.fadeDuration" in body or ".fadeDuration" in body
+        assert "subtitle.bgOpacity" in body or ".bgOpacity" in body
+
+    def test_saves_topic_specific_props(self):
+        """topic固有プロパティ（maxWidth, titleFontSize）が保存されること"""
+        js = read_js()
+        func_match = re.search(
+            r"async function editSave\(\)\s*\{(.*?)\n\}", js, re.DOTALL
+        )
+        body = func_match.group(1)
+        assert "overlaySettings.topic" in body
+        assert "topic.maxWidth" in body or "topic].maxWidth" in body
+
+    def test_saves_version_specific_props(self):
+        """version固有プロパティ（fontSize, strokeSize, strokeOpacity, format）が保存されること"""
+        js = read_js()
+        func_match = re.search(
+            r"async function editSave\(\)\s*\{(.*?)\n\}", js, re.DOTALL
+        )
+        body = func_match.group(1)
+        assert "overlaySettings.version" in body
+        assert "version.fontSize" in body or "version].fontSize" in body
+        assert "strokeSize" in body
+        assert "strokeOpacity" in body
+        assert "_versionFormat" in body
+
+    def test_dev_activity_skips_visible(self):
+        """dev_activityはskipVisible: trueでvisibleを保存しないこと"""
+        js = read_js()
+        match = re.search(r"const ITEM_REGISTRY\s*=\s*\[(.*?)\];", js, re.DOTALL)
+        assert match
+        registry = match.group(1)
+        # dev_activityのエントリにskipVisibleがあること
+        da_match = re.search(
+            r"prefix:\s*'dev_activity'.*?skipVisible:\s*true", registry, re.DOTALL
+        )
+        assert da_match, "dev_activity に skipVisible: true がない"
+
 
 # === broadcast.html の data-editable 属性 ===
 
