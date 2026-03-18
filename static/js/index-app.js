@@ -1095,6 +1095,10 @@ function onLayoutToggle(cb) {
   _updateLayout(cb.dataset.key, cb.checked ? 1 : 0);
 }
 
+function onLayoutSelect(sel) {
+  _updateLayout(sel.dataset.key, sel.value);
+}
+
 function cssColorToHex(color) {
   if (!color) return '#000000';
   if (color.startsWith('#')) return color.substring(0, 7);
@@ -1120,6 +1124,10 @@ function _commonPropsHTML(s) {
     `<span style="position:absolute; cursor:pointer; inset:0; background:#ccc; border-radius:20px; transition:.2s;"></span>` +
     `<span class="toggle-knob" style="position:absolute; left:2px; top:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:.2s;"></span></label>`;
   const group = (title) => `<div style="font-size:0.7rem; color:#7b1fa2; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(124,77,255,0.06); border-radius:3px; border-left:2px solid #7b1fa2;">${title}</div>`;
+  const select = (key, options) => {
+    const opts = options.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    return `<select class="layout-select" data-key="${s}.${key}" onchange="onLayoutSelect(this)" style="padding:2px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px;">${opts}</select>`;
+  };
   return `
     ${row('表示', toggle('visible'))}
     ${group('配置')}
@@ -1139,6 +1147,8 @@ function _commonPropsHTML(s) {
     ${group('文字')}
     ${row('サイズ (vw)', slider('fontSize', 0.3, 5, 0.05))}
     ${row('色', color('textColor'))}
+    ${row('水平揃え', select('textAlign', [['left', '左'], ['center', '中央'], ['right', '右']]))}
+    ${row('垂直揃え', select('verticalAlign', [['top', '上'], ['center', '中央'], ['bottom', '下']]))}
     ${row('縁取りサイズ', slider('textStrokeSize', 0, 10, 0.5))}
     ${row('縁取り色', color('textStrokeColor'))}
     ${row('縁取り透明度', slider('textStrokeOpacity', 0, 1, 0.05))}
@@ -1226,6 +1236,15 @@ function _applyLayoutToUI(data) {
       if (track) track.style.background = el.checked ? '#7b1fa2' : '#ccc';
       if (knob) knob.style.left = el.checked ? '16px' : '2px';
     }
+  });
+  // セレクトボックス初期化
+  document.querySelectorAll('.layout-select[data-key]').forEach(el => {
+    const key = el.dataset.key;
+    const dotIdx = key.indexOf('.');
+    const section = key.substring(0, dotIdx);
+    const prop = key.substring(dotIdx + 1);
+    const val = data[section]?.[prop];
+    if (val != null) el.value = val;
   });
 }
 

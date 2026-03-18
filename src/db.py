@@ -214,6 +214,13 @@ def _create_tables(conn):
         conn.commit()
     except sqlite3.OperationalError:
         pass
+    # Migration: add text_align, vertical_align to broadcast_items
+    for col, default in [("text_align", "'left'"), ("vertical_align", "'top'")]:
+        try:
+            conn.execute(f"ALTER TABLE broadcast_items ADD COLUMN {col} TEXT NOT NULL DEFAULT {default}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
     # Migration: overlay.* settings → broadcast_items
     try:
         migrate_overlay_to_items()
@@ -905,6 +912,7 @@ _ITEM_COMMON_COLS = {
     "textColor": "text_color", "fontSize": "font_size",
     "textStrokeColor": "text_stroke_color", "textStrokeSize": "text_stroke_size",
     "textStrokeOpacity": "text_stroke_opacity", "padding": "padding",
+    "textAlign": "text_align", "verticalAlign": "vertical_align",
 }
 
 # 逆マッピング（DB列名→APIキー名）

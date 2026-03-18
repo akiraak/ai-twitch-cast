@@ -1,5 +1,10 @@
 # DONE
 
+## テキストパネル文字揃え（水平・垂直）
+
+- [x] textAlign（左/中央/右）・verticalAlign（上/中央/下）を共通プロパティとして追加
+- [x] DB migration、broadcast.html描画、WebUIセレクトボックス対応
+
 ## テキストパネル変数ヘルプ表示
 
 - [x] WebUIのテキストパネルtextarea下に使える変数一覧（{version} {date} {year} {month} {day}）を表示

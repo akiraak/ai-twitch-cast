@@ -145,6 +145,16 @@ function applyCommonStyle(el, props) {
     el.style.padding = props.padding + 'px';
     el.style.setProperty('--item-padding', props.padding + 'px');
   }
+  // 文字揃え（水平）
+  if (props.textAlign != null) {
+    const ct = el.querySelector('.custom-text-content') || el;
+    ct.style.textAlign = props.textAlign;
+  }
+  // 文字揃え（垂直）
+  if (props.verticalAlign != null) {
+    const ct = el.querySelector('.custom-text-content') || el;
+    ct.style.justifyContent = props.verticalAlign === 'center' ? 'center' : props.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
+  }
 }
 
 // === ライティング適用（applySettings・pending両方から呼ばれる） ===
@@ -676,6 +686,10 @@ function addCustomTextLayer(id, label, content, layout) {
   textEl.className = 'custom-text-content';
   textEl.dataset.rawContent = content || '';
   textEl.textContent = _replaceVariables(content || '');
+  if (layout) {
+    if (layout.textAlign) textEl.style.textAlign = layout.textAlign;
+    if (layout.verticalAlign) textEl.style.justifyContent = layout.verticalAlign === 'center' ? 'center' : layout.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
+  }
   div.appendChild(textEl);
 
   customTextContainer.appendChild(div);

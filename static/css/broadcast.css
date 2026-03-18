@@ -208,6 +208,10 @@
     line-height: 1.5;
     word-break: break-word;
     white-space: pre-wrap;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
   }
 
   /* === 共通テキスト色オーバーライド（WebUIから設定時に適用、!importantでID詳細度に勝つ） === */
