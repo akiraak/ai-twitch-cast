@@ -750,6 +750,7 @@ const _zDialog = document.getElementById('zindex-dialog');
 const _zdInput = document.getElementById('zd-input');
 
 function getElZIndex(el) {
+  if (el._savedZIndex != null) return parseInt(el._savedZIndex) || 0;
   return parseInt(el.style.zIndex) || parseInt(getComputedStyle(el).zIndex) || 0;
 }
 
@@ -785,7 +786,9 @@ function selectEditable(el) {
   }
   _editingEl = el;
   el.classList.add('editing');
-  el._savedZIndex = el.style.zIndex || getComputedStyle(el).zIndex || '0';
+  if (el._savedZIndex == null) {
+    el._savedZIndex = el.style.zIndex || getComputedStyle(el).zIndex || '0';
+  }
   el.style.zIndex = 9000;
   // 他パーツをイベント透過にして、重なっていても操作可能にする
   document.querySelectorAll('[data-editable]').forEach(other => {
@@ -818,10 +821,15 @@ function hideAll() {
   }
 }
 
+function _setElZIndex(el, z) {
+  if (el._savedZIndex != null) el._savedZIndex = String(z);
+  else el.style.zIndex = z;
+}
+
 function editZIndex(delta) {
   if (!_selectedEditable) return;
   const newZ = Math.max(0, Math.min(100, getElZIndex(_selectedEditable) + delta));
-  _selectedEditable.style.zIndex = newZ;
+  _setElZIndex(_selectedEditable, newZ);
   _zdInput.value = newZ;
   scheduleSave();
 }
@@ -829,7 +837,7 @@ function editZIndex(delta) {
 function setZIndexDirect(val) {
   if (!_selectedEditable) return;
   const newZ = Math.max(0, Math.min(100, parseInt(val) || 0));
-  _selectedEditable.style.zIndex = newZ;
+  _setElZIndex(_selectedEditable, newZ);
   _zdInput.value = newZ;
   scheduleSave();
 }
