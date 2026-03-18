@@ -935,8 +935,8 @@ _ITEM_SPECIFIC_KEYS = {
 _ITEM_LABELS = {
     "avatar": "アバター",
     "subtitle": "字幕",
-    "todo": "TODOパネル",
-    "topic": "トピックパネル",
+    "todo": "TODO",
+    "topic": "トピック",
     "dev_activity": "開発アクティビティ",
 }
 

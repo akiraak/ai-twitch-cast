@@ -53,10 +53,10 @@
             <button onclick="fetch('/api/debug/subtitle/hide',{method:'POST'})" style="flex:1; padding:4px 8px; background:#666; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; margin-left:4px;">非表示</button>
           </div>
         </div></details>
-        <details data-section="todo" class="panel-item"><summary>TODOパネル</summary><div class="panel-body">
+        <details data-section="todo" class="panel-item"><summary>TODO</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">タイトル文字 (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="todo.titleFontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-titleFontSize" min="0.5" max="3" step="0.05" data-key="todo.titleFontSize" oninput="onLayoutNum(this)"></div>
         </div></details>
-        <details data-section="topic" class="panel-item"><summary>トピックパネル</summary><div class="panel-body">
+        <details data-section="topic" class="panel-item"><summary>トピック</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">最大幅 (%)</span><input type="range" class="vol-slider layout-slider" min="10" max="60" step="0.5" data-key="topic.maxWidth" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-maxWidth" min="10" max="60" step="0.5" data-key="topic.maxWidth" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">タイトル (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="topic.titleFontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-titleFontSize" min="0.5" max="3" step="0.05" data-key="topic.titleFontSize" oninput="onLayoutNum(this)"></div>
         </div></details>
