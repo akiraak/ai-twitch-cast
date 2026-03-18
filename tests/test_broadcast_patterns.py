@@ -270,6 +270,58 @@ class TestWebUICommonProps:
         assert "layout-toggle" in body, "loadLayout がトグルを初期化していない"
 
 
+class TestCssVariables:
+    """broadcast.cssがCSS変数を使っていること"""
+
+    def _read_css(self):
+        return (STATIC_DIR / "css" / "broadcast.css").read_text(encoding="utf-8")
+
+    def test_version_panel_in_css(self):
+        css = self._read_css()
+        assert "#version-panel" in css, "version-panelのCSSルールがない"
+        assert "#version-text" in css, "version-textのCSSルールがない"
+
+    def test_dev_activity_panel_in_css(self):
+        css = self._read_css()
+        assert "#dev-activity-panel" in css, "dev-activity-panelのCSSルールがない"
+        assert "#dev-activity-content" in css, "dev-activity-contentのCSSルールがない"
+        assert ".dev-activity-title" in css, "dev-activity-titleのCSSルールがない"
+
+    def test_css_uses_item_variables(self):
+        """CSS変数 --item-* がCSSで参照されていること"""
+        css = self._read_css()
+        assert "var(--item-border-radius" in css
+        assert "var(--item-text-color" in css
+        assert "var(--item-padding" in css
+        assert "var(--item-font-size" in css
+
+    def test_version_panel_no_inline_styles(self):
+        html = read_html()
+        m = re.search(r'id="version-panel"[^>]*>', html)
+        assert m, "version-panelが見つからない"
+        assert 'style=' not in m.group(0), "version-panelにインラインスタイルが残っている"
+
+    def test_dev_activity_panel_no_inline_styles(self):
+        html = read_html()
+        m = re.search(r'id="dev-activity-panel"[^>]*>', html)
+        assert m, "dev-activity-panelが見つからない"
+        assert 'style=' not in m.group(0), "dev-activity-panelにインラインスタイルが残っている"
+
+    def test_existing_items_use_border_radius_var(self):
+        """subtitle, todo, topicのborder-radiusがCSS変数を使っていること"""
+        css = self._read_css()
+        for panel in ["#subtitle", "#todo-panel", "#topic-panel"]:
+            # パネルのCSSブロックを探してborder-radius: var(を確認
+            idx = css.find(panel + " {") if panel + " {" in css else css.find(panel + " {\n")
+            if idx == -1:
+                idx = css.find(panel + "\n")
+            assert idx != -1, f"{panel} が見つからない"
+            block = css[idx:css.find("}", idx) + 1]
+            assert "var(--item-border-radius" in block, (
+                f"{panel} の border-radius が CSS変数を使っていない"
+            )
+
+
 class TestDataEditableAttributes:
     """broadcast.htmlの各パネルにdata-editable属性があること"""
 

@@ -1,5 +1,12 @@
 # DONE
 
+## アイテム共通化 Phase 3: CSS統一
+
+- [x] version-panel/dev-activity-panelのインラインスタイル全除去→CSSルールに移行
+- [x] CSS変数（--item-border-radius, --item-padding, --item-text-color, --item-font-size）でPhase 2のapplyCommonStyleと接続
+- [x] subtitle/todo/topicのborder-radiusをvar(--item-border-radius)に変更
+- [x] テスト6件追加
+
 ## アイテム共通化 Phase 4: Web UI設定パネル
 
 - [x] 全fieldsetに`data-section`属性追加、dev_activityフィールドセット新規追加

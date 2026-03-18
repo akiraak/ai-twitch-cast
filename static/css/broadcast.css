@@ -36,7 +36,7 @@
     --bg-opacity: 0.85;
     background: linear-gradient(135deg, rgba(20, 20, 40, var(--bg-opacity)), rgba(30, 20, 50, var(--bg-opacity)));
     border: 1px solid rgba(124, 77, 255, 0.3);
-    border-radius: 1vw;
+    border-radius: var(--item-border-radius, 1vw);
     padding: 1.4vw 2.2vw;
     max-width: 62%;
     min-width: 21%;
@@ -75,7 +75,7 @@
     --bg-opacity: 0.95;
     background: linear-gradient(135deg, rgba(0, 0, 0, var(--bg-opacity)), rgba(5, 0, 10, var(--bg-opacity)));
     border: 1px solid rgba(124, 77, 255, 0.3);
-    border-radius: 0.6vw;
+    border-radius: var(--item-border-radius, 0.6vw);
     padding: 1vw 1.25vw;
     backdrop-filter: blur(6px);
     pointer-events: none;
@@ -146,6 +146,53 @@
   @keyframes arrow-bounce {
     0%, 100% { transform: translateX(0); }
     50% { transform: translateX(0.15vw); }
+  }
+
+  /* === バージョンパネル（右下） === */
+  #version-panel {
+    position: absolute;
+    display: none;
+    left: 1%; top: 95%;
+    z-index: 10;
+    --bg-opacity: 0.85;
+    background: rgba(20, 20, 35, var(--bg-opacity));
+    border-radius: var(--item-border-radius, 6px);
+    padding: var(--item-padding, 4px 10px);
+    color: var(--item-text-color, #ccc);
+    font-family: 'Segoe UI', sans-serif;
+    pointer-events: none;
+  }
+  #version-text {
+    font-size: var(--item-font-size, 0.6vw);
+    -webkit-text-stroke: 2px rgba(0, 0, 0, 0.8);
+    paint-order: stroke fill;
+  }
+
+  /* === 開発アクティビティパネル === */
+  #dev-activity-panel {
+    position: absolute;
+    display: none;
+    left: 1%; top: 75%;
+    z-index: 15;
+    max-width: 35%;
+    --bg-opacity: 0.9;
+    background: rgba(20, 20, 35, var(--bg-opacity));
+    border-radius: var(--item-border-radius, 8px);
+    padding: var(--item-padding, 8px 12px);
+    color: var(--item-text-color, #e0e0e0);
+    font-family: 'Segoe UI', sans-serif;
+    border-left: 3px solid #4caf50;
+    pointer-events: none;
+  }
+  .dev-activity-title {
+    font-size: 0.7vw;
+    color: #4caf50;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  #dev-activity-content {
+    font-size: var(--item-font-size, 0.65vw);
+    line-height: 1.4;
   }
 
   /* === キャプチャレイヤー === */
@@ -353,7 +400,7 @@
     --bg-opacity: 0.95;
     background: linear-gradient(135deg, rgba(0, 0, 0, var(--bg-opacity)), rgba(5, 0, 10, var(--bg-opacity)));
     border: 1px solid rgba(124, 77, 255, 0.3);
-    border-radius: 0.5vw;
+    border-radius: var(--item-border-radius, 0.5vw);
     padding: 0;
     backdrop-filter: blur(6px);
     pointer-events: none;

@@ -11,8 +11,8 @@
         - [x] Phase 1: 共通プロパティのDB保存基盤
         - [x] Phase 2: broadcast.html JS共通化
         - [x] Phase 5: 保存漏れバグ修正 + 全アイテムvisible対応 + プレビュー→WebUIリアルタイム反映
-        - [ ] Phase 4: Web UI設定パネル（全アイテムの共通プロパティ編集UI）
-        - [ ] Phase 3: CSS統一（CSS変数ベース化、version/dev-activityのインラインスタイル除去）
+        - [x] Phase 4: Web UI設定パネル
+        - [x] Phase 3: CSS統一
         - [ ] Phase 6: broadcast_itemsテーブル作成 + 固定アイテム移行（overlay.* settings → 統合テーブル）
         - [ ] Phase 7: 動的アイテム移行（custom_texts/capture_windows → 統合テーブル）+ 旧構造廃止
         共通プロパティ:
