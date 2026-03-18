@@ -377,10 +377,8 @@ async def save_overlay_settings(request: Request):
         changed_sections.add(section)
         for prop, val in props.items():
             db.set_setting(f"overlay.{section}.{prop}", val)
-    # 変更されたセクションのみ読み直してブロードキャスト
-    full = await get_overlay_settings()
-    partial = {k: v for k, v in full.items() if k in changed_sections}
-    await state.broadcast_overlay({"type": "settings_update", **partial})
+    # 変更されたプロパティのみブロードキャスト（他のプロパティでドラッグ位置を上書きしない）
+    await state.broadcast_overlay({"type": "settings_update", **body})
     return {"ok": True}
 
 
