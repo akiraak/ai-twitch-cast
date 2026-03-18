@@ -79,13 +79,22 @@ function applyCommonStyle(el, props) {
     el.style.borderRadius = props.borderRadius + 'px';
     el.style.setProperty('--item-border-radius', props.borderRadius + 'px');
   }
-  // ふち枠（borderSize=0で非表示、>0で表示）
+  // ふち枠（borderSize=0で非表示、>0で表示、borderOpacityで透明度制御）
   if (props.borderColor != null) el.style.setProperty('--item-border-color', props.borderColor);
   if (props.borderSize != null) el.style.setProperty('--item-border-size', String(props.borderSize));
-  if (props.borderColor != null || props.borderSize != null) {
+  if (props.borderOpacity != null) el.style.setProperty('--item-border-opacity', String(props.borderOpacity));
+  if (props.borderColor != null || props.borderSize != null || props.borderOpacity != null) {
     const bs = parseFloat(props.borderSize ?? el.style.getPropertyValue('--item-border-size')) || 0;
     if (bs > 0) {
-      const bc = props.borderColor || el.style.getPropertyValue('--item-border-color') || 'rgba(255,255,255,0.5)';
+      let bc = props.borderColor || el.style.getPropertyValue('--item-border-color') || 'rgba(255,255,255,0.5)';
+      const bo = parseFloat(props.borderOpacity ?? el.style.getPropertyValue('--item-border-opacity') ?? 1);
+      // 色に透明度を適用（hex → rgba変換、またはrgba のalpha値を差し替え）
+      if (bc.startsWith('#')) {
+        bc = _hexToRgba(bc, bo);
+      } else {
+        const m = bc.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/);
+        if (m) bc = `rgba(${m[1]},${m[2]},${m[3]},${bo})`;
+      }
       el.style.border = bs + 'px solid ' + bc;
     } else {
       el.style.border = 'none';

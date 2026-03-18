@@ -1125,6 +1125,7 @@ function _commonPropsHTML(s) {
     ${row('角丸 (px)', slider('borderRadius', 0, 30, 1))}
     ${row('枠サイズ', slider('borderSize', 0, 10, 0.5))}
     ${row('枠色', color('borderColor'))}
+    ${row('枠透明度', slider('borderOpacity', 0, 1, 0.05))}
     ${group('文字')}
     ${row('サイズ (vw)', slider('fontSize', 0.3, 5, 0.05))}
     ${row('色', color('textColor'))}
