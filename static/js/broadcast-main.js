@@ -26,6 +26,45 @@ function setBgOpacity(el, opacity) {
   el.style.setProperty('--bg-opacity', opacity);
 }
 
+// === アイテムレジストリ（editSaveで共通ループに使用） ===
+const ITEM_REGISTRY = [
+  { id: 'avatar-area', prefix: 'avatar', hasSize: true, defaultZ: 5 },
+  { id: 'subtitle', prefix: 'subtitle', hasSize: false, defaultZ: 20 },
+  { id: 'todo-panel', prefix: 'todo', hasSize: true, defaultZ: 20 },
+  { id: 'topic-panel', prefix: 'topic', hasSize: false, defaultZ: 20 },
+  { id: 'version-panel', prefix: 'version', hasSize: false, defaultZ: 10, saveVisible: true },
+  { id: 'dev-activity-panel', prefix: 'dev_activity', hasSize: false, defaultZ: 15 },
+];
+
+// === 共通スタイル適用 ===
+function applyCommonStyle(el, props) {
+  if (!el || !props) return;
+  // 表示
+  if (props.visible != null) {
+    if (!Number(props.visible)) el.style.display = 'none';
+    else if (el.style.display === 'none') el.style.display = '';
+  }
+  // 配置
+  if (props.positionX != null) el.style.left = props.positionX + '%';
+  if (props.positionY != null) el.style.top = props.positionY + '%';
+  if (props.zIndex != null) el.style.zIndex = props.zIndex;
+  // 背景透明度（既存のCSS変数パターン）
+  if (props.bgOpacity != null) setBgOpacity(el, props.bgOpacity);
+  // 新規共通プロパティ → CSS変数として設定（Phase 3でCSSから参照）
+  if (props.bgColor != null) el.style.setProperty('--item-bg-color', props.bgColor);
+  if (props.borderRadius != null) el.style.setProperty('--item-border-radius', props.borderRadius + 'px');
+  if (props.borderEnabled != null) el.style.setProperty('--item-border-enabled', String(props.borderEnabled));
+  if (props.borderColor != null) el.style.setProperty('--item-border-color', props.borderColor);
+  if (props.borderSize != null) el.style.setProperty('--item-border-size', props.borderSize + 'px');
+  if (props.borderOpacity != null) el.style.setProperty('--item-border-opacity', String(props.borderOpacity));
+  if (props.textColor != null) el.style.setProperty('--item-text-color', props.textColor);
+  if (props.fontSize != null) el.style.setProperty('--item-font-size', props.fontSize + 'vw');
+  if (props.textStrokeColor != null) el.style.setProperty('--item-text-stroke-color', props.textStrokeColor);
+  if (props.textStrokeSize != null) el.style.setProperty('--item-text-stroke-size', props.textStrokeSize + 'px');
+  if (props.textStrokeOpacity != null) el.style.setProperty('--item-text-stroke-opacity', String(props.textStrokeOpacity));
+  if (props.padding != null) el.style.setProperty('--item-padding', props.padding + 'px');
+}
+
 // === ライティング適用（applySettings・pending両方から呼ばれる） ===
 function _applyLighting(lighting) {
   const L = window.avatarLighting;
@@ -58,75 +97,69 @@ function _applyLighting(lighting) {
 
 // === 設定適用（%/vw単位） ===
 function applySettings(s) {
+  // === avatar ===
   const avatarArea = document.getElementById('avatar-area');
   if (s.avatar) {
-    if (s.avatar.positionX != null) avatarArea.style.left = s.avatar.positionX + '%';
-    if (s.avatar.positionY != null) avatarArea.style.top = s.avatar.positionY + '%';
+    applyCommonStyle(avatarArea, s.avatar);
+    // avatar固有: サイズ + キャンバスリサイズ
     if (s.avatar.width != null) avatarArea.style.width = s.avatar.width + '%';
     if (s.avatar.height != null) avatarArea.style.height = s.avatar.height + '%';
-    if (s.avatar.zIndex != null) avatarArea.style.zIndex = s.avatar.zIndex;
     if (window.dispatchEvent) window.dispatchEvent(new Event('resize'));
   }
+  // === lighting ===
   if (s.lighting) {
     if (window.avatarLighting) {
       _applyLighting(s.lighting);
     } else {
-      // module script未ロード → pending保存（module側で適用）
       window._pendingLighting = s.lighting;
     }
   }
+  // === subtitle ===
   if (s.subtitle) {
+    applyCommonStyle(subtitleEl, s.subtitle);
+    // 字幕固有: bottom配置（commonのtop/leftをオーバーライド）
     if (s.subtitle.bottom != null) {
       subtitleEl.style.bottom = s.subtitle.bottom + '%';
-      subtitleEl.style.top = '';  // ドラッグで設定されたtopをクリア（bottomと競合するため）
+      subtitleEl.style.top = '';
       subtitleEl.style.left = '50%';
       subtitleEl.style.transform = 'translateX(-50%)';
     }
     if (s.subtitle.fontSize != null) subtitleEl.querySelector('.response').style.fontSize = s.subtitle.fontSize + 'vw';
     if (s.subtitle.maxWidth != null) subtitleEl.style.maxWidth = s.subtitle.maxWidth + '%';
     if (s.subtitle.fadeDuration != null) subtitleEl.dataset.fadeDuration = s.subtitle.fadeDuration;
-    if (s.subtitle.bgOpacity != null) setBgOpacity(subtitleEl, s.subtitle.bgOpacity);
-    if (s.subtitle.zIndex != null) subtitleEl.style.zIndex = s.subtitle.zIndex;
   }
+  // === todo ===
   if (s.todo) {
+    applyCommonStyle(todoPanelEl, s.todo);
     todoSettings = s.todo;
+    // todo固有: サイズ + maxHeight + transform
     if (s.todo.width != null) todoPanelEl.style.width = s.todo.width + '%';
     if (s.todo.height != null) {
       todoPanelEl.style.height = s.todo.height + '%';
       todoPanelEl.style.maxHeight = 'none';
       todoPanelEl.style.overflow = 'hidden';
     }
-    if (s.todo.positionX != null) {
-      todoPanelEl.style.left = s.todo.positionX + '%';
-      todoPanelEl.style.transform = 'none';
-    }
-    if (s.todo.positionY != null) {
-      todoPanelEl.style.top = s.todo.positionY + '%';
-    }
+    if (s.todo.positionX != null) todoPanelEl.style.transform = 'none';
     if (s.todo.fontSize != null) {
       todoPanelEl.querySelectorAll('.todo-item').forEach(el => el.style.fontSize = s.todo.fontSize + 'vw');
     }
     if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'vw';
-    if (s.todo.bgOpacity != null) setBgOpacity(todoPanelEl, s.todo.bgOpacity);
-    if (s.todo.zIndex != null) todoPanelEl.style.zIndex = s.todo.zIndex;
     loadTodo();
   }
+  // === topic ===
   if (s.topic) {
-    if (s.topic.positionX != null) topicPanelEl.style.left = s.topic.positionX + '%';
-    if (s.topic.positionY != null) topicPanelEl.style.top = s.topic.positionY + '%';
+    applyCommonStyle(topicPanelEl, s.topic);
     if (s.topic.maxWidth != null) topicPanelEl.style.maxWidth = s.topic.maxWidth + '%';
     if (s.topic.titleFontSize != null) {
       document.getElementById('topic-title-text').style.fontSize = s.topic.titleFontSize + 'vw';
     }
-    if (s.topic.bgOpacity != null) setBgOpacity(topicPanelEl, s.topic.bgOpacity);
-    if (s.topic.zIndex != null) topicPanelEl.style.zIndex = s.topic.zIndex;
   }
+  // === version ===
   if (s.version) {
     const vp = document.getElementById('version-panel');
     if (vp) {
-      if (s.version.visible != null) vp.style.display = s.version.visible ? 'block' : 'none';
-      if (s.version.positionX != null) vp.style.left = s.version.positionX + '%';
-      if (s.version.positionY != null) vp.style.top = s.version.positionY + '%';
+      applyCommonStyle(vp, s.version);
+      // version固有: format, fontSize(子要素), stroke
       if (s.version.format != null) { window._versionFormat = s.version.format; _applyVersionFormat(); }
       if (s.version.fontSize != null) document.getElementById('version-text').style.fontSize = s.version.fontSize + 'vw';
       const vText = document.getElementById('version-text');
@@ -138,14 +171,17 @@ function applySettings(s) {
         vText.style.webkitTextStroke = `${size}px rgba(0,0,0,${opacity})`;
         vText.style.paintOrder = 'stroke fill';
       }
-      if (s.version.bgOpacity != null) setBgOpacity(vp, s.version.bgOpacity);
-      if (s.version.zIndex != null) vp.style.zIndex = s.version.zIndex;
     }
   }
+  // === dev_activity ===
+  if (s.dev_activity) {
+    const dap = document.getElementById('dev-activity-panel');
+    if (dap) applyCommonStyle(dap, s.dev_activity);
+  }
+  // === sync ===
   if (s.sync) {
     if (s.sync.lipsyncDelay != null) {
       _lipsyncDelay = s.sync.lipsyncDelay;
-      // C#パネルに同期通知
       try { window.chrome?.webview?.postMessage({_syncDelay: _lipsyncDelay}); } catch(e){}
     }
   }
@@ -953,39 +989,26 @@ function getRealZIndex(el, fallback) {
 async function editSave() {
   _saving = true;
   const overlaySettings = {};
-  const avatarArea = document.getElementById('avatar-area');
-  overlaySettings.avatar = {
-    positionX: parseFloat(avatarArea.style.left) || 46.5,
-    positionY: parseFloat(avatarArea.style.top) || 24.3,
-    width: parseFloat(avatarArea.style.width) || 53.5,
-    height: parseFloat(avatarArea.style.height) || 75.7,
-    zIndex: getRealZIndex(avatarArea, 5),
-  };
-  overlaySettings.subtitle = {
-    zIndex: getRealZIndex(subtitleEl, 20),
-  };
-  overlaySettings.todo = {
-    positionX: parseFloat(todoPanelEl.style.left) || 36,
-    positionY: parseFloat(todoPanelEl.style.top) || 2,
-    width: parseFloat(todoPanelEl.style.width) || 28,
-    zIndex: getRealZIndex(todoPanelEl, 20),
-  };
-  if (todoPanelEl.style.height && todoPanelEl.style.height !== 'auto') {
-    overlaySettings.todo.height = parseFloat(todoPanelEl.style.height);
-  }
-  overlaySettings.topic = {
-    positionX: parseFloat(topicPanelEl.style.left) || 1.04,
-    positionY: parseFloat(topicPanelEl.style.top) || 1.85,
-    zIndex: getRealZIndex(topicPanelEl, 20),
-  };
-  const vp = document.getElementById('version-panel');
-  if (vp) {
-    overlaySettings.version = {
-      visible: vp.style.display !== 'none' ? 1 : 0,
-      positionX: parseFloat(vp.style.left) || 1,
-      positionY: parseFloat(vp.style.top) || 95,
-      zIndex: getRealZIndex(vp, 10),
+
+  // ITEM_REGISTRYベースの共通レイアウト保存
+  for (const item of ITEM_REGISTRY) {
+    const el = document.getElementById(item.id);
+    if (!el) continue;
+    const data = {
+      positionX: parseFloat(el.style.left) || 0,
+      positionY: parseFloat(el.style.top) || 0,
+      zIndex: getRealZIndex(el, item.defaultZ),
     };
+    if (item.saveVisible) {
+      data.visible = el.style.display !== 'none' ? 1 : 0;
+    }
+    if (item.hasSize) {
+      const w = parseFloat(el.style.width);
+      if (!isNaN(w)) data.width = w;
+      const h = parseFloat(el.style.height);
+      if (!isNaN(h) && el.style.height !== 'auto') data.height = h;
+    }
+    overlaySettings[item.prefix] = data;
   }
 
   try {
@@ -996,6 +1019,7 @@ async function editSave() {
     });
   } catch (e) { console.log('レイアウト保存エラー:', e.message); }
 
+  // capture/custom-text は個別APIに保存（既存ロジック維持）
   for (const [id, el] of Object.entries(captureLayers)) {
     const layout = {
       x: parseFloat(el.style.left) || 0,

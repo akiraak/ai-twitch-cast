@@ -1,5 +1,14 @@
 # DONE
 
+## アイテム共通化 Phase 2: broadcast.html JS共通化
+
+- [x] `ITEM_REGISTRY` で6アイテムをレジストリ定義（hasSize/saveVisible/defaultZ）
+- [x] `applyCommonStyle()` で共通スタイル適用（position/zIndex/bgOpacity直接 + CSS変数で新規プロパティ）
+- [x] `applySettings()` を applyCommonStyle + アイテム固有コードの2段階に統一
+- [x] `editSave()` を ITEM_REGISTRY ループに統一（ハードコード個別保存を廃止）
+- [x] dev-activity-panel に `data-editable="dev_activity"` 追加（ドラッグ・リサイズ可能に）
+- [x] ソースコード解析テスト11件追加（test_broadcast_patterns.py）
+
 ## アイテム共通化 Phase 1: 共通プロパティのDB保存基盤
 
 - [x] `_COMMON_DEFAULTS` (20プロパティ) 定義（visible, 配置, 背景, 文字）
