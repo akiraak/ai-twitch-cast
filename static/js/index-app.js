@@ -984,13 +984,20 @@ async function startTodo(el, text) {
 let layoutSettings = {};
 let _layoutTimer = null;
 
+let _pendingLayoutChanges = {};
+
 function _updateLayout(key, val) {
   const [section, prop] = key.split('.');
   if (!layoutSettings[section]) layoutSettings[section] = {};
   layoutSettings[section][prop] = val;
+  // 変更されたプロパティだけ記録
+  if (!_pendingLayoutChanges[section]) _pendingLayoutChanges[section] = {};
+  _pendingLayoutChanges[section][prop] = val;
   clearTimeout(_layoutTimer);
   _layoutTimer = setTimeout(() => {
-    api('POST', '/api/overlay/settings', layoutSettings);
+    const changes = _pendingLayoutChanges;
+    _pendingLayoutChanges = {};
+    api('POST', '/api/overlay/settings', changes);
   }, 200);
 }
 
