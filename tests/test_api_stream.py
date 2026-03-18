@@ -73,6 +73,8 @@ class TestStatus:
         data = resp.json()
         assert "server_started_at" in data
         assert "reader" in data
+        assert "version" in data
+        assert "updated_at" in data
 
     def test_env_masks_secrets(self, api_client):
         resp = api_client.get("/api/env")

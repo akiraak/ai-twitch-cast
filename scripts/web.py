@@ -46,6 +46,17 @@ app = FastAPI()
 SERVER_STARTED_AT = time.time()
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
+
+# バージョン情報
+APP_VERSION = (PROJECT_DIR / "VERSION").read_text(encoding="utf-8").strip() if (PROJECT_DIR / "VERSION").exists() else "0.0.0"
+try:
+    import subprocess as _sp
+    APP_UPDATED_AT = _sp.run(
+        ["git", "log", "-1", "--format=%cI"], cwd=str(PROJECT_DIR),
+        capture_output=True, text=True, timeout=5,
+    ).stdout.strip() or None
+except Exception:
+    APP_UPDATED_AT = None
 STATIC_DIR = PROJECT_DIR / "static"
 STATE_FILE = PROJECT_DIR / ".server_state"
 BGM_DIR = PROJECT_DIR / "resources" / "audio" / "bgm"
@@ -114,6 +125,8 @@ async def index():
 @app.get("/api/status")
 async def get_status():
     return {
+        "version": APP_VERSION,
+        "updated_at": APP_UPDATED_AT,
         "server_started_at": SERVER_STARTED_AT,
         "reader": {
             "running": state.reader.is_running,

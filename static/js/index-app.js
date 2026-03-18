@@ -149,6 +149,19 @@ async function refreshStatus() {
     document.getElementById('sb-stream-text').textContent = streaming ? '配信中' : '停止中';
     document.getElementById('status-bar').classList.toggle('streaming', streaming);
   } catch (e) {}
+  // バージョン表示（初回のみ）
+  const verEl = document.getElementById('app-version');
+  if (verEl && !verEl.textContent) {
+    try {
+      const st = await (await fetch('/api/status')).json();
+      let text = st.version ? `v${st.version}` : '';
+      if (st.updated_at) {
+        const d = new Date(st.updated_at);
+        text += ` (${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')})`;
+      }
+      verEl.textContent = text;
+    } catch (e) {}
+  }
   loadVolumes();
 }
 
