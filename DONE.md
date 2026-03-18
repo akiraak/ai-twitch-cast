@@ -443,6 +443,8 @@
 - [x] WEBUI全機能移植（OBS版→broadcast-ui統合：タブ化、TODO表示、Twitch配信情報、トピック管理、キャラクター設定、サウンド詳細、DB閲覧、環境変数表示、リンクバー整理）
 - [x] Windowsウィンドウキャプチャシステム（Electronアプリ: desktopCapturer+MJPEGサーバー、WSL2側API+WebSocket連携、broadcast.htmlドラッグ&リサイズ編集モード、broadcast-ui.htmlキャプチャ管理UI）
 - [x] レイアウト編集にスナップガイド線追加（ドラッグ・リサイズ時に画面中央・他パーツ端/中央への補助線表示+自動スナップ、グロー付き目立つデザイン）
+- [x] プレビュー画面でカーソルキーによる要素移動（通常0.1%、Shift+1.0%、500msデバウンスDB保存）
+- [x] プレビュー画面で辺リサイズハンドル追加（上下左右の辺中央につまみ、1軸のみリサイズ可能）
 - [x] プレビューウィンドウの配信画面を16:9レターボックス表示（ウィンドウ自由リサイズ対応）
 - [x] Electronプレビューウィンドウの検証ウィンドウ（DevTools）自動表示を削除
 - [x] 配信音声: FFmpegの音声入力をanullsrc→ローカルHTTPストリーム（broadcast.htmlのPCM音声）に変更、backgroundThrottling無効化+AudioContext監視+診断ログ追加

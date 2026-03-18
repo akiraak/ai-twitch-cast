@@ -295,6 +295,10 @@
   .resize-handle.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
   .resize-handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
   .resize-handle.nw { top: -6px; left: -6px; cursor: nw-resize; }
+  .resize-handle.n { top: -6px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+  .resize-handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+  .resize-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: e-resize; }
+  .resize-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: w-resize; }
 
   /* === スナップガイド線 === */
   .snap-guide {

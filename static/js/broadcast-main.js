@@ -783,9 +783,9 @@ function setupEditable(el) {
     el.appendChild(label);
   }
   if (!el.querySelector('.resize-handle')) {
-    for (const corner of ['se', 'sw', 'ne', 'nw']) {
+    for (const dir of ['se', 'sw', 'ne', 'nw', 'n', 's', 'e', 'w']) {
       const handle = document.createElement('div');
-      handle.className = 'resize-handle ' + corner;
+      handle.className = 'resize-handle ' + dir;
       el.appendChild(handle);
     }
   }
@@ -813,8 +813,14 @@ function setupEditable(el) {
       const startX = e.clientX, startY = e.clientY;
       const origW = el.offsetWidth, origH = el.offsetHeight;
       const origLeft = el.offsetLeft, origTop = el.offsetTop;
-      const isLeft = handle.classList.contains('sw') || handle.classList.contains('nw');
-      const isTop = handle.classList.contains('ne') || handle.classList.contains('nw');
+      // どの方向にリサイズするか判定
+      const hc = handle.classList;
+      const isLeft = hc.contains('sw') || hc.contains('nw') || hc.contains('w');
+      const isRight = hc.contains('se') || hc.contains('ne') || hc.contains('e');
+      const isTop = hc.contains('ne') || hc.contains('nw') || hc.contains('n');
+      const isBottom = hc.contains('se') || hc.contains('sw') || hc.contains('s');
+      const resizeH = isLeft || isRight;
+      const resizeV = isTop || isBottom;
       const otherRects = getOtherEditableRects(el);
 
       function onMove(e) {
@@ -823,28 +829,24 @@ function setupEditable(el) {
         let newLeft = origLeft, newTop = origTop;
         let newW = origW, newH = origH;
 
-        if (isLeft) {
-          newW = origW - dx; newLeft = origLeft + dx;
-        } else {
-          newW = origW + dx;
+        if (resizeH) {
+          if (isLeft) { newW = origW - dx; newLeft = origLeft + dx; }
+          else { newW = origW + dx; }
         }
-        if (isTop) {
-          newH = origH - dy; newTop = origTop + dy;
-        } else {
-          newH = origH + dy;
+        if (resizeV) {
+          if (isTop) { newH = origH - dy; newTop = origTop + dy; }
+          else { newH = origH + dy; }
         }
 
         // リサイズ中の端をスナップ
         const { vLines, hLines } = calcSnapPoints(otherRects, ww, wh);
-        // 動く辺をスナップ候補に
-        const vEdges = isLeft ? [newLeft] : [newLeft + newW];
-        // 中央もスナップ候補
-        vEdges.push(newLeft + newW / 2);
-        const hEdges = isTop ? [newTop] : [newTop + newH];
-        hEdges.push(newTop + newH / 2);
+        const vEdges = resizeH ? (isLeft ? [newLeft] : [newLeft + newW]) : [];
+        if (resizeH) vEdges.push(newLeft + newW / 2);
+        const hEdges = resizeV ? (isTop ? [newTop] : [newTop + newH]) : [];
+        if (resizeV) hEdges.push(newTop + newH / 2);
 
-        const snappedV = applySnap(vEdges, vLines, SNAP_THRESHOLD_PX);
-        const snappedH = applySnap(hEdges, hLines, SNAP_THRESHOLD_PX);
+        const snappedV = resizeH ? applySnap(vEdges, vLines, SNAP_THRESHOLD_PX) : null;
+        const snappedH = resizeV ? applySnap(hEdges, hLines, SNAP_THRESHOLD_PX) : null;
 
         if (snappedV) {
           if (isLeft) { newLeft -= snappedV.delta; newW += snappedV.delta; }
@@ -855,8 +857,8 @@ function setupEditable(el) {
           else { newH -= snappedH.delta; }
         }
 
-        el.style.width = (newW / ww * 100) + '%';
-        el.style.height = (newH / wh * 100) + '%';
+        if (resizeH) el.style.width = (newW / ww * 100) + '%';
+        if (resizeV) el.style.height = (newH / wh * 100) + '%';
         if (isLeft) { el.style.left = (newLeft / ww * 100) + '%'; el.style.transform = 'none'; }
         if (isTop) { el.style.top = (newTop / wh * 100) + '%'; el.style.transform = 'none'; }
 
