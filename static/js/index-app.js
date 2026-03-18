@@ -1,5 +1,5 @@
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'devstream', 'db', 'files', 'debug', 'todo'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'devstream', 'db', 'debug', 'todo'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -15,7 +15,6 @@ function switchTab(name, el) {
   if (name === 'character') loadLanguageModes();
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
-  if (name === 'files') loadFilesList();
   if (name === 'debug') { loadScreenshots(); }
   if (name === 'todo') loadTodoList();
   if (name === 'devstream') loadDevstream();
@@ -1273,10 +1272,6 @@ function _formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-async function loadFilesList() {
-  await loadCategoryFiles('avatar');
-}
-
 async function loadCategoryFiles(category) {
   const listEl = document.getElementById(category + '-files-list');
   if (!listEl) return;
@@ -1378,6 +1373,7 @@ initCommonProps();
 captureRefreshSources();
 loadCustomTexts();
 loadCategoryFiles('background');
+loadCategoryFiles('avatar');
 // 全パネルの値を読み込み
 loadVolumes();
 loadLayout();

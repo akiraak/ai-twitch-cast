@@ -24,7 +24,6 @@
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('layout', this)">配信画面</div>
-  <div class="tab" onclick="switchTab('files', this)">素材</div>
   <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
   <div class="tab" onclick="switchTab('topic', this)">トピック</div>
@@ -53,6 +52,15 @@
         </div></details>
         <details data-section="avatar" class="panel-item"><summary>アバター</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">スケール</span><input type="range" class="vol-slider layout-slider" min="0.1" max="3" step="0.05" data-key="avatar.scale" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-avatar-scale" min="0.1" max="3" step="0.05" data-key="avatar.scale" oninput="onLayoutNum(this)"></div>
+          <div style="font-size:0.7rem; color:#7b1fa2; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(124,77,255,0.06); border-radius:3px; border-left:2px solid #7b1fa2;">VRMファイル</div>
+          <div style="margin-bottom:8px;">
+            <label style="display:inline-block; padding:4px 12px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.8rem;">
+              ファイルを追加
+              <input type="file" accept=".vrm" style="display:none;" onchange="uploadFile('avatar', this)">
+            </label>
+            <span class="status" id="avatar-upload-status" style="display:inline; margin-left:8px;"></span>
+          </div>
+          <div id="avatar-files-list"></div>
         </div></details>
         <details data-section="subtitle" class="panel-item"><summary>字幕</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">下端 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-bottom" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutNum(this)"></div>
@@ -308,22 +316,6 @@ topics      1──N  topic_scripts (topic_id)</div>
     </div>
   </div>
 
-  <!-- ===== 素材管理 ===== -->
-  <div class="tab-content" id="tab-files">
-    <div class="grid">
-      <div class="card">
-        <h2>アバター（VRM）</h2>
-        <div style="margin-bottom:12px;">
-          <label style="display:inline-block; padding:6px 14px; background:#7b1fa2; color:#fff; border-radius:6px; cursor:pointer; font-size:0.85rem; font-weight:500;">
-            ファイルを選択
-            <input type="file" accept=".vrm" style="display:none;" onchange="uploadFile('avatar', this)">
-          </label>
-          <span class="status" id="avatar-upload-status" style="display:inline; margin-left:8px;"></span>
-        </div>
-        <div id="avatar-files-list"></div>
-      </div>
-    </div>
-  </div>
 
   <!-- ===== 開発実況 ===== -->
   <div class="tab-content" id="tab-devstream">
