@@ -85,6 +85,12 @@ ai-twitch-cast/
 │   ├── vrm/                  # VRMモデル
 │   ├── audio/
 │   └── video/
+├── tests/                    # pytestテスト（271テスト）
+│   ├── conftest.py           # 共通フィクスチャ（test_db, api_client, mock_gemini）
+│   ├── test_db.py            # DB CRUD テスト
+│   ├── test_ai_responder.py  # AI応答生成テスト
+│   ├── test_api_*.py         # APIエンドポイントテスト
+│   └── ...                   # 各モジュールのユニットテスト
 ├── server.sh                 # Webサーバー起動（再起動ループ+PIDファイル管理+二重起動防止）
 ├── stream.sh                 # C#ネイティブ配信アプリ起動（.envからSTREAM_KEY読み込み）
 ├── scenes.json               # 設定ファイル（オーバーレイ・音量・BGM・アバター設定）
@@ -132,17 +138,58 @@ ai-twitch-cast/
 - **音量制御**: broadcast.html内のJavaScriptで `master × tts` / `master × bgm × 曲音量` を計算
 - **保存先**: マスター・TTS・BGM音量 → SQLite DB（`volume.*`キー）、デフォルト → `scenes.json` の `audio_volumes`、曲別音量 → SQLite DB
 
+## テスト
+
+### 実行方法
+```bash
+python3 -m pytest tests/ -q          # 全テスト実行
+python3 -m pytest tests/test_db.py   # 特定ファイルのみ
+```
+
+### テスト構成（`tests/`）
+| ファイル | 対象 | 備考 |
+|---------|------|------|
+| `conftest.py` | 共通フィクスチャ | `test_db`(インメモリSQLite), `api_client`(FastAPI TestClient), `mock_gemini`, `mock_env` |
+| `test_db.py` | `src/db.py` | テーブル作成・全CRUD関数のテスト |
+| `test_ai_responder.py` | `src/ai_responder.py` | キャラクター管理・AI応答生成・ユーザーメモ |
+| `test_prompt_builder.py` | `src/prompt_builder.py` | 言語モード・システムプロンプト構築 |
+| `test_speech_pipeline.py` | `src/speech_pipeline.py` | TTS・リップシンク・オーバーレイ・感情連動 |
+| `test_tts.py` | `src/tts.py` | 言語タグ変換・TTSスタイル |
+| `test_topic_talker.py` | `src/topic_talker.py` | トピック管理・自発的発話 |
+| `test_git_watcher.py` | `src/git_watcher.py` | コミット検出・ライフサイクル・バッチ通知 |
+| `test_scene_config.py` | `src/scene_config.py` | 設定読み書き |
+| `test_wsl_path.py` | `src/wsl_path.py` | WSLパス変換・IP取得 |
+| `test_overlay.py` | `scripts/routes/overlay.py` | TODOパース・ブロードキャスト |
+| `test_capture_client.py` | `src/capture_client.py` | URL生成・WS通信・プロキシ |
+| `test_lipsync.py` | リップシンク | 振幅解析 |
+| `test_native_app_patterns.py` | C#ソースコード | 危険パターンの再発防止（ソース解析のみ） |
+| `test_api_character.py` | キャラクターAPI | CRUD・言語モード |
+| `test_api_stream.py` | 配信制御API | シーン・音量・アバター |
+| `test_api_topic.py` | トピックAPI | CRUD・スクリプト・一時停止 |
+
+### テスト規約
+- **新しいDB関数を追加したら `test_db.py` にテストを追加すること**
+- **新しいAPIエンドポイントを追加したら対応する `test_api_*.py` にテストを追加すること**
+- フィクスチャ `test_db` はインメモリSQLiteを使用（本番DBに影響しない）
+- フィクスチャ `api_client` は全外部依存（Gemini/Twitch/WebSocket）をモック化
+- 外部モジュール（twitchio, aiohttp）は `conftest.py` でスタブ化済み
+
 ## 機能変更時の必須チェック（リグレッション防止）
 
 **コードを変更したら、以下を必ず確認すること。**
 
-### 1. サーバー起動確認
+### 1. テスト実行
+```bash
+python3 -m pytest tests/ -q          # 全テスト通ることを確認
+```
+
+### 2. サーバー起動確認
 ```bash
 curl -s http://localhost:$WEB_PORT/api/status  # サーバーが応答するか
 curl -s http://localhost:$WEB_PORT/api/todo    # TODOが返るか
 ```
 
-### 2. 壊れやすいポイント（要注意）
+### 3. 壊れやすいポイント（要注意）
 - **broadcast.html**: CSS/JSの変更でTODOパネルの表示が消えることがある
 - **uvicorn再起動**: `--port` を `WEB_PORT` と一致させること
 
