@@ -1201,27 +1201,6 @@ setInterval(syncBgmVolumes, 3000);
 // ===== 開発実況 =====
 
 async function loadDevstream() {
-  // ステータス
-  try {
-    const r = await fetch('/api/dev-stream/status');
-    const d = await r.json();
-    const dot = document.getElementById('ds-status-dot');
-    const text = document.getElementById('ds-status-text');
-    const btn = document.getElementById('ds-toggle-btn');
-    if (d.running) {
-      dot.className = 'status-dot on';
-      text.textContent = `監視中（${d.active_repos}リポジトリ）`;
-      btn.textContent = '停止';
-      btn.className = 'danger';
-    } else {
-      dot.className = 'status-dot off';
-      text.textContent = '停止中';
-      btn.textContent = '開始';
-      btn.className = 'success';
-    }
-  } catch (e) { console.error('devstream status error', e); }
-
-  // リポジトリ一覧
   try {
     const r = await fetch('/api/dev-stream/repos');
     const d = await r.json();
@@ -1233,14 +1212,15 @@ async function loadDevstream() {
     el.innerHTML = d.repos.map(repo => {
       const active = repo.active ? true : false;
       const hash = repo.last_commit_hash ? repo.last_commit_hash.substring(0, 8) : '-';
-      const toggleLabel = active ? 'ON' : 'OFF';
+      const toggleLabel = active ? '有効' : '無効';
       const toggleColor = active ? '#2e7d32' : '#999';
-      const opacity = active ? '1' : '0.5';
-      return `<div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #e8e0f0; opacity:${opacity};">
+      const opacity = active ? '1' : '0.6';
+      const border = active ? 'border-left:3px solid #4caf50; padding-left:8px;' : '';
+      return `<div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #e8e0f0; opacity:${opacity}; ${border}">
         <div style="flex:1; min-width:0;">
           <div style="font-weight:600; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(repo.name)}</div>
           <div style="font-size:0.75rem; color:#9a88b5;">
-            ${esc(repo.branch)} / ${hash}
+            ${esc(repo.branch)} / ${hash}${active ? ' — 監視中・TODO表示中' : ''}
           </div>
         </div>
         <button onclick="dsToggleRepo(${repo.id}, ${!active})" style="padding:2px 10px; font-size:0.75rem; background:${toggleColor}; color:#fff; border:none; border-radius:4px; cursor:pointer;">${toggleLabel}</button>
@@ -1249,35 +1229,6 @@ async function loadDevstream() {
       </div>`;
     }).join('');
   } catch (e) { console.error('devstream repos error', e); }
-
-  // TODOソース
-  try {
-    const [srcRes, reposRes] = await Promise.all([
-      fetch('/api/todo/source'),
-      fetch('/api/dev-stream/repos'),
-    ]);
-    const srcData = await srcRes.json();
-    const reposData = await reposRes.json();
-    const sel = document.getElementById('ds-todo-source');
-    sel.innerHTML = '<option value="self">自プロジェクト</option>';
-    for (const repo of reposData.repos) {
-      const opt = document.createElement('option');
-      opt.value = `dev:${repo.id}`;
-      opt.textContent = repo.name;
-      sel.appendChild(opt);
-    }
-    sel.value = srcData.source === 'self' ? 'self' : `dev:${srcData.source.split(':')[1] || ''}`;
-  } catch (e) { console.error('devstream todo source error', e); }
-}
-
-async function dsToggleWatch() {
-  const btn = document.getElementById('ds-toggle-btn');
-  const isRunning = btn.textContent === '停止';
-  btn.disabled = true;
-  try {
-    await fetch(`/api/dev-stream/${isRunning ? 'stop' : 'start'}`, { method: 'POST' });
-    await loadDevstream();
-  } finally { btn.disabled = false; }
 }
 
 async function dsAddRepo() {
@@ -1334,21 +1285,4 @@ async function dsDeleteRepo(id, name) {
   if (!confirm(`「${name}」を削除しますか？`)) return;
   await fetch(`/api/dev-stream/repos/${id}`, { method: 'DELETE' });
   await loadDevstream();
-}
-
-async function dsChangeTodoSource() {
-  const sel = document.getElementById('ds-todo-source');
-  const val = sel.value;
-  let body;
-  if (val === 'self') {
-    body = { source: 'self' };
-  } else {
-    const repoId = val.split(':')[1];
-    body = { source: 'dev', repo_id: parseInt(repoId) };
-  }
-  await fetch('/api/todo/source', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
 }

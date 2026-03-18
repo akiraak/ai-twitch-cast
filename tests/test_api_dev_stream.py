@@ -49,8 +49,23 @@ class TestDeleteRepo:
 
 
 class TestToggleRepo:
-    def test_toggle(self, api_client, test_db):
+    def test_activate_exclusive(self, api_client, test_db):
+        """有効化すると他は無効化される"""
+        r1 = test_db.add_dev_repo("a", "https://a.git", "repos/a")
+        r2 = test_db.add_dev_repo("b", "https://b.git", "repos/b")
+        # r1を有効化
+        resp = api_client.post(f"/api/dev-stream/repos/{r1['id']}/toggle", json={"active": True})
+        assert resp.json()["ok"] is True
+        assert test_db.get_dev_repo(r1["id"])["active"] == 1
+        # r2を有効化 → r1は無効化される
+        resp = api_client.post(f"/api/dev-stream/repos/{r2['id']}/toggle", json={"active": True})
+        assert resp.json()["ok"] is True
+        assert test_db.get_dev_repo(r2["id"])["active"] == 1
+        assert test_db.get_dev_repo(r1["id"])["active"] == 0
+
+    def test_deactivate(self, api_client, test_db):
         repo = test_db.add_dev_repo("o/r", "https://o.git", "repos/r")
+        api_client.post(f"/api/dev-stream/repos/{repo['id']}/toggle", json={"active": True})
         resp = api_client.post(f"/api/dev-stream/repos/{repo['id']}/toggle", json={"active": False})
         assert resp.json()["ok"] is True
         assert test_db.get_dev_repo(repo["id"])["active"] == 0
@@ -69,13 +84,3 @@ class TestStatus:
         assert resp.status_code == 200
         assert "running" in resp.json()
         assert "active_repos" in resp.json()
-
-
-class TestStartStop:
-    def test_start(self, api_client):
-        resp = api_client.post("/api/dev-stream/start")
-        assert resp.json()["ok"] is True
-
-    def test_stop(self, api_client):
-        resp = api_client.post("/api/dev-stream/stop")
-        assert resp.json()["ok"] is True

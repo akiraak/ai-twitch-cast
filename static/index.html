@@ -354,14 +354,6 @@ topics      1──N  topic_scripts (topic_id)</div>
   <!-- ===== 開発実況 ===== -->
   <div class="tab-content" id="tab-devstream">
     <div class="card">
-      <h2>監視状態</h2>
-      <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-        <span id="ds-status-dot" class="status-dot off" style="width:10px; height:10px;"></span>
-        <span id="ds-status-text" style="font-size:0.9rem;">停止中</span>
-        <button id="ds-toggle-btn" onclick="dsToggleWatch()" style="margin-left:auto; padding:4px 16px;">開始</button>
-      </div>
-    </div>
-    <div class="card">
       <h2>リポジトリ追加</h2>
       <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
         <div style="flex:1; min-width:200px;">
@@ -379,13 +371,6 @@ topics      1──N  topic_scripts (topic_id)</div>
     <div class="card">
       <h2>リポジトリ一覧</h2>
       <div id="ds-repos"></div>
-    </div>
-    <div class="card">
-      <h2>TODOソース</h2>
-      <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:8px;">配信画面のTODOパネルに表示するTODO.mdのソースを選択</p>
-      <select id="ds-todo-source" onchange="dsChangeTodoSource()" style="width:100%; padding:6px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.9rem;">
-        <option value="self">自プロジェクト</option>
-      </select>
     </div>
   </div>
 
