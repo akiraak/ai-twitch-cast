@@ -130,11 +130,12 @@ function applySettings(s) {
       if (s.version.fontSize != null) document.getElementById('version-text').style.fontSize = s.version.fontSize + 'vw';
       const vText = document.getElementById('version-text');
       if (s.version.strokeSize != null || s.version.strokeOpacity != null) {
-        const size = s.version.strokeSize ?? parseFloat(vText.dataset.strokeSize || 3);
+        const size = s.version.strokeSize ?? parseFloat(vText.dataset.strokeSize || 2);
         const opacity = s.version.strokeOpacity ?? parseFloat(vText.dataset.strokeOpacity || 0.8);
         vText.dataset.strokeSize = size;
         vText.dataset.strokeOpacity = opacity;
-        vText.style.textShadow = `0 0 ${size}px rgba(0,0,0,${opacity}), 0 0 ${size}px rgba(0,0,0,${opacity})`;
+        vText.style.webkitTextStroke = `${size}px rgba(0,0,0,${opacity})`;
+        vText.style.paintOrder = 'stroke fill';
       }
       if (s.version.bgOpacity != null) setBgOpacity(vp, s.version.bgOpacity);
       if (s.version.zIndex != null) vp.style.zIndex = s.version.zIndex;
