@@ -224,11 +224,11 @@ class TestEditSaveUsesRegistry:
 class TestWebUICommonProps:
     """Web UI (index.html/index-app.js) の共通プロパティUI検証"""
 
-    def test_all_fieldsets_have_data_section(self):
+    def test_all_panels_have_data_section(self):
         html = read_html_index()
         for section in EXPECTED_ITEMS:
             assert f'data-section="{section}"' in html, (
-                f'index.html に data-section="{section}" の fieldset がない'
+                f'index.html に data-section="{section}" のパネルがない'
             )
 
     def test_init_common_props_exists(self):
@@ -272,14 +272,15 @@ class TestWebUICommonProps:
         assert "<details" not in body, "_commonPropsHTML に <details> が残っている"
 
     def test_common_inserted_at_top(self):
-        """共通コントロールがfieldset先頭（legend直後）に挿入されること"""
+        """共通コントロールがpanel-body先頭に挿入されること"""
         js = read_js_index()
+        assert "function _injectCommonProps(" in js
         func_match = re.search(
-            r"function initCommonProps\(\)\s*\{(.*?)\n\}", js, re.DOTALL
+            r"function _injectCommonProps\(.*?\n\}", js, re.DOTALL
         )
         assert func_match
-        body = func_match.group(1)
-        assert "afterend" in body, "legend.afterend への挿入がない"
+        body = func_match.group(0)
+        assert "afterbegin" in body, "panel-body.afterbegin への挿入がない"
 
     def test_color_handler_exists(self):
         js = read_js_index()
@@ -290,15 +291,15 @@ class TestWebUICommonProps:
         js = read_js_index()
         assert "function onLayoutToggle(" in js
 
-    def test_load_layout_handles_colors_and_toggles(self):
+    def test_apply_layout_handles_colors_and_toggles(self):
         js = read_js_index()
         func_match = re.search(
-            r"async function loadLayout\(\)\s*\{(.*?)\n\}", js, re.DOTALL
+            r"function _applyLayoutToUI\(.*?\n\}", js, re.DOTALL
         )
         assert func_match
-        body = func_match.group(1)
-        assert "layout-color" in body, "loadLayout がカラーピッカーを初期化していない"
-        assert "layout-toggle" in body, "loadLayout がトグルを初期化していない"
+        body = func_match.group(0)
+        assert "layout-color" in body, "_applyLayoutToUI がカラーピッカーを初期化していない"
+        assert "layout-toggle" in body, "_applyLayoutToUI がトグルを初期化していない"
 
 
 class TestCssVariables:

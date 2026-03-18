@@ -111,6 +111,13 @@
   .layout-num:focus { outline: 2px solid #7b1fa2; border-color: #7b1fa2; }
   fieldset { margin: 0; }
 
+  .panel-item { border: 1px solid #d0c0e8; border-radius: 6px; margin-bottom: 8px; }
+  .panel-item > summary { font-size: 0.85rem; color: #7b1fa2; font-weight: 600; padding: 8px 12px; cursor: pointer; user-select: none; list-style: none; }
+  .panel-item > summary::before { content: '▶ '; font-size: 0.7rem; }
+  .panel-item[open] > summary::before { content: '▼ '; }
+  .panel-item > summary::-webkit-details-marker { display: none; }
+  .panel-body { padding: 4px 12px 12px; }
+
   .text-input { width: 100%; padding: 6px 10px; background: #ece5fa; border: 1px solid #d0c0e8; border-radius: 6px; color: #2a1f40; font-size: 0.85rem; transition: border-color 0.15s; }
   .text-input:focus { border-color: #7b1fa2; outline: none; }
   textarea.text-input { resize: vertical; }

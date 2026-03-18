@@ -177,53 +177,39 @@ async function captureRefreshSources() {
 }
 
 function _renderCaptureList(saved, active) {
-  const el = document.getElementById('capture-list');
-  if (!saved.length) {
-    el.innerHTML = '<span style="color:#9a88b5;">保存済みウィンドウなし</span>';
-    return;
-  }
+  const el = document.getElementById('capture-panels');
+  if (!saved.length) { el.innerHTML = ''; return; }
   const activeByName = {};
-  for (const a of active) {
-    if (a.name) activeByName[a.name] = a;
-  }
-  // インデックスベースでイベント管理（ウィンドウ名に特殊文字があってもOK）
+  for (const a of active) { if (a.name) activeByName[a.name] = a; }
   _capSavedList = saved;
   _capActiveByName = activeByName;
   el.innerHTML = saved.map((s, idx) => {
     const wname = s.window_name || '';
     const a = activeByName[wname];
     const isActive = !!a;
-    const l = (isActive ? a.layout : s.layout) || {};
-    const vis = l.visible !== false;
     const label = escHtml(s.label || wname);
-    const capId = isActive ? a.id : '';
-    let buttons = '';
-    if (isActive) {
-      buttons += vis
-        ? `<button class="cap-btn-vis" data-action="toggle-vis" data-idx="${idx}">&#x1f441; 表示</button>`
-        : `<button class="cap-btn-vis hidden" data-action="toggle-vis" data-idx="${idx}">&#x1f441;&#xfe0f; 非表示</button>`;
-    }
-    buttons += `<button class="danger" style="padding:2px 8px; font-size:0.7rem;" data-action="delete" data-idx="${idx}">削除</button>`;
-    const lr = (prop, min, max, step, val) =>
-      `<div class="layout-row"><span class="layout-label">${prop === 'zIndex' ? 'Z順序' : prop === 'x' ? 'X位置 (%)' : prop === 'y' ? 'Y位置 (%)' : prop === 'width' ? '幅 (%)' : '高さ (%)'}</span><input type="range" class="vol-slider cap-layout-input" min="${min}" max="${max}" step="${step}" value="${val}" data-idx="${idx}" data-prop="${prop}"><input type="number" class="layout-num cap-layout-input" min="${min}" max="${max}" step="${step}" value="${val}" data-idx="${idx}" data-prop="${prop}"></div>`;
-    const layoutHtml = `<div class="cap-item-layout">
-      ${lr('x', 0, 100, 0.5, l.x ?? 5)}
-      ${lr('y', 0, 100, 0.5, l.y ?? 10)}
-      ${lr('width', 5, 100, 0.5, l.width ?? 40)}
-      ${lr('height', 5, 100, 0.5, l.height ?? 50)}
-      ${lr('zIndex', 0, 100, 1, l.zIndex ?? 10)}
-    </div>`;
-    return `<div class="cap-item ${isActive ? 'active' : 'inactive'}">
-      <div class="cap-item-header">
-        <span class="cap-item-label">${label}</span>
-        ${buttons}
+    const statusBadge = isActive
+      ? '<span style="color:#4caf50; font-size:0.7rem; margin-left:6px;">● 配信中</span>'
+      : '<span style="color:#999; font-size:0.7rem; margin-left:6px;">○ 停止</span>';
+    return `<details class="panel-item" data-cap-idx="${idx}">
+      <summary>キャプチャ - ${label}${statusBadge}</summary>
+      <div class="panel-body">
+        <div style="text-align:right; margin-bottom:6px;">
+          <button class="danger" style="padding:2px 8px; font-size:0.7rem;" data-action="delete" data-idx="${idx}">削除</button>
+        </div>
       </div>
-      ${layoutHtml}
-    </div>`;
+    </details>`;
   }).join('');
-  // イベント委譲
+  // 共通コントロールを注入（broadcast_itemsのcapture:{id}セクション）
+  saved.forEach((s, idx) => {
+    const detail = el.querySelector(`[data-cap-idx="${idx}"]`);
+    if (!detail) return;
+    const biId = `capture:${s.id}`;
+    detail.dataset.section = biId;
+    _injectCommonProps(detail, biId);
+  });
+  _initToggles(el);
   el.onclick = _capListClick;
-  el.oninput = _capListInput;
 }
 
 let _capSavedList = [];
@@ -291,33 +277,34 @@ async function loadCustomTexts() {
 }
 
 function _renderCustomTextList(items) {
-  const el = document.getElementById('custom-text-list');
-  if (!items.length) {
-    el.innerHTML = '<span style="color:#9a88b5;">カスタムテキストなし</span>';
-    return;
-  }
+  const el = document.getElementById('custom-text-panels');
+  if (!items.length) { el.innerHTML = ''; return; }
   el.innerHTML = items.map(item => {
-    const l = item.layout || {};
-    return `<div style="border:1px solid #d0c0e8; border-radius:6px; padding:10px; margin-bottom:8px;">
-      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-        <input type="text" value="${escHtml(item.label)}" placeholder="ラベル"
-          style="flex:1; padding:2px 6px; font-size:0.85rem; border:1px solid #ccc; border-radius:4px;"
-          onchange="updateCustomText(${item.id}, {label: this.value})">
-        <button onclick="deleteCustomText(${item.id})"
-          style="padding:2px 8px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">削除</button>
+    const label = escHtml(item.label || `テキスト ${item.id}`);
+    return `<details class="panel-item" data-ct-id="${item.id}">
+      <summary>テキスト - ${label}</summary>
+      <div class="panel-body">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <input type="text" value="${escHtml(item.label)}" placeholder="ラベル"
+            style="flex:1; padding:2px 6px; font-size:0.85rem; border:1px solid #ccc; border-radius:4px;"
+            onchange="updateCustomText(${item.id}, {label: this.value})">
+          <button onclick="deleteCustomText(${item.id})"
+            style="padding:2px 8px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">削除</button>
+        </div>
+        <textarea rows="2" style="width:100%; box-sizing:border-box; padding:4px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px; resize:vertical;"
+          onchange="updateCustomText(${item.id}, {content: this.value})">${escHtml(item.content)}</textarea>
       </div>
-      <textarea rows="2" style="width:100%; box-sizing:border-box; padding:4px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px; resize:vertical;"
-        onchange="updateCustomText(${item.id}, {content: this.value})">${escHtml(item.content)}</textarea>
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px; font-size:0.75rem;">
-        <label>文字サイズ <input type="number" value="${l.fontSize ?? 1.2}" min="0.3" max="5" step="0.1"
-          style="width:50px;" onchange="updateCustomText(${item.id}, {fontSize: parseFloat(this.value)})"> vw</label>
-        <label>背景透明度 <input type="number" value="${l.bgOpacity ?? 0.85}" min="0" max="1" step="0.05"
-          style="width:50px;" onchange="updateCustomText(${item.id}, {bgOpacity: parseFloat(this.value)})"></label>
-        <label>Z順序 <input type="number" value="${l.zIndex ?? 15}" min="0" max="100" step="1"
-          style="width:50px;" onchange="updateCustomText(${item.id}, {zIndex: parseInt(this.value)})"></label>
-      </div>
-    </div>`;
+    </details>`;
   }).join('');
+  // 共通コントロールを注入
+  items.forEach(item => {
+    const detail = el.querySelector(`[data-ct-id="${item.id}"]`);
+    if (!detail) return;
+    const biId = `customtext:${item.id}`;
+    detail.dataset.section = biId;
+    _injectCommonProps(detail, biId);
+  });
+  _initToggles(el);
 }
 
 async function addCustomText() {
@@ -1044,10 +1031,27 @@ let _layoutTimer = null;
 let _pendingLayoutChanges = {};
 
 function _updateLayout(key, val) {
-  const [section, prop] = key.split('.');
+  const dotIdx = key.indexOf('.');
+  const section = key.substring(0, dotIdx);
+  const prop = key.substring(dotIdx + 1);
   if (!layoutSettings[section]) layoutSettings[section] = {};
   layoutSettings[section][prop] = val;
-  // 変更されたプロパティだけ記録
+  // capture/customtext は items API を使用
+  if (section.startsWith('capture:') || section.startsWith('customtext:')) {
+    if (!_pendingLayoutChanges[section]) _pendingLayoutChanges[section] = {};
+    _pendingLayoutChanges[section][prop] = val;
+    clearTimeout(_layoutTimer);
+    _layoutTimer = setTimeout(() => {
+      for (const [sec, props] of Object.entries(_pendingLayoutChanges)) {
+        if (sec.startsWith('capture:') || sec.startsWith('customtext:')) {
+          api('PUT', `/api/items/${sec}`, props);
+        }
+      }
+      _pendingLayoutChanges = {};
+    }, 200);
+    return;
+  }
+  // 固定アイテム
   if (!_pendingLayoutChanges[section]) _pendingLayoutChanges[section] = {};
   _pendingLayoutChanges[section][prop] = val;
   clearTimeout(_layoutTimer);
@@ -1131,24 +1135,20 @@ function _commonPropsHTML(s) {
   `;
 }
 
-function initCommonProps() {
-  const sections = ['avatar', 'subtitle', 'todo', 'topic', 'version', 'dev_activity'];
-  for (const s of sections) {
-    const fs = document.querySelector(`fieldset[data-section="${s}"]`);
-    if (!fs) continue;
-    // legendの直後（先頭）に共通コントロールを挿入
-    const legend = fs.querySelector('legend');
-    if (legend) legend.insertAdjacentHTML('afterend', _commonPropsHTML(s));
-    else fs.insertAdjacentHTML('afterbegin', _commonPropsHTML(s));
-    // 固有パラメータがあればグループヘッダーを追加
-    const specificRows = fs.querySelectorAll('.layout-row:not(.common-row)');
-    if (specificRows.length > 0) {
-      specificRows[0].insertAdjacentHTML('beforebegin',
-        '<div style="font-size:0.7rem; color:#e67e22; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(230,126,34,0.06); border-radius:3px; border-left:2px solid #e67e22;">固有設定</div>');
-    }
+function _injectCommonProps(el, section) {
+  const body = el.querySelector('.panel-body');
+  if (!body) return;
+  body.insertAdjacentHTML('afterbegin', _commonPropsHTML(section));
+  // 固有パラメータがあればグループヘッダーを追加
+  const specificRows = body.querySelectorAll('.layout-row:not(.common-row)');
+  if (specificRows.length > 0) {
+    specificRows[0].insertAdjacentHTML('beforebegin',
+      '<div style="font-size:0.7rem; color:#e67e22; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(230,126,34,0.06); border-radius:3px; border-left:2px solid #e67e22;">固有設定</div>');
   }
-  // トグルの見た目更新
-  document.querySelectorAll('.layout-toggle').forEach(cb => {
+}
+
+function _initToggles(container) {
+  container.querySelectorAll('.layout-toggle').forEach(cb => {
     cb.addEventListener('change', () => {
       const track = cb.nextElementSibling;
       const knob = track?.nextElementSibling;
@@ -1158,44 +1158,69 @@ function initCommonProps() {
   });
 }
 
+function initCommonProps() {
+  document.querySelectorAll('.panel-item[data-section]').forEach(el => {
+    _injectCommonProps(el, el.dataset.section);
+  });
+  _initToggles(document);
+}
+
 async function loadLayout() {
   try {
     const data = await (await fetch('/api/overlay/settings')).json();
+    // /api/itemsから動的アイテム(capture/customtext)のデータもマージ
+    try {
+      const items = await (await fetch('/api/items')).json();
+      for (const item of items) {
+        if (item.id && !data[item.id]) data[item.id] = item;
+      }
+    } catch (e) {}
     layoutSettings = data;
-    document.querySelectorAll('.layout-num[data-key]').forEach(numEl => {
-      const [section, prop] = numEl.dataset.key.split('.');
-      const val = data[section]?.[prop];
-      if (val != null) {
-        numEl.value = val;
-        const slider = numEl.closest('.layout-row').querySelector('.layout-slider');
-        if (slider) slider.value = val;
-      }
-    });
-    // バージョンフォーマット初期化
-    if (data.version) {
-      const vFormat = document.getElementById('lv-version-format');
-      if (vFormat && data.version.format) {
-        vFormat.value = data.version.format;
-      }
-    }
-    // 共通プロパティ: カラーピッカー・トグル初期化
-    document.querySelectorAll('.layout-color[data-key]').forEach(el => {
-      const [section, prop] = el.dataset.key.split('.');
-      const val = data[section]?.[prop];
-      if (val) el.value = cssColorToHex(String(val));
-    });
-    document.querySelectorAll('.layout-toggle[data-key]').forEach(el => {
-      const [section, prop] = el.dataset.key.split('.');
-      const val = data[section]?.[prop];
-      if (val != null) {
-        el.checked = !!Number(val);
-        const track = el.nextElementSibling;
-        const knob = track?.nextElementSibling;
-        if (track) track.style.background = el.checked ? '#7b1fa2' : '#ccc';
-        if (knob) knob.style.left = el.checked ? '16px' : '2px';
-      }
-    });
+    _applyLayoutToUI(data);
   } catch (e) {}
+}
+
+function _applyLayoutToUI(data) {
+  document.querySelectorAll('.layout-num[data-key]').forEach(numEl => {
+    const key = numEl.dataset.key;
+    const dotIdx = key.indexOf('.');
+    const section = key.substring(0, dotIdx);
+    const prop = key.substring(dotIdx + 1);
+    const val = data[section]?.[prop];
+    if (val != null) {
+      numEl.value = val;
+      const slider = numEl.closest('.layout-row')?.querySelector('.layout-slider');
+      if (slider) slider.value = val;
+    }
+  });
+  // バージョンフォーマット初期化
+  if (data.version) {
+    const vFormat = document.getElementById('lv-version-format');
+    if (vFormat && data.version.format) vFormat.value = data.version.format;
+  }
+  // カラーピッカー・トグル初期化
+  document.querySelectorAll('.layout-color[data-key]').forEach(el => {
+    const key = el.dataset.key;
+    const dotIdx = key.indexOf('.');
+    const section = key.substring(0, dotIdx);
+    const prop = key.substring(dotIdx + 1);
+    const val = data[section]?.[prop];
+    if (val) el.value = cssColorToHex(String(val));
+  });
+  document.querySelectorAll('.layout-toggle[data-key]').forEach(el => {
+    const key = el.dataset.key;
+    const dotIdx = key.indexOf('.');
+    const section = key.substring(0, dotIdx);
+    const prop = key.substring(dotIdx + 1);
+    const val = data[section]?.[prop];
+    if (val != null) {
+      el.checked = !!Number(val);
+      const track = el.nextElementSibling;
+      const knob = track?.nextElementSibling;
+      if (track) track.style.background = el.checked ? '#7b1fa2' : '#ccc';
+      if (knob) knob.style.left = el.checked ? '16px' : '2px';
+    }
+  });
 }
 
 let _versionFormatTimer = null;
@@ -1375,7 +1400,12 @@ async function deleteFile(category, file) {
 const initTab = location.hash.slice(1);
 if (TAB_NAMES.includes(initTab)) switchTab(initTab);
 
+// 固定アイテムの共通コントロール注入
 initCommonProps();
+// キャプチャ・カスタムテキストをロード（パネル生成+共通コントロール注入）
+captureRefreshSources();
+loadCustomTexts();
+// 全パネルの値を読み込み
 loadVolumes();
 loadLayout();
 loadCharacter();
@@ -1387,9 +1417,7 @@ refreshStatus();
 setInterval(refreshStatus, 5000);
 checkServerUpdate();
 setInterval(checkServerUpdate, 3000);
-captureRefreshSources();
 setInterval(captureRefreshSources, 10000);
-loadCustomTexts();
 setInterval(syncBgmVolumes, 3000);
 
 // --- WebSocket接続（プレビュー→WebUIリアルタイム同期） ---
