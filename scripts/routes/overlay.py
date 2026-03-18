@@ -289,13 +289,30 @@ _OVERLAY_DEFAULTS = {
 
 @router.get("/api/overlay/settings")
 async def get_overlay_settings():
-    """レイアウト設定を返す（DB優先→scenes.json→ハードコードデフォルト）"""
+    """レイアウト設定を返す（broadcast_items優先→overlay.* settings→デフォルト）"""
     file_defaults = _get_overlay_defaults()
     result = {}
+
+    # broadcast_itemsテーブルからの読み込みを試行
+    items_map = {}
+    try:
+        items = db.get_broadcast_items()
+        for item in items:
+            items_map[item["id"]] = item
+    except Exception:
+        pass
+
     for section, props in _OVERLAY_DEFAULTS.items():
         result[section] = {}
         file_section = file_defaults.get(section, {})
+        bi = items_map.get(section)
+
         for prop, fallback in props.items():
+            # 1. broadcast_itemsテーブルから取得
+            if bi and prop in bi:
+                result[section][prop] = bi[prop]
+                continue
+            # 2. overlay.* settings（旧形式フォールバック）
             val = db.get_setting(f"overlay.{section}.{prop}")
             if val is not None:
                 try:
@@ -426,13 +443,17 @@ async def preview_overlay_settings(request: Request):
 async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
-    changed_sections = set()
+    fixed_items = {"avatar", "subtitle", "todo", "topic", "version", "dev_activity"}
     for section, props in body.items():
         if not isinstance(props, dict):
             continue
-        changed_sections.add(section)
-        for prop, val in props.items():
-            db.set_setting(f"overlay.{section}.{prop}", val)
+        if section in fixed_items:
+            # broadcast_itemsテーブルに保存
+            db.upsert_broadcast_item(section, section, props)
+        else:
+            # lighting/sync等はsettingsテーブルに保存（従来通り）
+            for prop, val in props.items():
+                db.set_setting(f"overlay.{section}.{prop}", val)
     # 変更されたプロパティのみブロードキャスト（他のプロパティでドラッグ位置を上書きしない）
     await state.broadcast_overlay({"type": "settings_update", **body})
     return {"ok": True}

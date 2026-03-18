@@ -1,5 +1,6 @@
 """データベース管理モジュール（SQLite）"""
 
+import json as _json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -154,6 +155,34 @@ def _create_tables(conn):
             visible INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS broadcast_items (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            x REAL NOT NULL DEFAULT 0,
+            y REAL NOT NULL DEFAULT 0,
+            width REAL NOT NULL DEFAULT 50,
+            height REAL NOT NULL DEFAULT 50,
+            z_index INTEGER NOT NULL DEFAULT 10,
+            visible INTEGER NOT NULL DEFAULT 1,
+            bg_color TEXT NOT NULL DEFAULT 'rgba(20,20,35,1)',
+            bg_opacity REAL NOT NULL DEFAULT 0.85,
+            border_radius REAL NOT NULL DEFAULT 8,
+            border_enabled INTEGER NOT NULL DEFAULT 0,
+            border_color TEXT NOT NULL DEFAULT 'rgba(255,255,255,0.5)',
+            border_size REAL NOT NULL DEFAULT 1,
+            border_opacity REAL NOT NULL DEFAULT 1.0,
+            text_color TEXT NOT NULL DEFAULT '#e0e0e0',
+            font_size REAL NOT NULL DEFAULT 1.0,
+            text_stroke_color TEXT NOT NULL DEFAULT 'rgba(0,0,0,0.8)',
+            text_stroke_size REAL NOT NULL DEFAULT 0,
+            text_stroke_opacity REAL NOT NULL DEFAULT 0.8,
+            padding REAL NOT NULL DEFAULT 8,
+            properties TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT,
+            updated_at TEXT
+        );
     """)
     conn.commit()
     # Migration: add updated_at to characters
@@ -179,6 +208,11 @@ def _create_tables(conn):
             conn.commit()
         except sqlite3.OperationalError:
             pass
+    # Migration: overlay.* settings → broadcast_items
+    try:
+        migrate_overlay_to_items()
+    except Exception:
+        pass
 
 
 # --- channels ---
@@ -834,4 +868,190 @@ def delete_custom_text(text_id):
     """カスタムテキストを削除"""
     conn = get_connection()
     conn.execute("DELETE FROM custom_texts WHERE id = ?", (text_id,))
+    conn.commit()
+
+
+# --- broadcast_items ---
+
+# 共通カラムとDB列名のマッピング
+_ITEM_COMMON_COLS = {
+    "positionX": "x", "positionY": "y", "width": "width", "height": "height",
+    "zIndex": "z_index", "visible": "visible",
+    "bgColor": "bg_color", "bgOpacity": "bg_opacity",
+    "borderRadius": "border_radius", "borderEnabled": "border_enabled",
+    "borderColor": "border_color", "borderSize": "border_size",
+    "borderOpacity": "border_opacity",
+    "textColor": "text_color", "fontSize": "font_size",
+    "textStrokeColor": "text_stroke_color", "textStrokeSize": "text_stroke_size",
+    "textStrokeOpacity": "text_stroke_opacity", "padding": "padding",
+}
+
+# 逆マッピング（DB列名→APIキー名）
+_ITEM_COL_TO_KEY = {v: k for k, v in _ITEM_COMMON_COLS.items()}
+
+# アイテム固有プロパティのキー一覧（共通カラムに含まれないもの）
+_ITEM_SPECIFIC_KEYS = {
+    "subtitle": {"bottom", "maxWidth", "fadeDuration"},
+    "todo": {"titleFontSize"},
+    "topic": {"maxWidth", "titleFontSize"},
+    "version": {"format", "strokeSize", "strokeOpacity"},
+}
+
+_ITEM_LABELS = {
+    "avatar": "アバター",
+    "subtitle": "字幕",
+    "todo": "TODOパネル",
+    "topic": "トピックパネル",
+    "version": "バージョン表示",
+    "dev_activity": "開発アクティビティ",
+}
+
+
+def _item_row_to_dict(row):
+    """broadcast_items行をAPI用dictに変換"""
+    d = dict(row)
+    # DB列名→APIキー名に変換
+    result = {"id": d["id"], "type": d["type"], "label": d["label"]}
+    for col, key in _ITEM_COL_TO_KEY.items():
+        if col in d:
+            result[key] = d[col]
+    # properties JSONをマージ
+    props = _json.loads(d.get("properties", "{}"))
+    result.update(props)
+    return result
+
+
+def get_broadcast_items():
+    """全broadcast_itemsを返す"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM broadcast_items ORDER BY z_index"
+    ).fetchall()
+    return [_item_row_to_dict(r) for r in rows]
+
+
+def get_broadcast_item(item_id):
+    """指定IDのbroadcast_itemを返す"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM broadcast_items WHERE id = ?", (item_id,)
+    ).fetchone()
+    return _item_row_to_dict(row) if row else None
+
+
+def upsert_broadcast_item(item_id, item_type, data):
+    """broadcast_itemを挿入または更新する"""
+    conn = get_connection()
+    now = _now()
+    # 共通カラムとpropertiesを分離
+    common = {}
+    props = {}
+    specific_keys = _ITEM_SPECIFIC_KEYS.get(item_type, set())
+    for key, val in data.items():
+        if key in ("id", "type", "label", "created_at", "updated_at"):
+            continue
+        if key in _ITEM_COMMON_COLS:
+            common[_ITEM_COMMON_COLS[key]] = val
+        elif key in specific_keys or key not in _ITEM_COMMON_COLS:
+            props[key] = val
+
+    # 既存のpropertiesをマージ
+    existing = conn.execute(
+        "SELECT properties FROM broadcast_items WHERE id = ?", (item_id,)
+    ).fetchone()
+    if existing:
+        old_props = _json.loads(existing["properties"])
+        old_props.update(props)
+        props = old_props
+
+    label = data.get("label", _ITEM_LABELS.get(item_type, item_id))
+    cols = ["id", "type", "label", "properties", "updated_at"]
+    vals = [item_id, item_type, label, _json.dumps(props, ensure_ascii=False), now]
+    for col, val in common.items():
+        cols.append(col)
+        vals.append(val)
+
+    placeholders = ", ".join(["?"] * len(vals))
+    col_names = ", ".join(cols)
+    updates = ", ".join(f"{c} = excluded.{c}" for c in cols if c != "id")
+    conn.execute(
+        f"INSERT INTO broadcast_items ({col_names}) VALUES ({placeholders}) "
+        f"ON CONFLICT(id) DO UPDATE SET {updates}",
+        vals,
+    )
+    conn.commit()
+    return get_broadcast_item(item_id)
+
+
+def update_broadcast_item_layout(item_id, layout):
+    """broadcast_itemのレイアウトのみ更新"""
+    conn = get_connection()
+    sets = []
+    vals = []
+    for key, val in layout.items():
+        col = _ITEM_COMMON_COLS.get(key)
+        if col and col in ("x", "y", "width", "height", "z_index", "visible"):
+            sets.append(f"{col} = ?")
+            vals.append(val)
+    if not sets:
+        return
+    sets.append("updated_at = ?")
+    vals.append(_now())
+    vals.append(item_id)
+    conn.execute(
+        f"UPDATE broadcast_items SET {', '.join(sets)} WHERE id = ?", vals
+    )
+    conn.commit()
+
+
+def migrate_overlay_to_items():
+    """overlay.* settings → broadcast_items に移行（初回起動時に自動実行）"""
+    conn = get_connection()
+    existing = conn.execute(
+        "SELECT id FROM broadcast_items WHERE id = 'avatar'"
+    ).fetchone()
+    if existing:
+        return
+
+    from scripts.routes.overlay import _OVERLAY_DEFAULTS, _COMMON_DEFAULTS
+
+    now = _now()
+    fixed_items = ["avatar", "subtitle", "todo", "topic", "version", "dev_activity"]
+    for item_type in fixed_items:
+        defaults = _OVERLAY_DEFAULTS.get(item_type, {})
+        # overlay.* settingsからDB値を読み込み
+        saved = {}
+        for prop in defaults:
+            val = get_setting(f"overlay.{item_type}.{prop}")
+            if val is not None:
+                try:
+                    saved[prop] = float(val)
+                except (ValueError, TypeError):
+                    saved[prop] = val
+
+        merged = {**defaults, **saved}
+
+        # 共通カラムとpropertiesに分離
+        common = {}
+        props = {}
+        specific_keys = _ITEM_SPECIFIC_KEYS.get(item_type, set())
+        for key, val in merged.items():
+            if key in _ITEM_COMMON_COLS:
+                common[_ITEM_COMMON_COLS[key]] = val
+            elif key in specific_keys:
+                props[key] = val
+
+        label = _ITEM_LABELS.get(item_type, item_type)
+        cols = ["id", "type", "label", "properties", "created_at", "updated_at"]
+        vals = [item_type, item_type, label, _json.dumps(props, ensure_ascii=False), now, now]
+        for col, val in common.items():
+            cols.append(col)
+            vals.append(val)
+
+        placeholders = ", ".join(["?"] * len(vals))
+        col_names = ", ".join(cols)
+        conn.execute(
+            f"INSERT OR IGNORE INTO broadcast_items ({col_names}) VALUES ({placeholders})",
+            vals,
+        )
     conn.commit()

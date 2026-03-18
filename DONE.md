@@ -1,5 +1,14 @@
 # DONE
 
+## アイテム共通化 Phase 6: broadcast_itemsテーブル + 固定アイテム移行
+
+- [x] broadcast_itemsテーブル作成（共通22カラム + properties JSON）
+- [x] CRUD関数（get/upsert/update_layout + キー名↔カラム名自動マッピング）
+- [x] overlay.* settings → broadcast_itemsマイグレーション（初回起動時自動実行）
+- [x] 統合API `/api/items` (GET/PUT/{id}/layout/visibility)
+- [x] 旧API `/api/overlay/settings` をbroadcast_items優先の互換レイヤーに更新
+- [x] テスト15件追加（test_api_items.py）
+
 ## アイテム共通化 Phase 3: CSS統一
 
 - [x] version-panel/dev-activity-panelのインラインスタイル全除去→CSSルールに移行

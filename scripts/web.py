@@ -37,6 +37,7 @@ from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream_control import router as stream_control_router
 from scripts.routes.topic import router as topic_router
 from scripts.routes.files import router as files_router
+from scripts.routes.items import router as items_router
 from scripts.routes.twitch import router as twitch_router
 from src.ai_responder import load_character
 from src import scene_config
@@ -83,6 +84,7 @@ app.include_router(character_router)
 app.include_router(db_viewer_router)
 app.include_router(dev_stream_router)
 app.include_router(files_router)
+app.include_router(items_router)
 app.include_router(overlay_router)
 app.include_router(topic_router)
 app.include_router(twitch_router)

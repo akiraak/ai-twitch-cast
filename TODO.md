@@ -13,7 +13,7 @@
         - [x] Phase 5: 保存漏れバグ修正 + 全アイテムvisible対応 + プレビュー→WebUIリアルタイム反映
         - [x] Phase 4: Web UI設定パネル
         - [x] Phase 3: CSS統一
-        - [ ] Phase 6: broadcast_itemsテーブル作成 + 固定アイテム移行（overlay.* settings → 統合テーブル）
+        - [x] Phase 6: broadcast_itemsテーブル作成 + 固定アイテム移行
         - [ ] Phase 7: 動的アイテム移行（custom_texts/capture_windows → 統合テーブル）+ 旧構造廃止
         共通プロパティ:
                 表示: ON/OFF
