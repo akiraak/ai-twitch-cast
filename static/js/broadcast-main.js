@@ -754,6 +754,14 @@ function getElZIndex(el) {
   return parseInt(el.style.zIndex) || parseInt(getComputedStyle(el).zIndex) || 0;
 }
 
+function _clampToViewport(el) {
+  const rect = el.getBoundingClientRect();
+  const maxX = window.innerWidth - rect.width;
+  const maxY = window.innerHeight - rect.height;
+  if (rect.left > maxX) el.style.left = Math.max(0, maxX) + 'px';
+  if (rect.top > maxY) el.style.top = Math.max(0, maxY) + 'px';
+}
+
 function showContextMenu(el, x, y) {
   hideAll();
   selectEditable(el);
@@ -762,6 +770,7 @@ function showContextMenu(el, x, y) {
   _ctxMenu.style.left = x + 'px';
   _ctxMenu.style.top = y + 'px';
   _ctxMenu.style.display = 'block';
+  _clampToViewport(_ctxMenu);
 }
 
 function openZIndexDialog() {
@@ -772,6 +781,7 @@ function openZIndexDialog() {
   _zDialog.style.left = _ctxMenu.style.left;
   _zDialog.style.top = _ctxMenu.style.top;
   _zDialog.style.display = 'block';
+  _clampToViewport(_zDialog);
 }
 
 let _editingEl = null;
