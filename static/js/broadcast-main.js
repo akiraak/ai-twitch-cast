@@ -121,6 +121,17 @@ function applySettings(s) {
     if (s.topic.bgOpacity != null) setBgOpacity(topicPanelEl, s.topic.bgOpacity);
     if (s.topic.zIndex != null) topicPanelEl.style.zIndex = s.topic.zIndex;
   }
+  if (s.version) {
+    const vp = document.getElementById('version-panel');
+    if (vp) {
+      if (s.version.visible != null) vp.style.display = s.version.visible ? 'block' : 'none';
+      if (s.version.positionX != null) vp.style.left = s.version.positionX + '%';
+      if (s.version.positionY != null) { vp.style.bottom = ''; vp.style.top = s.version.positionY + '%'; }
+      if (s.version.fontSize != null) document.getElementById('version-text').style.fontSize = s.version.fontSize + 'vw';
+      if (s.version.bgOpacity != null) setBgOpacity(vp, s.version.bgOpacity);
+      if (s.version.zIndex != null) vp.style.zIndex = s.version.zIndex;
+    }
+  }
   if (s.sync) {
     if (s.sync.lipsyncDelay != null) {
       _lipsyncDelay = s.sync.lipsyncDelay;
@@ -953,6 +964,21 @@ async function init() {
       addCaptureLayer(s.id, s.stream_url, s.label || s.name || s.id, s.layout);
     }
   } catch (e) { console.log('キャプチャ読み込みスキップ:', e.message); }
+
+  // バージョン情報取得
+  try {
+    const res = await fetch('/api/status');
+    const st = await res.json();
+    const vEl = document.getElementById('version-text');
+    if (vEl && st.version) {
+      let text = `v${st.version}`;
+      if (st.updated_at) {
+        const d = new Date(st.updated_at);
+        text += ` (${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')})`;
+      }
+      vEl.textContent = text;
+    }
+  } catch (e) {}
 
   await loadTodo();
   await loadTopicPanel();
