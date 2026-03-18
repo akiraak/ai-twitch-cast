@@ -1249,6 +1249,25 @@ async function loadDevstream() {
       </div>`;
     }).join('');
   } catch (e) { console.error('devstream repos error', e); }
+
+  // TODOソース
+  try {
+    const [srcRes, reposRes] = await Promise.all([
+      fetch('/api/todo/source'),
+      fetch('/api/dev-stream/repos'),
+    ]);
+    const srcData = await srcRes.json();
+    const reposData = await reposRes.json();
+    const sel = document.getElementById('ds-todo-source');
+    sel.innerHTML = '<option value="self">自プロジェクト</option>';
+    for (const repo of reposData.repos) {
+      const opt = document.createElement('option');
+      opt.value = `dev:${repo.id}`;
+      opt.textContent = repo.name;
+      sel.appendChild(opt);
+    }
+    sel.value = srcData.source === 'self' ? 'self' : `dev:${srcData.source.split(':')[1] || ''}`;
+  } catch (e) { console.error('devstream todo source error', e); }
 }
 
 async function dsToggleWatch() {
@@ -1315,4 +1334,21 @@ async function dsDeleteRepo(id, name) {
   if (!confirm(`「${name}」を削除しますか？`)) return;
   await fetch(`/api/dev-stream/repos/${id}`, { method: 'DELETE' });
   await loadDevstream();
+}
+
+async function dsChangeTodoSource() {
+  const sel = document.getElementById('ds-todo-source');
+  const val = sel.value;
+  let body;
+  if (val === 'self') {
+    body = { source: 'self' };
+  } else {
+    const repoId = val.split(':')[1];
+    body = { source: 'dev', repo_id: parseInt(repoId) };
+  }
+  await fetch('/api/todo/source', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }

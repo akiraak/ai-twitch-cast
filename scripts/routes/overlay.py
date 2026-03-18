@@ -28,24 +28,61 @@ TODO_PATH = PROJECT_DIR / "TODO.md"
 _todo_last_mtime: float = 0.0
 _todo_watch_task: asyncio.Task | None = None
 
+# TODOソース: "self" (自プロジェクト) or "dev:{repo_id}" (外部リポジトリ)
+_todo_source: str = "self"
+
+
+def _get_todo_path() -> Path:
+    """現在のTODOソースに応じたTODO.mdパスを返す"""
+    if _todo_source == "self":
+        return TODO_PATH
+    if _todo_source.startswith("dev:"):
+        try:
+            repo_id = int(_todo_source.split(":", 1)[1])
+            repo = db.get_dev_repo(repo_id)
+            if repo:
+                return Path(repo["local_path"]) / "TODO.md"
+        except (ValueError, IndexError):
+            pass
+    return TODO_PATH
+
+
+def _get_todo_source_label() -> str | None:
+    """外部リポジトリ選択時にリポジトリ名を返す（selfならNone）"""
+    if _todo_source.startswith("dev:"):
+        try:
+            repo_id = int(_todo_source.split(":", 1)[1])
+            repo = db.get_dev_repo(repo_id)
+            if repo:
+                return repo["name"]
+        except (ValueError, IndexError):
+            pass
+    return None
+
 
 async def broadcast_todo():
     """TODO.mdを読み込み、todo_updateイベントをブロードキャストする"""
     todo_data = await get_todo()
-    await state.broadcast_overlay({"type": "todo_update", "items": todo_data["items"]})
+    event = {"type": "todo_update", "items": todo_data["items"]}
+    source_label = _get_todo_source_label()
+    if source_label:
+        event["source"] = source_label
+    await state.broadcast_overlay(event)
 
 
 async def _watch_todo_file():
     """TODO.mdのmtimeを監視し、変更があればブロードキャストする"""
     global _todo_last_mtime
-    if TODO_PATH.exists():
-        _todo_last_mtime = TODO_PATH.stat().st_mtime
+    todo_path = _get_todo_path()
+    if todo_path.exists():
+        _todo_last_mtime = todo_path.stat().st_mtime
     while True:
         await asyncio.sleep(2)
         try:
-            if not TODO_PATH.exists():
+            todo_path = _get_todo_path()
+            if not todo_path.exists():
                 continue
-            mtime = TODO_PATH.stat().st_mtime
+            mtime = todo_path.stat().st_mtime
             if mtime != _todo_last_mtime:
                 _todo_last_mtime = mtime
                 await broadcast_todo()
@@ -216,9 +253,10 @@ async def get_overlay_settings():
 @router.get("/api/todo")
 async def get_todo():
     """TODO.mdから未完了タスクを返す（セクション・作業中マーク対応）"""
-    if not TODO_PATH.exists():
+    todo_path = _get_todo_path()
+    if not todo_path.exists():
         return {"items": []}
-    text = TODO_PATH.read_text(encoding="utf-8")
+    text = todo_path.read_text(encoding="utf-8")
     items = []
     current_section = ""
     for line in text.splitlines():
@@ -247,11 +285,12 @@ async def start_todo(request: Request):
     """TODOを作業中にマークし、アバターに読み上げさせる"""
     body = await request.json()
     task_text = body.get("text", "").strip()
-    if not task_text or not TODO_PATH.exists():
+    todo_path = _get_todo_path()
+    if not task_text or not todo_path.exists():
         return {"ok": False, "error": "タスクが見つかりません"}
 
     # TODO.mdの該当行を [ ] → [>] に変更（他の作業中は [ ] に戻す）
-    text = TODO_PATH.read_text(encoding="utf-8")
+    text = todo_path.read_text(encoding="utf-8")
     lines = text.splitlines()
     found = False
     new_lines = []
@@ -272,7 +311,7 @@ async def start_todo(request: Request):
     if not found:
         return {"ok": False, "error": "タスクが見つかりません"}
 
-    TODO_PATH.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    todo_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
     # オーバーレイに現在の作業を通知
     await state.broadcast_overlay({
@@ -288,6 +327,34 @@ async def start_todo(request: Request):
         asyncio.create_task(state.reader.speak_event("作業開始", task_text))
 
     return {"ok": True}
+
+
+@router.get("/api/todo/source")
+async def get_todo_source():
+    """現在のTODOソースを返す"""
+    return {"source": _todo_source, "label": _get_todo_source_label()}
+
+
+@router.post("/api/todo/source")
+async def set_todo_source(request: Request):
+    """TODOソースを切り替える"""
+    global _todo_source, _todo_last_mtime
+    body = await request.json()
+    source = body.get("source", "self")
+    repo_id = body.get("repo_id")
+    if source == "self":
+        _todo_source = "self"
+    elif source == "dev" and repo_id is not None:
+        repo = db.get_dev_repo(int(repo_id))
+        if not repo:
+            return {"ok": False, "error": "リポジトリが見つかりません"}
+        _todo_source = f"dev:{repo_id}"
+    else:
+        return {"ok": False, "error": "不正なソース指定"}
+    # mtime をリセットして即座にブロードキャスト
+    _todo_last_mtime = 0.0
+    await broadcast_todo()
+    return {"ok": True, "source": _todo_source, "label": _get_todo_source_label()}
 
 
 @router.post("/api/overlay/preview")

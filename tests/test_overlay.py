@@ -78,3 +78,61 @@ class TestBroadcastTodo:
             assert event["type"] == "todo_update"
             assert len(event["items"]) == 1
             assert event["items"][0]["text"] == "アイテム"
+
+
+class TestTodoSource:
+    """TODOソース切り替えのテスト"""
+
+    async def test_default_source_is_self(self):
+        import scripts.routes.overlay as ov
+        original = ov._todo_source
+        ov._todo_source = "self"
+        try:
+            assert ov._get_todo_path() == ov.TODO_PATH
+            assert ov._get_todo_source_label() is None
+        finally:
+            ov._todo_source = original
+
+    async def test_dev_source_returns_repo_path(self, test_db, tmp_path):
+        import scripts.routes.overlay as ov
+        local_path = tmp_path / "repo"
+        local_path.mkdir()
+        (local_path / "TODO.md").write_text("- [ ] task\n")
+        repo = test_db.add_dev_repo("o/r", "https://o.git", str(local_path))
+        original = ov._todo_source
+        ov._todo_source = f"dev:{repo['id']}"
+        try:
+            assert ov._get_todo_path() == local_path / "TODO.md"
+            assert ov._get_todo_source_label() == "o/r"
+        finally:
+            ov._todo_source = original
+
+    async def test_invalid_dev_source_falls_back(self):
+        import scripts.routes.overlay as ov
+        original = ov._todo_source
+        ov._todo_source = "dev:999"
+        try:
+            assert ov._get_todo_path() == ov.TODO_PATH
+        finally:
+            ov._todo_source = original
+
+    def test_get_todo_source_api(self, api_client):
+        resp = api_client.get("/api/todo/source")
+        assert resp.status_code == 200
+        assert resp.json()["source"] == "self"
+
+    def test_set_todo_source_self(self, api_client):
+        resp = api_client.post("/api/todo/source", json={"source": "self"})
+        assert resp.json()["ok"] is True
+
+    def test_set_todo_source_dev(self, api_client, test_db):
+        repo = test_db.add_dev_repo("o/r", "https://o.git", "repos/r")
+        resp = api_client.post("/api/todo/source", json={"source": "dev", "repo_id": repo["id"]})
+        assert resp.json()["ok"] is True
+        assert resp.json()["label"] == "o/r"
+        # クリーンアップ
+        api_client.post("/api/todo/source", json={"source": "self"})
+
+    def test_set_todo_source_invalid_repo(self, api_client):
+        resp = api_client.post("/api/todo/source", json={"source": "dev", "repo_id": 999})
+        assert resp.json()["ok"] is False

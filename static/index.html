@@ -380,6 +380,13 @@ topics      1──N  topic_scripts (topic_id)</div>
       <h2>リポジトリ一覧</h2>
       <div id="ds-repos"></div>
     </div>
+    <div class="card">
+      <h2>TODOソース</h2>
+      <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:8px;">配信画面のTODOパネルに表示するTODO.mdのソースを選択</p>
+      <select id="ds-todo-source" onchange="dsChangeTodoSource()" style="width:100%; padding:6px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.9rem;">
+        <option value="self">自プロジェクト</option>
+      </select>
+    </div>
   </div>
 
   <!-- ===== TODO ===== -->
