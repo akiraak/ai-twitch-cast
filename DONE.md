@@ -447,6 +447,14 @@
 - [x] 配信BGM音声修正: createScriptProcessorNode→createScriptProcessor修正（WebSocket接続阻害の根本原因）、MP3デコード対応、BGM+TTSミキサー、pendingBgmUrlタイミング問題解決、broadcastWindow embedded修正
 - [x] 配信定期停止修正: ミキサーを壁時計追従+自己補正タイマーに改修（setInterval→setTimeout）、常時データ書き込み（無音時もギャップなし）、AudioCapture無効化、初期サイレンス縮小、TCP Nagle無効化
 
+## 開発配信機能 Phase 1: リポジトリ管理基盤
+
+- [x] dev_reposテーブル追加（name, url, local_path, branch, last_commit_hash, active, timestamps）
+- [x] CRUD関数実装（add_dev_repo, get_dev_repos, get_active_dev_repos, get_dev_repo, update_dev_repo_commit, toggle_dev_repo, delete_dev_repo）
+- [x] テスト追加（TestDevRepos: 12テスト — 追加・取得・URL重複・フィルタ・更新・切替・削除）
+- [x] CLAUDE.mdにテストセクション追加（実行方法・構成一覧・規約）
+- [x] プラン: plans/dev-stream.md
+
 ## BGMトラックにYouTubeソースURLリンク追加
 
 - [x] bgm_tracksテーブルにsource_urlカラム追加（マイグレーション付き）
