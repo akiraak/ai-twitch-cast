@@ -17,7 +17,7 @@
 - [ ] ちょびの返信を改善する → [plans/improve-ai-responses.md](plans/improve-ai-responses.md)
   - [x] Phase 1: プロンプト改善（A:キャラ設定 / B:感情矯正 / C:応答ルール / F:GM対応）
   - [x] Phase 2: D:ペルソナ自動抽出 / G:temperature / E:履歴強化 / H:イベント応答バリエーション
-  - [ ] Phase 3: I:ユーザーメモ品質 / J:感情種類追加
+  - [x] Phase 3: I:ユーザーメモ品質 / J:感情種類追加
 - [ ] トピックについて話すモードを運用してみる → [plans/topic-operation.md](plans/topic-operation.md)
 - [ ] ブラウザテスト（Playwright等）導入の検証
 - [ ] ちょびのバージョンを上げるルールを作る

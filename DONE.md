@@ -10,6 +10,8 @@
 - [x] G: temperature=1.0設定
 - [x] E: 会話履歴5→10件、禁止パターン（直前3件の書き出し重複防止）
 - [x] H: イベント応答バリエーション（直前応答を渡して繰り返し防止）
+- [x] I: ユーザーメモ・自己メモに「事実のみ、キャラ口調禁止」ルール追加
+- [x] J: 感情種類追加（excited/sad/embarrassed）+ BlendShapeマッピング
 - [x] DB上のキャラクター設定も更新済み
 - [x] プラン: plans/improve-ai-responses.md
 
