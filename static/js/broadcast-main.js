@@ -1069,13 +1069,29 @@ function startDrag(el, e) {
     let newTop = origVisualTop + e.clientY - startY;
 
     if (isChild) {
-      // 子パネル: 親パネル基準の相対%座標
+      // 子パネル: 親パネルの端・中央にスナップ
       const parentRect = el.parentElement.getBoundingClientRect();
-      const relX = ((newLeft - parentRect.left) / parentRect.width) * 100;
-      const relY = ((newTop - parentRect.top) / parentRect.height) * 100;
-      el.style.left = relX + '%';
-      el.style.top = relY + '%';
+      const pw = parentRect.width, ph = parentRect.height;
+      const vLines = [{ px: parentRect.left, isCenter: false }, { px: parentRect.left + pw / 2, isCenter: true }, { px: parentRect.right, isCenter: false }];
+      const hLines = [{ px: parentRect.top, isCenter: false }, { px: parentRect.top + ph / 2, isCenter: true }, { px: parentRect.bottom, isCenter: false }];
+      // 兄弟子パネルの端・中央もスナップ対象
+      el.parentElement.querySelectorAll('.child-panel').forEach(sib => {
+        if (sib === el || sib.style.display === 'none') return;
+        const sr = sib.getBoundingClientRect();
+        if (sr.width === 0 && sr.height === 0) return;
+        vLines.push({ px: sr.left }, { px: sr.right }, { px: (sr.left + sr.right) / 2 });
+        hLines.push({ px: sr.top }, { px: sr.bottom }, { px: (sr.top + sr.bottom) / 2 });
+      });
+      const vEdges = [newLeft, newLeft + elW, newLeft + elW / 2];
+      const hEdges = [newTop, newTop + elH, newTop + elH / 2];
+      const snappedV = applySnap(vEdges, vLines, SNAP_THRESHOLD_PX);
+      const snappedH = applySnap(hEdges, hLines, SNAP_THRESHOLD_PX);
+      if (snappedV) newLeft -= snappedV.delta;
+      if (snappedH) newTop -= snappedH.delta;
+      el.style.left = ((newLeft - parentRect.left) / pw * 100) + '%';
+      el.style.top = ((newTop - parentRect.top) / ph * 100) + '%';
       el.style.transform = 'none';
+      showActiveGuides(snappedV, snappedH);
     } else {
       const ww = window.innerWidth, wh = window.innerHeight;
       const { vLines, hLines } = calcSnapPoints(otherRects, ww, wh);
@@ -1169,16 +1185,30 @@ function setupEditable(el) {
           else { newH = origH + dy; }
         }
 
-        if (!isChild) {
-          // ルートパネル: スナップ対応
-          const { vLines, hLines } = calcSnapPoints(otherRects, ref.w, ref.h);
+        // スナップ対応（ルート: 画面+他パーツ、子: 親の端・中央+兄弟）
+        let snapVLines, snapHLines;
+        if (isChild) {
+          // 子パネル: 親パネルの端・中央（offsetピクセル座標）
+          snapVLines = [{ px: 0 }, { px: ref.w / 2, isCenter: true }, { px: ref.w }];
+          snapHLines = [{ px: 0 }, { px: ref.h / 2, isCenter: true }, { px: ref.h }];
+          el.parentElement.querySelectorAll('.child-panel').forEach(sib => {
+            if (sib === el || sib.style.display === 'none') return;
+            const sl = sib.offsetLeft, st = sib.offsetTop, sw = sib.offsetWidth, sh = sib.offsetHeight;
+            snapVLines.push({ px: sl }, { px: sl + sw }, { px: sl + sw / 2 });
+            snapHLines.push({ px: st }, { px: st + sh }, { px: st + sh / 2 });
+          });
+        } else {
+          const sp = calcSnapPoints(otherRects, ref.w, ref.h);
+          snapVLines = sp.vLines; snapHLines = sp.hLines;
+        }
+        {
           const vEdges = resizeH ? (isLeft ? [newLeft] : [newLeft + newW]) : [];
           if (resizeH) vEdges.push(newLeft + newW / 2);
           const hEdges = resizeV ? (isTop ? [newTop] : [newTop + newH]) : [];
           if (resizeV) hEdges.push(newTop + newH / 2);
 
-          const snappedV = resizeH ? applySnap(vEdges, vLines, SNAP_THRESHOLD_PX) : null;
-          const snappedH = resizeV ? applySnap(hEdges, hLines, SNAP_THRESHOLD_PX) : null;
+          const snappedV = resizeH ? applySnap(vEdges, snapVLines, SNAP_THRESHOLD_PX) : null;
+          const snappedH = resizeV ? applySnap(hEdges, snapHLines, SNAP_THRESHOLD_PX) : null;
 
           if (snappedV) {
             if (isLeft) { newLeft -= snappedV.delta; newW += snappedV.delta; }
@@ -1187,6 +1217,12 @@ function setupEditable(el) {
           if (snappedH) {
             if (isTop) { newTop -= snappedH.delta; newH += snappedH.delta; }
             else { newH -= snappedH.delta; }
+          }
+          if (isChild) {
+            // ガイド線を画面座標に変換して表示
+            const parentRect = el.parentElement.getBoundingClientRect();
+            if (snappedV) snappedV.line = { ...snappedV.line, px: snappedV.line.px + parentRect.left };
+            if (snappedH) snappedH.line = { ...snappedH.line, px: snappedH.line.px + parentRect.top };
           }
           showActiveGuides(snappedV, snappedH);
         }
