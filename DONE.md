@@ -1,5 +1,18 @@
 # DONE
 
+## 表情・ジェスチャーシステム実装
+
+- [x] 表情イージング遷移（300ms）実装
+- [x] ジェスチャーアニメーション（AnimationMixer）実装（nod, surprise, head_tilt, happy_bounce, sad_droop, bow）
+- [x] 感情→ジェスチャーのデフォルトマッピング（joy→nod, surprise→surprise等）
+- [x] emotion_blendshapesをVRM 1.0名に修正（DB + DEFAULT_CHARACTER）
+- [x] リップシンクと感情BlendShapeの競合修正（aa/blink/ear_standをスキップ）
+- [x] WebUI感情テストボタン追加（joy/surprise/thinking/neutral）
+- [x] 耳プルプル振り追加（15%確率、30-50Hz高速振動 + ear_stand/ear_droop交互 + happy表情連動）
+- [x] broadcast.htmlにconsole.logキャプチャ→サーバー送信機能追加
+- [x] デバッグ用API追加（expression直送・jslog保存）
+- [x] プラン: plans/expression-gesture-implementation.md
+
 ## 子パネル（入れ子テキストパネル）機能
 
 - [x] DBスキーマ拡張: broadcast_itemsにparent_idカラム追加、子パネルCRUD関数（create/get/delete + 連鎖削除）

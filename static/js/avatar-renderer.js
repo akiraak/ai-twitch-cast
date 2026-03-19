@@ -81,6 +81,8 @@ let nextEarTwitch = t0 + 3 + Math.random() * 5;
 let earTwitchEnd = 0;
 let earTwitchStart = 0;
 let earTwitchDuration = 0.2;
+let earTwitchShake = false;  // プルプル振りモード
+let earTwitchShakeHz = 0;    // 振動周波数
 
 // リップシンク状態
 let lipsyncFrames = null;
@@ -448,7 +450,16 @@ function animate() {
 
     // 耳ぴくぴく（カスタムBlendShape）
     if (now >= nextEarTwitch && now >= earTwitchEnd) {
-      earTwitchDuration = 0.15 + Math.random() * 0.15;
+      // 15%の確率でプルプル振りモード
+      earTwitchShake = Math.random() < 0.15;
+      if (earTwitchShake) {
+        earTwitchDuration = 0.3 + Math.random() * 0.3;  // 0.3-0.6秒
+        earTwitchShakeHz = 30 + Math.random() * 20;  // 30-50Hz（超高速）
+        // プルプル中は驚き顔
+        em.setValue('happy', 0.6);
+      } else {
+        earTwitchDuration = 0.15 + Math.random() * 0.15;
+      }
       earTwitchEnd = now + earTwitchDuration;
       earTwitchStart = now;
       nextEarTwitch = now + 3 + Math.random() * 7;
@@ -456,11 +467,25 @@ function animate() {
     try {
       if (now < earTwitchEnd) {
         const progress = (now - earTwitchStart) / earTwitchDuration;
-        em.setValue('ear_stand', Math.sin(progress * Math.PI));
+        if (earTwitchShake) {
+          // プルプル: ear_stand↔ear_droop を交互に振って大きく揺らす
+          const fade = 1 - progress;
+          const wave = Math.sin(progress * earTwitchShakeHz * Math.PI) * fade;
+          em.setValue('ear_stand', Math.max(0, wave));
+          em.setValue('ear_droop', Math.max(0, -wave));
+        } else {
+          em.setValue('ear_stand', Math.sin(progress * Math.PI));
+          em.setValue('ear_droop', 0.0);
+        }
       } else {
         em.setValue('ear_stand', 0.0);
+        em.setValue('ear_droop', 0.0);
+        if (earTwitchShake) {
+          em.setValue('happy', 0.0);
+          earTwitchShake = false;
+        }
       }
-    } catch (e) { /* ear_stand BlendShapeがない場合は無視 */ }
+    } catch (e) { /* ear BlendShapeがない場合は無視 */ }
 
     // リップシンク
     if (lipsyncFrames) {
