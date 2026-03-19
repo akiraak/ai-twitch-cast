@@ -106,7 +106,7 @@ def invalidate_character_cache():
     _character_id = None
 
 
-def generate_response(author, message, comment_count=0, history=None, stream_context=None, user_note=None, already_greeted=False, self_note=None):
+def generate_response(author, message, comment_count=0, history=None, stream_context=None, user_note=None, already_greeted=False, self_note=None, persona=None):
     """コメントに対するAI応答を生成する
 
     Args:
@@ -118,12 +118,13 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
         user_note: このユーザーについてのメモ
         already_greeted: この配信で既に挨拶済みか
         self_note: アバター自身の記憶メモ
+        persona: ペルソナ（過去の応答から抽出した性格特徴）
 
     Returns:
         dict: {"response": str, "emotion": str}
     """
     client = get_client()
-    system_prompt = build_system_prompt(get_character(), stream_context=stream_context, self_note=self_note)
+    system_prompt = build_system_prompt(get_character(), stream_context=stream_context, self_note=self_note, persona=persona)
 
     context_parts = []
     if comment_count == 0 and not already_greeted:
@@ -136,6 +137,11 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
         context_parts.append("GMはこの配信システムの開発者。親しい関係、敬語不要、タメ口でOK")
     if user_note:
         context_parts.append(f"メモ: {user_note}（※メモの内容を直接言及しないこと。会話の雰囲気づくりに自然に活かす程度に）")
+    # 禁止パターン（直前3件の自分の応答の書き出しを繰り返さない）
+    if history:
+        recent_responses = [h["response"][:30] for h in history[-3:] if h.get("response")]
+        if recent_responses:
+            context_parts.append(f"禁止パターン（同じ書き出しを避けろ）: {', '.join(recent_responses)}")
     context = f"（{'、'.join(context_parts)}）"
 
     # 会話履歴をcontentsに組み立て（Geminiのマルチターン形式）
@@ -163,6 +169,7 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
+            temperature=1.0,
         ),
     )
 
@@ -298,6 +305,61 @@ def generate_self_note(recent_comments, current_note=""):
         return current_note or ""
 
 
+def generate_persona(recent_comments):
+    """応答パターンからペルソナ（性格・話し方の特徴）を抽出する
+
+    Args:
+        recent_comments: 直近の会話 [{user_name, message, response}, ...]
+
+    Returns:
+        str: ペルソナ記述、または空文字
+    """
+    if not recent_comments:
+        return ""
+
+    # 自分の応答だけ抽出
+    responses = [c["response"] for c in recent_comments if c.get("response")]
+    if len(responses) < 10:
+        return ""
+
+    client = get_client()
+    char = get_character()
+    char_name = char.get("name", "ちょビ")
+
+    parts = [
+        f"以下は配信者「{char_name}」の直近の返答一覧です。",
+        "返答の内容から、性格・話し方の特徴・興味のある話題を分析してください。",
+        "",
+        "## ルール",
+        "- 事実のみ記述。良し悪しの判断はしない",
+        "- 200文字以内",
+        "- 話し方の癖、好きな話題、リアクションの傾向を含める",
+        "- キャラクター口調で書かない。客観的な分析として書く",
+        "",
+        "## 出力形式",
+        '{"persona": "分析結果"}',
+    ]
+
+    lines = ["直近の返答:"]
+    for r in responses[-30:]:
+        lines.append(f"- {r}")
+
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents="\n".join(lines),
+        config=types.GenerateContentConfig(
+            system_instruction="\n".join(parts),
+            response_mime_type="application/json",
+        ),
+    )
+
+    try:
+        result = json.loads(response.text)
+        return result.get("persona", "")
+    except (json.JSONDecodeError, AttributeError):
+        return ""
+
+
 def generate_topic_line(title, description="", last_speeches=None, recent_comments=None):
     """トピックについて1件の発話を生成する（前回の発話から続く自然な流れ）
 
@@ -394,12 +456,13 @@ def generate_topic_line(title, description="", last_speeches=None, recent_commen
     return result
 
 
-def generate_event_response(event_type, detail):
+def generate_event_response(event_type, detail, last_event_responses=None):
     """イベント（コミット・作業開始等）に対するAI応答を生成する
 
     Args:
         event_type: イベント種別 ("commit", "stream_start" など)
         detail: イベントの詳細情報
+        last_event_responses: 直前のイベント応答リスト（繰り返し防止用）
 
     Returns:
         dict: {"response": str, "emotion": str, "english": str}
@@ -418,10 +481,18 @@ def generate_event_response(event_type, detail):
         "## ルール",
         "- 配信中のイベント（コミット、作業開始など）について短くコメントしてください",
         "- 視聴者に向かって話すように、自然で楽しいコメントをしてください",
-        "- 1〜2文で簡潔に",
+        "- 1文で簡潔に。40文字以内",
+        "- 毎回同じリアクション（やったー！おっ！等）をしない。バリエーションを出す",
+    ]
+    if last_event_responses:
+        parts.append("")
+        parts.append("## 直前のイベント応答（同じ表現を避けろ）")
+        for r in last_event_responses[-3:]:
+            parts.append(f"- {r}")
+    parts.extend([
         "",
         "## 言語ルール",
-    ]
+    ])
     for rule in lang["rules"]:
         parts.append(rule)
     parts.extend([

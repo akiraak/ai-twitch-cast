@@ -8,7 +8,7 @@ from collections import deque
 logger = logging.getLogger(__name__)
 
 from src import db
-from src.ai_responder import generate_event_response, generate_response, generate_self_note, generate_user_notes, get_character
+from src.ai_responder import generate_event_response, generate_persona, generate_response, generate_self_note, generate_user_notes, get_character
 from src.speech_pipeline import SpeechPipeline
 from src.twitch_chat import TwitchChat
 
@@ -192,15 +192,17 @@ class CommentReader:
     async def _generate_ai_response(self, author, message, comment_count, user_note="", already_greeted=False):
         """AI応答を生成する（会話履歴・配信コンテキスト付き）"""
         logger.info("[ai] 応答生成中...")
-        history = await asyncio.to_thread(db.get_recent_comments, 5, 2)
+        history = await asyncio.to_thread(db.get_recent_comments, 10, 2)
         stream_context = await self._get_stream_context()
         # アバター自身のメモを取得
         self_note = await self._get_self_note()
+        # ペルソナ（性格特徴）を取得
+        persona = await asyncio.to_thread(db.get_setting, "persona")
         result = await asyncio.to_thread(
             generate_response, author, message, comment_count,
             history=history, stream_context=stream_context,
             user_note=user_note or None, already_greeted=already_greeted,
-            self_note=self_note,
+            self_note=self_note, persona=persona,
         )
         logger.info("[ai] [%s] %s", result["emotion"], result["response"])
         return result
@@ -264,7 +266,14 @@ class CommentReader:
         """イベントに対してアバターが発話する（コミット・作業開始等）"""
         try:
             logger.info("[event] %s: %s", event_type, detail)
-            result = await asyncio.to_thread(generate_event_response, event_type, detail)
+            # 直前のイベント応答を取得（繰り返し防止）
+            last_responses = None
+            try:
+                recent = await asyncio.to_thread(db.get_recent_comments, 5, 1)
+                last_responses = [c["response"] for c in recent if c.get("response") and c.get("user_name") == "システム"]
+            except Exception:
+                pass
+            result = await asyncio.to_thread(generate_event_response, event_type, detail, last_event_responses=last_responses)
             logger.info("[event] [%s] %s", result["emotion"], result["response"])
             self._speech.apply_emotion(result["emotion"])
             # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
@@ -310,6 +319,19 @@ class CommentReader:
                 logger.info("[note] アバターメモ更新: %s", new_note)
         except Exception as e:
             logger.warning("[note] アバターメモ更新失敗: %s", e)
+
+    async def _update_persona(self):
+        """ペルソナ（性格特徴）を応答パターンから更新する"""
+        try:
+            recent = await asyncio.to_thread(db.get_recent_comments, 50, 24)
+            if not recent:
+                return
+            persona = await asyncio.to_thread(generate_persona, recent)
+            if persona:
+                await asyncio.to_thread(db.set_setting, "persona", persona)
+                logger.info("[persona] ペルソナ更新: %s", persona[:80])
+        except Exception as e:
+            logger.warning("[persona] ペルソナ更新失敗: %s", e)
 
     async def _save_avatar_speech(self, message, response, emotion="neutral"):
         """アバターの発話をDBに保存する（会話履歴に含めるため）"""
@@ -367,6 +389,8 @@ class CommentReader:
                     logger.info("[note] ユーザーメモ更新完了: %s", notes)
                     # アバター自身のメモも更新
                     await self._update_self_note()
+                    # ペルソナ（性格特徴）も更新
+                    await self._update_persona()
                 except Exception as e:
                     logger.error("[note] ユーザーメモ更新失敗: %s", e)
         except asyncio.CancelledError:

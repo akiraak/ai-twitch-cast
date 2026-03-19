@@ -108,13 +108,14 @@ def set_language_mode(mode):
     _language_mode = mode
 
 
-def build_system_prompt(char, stream_context=None, self_note=None):
+def build_system_prompt(char, stream_context=None, self_note=None, persona=None):
     """キャラクター設定からシステムプロンプトを構築する
 
     Args:
         char: キャラクター設定dict（get_character()の戻り値）
         stream_context: 配信情報 {title, topic, todo_items}
         self_note: アバター自身の記憶メモ
+        persona: ペルソナ（過去の応答から抽出した性格特徴）
     """
     emotions = char.get("emotions", {})
     emotion_list = ", ".join(emotions.keys())
@@ -133,6 +134,14 @@ def build_system_prompt(char, stream_context=None, self_note=None):
             "",
             "## あなたの記憶メモ（今日の配信で話したこと・感じたこと）",
             self_note,
+        ])
+
+    # ペルソナ（過去の応答から抽出した性格特徴）
+    if persona:
+        parts.extend([
+            "",
+            "## あなた自身の性格（過去の会話から抽出）",
+            persona,
         ])
 
     # 配信コンテキスト
