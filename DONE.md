@@ -1,5 +1,15 @@
 # DONE
 
+## WebUIチャット欄追加（GM→アバター会話）
+
+- [x] C#コントロールパネルのChatタブにチャットUI実装（メッセージ履歴+入力欄）
+- [x] `POST /api/chat/webui` エンドポイント追加
+- [x] `CommentReader.respond_webui()` 実装（AI応答→TTS→字幕、GMメッセージをTwitchチャット投稿）
+- [x] CORSミドルウェア追加（C#パネル→WSLサーバー間の通信対応）
+- [x] preview.htmlにもチャットUI追加
+- [x] テスト追加（test_api_chat.py）
+- [x] プラン: plans/webui-chat-input.md
+
 ## 表情・ジェスチャーシステム実装
 
 - [x] 表情イージング遷移（300ms）実装

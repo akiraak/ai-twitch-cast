@@ -279,15 +279,58 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
 .log-success { color: #89d185; }
 .log-info { color: #9cdcfe; }
 
-/* Chat placeholder */
-.placeholder {
+/* Chat */
+#chatMessages {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-dim);
+  overflow-y: auto;
+  padding: 6px 8px;
   font-size: 12px;
+  background: #1a1a1a;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 0;
 }
+.chat-msg-user { margin-bottom: 4px; color: var(--text-dim); }
+.chat-msg-user .chat-name { color: var(--accent); font-weight: 600; }
+.chat-msg-ai {
+  margin-bottom: 6px;
+  color: var(--text);
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+}
+.chat-msg-err { margin-bottom: 4px; color: var(--red); font-size: 11px; }
+.chat-input-area {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+#chatInput {
+  flex: 1;
+  padding: 5px 8px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  min-width: 0;
+}
+#chatInput:focus { border-color: var(--accent); }
+#chatSendBtn {
+  padding: 5px 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#chatSendBtn:hover { background: var(--accent-hover); }
+#chatSendBtn:disabled { opacity: 0.35; cursor: default; }
 </style>
 </head>
 <body>
@@ -383,12 +426,21 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
 </div>
 
 <div class="tab-content" id="tab-chat">
-  <div class="placeholder">Coming soon</div>
+  <div class="section flex">
+    <div class="section-title">Chat</div>
+    <div id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chatInput" placeholder="メッセージを入力..."
+             onkeydown="if(event.key==='Enter'&&!this.disabled)sendChat()">
+      <button class="btn" id="chatSendBtn" onclick="sendChat()">送信</button>
+    </div>
+  </div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const wv = window.chrome?.webview;
+let serverUrl = 'http://' + location.hostname + ':8080';
 
 // Tab switching
 document.querySelector('.tab-bar').addEventListener('click', e => {
@@ -415,6 +467,7 @@ wv?.addEventListener('message', e => {
     case 'streamResult': handleStreamResult(m); break;
     case 'bgm_status': updateBgmStatus(m); break;
     case 'track_volume': setTrackVolume(m.volume); break;
+    case 'serverUrl': serverUrl = m.url; break;
   }
 });
 
@@ -623,6 +676,65 @@ function updateMeter(data) {
 
   $('meterBgm').classList.toggle('active', !!data.bgm);
   $('meterTts').classList.toggle('active', !!data.tts);
+}
+
+// === Chat ===
+async function sendChat() {
+  const input = $('chatInput');
+  const btn = $('chatSendBtn');
+  const msg = input.value.trim();
+  if (!msg || !serverUrl) return;
+
+  input.disabled = true;
+  btn.disabled = true;
+  input.value = '';
+  appendChatMsg('GM', msg);
+
+  try {
+    const res = await fetch(serverUrl + '/api/chat/webui', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg }),
+    });
+    const data = await res.json();
+    if (data.response) appendChatAi(data.response);
+  } catch (e) {
+    appendChatErr('Error: ' + e.message);
+  } finally {
+    input.disabled = false;
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
+function appendChatMsg(author, text) {
+  const c = $('chatMessages');
+  const d = document.createElement('div');
+  d.className = 'chat-msg-user';
+  d.innerHTML = '<span class="chat-name">' + esc(author) + '</span> ' + esc(text);
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+}
+function appendChatAi(text) {
+  const c = $('chatMessages');
+  const d = document.createElement('div');
+  d.className = 'chat-msg-ai';
+  d.textContent = text;
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+}
+function appendChatErr(text) {
+  const c = $('chatMessages');
+  const d = document.createElement('div');
+  d.className = 'chat-msg-err';
+  d.textContent = text;
+  c.appendChild(d);
+  c.scrollTop = c.scrollHeight;
+}
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
 }
 
 // Init

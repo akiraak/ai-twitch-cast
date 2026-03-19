@@ -289,6 +289,7 @@ public class MainForm : Form
                 case "init":
                     // 初期状態を送信
                     PanelLog("接続完了", "success");
+                    SendPanelMessage(new { type = "serverUrl", url = _serverBaseUrl });
                     var windows = WindowEnumerator.GetWindows();
                     SendPanelMessage(new
                     {

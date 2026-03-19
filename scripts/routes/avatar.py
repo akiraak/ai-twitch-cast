@@ -72,6 +72,18 @@ async def tts_test_emotion(body: EmotionTestRequest):
     return {"ok": True}
 
 
+class WebUIChatRequest(BaseModel):
+    message: str
+
+
+@router.post("/api/chat/webui")
+async def chat_webui(body: WebUIChatRequest):
+    """WebUIからアバターに会話を送る（AI応答→TTS→字幕、Twitch投稿なし）"""
+    await state.ensure_reader()
+    result = await state.reader.respond_webui(body.message)
+    return result
+
+
 class ChatMessage(BaseModel):
     message: str
 

@@ -175,7 +175,10 @@ async def preview_page(request: Request):
     token = request.query_params.get("token")
     if token != BROADCAST_TOKEN:
         return PlainTextResponse("認証エラー", status_code=403)
-    return HTMLResponse((STATIC_DIR / "preview.html").read_text(encoding="utf-8"))
+    return HTMLResponse(
+        (STATIC_DIR / "preview.html").read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @router.get("/api/broadcast/token")

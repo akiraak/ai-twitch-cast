@@ -130,6 +130,34 @@ class CommentReader:
         except Exception as e:
             logger.error("自発的発話失敗: %s", e, exc_info=True)
 
+    async def respond_webui(self, message):
+        """WebUIからの会話に応答する（GMのメッセージをTwitchチャットに投稿）"""
+        author = "GM"
+        try:
+            # GMのメッセージをTwitchチャットに投稿
+            try:
+                await self._chat.send_message(f"[GM] {message}")
+            except Exception as e:
+                logger.warning("GMメッセージのチャット投稿失敗: %s", e)
+            user = await asyncio.to_thread(db.get_or_create_user, author)
+            result = await self._generate_ai_response(
+                author, message, user["comment_count"],
+            )
+            await self._save_to_db(user, message, result)
+            await asyncio.to_thread(db.update_user_last_seen, user["id"])
+            self._speech.apply_emotion(result["emotion"])
+            await self._speech.speak(result["response"], subtitle={
+                "author": author, "message": message, "result": result,
+            }, tts_text=result.get("tts_text"))
+            self._speech.apply_emotion("neutral")
+            await self._speech.notify_overlay_end()
+            if self._topic_talker:
+                self._topic_talker.mark_spoken()
+            return result
+        except Exception as e:
+            logger.error("WebUI応答失敗: %s", e)
+            return {"response": "", "emotion": "neutral", "english": ""}
+
     async def _respond(self, author, message):
         """1件のコメントにAIで応答して読み上げる"""
         try:
