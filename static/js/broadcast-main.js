@@ -227,13 +227,11 @@ function applySettings(s) {
   // === subtitle ===
   if (s.subtitle) {
     applyCommonStyle(subtitleEl, s.subtitle);
-    // 字幕固有: bottom配置（commonのtop/leftをオーバーライド）
-    if (s.subtitle.bottom != null) {
-      subtitleEl.style.bottom = s.subtitle.bottom + '%';
-      subtitleEl.style.top = '';
-      subtitleEl.style.left = '50%';
-      subtitleEl.style.transform = 'translateX(-50%)';
-    }
+    // 字幕固有: 常に水平中央配置 + bottom配置（commonのtop/leftをオーバーライド）
+    if (s.subtitle.bottom != null) subtitleEl.style.bottom = s.subtitle.bottom + '%';
+    subtitleEl.style.top = '';
+    subtitleEl.style.left = '50%';
+    subtitleEl.style.transform = 'translateX(-50%)';
     if (s.subtitle.fontSize != null) subtitleEl.querySelector('.response').style.fontSize = s.subtitle.fontSize + 'vw';
     if (s.subtitle.maxWidth != null) subtitleEl.style.maxWidth = s.subtitle.maxWidth + '%';
     if (s.subtitle.fadeDuration != null) subtitleEl.dataset.fadeDuration = s.subtitle.fadeDuration;
@@ -1107,9 +1105,18 @@ function startDrag(el, e) {
       if (snappedV) newLeft -= snappedV.delta;
       if (snappedH) newTop -= snappedH.delta;
 
-      el.style.left = (newLeft / ww * 100) + '%';
-      el.style.top = (newTop / wh * 100) + '%';
-      el.style.transform = 'none';
+      // 字幕パネルは水平中央固定、垂直のみ移動（bottom基準）
+      if (el.dataset.editable === 'subtitle') {
+        const bottomPct = 100 - ((newTop + elH) / wh * 100);
+        el.style.bottom = bottomPct + '%';
+        el.style.top = '';
+        el.style.left = '50%';
+        el.style.transform = 'translateX(-50%)';
+      } else {
+        el.style.left = (newLeft / ww * 100) + '%';
+        el.style.top = (newTop / wh * 100) + '%';
+        el.style.transform = 'none';
+      }
 
       showActiveGuides(snappedV, snappedH);
     }
@@ -1287,6 +1294,9 @@ async function editSave() {
 
   // アイテム固有プロパティの保存（保存漏れ修正）
   if (overlaySettings.subtitle) {
+    // 字幕は水平中央固定なのでpositionXは常に50、positionYは不使用（bottom基準）
+    overlaySettings.subtitle.positionX = 50;
+    overlaySettings.subtitle.positionY = 0;
     const bottom = parseFloat(subtitleEl.style.bottom);
     if (!isNaN(bottom)) overlaySettings.subtitle.bottom = bottom;
     const respFs = parseFloat(subtitleEl.querySelector('.response')?.style.fontSize);

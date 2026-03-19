@@ -1,5 +1,11 @@
 # DONE
 
+## 字幕パネルの水平中央配置修正
+
+- [x] `applySettings`の字幕中央揃えコードを常時適用に変更（`bottom != null`条件を除去）
+- [x] ドラッグ時に字幕は垂直移動のみ（水平は常に中央固定、`transform: translateX(-50%)`を維持）
+- [x] `editSave`で字幕の`positionX`を常に50に固定（ドラッグで不正な値が保存されるのを防止）
+
 ## WebUIポーリング負荷削減（84%削減）
 
 - [x] `checkServerUpdate`ポーリング（3秒）をWebSocket push方式に置換（`server_restart`イベント）
