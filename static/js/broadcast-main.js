@@ -1069,14 +1069,10 @@ function startDrag(el, e) {
     let newTop = origVisualTop + e.clientY - startY;
 
     if (isChild) {
-      // 子パネル: 親パネル基準の相対%座標（親の範囲内にクランプ）
+      // 子パネル: 親パネル基準の相対%座標
       const parentRect = el.parentElement.getBoundingClientRect();
-      const childW = elW / parentRect.width * 100;
-      const childH = elH / parentRect.height * 100;
-      let relX = ((newLeft - parentRect.left) / parentRect.width) * 100;
-      let relY = ((newTop - parentRect.top) / parentRect.height) * 100;
-      relX = Math.max(0, Math.min(relX, 100 - childW));
-      relY = Math.max(0, Math.min(relY, 100 - childH));
+      const relX = ((newLeft - parentRect.left) / parentRect.width) * 100;
+      const relY = ((newTop - parentRect.top) / parentRect.height) * 100;
       el.style.left = relX + '%';
       el.style.top = relY + '%';
       el.style.transform = 'none';
@@ -1173,16 +1169,7 @@ function setupEditable(el) {
           else { newH = origH + dy; }
         }
 
-        if (isChild) {
-          // 子パネル: 親の範囲内にクランプ
-          const minSize = 10; // 最小サイズ(px)
-          if (newLeft < 0) { newW += newLeft; newLeft = 0; }
-          if (newTop < 0) { newH += newTop; newTop = 0; }
-          if (newLeft + newW > ref.w) newW = ref.w - newLeft;
-          if (newTop + newH > ref.h) newH = ref.h - newTop;
-          if (newW < minSize) newW = minSize;
-          if (newH < minSize) newH = minSize;
-        } else {
+        if (!isChild) {
           // ルートパネル: スナップ対応
           const { vLines, hLines } = calcSnapPoints(otherRects, ref.w, ref.h);
           const vEdges = resizeH ? (isLeft ? [newLeft] : [newLeft + newW]) : [];
@@ -1352,17 +1339,10 @@ function initEditMode() {
     if (!dir) return;
     e.preventDefault();
     const step = e.shiftKey ? 1.0 : 0.1; // %単位
-    let newLeft = (parseFloat(_editingEl.style.left) || 0) + dir[0] * step;
-    let newTop = (parseFloat(_editingEl.style.top) || 0) + dir[1] * step;
-    // 子パネル: 親の範囲内にクランプ
-    if (_editingEl.dataset.parentId) {
-      const childW = parseFloat(_editingEl.style.width) || 0;
-      const childH = parseFloat(_editingEl.style.height) || 0;
-      newLeft = Math.max(0, Math.min(newLeft, 100 - childW));
-      newTop = Math.max(0, Math.min(newTop, 100 - childH));
-    }
-    _editingEl.style.left = newLeft + '%';
-    _editingEl.style.top = newTop + '%';
+    const curLeft = parseFloat(_editingEl.style.left) || 0;
+    const curTop = parseFloat(_editingEl.style.top) || 0;
+    _editingEl.style.left = (curLeft + dir[0] * step) + '%';
+    _editingEl.style.top = (curTop + dir[1] * step) + '%';
     _editingEl.style.transform = 'none';
     scheduleSave();
   });
