@@ -1,5 +1,13 @@
 # DONE
 
+## Claude Code長時間実行時にちょびがコメント
+
+- [x] `~/.claude/hooks/long-execution-timer.py` 作成（バックグラウンドタイマー、transcript解析）
+- [x] `notify-prompt.py` にタイマー起動処理追加（マーカーファイル + Popen）
+- [x] `notify-stop.py` にタイマー停止処理追加（マーカー削除 + pkill）
+- [x] transcript_pathのJSONLからツール呼び出しを解析し、作業内容付きで報告
+- [x] アイドル検知: transcript未更新2分でタイマー自動終了（Ctrl+C/Stopフック失敗のセーフガード）
+
 ## Claude Code実況フックのグローバル化（他リポジトリ対応）
 
 - [x] `~/.claude/hooks/notify-stop.py` / `notify-prompt.py` をグローバルフックとして作成

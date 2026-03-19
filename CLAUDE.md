@@ -127,6 +127,7 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 - `last_assistant_message` を `POST /api/avatar/speak` に送信 → ちょびが要約して発話
 - 短い応答（10文字未満）はスキップ
 - **他リポジトリ対応**: `CLAUDE_PROJECT_DIR` からプロジェクト名を抽出し、ai-twitch-cast以外なら「作業報告（リポジトリ名）」として報告
+- **長時間実行タイマー**: UserPromptSubmitでバックグラウンドタイマー起動、3分以上かかるとtranscript_pathから直近の作業内容を読み取り「○分作業中、直近の作業: ○○」と報告（3分間隔で繰り返し）。Stopで自動停止。transcript未更新2分でアイドル判定→タイマー自動終了
 
 ### 疎結合設計
 - フックは **`"async": true`** で非ブロッキング実行
@@ -135,8 +136,9 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 - **無効化**: `~/.claude/settings.json` の該当フックを削除するだけ
 
 ### 関連ファイル
-- `~/.claude/hooks/notify-stop.py` — Stopフック（作業完了報告、グローバル）
-- `~/.claude/hooks/notify-prompt.py` — UserPromptSubmitフック（指示受信報告、グローバル）
+- `~/.claude/hooks/notify-stop.py` — Stopフック（作業完了報告 + タイマー停止、グローバル）
+- `~/.claude/hooks/notify-prompt.py` — UserPromptSubmitフック（指示受信報告 + タイマー起動、グローバル）
+- `~/.claude/hooks/long-execution-timer.py` — 長時間実行タイマー（バックグラウンド、transcript解析）
 - `~/.claude/settings.json` — グローバルフック設定
 
 ## WSL2環境について

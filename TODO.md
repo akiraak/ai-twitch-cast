@@ -13,7 +13,8 @@
 - [ ] 開発の読み上げのON/OFFをWEBUIに入れる
 - [ ] capture.pyのbroadcast_items全面移行（二重管理解消） → [plans/capture-broadcast-items-migration.md](plans/capture-broadcast-items-migration.md)
 - [ ] ちょびの発言をチャット欄に表示するかのスイッチをWebUIに入れたい
+- [ ] WebUIにキャラのペルソナなどキャラのステータスを表示。一番上に
+- [ ] WebUIのキャラのライティングを下に
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証
-- [ ] Claude Code の実行が長すぎるときにちょびが何かコメント 
