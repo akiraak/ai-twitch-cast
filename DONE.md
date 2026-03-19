@@ -1,5 +1,28 @@
 # DONE
 
+## 子パネル（入れ子テキストパネル）機能
+
+- [x] DBスキーマ拡張: broadcast_itemsにparent_idカラム追加、子パネルCRUD関数（create/get/delete + 連鎖削除）
+- [x] API: POST /api/items/{parent_id}/children、GET /api/items で children ネスト、DELETE 連鎖削除
+- [x] WebSocket: child_panel_add/update/remove イベント、settings_update で子パネル情報同期
+- [x] broadcast.html: 子パネルのレンダリング・編集（ドラッグ＆リサイズ、相対座標、右クリックメニュー）
+- [x] 管理UI: 固定パネル・カスタムテキストに子パネル管理UI（追加・編集・削除）
+- [x] テスト: DB子パネルCRUD + API子パネルテスト追加
+- [x] プラン: plans/child-panels.md
+
+## パネルUI共通化（テキスト変数・テキスト編集UI）
+
+- [x] テキスト変数定義を`lib/text-variables.js`に一元化（`replaceTextVariables()` + `TEXT_VARIABLE_HINT`）
+- [x] テキスト編集UIを`panel-ui.js`に共通関数化（`renderTextEditUI()` + `injectChildPanelSection()`）
+- [x] 子パネルに変数ヒント（{version} {date} 等）が表示されないバグ修正
+- [x] broadcast-main.jsのバージョン再展開が`.child-text-content`にも適用されるよう修正
+
+## 子パネルのスタイル適用バグ修正
+
+- [x] `addChildPanel()`の手動スタイル適用を`applyCommonStyle()`に一本化（textStroke・backdrop等の適用漏れ修正）
+- [x] `applyCommonStyle()`のtextAlign/verticalAlign/fontFamilyセレクタに`.child-text-content`を追加
+- [x] `.child-text-content` CSSに`flex-direction: column`追加（垂直揃えが水平に効いていたバグ修正）
+
 ## Z値ダイアログ・コンテキストメニューの画面外はみ出し修正
 
 - [x] 右クリックメニューとZ値ダイアログの表示位置をビューポート内にクランプ

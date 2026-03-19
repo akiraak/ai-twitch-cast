@@ -227,6 +227,12 @@ def _create_tables(conn):
         conn.commit()
     except sqlite3.OperationalError:
         pass
+    # Migration: add parent_id to broadcast_items (子パネル対応)
+    try:
+        conn.execute("ALTER TABLE broadcast_items ADD COLUMN parent_id TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     # Migration: overlay.* settings → broadcast_items
     try:
         migrate_overlay_to_items()
@@ -946,6 +952,8 @@ def _item_row_to_dict(row):
     d = dict(row)
     # DB列名→APIキー名に変換
     result = {"id": d["id"], "type": d["type"], "label": d["label"]}
+    if d.get("parent_id"):
+        result["parentId"] = d["parent_id"]
     for col, key in _ITEM_COL_TO_KEY.items():
         if col in d:
             result[key] = d[col]
@@ -956,12 +964,113 @@ def _item_row_to_dict(row):
 
 
 def get_broadcast_items():
-    """全broadcast_itemsを返す"""
+    """全broadcast_itemsを返す（ルートのみ、子は含まない）"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM broadcast_items WHERE parent_id IS NULL ORDER BY z_index"
+    ).fetchall()
+    return [_item_row_to_dict(r) for r in rows]
+
+
+def get_all_broadcast_items():
+    """全broadcast_itemsを返す（子も含む）"""
     conn = get_connection()
     rows = conn.execute(
         "SELECT * FROM broadcast_items ORDER BY z_index"
     ).fetchall()
     return [_item_row_to_dict(r) for r in rows]
+
+
+def get_child_items(parent_id):
+    """指定親IDの子アイテム一覧を返す"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM broadcast_items WHERE parent_id = ? ORDER BY z_index",
+        (parent_id,)
+    ).fetchall()
+    return [_item_row_to_dict(r) for r in rows]
+
+
+def create_child_item(parent_id, data):
+    """親パネルに子パネルを作成する"""
+    conn = get_connection()
+    # 親パネルの存在確認
+    parent = conn.execute(
+        "SELECT id FROM broadcast_items WHERE id = ?", (parent_id,)
+    ).fetchone()
+    if not parent:
+        return None
+
+    # 次のIDを算出
+    row = conn.execute(
+        "SELECT MAX(CAST(SUBSTR(id, LENGTH(?) + 2) AS INTEGER)) as max_id "
+        "FROM broadcast_items WHERE parent_id = ?",
+        (f"child:{parent_id}", parent_id)
+    ).fetchone()
+    next_id = (row["max_id"] or 0) + 1 if row and row["max_id"] else 1
+    item_id = f"child:{parent_id}:{next_id}"
+
+    child_type = data.get("type", "child_text")
+    label = data.get("label", "テキスト")
+    content = data.get("content", "")
+
+    now = _now()
+    item_data = {
+        "positionX": data.get("positionX", 5),
+        "positionY": data.get("positionY", 75),
+        "width": data.get("width", 90),
+        "height": data.get("height", 20),
+        "zIndex": data.get("zIndex", 10),
+        "visible": 1 if data.get("visible", True) else 0,
+        "bgColor": data.get("bgColor", "rgba(0,0,0,0.5)"),
+        "bgOpacity": data.get("bgOpacity", 0.5),
+        "borderRadius": data.get("borderRadius", 4),
+        "borderSize": data.get("borderSize", 0),
+        "fontSize": data.get("fontSize", 0.8),
+        "textColor": data.get("textColor", "#ffffff"),
+        "padding": data.get("padding", 4),
+        "content": content,
+    }
+
+    # 共通カラムとpropertiesに分離
+    common = {}
+    props = {}
+    for key, val in item_data.items():
+        if key in _ITEM_COMMON_COLS:
+            common[_ITEM_COMMON_COLS[key]] = val
+        else:
+            props[key] = val
+
+    cols = ["id", "type", "label", "parent_id", "properties", "created_at", "updated_at"]
+    vals = [item_id, child_type, label, parent_id,
+            _json.dumps(props, ensure_ascii=False), now, now]
+    for col, val in common.items():
+        cols.append(col)
+        vals.append(val)
+
+    placeholders = ", ".join(["?"] * len(vals))
+    col_names = ", ".join(cols)
+    conn.execute(
+        f"INSERT INTO broadcast_items ({col_names}) VALUES ({placeholders})",
+        vals,
+    )
+    conn.commit()
+    return get_broadcast_item(item_id)
+
+
+def delete_child_item(item_id):
+    """子パネルを削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM broadcast_items WHERE id = ?", (item_id,))
+    conn.commit()
+
+
+def delete_broadcast_item_cascade(item_id):
+    """パネルとその子パネルをすべて削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM broadcast_items WHERE parent_id = ?", (item_id,))
+    conn.execute("DELETE FROM broadcast_items WHERE id = ?", (item_id,))
+    conn.commit()
 
 
 def get_broadcast_item(item_id):

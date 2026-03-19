@@ -5,12 +5,15 @@
 <title>AI Twitch Cast - Broadcast</title>
 <link rel="stylesheet" href="/static/css/broadcast.css">
 <script src="/static/js/lib/api-client.js"></script>
+<script src="/static/js/lib/text-variables.js"></script>
 </head>
 <body>
 
 <!-- 右クリックメニュー -->
 <div class="edit-context-menu" id="edit-context-menu">
   <div class="ctx-item" onclick="openZIndexDialog()">Z順序を変更...</div>
+  <div class="ctx-item" id="ctx-add-child" onclick="addChildPanelToSelected()">テキスト子パネルを追加</div>
+  <div class="ctx-item ctx-danger" id="ctx-delete-child" onclick="deleteSelectedChildPanel()">この子パネルを削除</div>
 </div>
 
 <!-- Z値ダイアログ -->

@@ -7,6 +7,7 @@
 <title>AI Twitch Cast</title>
 <link rel="stylesheet" href="/static/css/index.css?v=4">
 <script src="/static/js/lib/api-client.js?v=4"></script>
+<script src="/static/js/lib/text-variables.js"></script>
 </head>
 <body>
 
@@ -81,6 +82,7 @@
         <details data-section="dev_activity" class="panel-item"><summary>開発アクティビティ</summary><div class="panel-body">
         </div></details>
       </div>
+      <!-- 子パネル管理UIは panel-ui.js の injectChildPanelSection() で注入 -->
       <div id="capture-panels"></div>
       <div id="custom-text-panels"></div>
       <button onclick="addCustomText()" style="margin-top:12px; padding:6px 16px; background:#7c4dff; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">+ テキスト追加</button>
@@ -368,6 +370,7 @@ topics      1──N  topic_scripts (topic_id)</div>
 
 </div>
 
+<script src="/static/js/panel-ui.js"></script>
 <script src="/static/js/index-app.js?v=4"></script>
 </body>
 </html>

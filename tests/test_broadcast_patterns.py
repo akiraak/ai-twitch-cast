@@ -26,6 +26,10 @@ def read_js_index() -> str:
     return (STATIC_DIR / "js" / "index-app.js").read_text(encoding="utf-8")
 
 
+def read_js_text_variables() -> str:
+    return (STATIC_DIR / "js" / "lib" / "text-variables.js").read_text(encoding="utf-8")
+
+
 # === ITEM_REGISTRY ===
 
 EXPECTED_ITEMS = ["avatar", "subtitle", "todo", "topic", "dev_activity"]
@@ -192,13 +196,14 @@ class TestEditSaveUsesRegistry:
         assert "topic.maxWidth" in body or "topic].maxWidth" in body
 
     def test_custom_text_variable_expansion(self):
-        """カスタムテキストの変数展開関数が存在すること"""
-        js = read_js()
-        assert "function _replaceVariables(" in js
-        func_match = re.search(r"function _replaceVariables\(.*?\n\}", js, re.DOTALL)
-        body = func_match.group(0)
-        assert "{version}" in body
-        assert "{date}" in body
+        """テキスト変数展開関数が共通ファイルに存在すること"""
+        js = read_js_text_variables()
+        assert "function replaceTextVariables(" in js
+        assert "key: 'version'" in js
+        assert "key: 'date'" in js
+        # broadcast-main.jsから共通関数を呼び出していること
+        broadcast_js = read_js()
+        assert "replaceTextVariables(" in broadcast_js
 
     def test_dev_activity_skips_visible(self):
         """dev_activityはskipVisible: trueでvisibleを保存しないこと"""

@@ -159,17 +159,17 @@ function applyCommonStyle(el, props) {
   }
   // 文字揃え（水平）
   if (props.textAlign != null) {
-    const ct = el.querySelector('.custom-text-content') || el;
+    const ct = el.querySelector('.custom-text-content, .child-text-content') || el;
     ct.style.textAlign = props.textAlign;
   }
   // 文字揃え（垂直）
   if (props.verticalAlign != null) {
-    const ct = el.querySelector('.custom-text-content') || el;
+    const ct = el.querySelector('.custom-text-content, .child-text-content') || el;
     ct.style.justifyContent = props.verticalAlign === 'center' ? 'center' : props.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
   }
   // フォント
   if (props.fontFamily != null) {
-    const ct = el.querySelector('.custom-text-content') || el;
+    const ct = el.querySelector('.custom-text-content, .child-text-content') || el;
     ct.style.fontFamily = props.fontFamily || '';
     _loadGoogleFont(props.fontFamily);
   }
@@ -334,22 +334,7 @@ async function loadTopicPanel() {
   } catch (e) {}
 }
 
-// === テキスト変数展開（カスタムテキスト等で使用） ===
-function _replaceVariables(text) {
-  const info = window._versionInfo;
-  if (!info) return text;
-  const d = info.updated_at ? new Date(info.updated_at) : null;
-  const year = d ? String(d.getFullYear()) : '';
-  const month = d ? String(d.getMonth() + 1).padStart(2, '0') : '';
-  const day = d ? String(d.getDate()).padStart(2, '0') : '';
-  const date = d ? `${year}-${month}-${day}` : '';
-  return text
-    .replace(/\{version}/g, info.version || '')
-    .replace(/\{date}/g, date)
-    .replace(/\{year}/g, year)
-    .replace(/\{month}/g, month)
-    .replace(/\{day}/g, day);
-}
+// テキスト変数展開は lib/text-variables.js の replaceTextVariables() を使用
 
 // === 開発アクティビティ ===
 let _devActivityTimer = null;
@@ -460,12 +445,15 @@ function connectWS() {
                 applyCommonStyle(el, val);
                 if (val.content != null) {
                   const ct = el.querySelector('.custom-text-content');
-                  if (ct) { ct.dataset.rawContent = val.content; ct.textContent = _replaceVariables(val.content); }
+                  if (ct) { ct.dataset.rawContent = val.content; ct.textContent = replaceTextVariables(val.content); }
                 }
               }
             } else if (key.startsWith('capture:')) {
               const id = key.split(':')[1];
               const el = captureLayers[id];
+              if (el) applyCommonStyle(el, val);
+            } else if (key.startsWith('child:')) {
+              const el = childPanelEls[key];
               if (el) applyCommonStyle(el, val);
             }
           }
@@ -555,6 +543,14 @@ function connectWS() {
         break;
       case 'custom_text_remove':
         removeCustomTextLayer(data.id);
+        break;
+
+      // 子パネル
+      case 'child_panel_add':
+        addChildPanel(data.parentId, data);
+        break;
+      case 'child_panel_remove':
+        removeChildPanel(data.id);
         break;
 
       // 素材変更
@@ -703,7 +699,7 @@ function addCustomTextLayer(id, label, content, layout) {
   const textEl = document.createElement('div');
   textEl.className = 'custom-text-content';
   textEl.dataset.rawContent = content || '';
-  textEl.textContent = _replaceVariables(content || '');
+  textEl.textContent = replaceTextVariables(content || '');
   if (layout) {
     if (layout.textAlign) textEl.style.textAlign = layout.textAlign;
     if (layout.verticalAlign) textEl.style.justifyContent = layout.verticalAlign === 'center' ? 'center' : layout.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
@@ -722,7 +718,7 @@ function updateCustomTextLayer(id, data) {
   if (data.content != null) {
     const ct = el.querySelector('.custom-text-content');
     ct.dataset.rawContent = data.content;
-    ct.textContent = _replaceVariables(data.content);
+    ct.textContent = replaceTextVariables(data.content);
   }
   if (data.label != null) el.querySelector('.edit-label').textContent = data.label;
   if (data.layout) {
@@ -737,6 +733,83 @@ function updateCustomTextLayer(id, data) {
 function removeCustomTextLayer(id) {
   const el = customTextLayers[id];
   if (el) { el.remove(); delete customTextLayers[id]; }
+}
+
+// === 子パネル ===
+const childPanelEls = {};  // id → DOM要素
+
+function addChildPanel(parentId, data) {
+  const childId = data.id;
+  if (childPanelEls[childId]) removeChildPanel(childId);
+
+  // 親要素を探す
+  const parentEl = document.querySelector(`[data-editable="${parentId}"]`);
+  if (!parentEl) return;
+
+  const div = document.createElement('div');
+  div.className = 'child-panel';
+  div.dataset.editable = childId;
+  div.dataset.childPanelId = childId;
+  div.dataset.parentId = parentId;
+
+  // デフォルト座標（data に値がなければ使用）
+  div.style.left = (data.positionX || 5) + '%';
+  div.style.top = (data.positionY || 75) + '%';
+  div.style.width = (data.width || 90) + '%';
+  div.style.height = (data.height || 20) + '%';
+
+  // 共通スタイル適用（textStroke・border・backdrop等すべて含む）
+  applyCommonStyle(div, data);
+
+  // 編集ラベル
+  const labelEl = document.createElement('div');
+  labelEl.className = 'edit-label';
+  labelEl.textContent = data.label || 'テキスト';
+  div.appendChild(labelEl);
+
+  // テキストコンテンツ
+  const textEl = document.createElement('div');
+  textEl.className = 'child-text-content';
+  textEl.dataset.rawContent = data.content || '';
+  textEl.textContent = replaceTextVariables(data.content || '');
+  if (data.textAlign) textEl.style.textAlign = data.textAlign;
+  if (data.verticalAlign) textEl.style.justifyContent = data.verticalAlign === 'center' ? 'center' : data.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
+  if (data.fontFamily) { textEl.style.fontFamily = data.fontFamily; _loadGoogleFont(data.fontFamily); }
+  div.appendChild(textEl);
+
+  parentEl.appendChild(div);
+  childPanelEls[childId] = div;
+  setupEditable(div);
+}
+
+function removeChildPanel(childId) {
+  const el = childPanelEls[childId];
+  if (el) { el.remove(); delete childPanelEls[childId]; }
+}
+
+async function addChildPanelToSelected() {
+  hideAll();
+  if (!_selectedEditable) return;
+  const parentId = _selectedEditable.dataset.editable;
+  // 子パネルには子パネルを追加不可（1階層のみ）
+  if (_selectedEditable.dataset.parentId) return;
+  try {
+    await fetch(`/api/items/${encodeURIComponent(parentId)}/children`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ type: 'child_text', label: 'テキスト', content: '' }),
+    });
+  } catch (e) { console.log('子パネル追加エラー:', e.message); }
+}
+
+async function deleteSelectedChildPanel() {
+  hideAll();
+  if (!_selectedEditable) return;
+  const childId = _selectedEditable.dataset.editable;
+  if (!_selectedEditable.dataset.parentId) return;
+  try {
+    await fetch(`/api/items/${encodeURIComponent(childId)}`, { method: 'DELETE' });
+  } catch (e) { console.log('子パネル削除エラー:', e.message); }
 }
 
 // === 編集モード（常時有効） ===
@@ -767,6 +840,10 @@ function showContextMenu(el, x, y) {
   selectEditable(el);
   _selectedEditable = el;
   el.classList.add('selected');
+  // 子パネルかどうかでメニュー項目を切替
+  const isChild = !!el.dataset.parentId;
+  document.getElementById('ctx-add-child').style.display = isChild ? 'none' : '';
+  document.getElementById('ctx-delete-child').style.display = isChild ? '' : 'none';
   _ctxMenu.style.left = x + 'px';
   _ctxMenu.style.top = y + 'px';
   _ctxMenu.style.display = 'block';
@@ -967,38 +1044,56 @@ function showActiveGuides(snappedV, snappedH) {
   }
 }
 
+function _getRefSize(el) {
+  // 子パネルは親パネルの幅/高さを基準にする
+  if (el.dataset.parentId) {
+    const parentEl = el.parentElement;
+    return { w: parentEl.offsetWidth, h: parentEl.offsetHeight };
+  }
+  return { w: window.innerWidth, h: window.innerHeight };
+}
+
 function startDrag(el, e) {
   el.classList.add('dragging');
   const startX = e.clientX, startY = e.clientY;
-  // getBoundingClientRect()はtransform適用後の実際の表示位置を返す
   const rect = el.getBoundingClientRect();
   const origVisualLeft = rect.left, origVisualTop = rect.top;
   const elW = rect.width, elH = rect.height;
   let didDrag = false;
-  const otherRects = getOtherEditableRects(el);
+  const isChild = !!el.dataset.parentId;
+  const otherRects = isChild ? [] : getOtherEditableRects(el);
 
   function onMove(e) {
     didDrag = true;
-    const ww = window.innerWidth, wh = window.innerHeight;
     let newLeft = origVisualLeft + e.clientX - startX;
     let newTop = origVisualTop + e.clientY - startY;
 
-    const { vLines, hLines } = calcSnapPoints(otherRects, ww, wh);
-    // パーツの左端、右端、中央をスナップ候補に
-    const vEdges = [newLeft, newLeft + elW, newLeft + elW / 2];
-    const hEdges = [newTop, newTop + elH, newTop + elH / 2];
+    if (isChild) {
+      // 子パネル: 親パネル基準の相対%座標
+      const parentRect = el.parentElement.getBoundingClientRect();
+      const relX = ((newLeft - parentRect.left) / parentRect.width) * 100;
+      const relY = ((newTop - parentRect.top) / parentRect.height) * 100;
+      el.style.left = relX + '%';
+      el.style.top = relY + '%';
+      el.style.transform = 'none';
+    } else {
+      const ww = window.innerWidth, wh = window.innerHeight;
+      const { vLines, hLines } = calcSnapPoints(otherRects, ww, wh);
+      const vEdges = [newLeft, newLeft + elW, newLeft + elW / 2];
+      const hEdges = [newTop, newTop + elH, newTop + elH / 2];
 
-    const snappedV = applySnap(vEdges, vLines, SNAP_THRESHOLD_PX);
-    const snappedH = applySnap(hEdges, hLines, SNAP_THRESHOLD_PX);
+      const snappedV = applySnap(vEdges, vLines, SNAP_THRESHOLD_PX);
+      const snappedH = applySnap(hEdges, hLines, SNAP_THRESHOLD_PX);
 
-    if (snappedV) newLeft -= snappedV.delta;
-    if (snappedH) newTop -= snappedH.delta;
+      if (snappedV) newLeft -= snappedV.delta;
+      if (snappedH) newTop -= snappedH.delta;
 
-    el.style.left = (newLeft / ww * 100) + '%';
-    el.style.top = (newTop / wh * 100) + '%';
-    el.style.transform = 'none';
+      el.style.left = (newLeft / ww * 100) + '%';
+      el.style.top = (newTop / wh * 100) + '%';
+      el.style.transform = 'none';
 
-    showActiveGuides(snappedV, snappedH);
+      showActiveGuides(snappedV, snappedH);
+    }
   }
   function onUp() {
     el.classList.remove('dragging');
@@ -1049,7 +1144,6 @@ function setupEditable(el) {
       const startX = e.clientX, startY = e.clientY;
       const origW = el.offsetWidth, origH = el.offsetHeight;
       const origLeft = el.offsetLeft, origTop = el.offsetTop;
-      // どの方向にリサイズするか判定
       const hc = handle.classList;
       const isLeft = hc.contains('sw') || hc.contains('nw') || hc.contains('w');
       const isRight = hc.contains('se') || hc.contains('ne') || hc.contains('e');
@@ -1057,11 +1151,12 @@ function setupEditable(el) {
       const isBottom = hc.contains('se') || hc.contains('sw') || hc.contains('s');
       const resizeH = isLeft || isRight;
       const resizeV = isTop || isBottom;
-      const otherRects = getOtherEditableRects(el);
+      const isChild = !!el.dataset.parentId;
+      const otherRects = isChild ? [] : getOtherEditableRects(el);
 
       function onMove(e) {
         const dx = e.clientX - startX, dy = e.clientY - startY;
-        const ww = window.innerWidth, wh = window.innerHeight;
+        const ref = _getRefSize(el);
         let newLeft = origLeft, newTop = origTop;
         let newW = origW, newH = origH;
 
@@ -1074,31 +1169,32 @@ function setupEditable(el) {
           else { newH = origH + dy; }
         }
 
-        // リサイズ中の端をスナップ
-        const { vLines, hLines } = calcSnapPoints(otherRects, ww, wh);
-        const vEdges = resizeH ? (isLeft ? [newLeft] : [newLeft + newW]) : [];
-        if (resizeH) vEdges.push(newLeft + newW / 2);
-        const hEdges = resizeV ? (isTop ? [newTop] : [newTop + newH]) : [];
-        if (resizeV) hEdges.push(newTop + newH / 2);
+        if (!isChild) {
+          // ルートパネル: スナップ対応
+          const { vLines, hLines } = calcSnapPoints(otherRects, ref.w, ref.h);
+          const vEdges = resizeH ? (isLeft ? [newLeft] : [newLeft + newW]) : [];
+          if (resizeH) vEdges.push(newLeft + newW / 2);
+          const hEdges = resizeV ? (isTop ? [newTop] : [newTop + newH]) : [];
+          if (resizeV) hEdges.push(newTop + newH / 2);
 
-        const snappedV = resizeH ? applySnap(vEdges, vLines, SNAP_THRESHOLD_PX) : null;
-        const snappedH = resizeV ? applySnap(hEdges, hLines, SNAP_THRESHOLD_PX) : null;
+          const snappedV = resizeH ? applySnap(vEdges, vLines, SNAP_THRESHOLD_PX) : null;
+          const snappedH = resizeV ? applySnap(hEdges, hLines, SNAP_THRESHOLD_PX) : null;
 
-        if (snappedV) {
-          if (isLeft) { newLeft -= snappedV.delta; newW += snappedV.delta; }
-          else { newW -= snappedV.delta; }
+          if (snappedV) {
+            if (isLeft) { newLeft -= snappedV.delta; newW += snappedV.delta; }
+            else { newW -= snappedV.delta; }
+          }
+          if (snappedH) {
+            if (isTop) { newTop -= snappedH.delta; newH += snappedH.delta; }
+            else { newH -= snappedH.delta; }
+          }
+          showActiveGuides(snappedV, snappedH);
         }
-        if (snappedH) {
-          if (isTop) { newTop -= snappedH.delta; newH += snappedH.delta; }
-          else { newH -= snappedH.delta; }
-        }
 
-        if (resizeH) el.style.width = (newW / ww * 100) + '%';
-        if (resizeV) el.style.height = (newH / wh * 100) + '%';
-        if (isLeft) { el.style.left = (newLeft / ww * 100) + '%'; el.style.transform = 'none'; }
-        if (isTop) { el.style.top = (newTop / wh * 100) + '%'; el.style.transform = 'none'; }
-
-        showActiveGuides(snappedV, snappedH);
+        if (resizeH) el.style.width = (newW / ref.w * 100) + '%';
+        if (resizeV) el.style.height = (newH / ref.h * 100) + '%';
+        if (isLeft) { el.style.left = (newLeft / ref.w * 100) + '%'; el.style.transform = 'none'; }
+        if (isTop) { el.style.top = (newTop / ref.h * 100) + '%'; el.style.transform = 'none'; }
       }
       function onUp() {
         document.removeEventListener('mousemove', onMove);
@@ -1211,6 +1307,24 @@ async function editSave() {
       });
     } catch (e) {}
   }
+
+  // 子パネルのレイアウト保存
+  for (const [childId, el] of Object.entries(childPanelEls)) {
+    const layout = {
+      positionX: parseFloat(el.style.left) || 0,
+      positionY: parseFloat(el.style.top) || 0,
+      width: parseFloat(el.style.width) || 90,
+      height: parseFloat(el.style.height) || 20,
+      zIndex: getRealZIndex(el, 10),
+    };
+    try {
+      await fetch(`/api/items/${encodeURIComponent(childId)}/layout`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(layout),
+      });
+    } catch (e) {}
+  }
   _saving = false;
 }
 
@@ -1290,7 +1404,7 @@ async function init() {
     }
   } catch (e) { console.log('カスタムテキスト読み込みスキップ:', e.message); }
 
-  // broadcast_itemsから共通プロパティをカスタムテキスト・キャプチャに適用
+  // broadcast_itemsから共通プロパティをカスタムテキスト・キャプチャに適用 + 子パネル読み込み
   try {
     const allItems = await (await fetch('/api/items')).json();
     for (const bi of allItems) {
@@ -1301,6 +1415,12 @@ async function init() {
       } else if (bi.type === 'capture' && bi.id.startsWith('capture:')) {
         // captureはIDがセッション固有のためwindow_name経由では適用困難→スキップ
       }
+      // 子パネルの読み込み
+      if (bi.children) {
+        for (const child of bi.children) {
+          addChildPanel(bi.id, child);
+        }
+      }
     }
   } catch (e) {}
 
@@ -1309,8 +1429,8 @@ async function init() {
     const res = await fetch('/api/status');
     const st = await res.json();
     window._versionInfo = st;
-    document.querySelectorAll('.custom-text-content[data-raw-content]').forEach(el => {
-      el.textContent = _replaceVariables(el.dataset.rawContent);
+    document.querySelectorAll('.custom-text-content[data-raw-content], .child-text-content[data-raw-content]').forEach(el => {
+      el.textContent = replaceTextVariables(el.dataset.rawContent);
     });
   } catch (e) {}
 

@@ -230,6 +230,83 @@ class TestMigration:
         assert bi["type"] == "capture"
 
 
+class TestChildPanelAPI:
+    """子パネルCRUD APIのテスト"""
+
+    def _ensure_parent(self, test_db):
+        test_db.upsert_broadcast_item("avatar", "avatar", {
+            "positionX": 46.5, "positionY": 24.3,
+        })
+
+    def test_create_child(self, api_client, test_db):
+        self._ensure_parent(test_db)
+        resp = api_client.post("/api/items/avatar/children", json={
+            "type": "child_text",
+            "label": "バージョン",
+            "content": "v1.0",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == "child:avatar:1"
+        assert data["type"] == "child_text"
+        assert data["label"] == "バージョン"
+        assert data["parentId"] == "avatar"
+
+    def test_create_child_nonexistent_parent(self, api_client):
+        resp = api_client.post("/api/items/nonexistent/children", json={
+            "type": "child_text", "label": "テスト",
+        })
+        data = resp.json()
+        assert data.get("error") == "parent not found"
+
+    def test_delete_child(self, api_client, test_db):
+        self._ensure_parent(test_db)
+        child = test_db.create_child_item("avatar", {"label": "削除対象"})
+        resp = api_client.delete(f"/api/items/{child['id']}")
+        assert resp.status_code == 200
+        assert resp.json().get("ok") is True
+        assert test_db.get_child_items("avatar") == []
+
+    def test_update_child_layout(self, api_client, test_db):
+        self._ensure_parent(test_db)
+        child = test_db.create_child_item("avatar", {"label": "位置テスト"})
+        resp = api_client.post(f"/api/items/{child['id']}/layout", json={
+            "positionX": 20, "positionY": 30,
+        })
+        assert resp.status_code == 200
+        updated = test_db.get_broadcast_item(child["id"])
+        assert updated["positionX"] == 20
+        assert updated["positionY"] == 30
+
+    def test_get_items_with_children(self, api_client, test_db):
+        self._ensure_parent(test_db)
+        test_db.create_child_item("avatar", {"label": "子A"})
+        test_db.create_child_item("avatar", {"label": "子B"})
+        resp = api_client.get("/api/items")
+        items = resp.json()
+        avatar = next((i for i in items if i["id"] == "avatar"), None)
+        assert avatar is not None
+        assert "children" in avatar
+        assert len(avatar["children"]) == 2
+
+    def test_get_single_item_with_children(self, api_client, test_db):
+        self._ensure_parent(test_db)
+        test_db.create_child_item("avatar", {"label": "子テスト"})
+        resp = api_client.get("/api/items/avatar")
+        data = resp.json()
+        assert len(data["children"]) == 1
+        assert data["children"][0]["label"] == "子テスト"
+
+    def test_children_not_in_root_list(self, api_client, test_db):
+        """子パネルがルートの一覧に混ざらないこと"""
+        self._ensure_parent(test_db)
+        test_db.create_child_item("avatar", {"label": "子"})
+        resp = api_client.get("/api/items")
+        items = resp.json()
+        child_in_root = [i for i in items if i["id"].startswith("child:")]
+        assert len(child_in_root) == 0
+
+
 class TestOverlaySettingsCompat:
     """旧API /api/overlay/settings の互換性テスト"""
 

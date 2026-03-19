@@ -489,3 +489,104 @@ class TestCustomTexts:
         test_db.create_custom_text(label="b")
         test_db.create_custom_text(label="c")
         assert len(test_db.get_custom_texts()) == 3
+
+
+class TestChildPanels:
+    """子パネルのCRUDテスト"""
+
+    def _ensure_parent(self, test_db):
+        """テスト用の親パネルを作成"""
+        test_db.upsert_broadcast_item("avatar", "avatar", {
+            "positionX": 46.5, "positionY": 24.3,
+            "width": 53.5, "height": 75.7,
+        })
+        return "avatar"
+
+    def test_create_child(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        child = test_db.create_child_item(parent_id, {
+            "type": "child_text",
+            "label": "バージョン",
+            "content": "v1.0",
+        })
+        assert child is not None
+        assert child["id"] == f"child:{parent_id}:1"
+        assert child["type"] == "child_text"
+        assert child["label"] == "バージョン"
+        assert child["parentId"] == parent_id
+        assert child.get("content") == "v1.0"
+
+    def test_create_multiple_children(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        c1 = test_db.create_child_item(parent_id, {"label": "テスト1"})
+        c2 = test_db.create_child_item(parent_id, {"label": "テスト2"})
+        assert c1["id"] == f"child:{parent_id}:1"
+        assert c2["id"] == f"child:{parent_id}:2"
+
+    def test_get_child_items(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        test_db.create_child_item(parent_id, {"label": "子A"})
+        test_db.create_child_item(parent_id, {"label": "子B"})
+        children = test_db.get_child_items(parent_id)
+        assert len(children) == 2
+        assert children[0]["label"] == "子A"
+        assert children[1]["label"] == "子B"
+
+    def test_children_not_in_root_items(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        test_db.create_child_item(parent_id, {"label": "子パネル"})
+        # get_broadcast_items()はルートアイテムのみ返す
+        items = test_db.get_broadcast_items()
+        child_items = [i for i in items if i["id"].startswith("child:")]
+        assert len(child_items) == 0
+
+    def test_children_in_all_items(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        test_db.create_child_item(parent_id, {"label": "子パネル"})
+        items = test_db.get_all_broadcast_items()
+        child_items = [i for i in items if i["id"].startswith("child:")]
+        assert len(child_items) == 1
+
+    def test_delete_child(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        child = test_db.create_child_item(parent_id, {"label": "削除対象"})
+        test_db.delete_child_item(child["id"])
+        assert test_db.get_child_items(parent_id) == []
+
+    def test_cascade_delete(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        test_db.create_child_item(parent_id, {"label": "子1"})
+        test_db.create_child_item(parent_id, {"label": "子2"})
+        test_db.delete_broadcast_item_cascade(parent_id)
+        assert test_db.get_child_items(parent_id) == []
+        assert test_db.get_broadcast_item(parent_id) is None
+
+    def test_create_child_nonexistent_parent(self, test_db):
+        result = test_db.create_child_item("nonexistent", {"label": "テスト"})
+        assert result is None
+
+    def test_child_default_values(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        child = test_db.create_child_item(parent_id, {})
+        assert child["positionX"] == 5
+        assert child["positionY"] == 75
+        assert child["width"] == 90
+        assert child["height"] == 20
+        assert child["fontSize"] == 0.8
+
+    def test_child_custom_values(self, test_db):
+        parent_id = self._ensure_parent(test_db)
+        child = test_db.create_child_item(parent_id, {
+            "positionX": 10,
+            "positionY": 50,
+            "width": 80,
+            "height": 30,
+            "fontSize": 1.2,
+            "textColor": "#ff0000",
+        })
+        assert child["positionX"] == 10
+        assert child["positionY"] == 50
+        assert child["width"] == 80
+        assert child["height"] == 30
+        assert child["fontSize"] == 1.2
+        assert child["textColor"] == "#ff0000"

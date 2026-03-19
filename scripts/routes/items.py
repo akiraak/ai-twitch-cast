@@ -10,8 +10,14 @@ router = APIRouter()
 
 @router.get("/api/items")
 async def get_items():
-    """全broadcast_items一覧を返す"""
-    return db.get_broadcast_items()
+    """全broadcast_items一覧を返す（子パネルはchildren配列としてネスト）"""
+    items = db.get_broadcast_items()
+    # 各アイテムにchildren配列を追加
+    for item in items:
+        children = db.get_child_items(item["id"])
+        if children:
+            item["children"] = children
+    return items
 
 
 @router.get("/api/items/{item_id}")
@@ -20,6 +26,10 @@ async def get_item(item_id: str):
     item = db.get_broadcast_item(item_id)
     if not item:
         return {"error": "not found"}, 404
+    # 子パネルも含める
+    children = db.get_child_items(item_id)
+    if children:
+        item["children"] = children
     return item
 
 
@@ -54,4 +64,37 @@ async def update_item_visibility(item_id: str, request: Request):
     db.upsert_broadcast_item(item_id, item["type"], {"visible": visible})
     prefix = item_id if item_id in ("avatar", "subtitle", "todo", "topic", "version", "dev_activity") else item["type"]
     await state.broadcast_overlay({"type": "settings_update", prefix: {"visible": visible}})
+    return {"ok": True}
+
+
+@router.post("/api/items/{parent_id}/children")
+async def create_child_item(parent_id: str, request: Request):
+    """親パネルに子パネルを追加"""
+    body = await request.json()
+    item = db.create_child_item(parent_id, body)
+    if not item:
+        return {"error": "parent not found"}
+    await state.broadcast_overlay({
+        "type": "child_panel_add",
+        "parentId": parent_id,
+        **item,
+    })
+    return item
+
+
+@router.delete("/api/items/{item_id}")
+async def delete_item(item_id: str):
+    """broadcast_itemを削除（子パネル含む）"""
+    item = db.get_broadcast_item(item_id)
+    if not item:
+        return {"error": "not found"}
+    parent_id = item.get("parentId")
+    db.delete_broadcast_item_cascade(item_id)
+    if parent_id:
+        # 子パネル削除
+        await state.broadcast_overlay({
+            "type": "child_panel_remove",
+            "id": item_id,
+            "parentId": parent_id,
+        })
     return {"ok": True}

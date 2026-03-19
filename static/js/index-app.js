@@ -267,24 +267,24 @@ function _renderCustomTextList(items) {
     return `<details class="panel-item" data-ct-id="${item.id}">
       <summary>テキスト - ${label}<button class="summary-delete-btn" onclick="event.preventDefault(); deleteCustomText(${item.id})">削除</button></summary>
       <div class="panel-body">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-          <input type="text" value="${escHtml(item.label)}" placeholder="ラベル"
-            style="flex:1; padding:2px 6px; font-size:0.85rem; border:1px solid #ccc; border-radius:4px;"
-            onchange="updateCustomText(${item.id}, {label: this.value})">
-        </div>
-        <textarea rows="2" style="width:100%; box-sizing:border-box; padding:4px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px; resize:vertical;"
-          onchange="updateCustomText(${item.id}, {content: this.value})">${escHtml(item.content)}</textarea>
-        <div style="font-size:0.7rem; color:#9a88b5; margin-top:2px;">変数: {version} {date} {year} {month} {day}</div>
+        ${renderTextEditUI({
+          label: item.label,
+          content: item.content,
+          onLabelChange: `updateCustomText(${item.id}, {label: this.value})`,
+          onContentChange: `updateCustomText(${item.id}, {content: this.value})`,
+        })}
       </div>
     </details>`;
   }).join('');
-  // 共通コントロールを注入
+  // 共通コントロール + 子パネルUIを注入
   items.forEach(item => {
     const detail = el.querySelector(`[data-ct-id="${item.id}"]`);
     if (!detail) return;
     const biId = `customtext:${item.id}`;
     detail.dataset.section = biId;
     _injectCommonProps(detail, biId);
+    const panelBody = detail.querySelector('.panel-body');
+    if (panelBody) injectChildPanelSection(panelBody, biId);
   });
   _initToggles(el);
   // layoutSettingsに値があればUIに反映（loadLayout完了後の再描画対応）
@@ -308,6 +308,64 @@ async function deleteCustomText(id) {
   await api('DELETE', `/api/overlay/custom-texts/${id}`);
   showToast('テキスト削除', 'success');
   loadCustomTexts();
+}
+
+// --- 子パネル管理 ---
+
+async function loadChildPanels(parentId, containerEl) {
+  try {
+    const item = await (await fetch(`/api/items/${encodeURIComponent(parentId)}`)).json();
+    const children = item.children || [];
+    containerEl.innerHTML = '';
+    if (!children.length) return;
+    children.forEach(child => {
+      const childEl = document.createElement('details');
+      childEl.className = 'panel-item child-panel-item';
+      childEl.dataset.section = child.id;
+      childEl.innerHTML = `
+        <summary>子テキスト - ${escHtml(child.label || 'テキスト')}
+          <button class="summary-delete-btn" onclick="event.preventDefault(); deleteChildPanel('${escHtml(child.id)}', '${escHtml(parentId)}')">削除</button>
+        </summary>
+        <div class="panel-body">
+          ${renderTextEditUI({
+            label: child.label || '',
+            content: child.content || '',
+            onLabelChange: `updateChildPanel('${escHtml(child.id)}', {label: this.value})`,
+            onContentChange: `updateChildPanel('${escHtml(child.id)}', {content: this.value})`,
+          })}
+        </div>`;
+      containerEl.appendChild(childEl);
+      // 共通プロパティコントロールを注入
+      _injectCommonProps(childEl, child.id);
+    });
+    _initToggles(containerEl);
+    // layoutSettingsに値があればUIに反映
+    if (Object.keys(layoutSettings).length > 0) {
+      _applyLayoutToUI(layoutSettings);
+    }
+  } catch (e) {}
+}
+
+async function addChildPanel(parentId) {
+  await api('POST', `/api/items/${encodeURIComponent(parentId)}/children`, { type: 'child_text', label: 'テキスト', content: '' });
+  showToast('子パネル追加', 'success');
+  // リロード
+  const container = document.querySelector(`[data-children-for="${parentId}"]`);
+  if (container) loadChildPanels(parentId, container);
+}
+
+async function updateChildPanel(childId, changes) {
+  const item = await (await fetch(`/api/items/${encodeURIComponent(childId)}`)).json();
+  if (!item || item.error) return;
+  await api('PUT', `/api/items/${encodeURIComponent(childId)}`, changes);
+}
+
+async function deleteChildPanel(childId, parentId) {
+  if (!await showConfirm('この子パネルを削除しますか？', { title: '削除', okLabel: '削除', danger: true })) return;
+  await api('DELETE', `/api/items/${encodeURIComponent(childId)}`);
+  showToast('子パネル削除', 'success');
+  const container = document.querySelector(`[data-children-for="${parentId}"]`);
+  if (container) loadChildPanels(parentId, container);
 }
 
 // --- キャラクター設定 ---
@@ -1022,15 +1080,15 @@ function _updateLayout(key, val) {
   const prop = key.substring(dotIdx + 1);
   if (!layoutSettings[section]) layoutSettings[section] = {};
   layoutSettings[section][prop] = val;
-  // capture/customtext は items API を使用
-  if (section.startsWith('capture:') || section.startsWith('customtext:')) {
+  // capture/customtext/child は items API を使用
+  if (section.startsWith('capture:') || section.startsWith('customtext:') || section.startsWith('child:')) {
     if (!_pendingLayoutChanges[section]) _pendingLayoutChanges[section] = {};
     _pendingLayoutChanges[section][prop] = val;
     clearTimeout(_layoutTimer);
     _layoutTimer = setTimeout(() => {
       for (const [sec, props] of Object.entries(_pendingLayoutChanges)) {
-        if (sec.startsWith('capture:') || sec.startsWith('customtext:')) {
-          api('PUT', `/api/items/${sec}`, props);
+        if (sec.startsWith('capture:') || sec.startsWith('customtext:') || sec.startsWith('child:')) {
+          api('PUT', `/api/items/${encodeURIComponent(sec)}`, props);
         }
       }
       _pendingLayoutChanges = {};
@@ -1167,11 +1225,17 @@ function initCommonProps() {
 async function loadLayout() {
   try {
     const data = await (await fetch('/api/overlay/settings')).json();
-    // /api/itemsから動的アイテム(capture/customtext)のデータもマージ
+    // /api/itemsから動的アイテム(capture/customtext/child)のデータもマージ
     try {
       const items = await (await fetch('/api/items')).json();
       for (const item of items) {
         if (item.id && !data[item.id]) data[item.id] = item;
+        // 子パネルもフラットに展開
+        if (item.children) {
+          for (const child of item.children) {
+            if (child.id) data[child.id] = child;
+          }
+        }
       }
     } catch (e) {}
     layoutSettings = data;
@@ -1369,6 +1433,11 @@ if (TAB_NAMES.includes(initTab)) switchTab(initTab);
 
 // 固定アイテムの共通コントロール注入
 initCommonProps();
+// 固定パネルに子パネル管理UIを注入
+['avatar', 'subtitle', 'todo', 'topic', 'dev_activity'].forEach(panelId => {
+  const body = document.querySelector(`[data-section="${panelId}"] .panel-body`);
+  if (body) injectChildPanelSection(body, panelId);
+});
 // キャプチャ・カスタムテキスト・背景をロード（パネル生成+共通コントロール注入）
 captureRefreshSources();
 loadCustomTexts();
