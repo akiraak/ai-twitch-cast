@@ -423,6 +423,10 @@ function connectWS() {
         _pendingSubtitle = data;
         if (!_isStreaming) { showSubtitle(data); }
         // 配信時は lipsync と同時に遅延表示（下の lipsync case で処理）
+        // C#パネルにコメント転送
+        if (window.chrome?.webview) {
+          window.chrome.webview.postMessage({ _comment: data });
+        }
         break;
       case 'speaking_end':
         fadeSubtitle();

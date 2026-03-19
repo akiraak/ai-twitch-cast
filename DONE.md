@@ -1,5 +1,13 @@
 # DONE
 
+## ちょビの発話をチャットログとして表示（C#パネル + WebUI）
+
+- [x] WebUIにチャットログタブ追加（DB履歴読み込み + WSリアルタイム追加）
+- [x] `GET /api/chat/history` API追加（ページング対応、新しい順）
+- [x] C#パネルにcommentイベント転送（broadcast.html → MainForm → control-panel）
+- [x] コンパクト1行表示（日時 / 発言者 / コメント ← きっかけ）
+- [x] 上下ページャー、URLにページ番号反映（`#chat:2`）
+
 ## Twitch配信遅延解消（NVENCハードウェアエンコーダ自動検出修正）
 
 - [x] 遅延原因特定: FFmpegがlibx264（CPU）にフォールバックし、1080p30fpsでspeed 0.64x（19fps）しか出ず遅延蓄積

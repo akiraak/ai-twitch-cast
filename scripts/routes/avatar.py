@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from src import db
 from scripts import state
 
 router = APIRouter()
@@ -93,6 +94,21 @@ async def chat_send(body: ChatMessage):
     """Twitchチャットにメッセージを送信する"""
     await state.reader._chat.send_message(body.message)
     return {"ok": True}
+
+
+@router.get("/api/chat/history")
+async def chat_history(limit: int = 50, offset: int = 0):
+    """コメント履歴を返す（新しい順）"""
+    conn = db.get_connection()
+    total = conn.execute("SELECT COUNT(*) as cnt FROM comments").fetchone()["cnt"]
+    rows = conn.execute(
+        """SELECT u.name as author, c.message, c.response, c.emotion,
+                  c.created_at
+           FROM comments c JOIN users u ON c.user_id = u.id
+           ORDER BY c.id DESC LIMIT ? OFFSET ?""",
+        (limit, offset),
+    ).fetchall()
+    return {"comments": [dict(r) for r in rows], "total": total, "offset": offset, "limit": limit}
 
 
 @router.get("/api/tts/audio")

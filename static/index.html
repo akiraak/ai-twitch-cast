@@ -38,6 +38,7 @@
   <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
   <div class="tab" onclick="switchTab('topic', this)">トピック</div>
+  <div class="tab" onclick="switchTab('chat', this)">チャット</div>
   <div class="tab" onclick="switchTab('devstream', this)">開発実況</div>
   <div class="tab" onclick="switchTab('todo', this)">TODO</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
@@ -355,6 +356,16 @@ topics      1──N  topic_scripts (topic_id)</div>
     </div>
   </div>
 
+
+  <!-- ===== チャット ===== -->
+  <div class="tab-content" id="tab-chat">
+    <div class="card">
+      <h2>チャットログ <span id="chat-count" style="font-size:0.75rem; font-weight:normal; color:#9a88b5;"></span></h2>
+      <div id="chat-pager-top" class="chat-pager"></div>
+      <div id="chat-messages"></div>
+      <div id="chat-pager" class="chat-pager"></div>
+    </div>
+  </div>
 
   <!-- ===== 開発実況 ===== -->
   <div class="tab-content" id="tab-devstream">

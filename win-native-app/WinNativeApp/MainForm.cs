@@ -606,6 +606,19 @@ public class MainForm : Form
                         SendPanelMessage(new { type = "volume", syncDelay = delay });
                         Log.Debug("[Sync] Delay from broadcast.html: {Delay}ms", delay);
                     }
+                    // broadcast.htmlからのコメント通知 → パネルに転送
+                    if (msg.TryGetProperty("_comment", out var commentData))
+                    {
+                        SendPanelMessage(new
+                        {
+                            type = "comment",
+                            author = commentData.GetProperty("author").GetString(),
+                            message = commentData.GetProperty("message").GetString(),
+                            response = commentData.GetProperty("response").GetString(),
+                            english = commentData.TryGetProperty("english", out var eng) ? eng.GetString() : "",
+                            emotion = commentData.TryGetProperty("emotion", out var emo) ? emo.GetString() : "neutral",
+                        });
+                    }
                     // broadcast.htmlからの音量レベル → パネルに転送
                     if (msg.TryGetProperty("_audioLevel", out var audioLevel))
                     {

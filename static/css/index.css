@@ -198,6 +198,17 @@
     margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px;
   }
 
+  /* チャットログ */
+  .chat-header { display: flex; gap: 6px; padding: 4px 8px; font-size: 0.7rem; color: #9a88b5; font-weight: 600; border-bottom: 2px solid #e8e0f0; }
+  .chat-row { display: flex; gap: 6px; padding: 4px 8px; border-bottom: 1px solid #f0eaf8; font-size: 0.8rem; line-height: 1.4; }
+  .chat-row:hover { background: #faf5ff; }
+  .chat-c-time { color: #b0a0c8; font-size: 0.7rem; white-space: nowrap; flex-shrink: 0; width: 75px; }
+  .chat-c-name { color: #7b1fa2; font-weight: 600; white-space: nowrap; flex-shrink: 0; width: 80px; overflow: hidden; text-overflow: ellipsis; }
+  .chat-c-msg { color: #2a1f40; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-c-arrow { color: #d0c0e8; flex-shrink: 0; }
+  .chat-c-resp { color: #6a5590; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-pager { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+
   /* レイヤーUI */
   .layer-header {
     display: flex; align-items: center; justify-content: space-between;

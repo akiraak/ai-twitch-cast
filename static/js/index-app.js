@@ -1,5 +1,5 @@
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'devstream', 'db', 'debug', 'todo'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'chat', 'devstream', 'db', 'debug', 'todo'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -10,7 +10,13 @@ function switchTab(name, el) {
     el = document.querySelectorAll('.tab')[idx];
   }
   el.classList.add('active');
-  location.hash = name;
+  if (name === 'chat') {
+    const pg = Math.floor(_chatOffset / _chatLimit) + 1;
+    location.hash = pg > 1 ? `chat:${pg}` : 'chat';
+    loadChatHistory();
+  } else {
+    location.hash = name;
+  }
   if (name === 'db') loadDbTables();
   if (name === 'character') { loadLanguageModes(); loadCharacterLayers(); }
   if (name === 'sound') loadBgmTracks();
@@ -1164,6 +1170,68 @@ async function startTodo(el, text) {
   }
 }
 
+// --- チャットログ ---
+let _chatOffset = 0;
+const _chatLimit = 50;
+
+const _chatHeaderHtml = '<div class="chat-header"><span class="chat-c-time">日時</span><span class="chat-c-name">発言者</span><span class="chat-c-resp">コメント</span><span class="chat-c-arrow"></span><span class="chat-c-msg">きっかけ</span></div>';
+
+function _chatFormatTime(iso) {
+  if (!iso) {
+    const now = new Date();
+    return `${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  }
+  const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z');
+  return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function chatRowHtml(c) {
+  const time = _chatFormatTime(c.created_at);
+  const name = esc(c.author || 'システム');
+  const msg = esc(c.message || '');
+  const resp = esc(c.response || '');
+  return `<div class="chat-row"><span class="chat-c-time">${time}</span><span class="chat-c-name">${name}</span><span class="chat-c-resp" title="${escHtml(c.response || '')}">${resp}</span><span class="chat-c-arrow">←</span><span class="chat-c-msg" title="${escHtml(c.message || '')}">${msg}</span></div>`;
+}
+
+function prependChatMessage(data) {
+  const el = document.getElementById('chat-messages');
+  if (!el || _chatOffset > 0) return;
+  const header = el.querySelector('.chat-header');
+  if (header) {
+    header.insertAdjacentHTML('afterend', chatRowHtml(data));
+  } else {
+    el.insertAdjacentHTML('afterbegin', chatRowHtml(data));
+  }
+}
+
+async function loadChatHistory() {
+  try {
+    const res = await fetch(`/api/chat/history?limit=${_chatLimit}&offset=${_chatOffset}`);
+    const d = await res.json();
+    const el = document.getElementById('chat-messages');
+    const countEl = document.getElementById('chat-count');
+    countEl.textContent = d.total ? `(${d.total}件)` : '';
+    el.innerHTML = _chatHeaderHtml + d.comments.map(chatRowHtml).join('');
+    // ページャー（上下両方）
+    const page = Math.floor(_chatOffset / _chatLimit) + 1;
+    const totalPages = Math.ceil((d.total || 0) / _chatLimit);
+    const pagerHtml = totalPages > 1
+      ? `<button onclick="chatPage(-1)" ${_chatOffset === 0 ? 'disabled' : ''} style="font-size:0.75rem;">新しい</button>` +
+        `<span style="font-size:0.8rem; color:#6a5590;">${page} / ${totalPages}</span>` +
+        `<button onclick="chatPage(1)" ${page >= totalPages ? 'disabled' : ''} style="font-size:0.75rem;">古い</button>`
+      : '';
+    document.getElementById('chat-pager-top').innerHTML = pagerHtml;
+    document.getElementById('chat-pager').innerHTML = pagerHtml;
+  } catch (e) {}
+}
+
+function chatPage(dir) {
+  _chatOffset = Math.max(0, _chatOffset + dir * _chatLimit);
+  const pg = Math.floor(_chatOffset / _chatLimit) + 1;
+  location.hash = pg > 1 ? `chat:${pg}` : 'chat';
+  loadChatHistory();
+}
+
 // --- 会話生成ドキュメントモーダル ---
 function simpleMarkdownToHtml(md) {
   const lines = md.split('\n');
@@ -1626,8 +1694,13 @@ async function deleteFile(category, file) {
 }
 
 // --- 初期化 ---
-const initTab = location.hash.slice(1);
-if (TAB_NAMES.includes(initTab)) switchTab(initTab);
+const _initHash = location.hash.slice(1);
+const [_initTab, _initParam] = _initHash.split(':');
+if (_initTab === 'chat' && _initParam) {
+  const pg = Math.max(1, parseInt(_initParam) || 1);
+  _chatOffset = (pg - 1) * _chatLimit;
+}
+if (TAB_NAMES.includes(_initTab)) switchTab(_initTab);
 
 // 固定アイテムの共通コントロール注入
 initCommonProps();
@@ -1664,6 +1737,11 @@ setInterval(syncBgmVolumes, 30000);
       // サーバー再起動通知
       if (data.type === 'server_restart') {
         showUpdateDialog();
+        return;
+      }
+      // チャットメッセージをリアルタイム表示（先頭に追加）
+      if (data.type === 'comment') {
+        prependChatMessage(data);
         return;
       }
       if (data.type !== 'settings_update') return;
