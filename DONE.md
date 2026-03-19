@@ -1,5 +1,14 @@
 # DONE
 
+## Twitch配信遅延解消（NVENCハードウェアエンコーダ自動検出修正）
+
+- [x] 遅延原因特定: FFmpegがlibx264（CPU）にフォールバックし、1080p30fpsでspeed 0.64x（19fps）しか出ず遅延蓄積
+- [x] HWエンコーダprobeの改善: `nullsrc` → `color=black`、`-f null -` → `-f null NUL`（Windows互換性向上）
+- [x] `-encoders` リストで事前チェック追加（probeの高速化）
+- [x] FFmpegパス不在時のprobeスキップ（例外握りつぶし防止）
+- [x] probe失敗時のログ出力追加（原因特定しやすく）
+- [x] 結果: h264_nvenc（RTX 3090 Ti）が正常検出され、speed 0.64x → 1.01x（リアルタイム）に改善
+
 ## 会話生成ドキュメント + 5層プロンプトWebUI表示 + character_memoryテーブル
 
 - [x] `docs/character-prompt.md` 作成（5層プロンプト構成・言語モード・感情システム等のドキュメント）

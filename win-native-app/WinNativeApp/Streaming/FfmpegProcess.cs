@@ -687,36 +687,78 @@ public sealed class FfmpegProcess : IDisposable
     {
         if (encoder != "auto") return encoder;
 
+        Log.Information("[FFmpeg] Auto-detecting HW encoder (path={Path})...", ffmpegPath);
+
+        // FFmpegが見つからない場合はprobeスキップ
+        if (!File.Exists(ffmpegPath))
+        {
+            Log.Warning("[FFmpeg] FFmpeg not found at {Path}, skipping HW probe", ffmpegPath);
+            return "libx264";
+        }
+
+        // まず -encoders リストからHWエンコーダの有無を確認
+        string encoderList = "";
+        try
+        {
+            var listPsi = new ProcessStartInfo
+            {
+                FileName = ffmpegPath,
+                Arguments = "-hide_banner -encoders",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var listProc = Process.Start(listPsi);
+            encoderList = listProc!.StandardOutput.ReadToEnd();
+            listProc.WaitForExit(5000);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning("[FFmpeg] Failed to list encoders: {Msg}", ex.Message);
+        }
+
         // HWエンコーダを優先順に試行
         string[] candidates = ["h264_nvenc", "h264_amf", "h264_qsv"];
         foreach (var enc in candidates)
         {
+            // -encoders リストに含まれていなければスキップ
+            if (!string.IsNullOrEmpty(encoderList) && !encoderList.Contains(enc))
+            {
+                Log.Debug("[FFmpeg] {Enc} not in encoder list, skipping", enc);
+                continue;
+            }
+
             try
             {
+                // color=black でシンプルなテストフレームを生成（nullsrcより互換性が高い）
                 var psi = new ProcessStartInfo
                 {
                     FileName = ffmpegPath,
-                    Arguments = $"-f lavfi -i nullsrc=s=256x256:d=0.1 -c:v {enc} -f null -",
+                    Arguments = $"-y -f lavfi -i color=black:s=256x256:d=0.1 -frames:v 1 -c:v {enc} -f null NUL",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                 };
                 using var p = Process.Start(psi);
-                p!.WaitForExit(5000);
+                var stderr = p!.StandardError.ReadToEnd();
+                p.WaitForExit(10000);
                 if (p.ExitCode == 0)
                 {
                     Log.Information("[FFmpeg] HW encoder detected: {Enc}", enc);
                     return enc;
                 }
+                var errTail = stderr.Length > 300 ? stderr[^300..] : stderr;
+                Log.Information("[FFmpeg] Probe {Enc} failed (exit={Code}): {Err}", enc, p.ExitCode, errTail);
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore probe failures
+                Log.Warning("[FFmpeg] Probe {Enc} exception: {Msg}", enc, ex.Message);
             }
         }
 
-        Log.Information("[FFmpeg] No HW encoder found, using libx264");
+        Log.Warning("[FFmpeg] No HW encoder found, falling back to libx264 (will be slow at high resolutions)");
         return "libx264";
     }
 
