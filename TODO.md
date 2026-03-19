@@ -14,7 +14,7 @@
 - [ ] ちょびの発言をチャット欄に表示するかのスイッチをWebUIに入れたい
 
 ### その他
-- [ ] ちょびの返信を改善する → [plans/improve-ai-responses.md](plans/improve-ai-responses.md)
-- [ ] トピックについて話すモードを運用してみる
+- [ ] ちょびの返信を改善する（Phase 2以降） → [plans/improve-ai-responses.md](plans/improve-ai-responses.md)
+- [ ] トピックについて話すモードを運用してみる → [plans/topic-operation.md](plans/topic-operation.md)
 - [ ] ブラウザテスト（Playwright等）導入の検証
 - [ ] ちょびのバージョンを上げるルールを作る

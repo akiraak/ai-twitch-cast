@@ -1,5 +1,14 @@
 # DONE
 
+## ちょびの返信改善 Phase 1（プロンプト改善）
+
+- [x] A: キャラ設定全面書き直し（性格5項目+話し方5項目、AI身体体験捏造禁止）
+- [x] B: 感情分布矯正（neutral 60%以上、joy乱用禁止ガイド追加）
+- [x] C: 応答ルール厳格化（40文字以内、1文返し、感嘆符制限）
+- [x] F: GM特別対応（開発者、敬語不要コンテキスト）
+- [x] DB上のキャラクター設定も更新済み
+- [x] プラン: plans/improve-ai-responses.md
+
 ## Claude Code 作業実況（Stopフック）
 
 - [x] `.claude/hooks/notify-stop.py` / `notify-stop.sh` 作成（Stopフックで作業完了をちょびに自動報告）
