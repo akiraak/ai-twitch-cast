@@ -1295,25 +1295,7 @@ function _applyLayoutToUI(data) {
 }
 
 
-// --- サーバー更新検知 ---
-let _knownStartedAt = null;
-
-async function checkServerUpdate() {
-  try {
-    const r = await fetch('/api/status', { signal: AbortSignal.timeout(3000) });
-    if (!r.ok) return;
-    const data = await r.json();
-    const startedAt = data.server_started_at;
-    if (_knownStartedAt === null) {
-      _knownStartedAt = startedAt;
-      return;
-    }
-    if (startedAt !== _knownStartedAt) {
-      _knownStartedAt = startedAt;
-      showUpdateDialog();
-    }
-  } catch (e) {}
-}
+// --- サーバー更新検知（WebSocket push方式） ---
 
 function showUpdateDialog() {
   if (document.getElementById('update-dialog')) return;
@@ -1456,11 +1438,9 @@ loadBgmTracks();
 loadTopicStatus();
 loadTopicScripts();
 refreshStatus();
-setInterval(refreshStatus, 5000);
-checkServerUpdate();
-setInterval(checkServerUpdate, 3000);
-setInterval(captureRefreshSources, 10000);
-setInterval(syncBgmVolumes, 3000);
+setInterval(refreshStatus, 30000);
+setInterval(captureRefreshSources, 30000);
+setInterval(syncBgmVolumes, 30000);
 
 // --- WebSocket接続（プレビュー→WebUIリアルタイム同期） ---
 (function connectLayoutWS() {
@@ -1469,6 +1449,11 @@ setInterval(syncBgmVolumes, 3000);
   ws.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
+      // サーバー再起動通知
+      if (data.type === 'server_restart') {
+        showUpdateDialog();
+        return;
+      }
       if (data.type !== 'settings_update') return;
       // レイアウトスライダーをリアルタイム更新（自身の変更中は除く）
       if (_layoutTimer) return;

@@ -17,4 +17,4 @@
 ### その他
 - [ ] トピックについて話すモードを運用してみる → [plans/topic-operation.md](plans/topic-operation.md)
 - [ ] ブラウザテスト（Playwright等）導入の検証
-- [ ] 夜になると配信が止まる
+- [ ] 夜になると配信が止まる（原因: PCスリープ → Windows電源設定で「スリープしない」に変更が必要）

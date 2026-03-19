@@ -1,5 +1,14 @@
 # DONE
 
+## WebUIポーリング負荷削減（84%削減）
+
+- [x] `checkServerUpdate`ポーリング（3秒）をWebSocket push方式に置換（`server_restart`イベント）
+- [x] `refreshStatus`ポーリング間隔を5秒→30秒に延長
+- [x] `syncBgmVolumes`ポーリング間隔を3秒→30秒に延長
+- [x] `captureRefreshSources`ポーリング間隔を10秒→30秒に延長
+- [x] サーバー起動時に`server_restart` WebSocketイベントをbroadcast（`web.py`）
+- [x] 夜の配信停止原因を特定: PCスリープによるWSL2停止（コード修正では解決不可、Windows電源設定変更が必要）
+
 ## バージョニングルール作成
 
 - [x] `docs/versioning.md` 作成（バージョン基準: MAJOR/MINOR/PATCH/上げない、半自動提案フロー）

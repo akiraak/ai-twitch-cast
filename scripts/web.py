@@ -187,6 +187,18 @@ async def startup():
     # 復旧処理はバックグラウンドで実行（サーバーを即座に応答可能にする）
     asyncio.create_task(_restore_session())
 
+    # WebSocketクライアントにサーバー再起動を通知（ポーリング不要化）
+    asyncio.create_task(_notify_server_restart())
+
+
+async def _notify_server_restart():
+    """WebSocketクライアントにサーバー再起動を通知する（クライアント接続を少し待つ）"""
+    await asyncio.sleep(2)
+    await state.broadcast_overlay({
+        "type": "server_restart",
+        "server_started_at": SERVER_STARTED_AT,
+    })
+
 
 async def _restore_session():
     """前回のセッションをバックグラウンドで自動復旧する"""
