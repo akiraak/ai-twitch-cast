@@ -117,6 +117,25 @@ ai-twitch-cast/
 
 ```
 
+## 作業実況（Claude Code → ちょび）
+
+Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み。
+
+### 仕組み
+- **Stopフック**: Claude Codeの応答完了時に `.claude/hooks/notify-stop.sh` が自動発火
+- `last_assistant_message` を `POST /api/avatar/speak` に送信 → ちょびが要約して発話
+- 短い応答（80文字未満）はスキップ
+
+### 疎結合設計
+- フックは **バックグラウンド実行**（Claude Codeをブロックしない）
+- **stdlib only**（プロジェクトモジュールのimportなし）
+- サーバー未起動時は静かに失敗（エラー出力なし）
+- **無効化**: `settings.local.json` の `Stop` フックを削除するだけ
+
+### 関連ファイル
+- `.claude/hooks/notify-stop.sh` / `notify-stop.py` — Stopフック（作業完了報告）
+- `.claude/hooks/notify-prompt.sh` / `notify-prompt.py` — UserPromptSubmitフック（指示受信報告）
+
 ## WSL2環境について
 
 - **開発はWSL2上で行い、配信はWindows側C#ネイティブアプリが担当する**
