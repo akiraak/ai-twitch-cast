@@ -14,4 +14,7 @@
 - [ ] ちょびの発言をチャット欄に表示するかのスイッチをWebUIに入れたい
 
 ### その他
+- [ ] ちょびの返信を改善する → [plans/improve-ai-responses.md](plans/improve-ai-responses.md)
+- [ ] Claude Code 作業中をちょびに実況させる
+- [ ] トピックについて話すモードを運用してみる
 - [ ] ブラウザテスト（Playwright等）導入の検証
