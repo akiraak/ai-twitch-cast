@@ -52,6 +52,26 @@ async def tts_test(body: TtsTestRequest):
     return {"ok": True}
 
 
+class EmotionTestRequest(BaseModel):
+    emotion: str
+
+
+@router.post("/api/tts/test-emotion")
+async def tts_test_emotion(body: EmotionTestRequest):
+    """指定感情でテスト発話する（感情に合ったセリフをAIが生成）"""
+    from src.ai_responder import get_character
+    char = get_character()
+    emotions = char.get("emotions", {})
+    emotion_desc = emotions.get(body.emotion, body.emotion)
+    detail = (
+        f"Say a very short phrase (1 sentence, in Japanese) that naturally expresses "
+        f"the emotion '{body.emotion}' ({emotion_desc}). "
+        f"Be expressive and match the emotion."
+    )
+    asyncio.create_task(state.reader.speak_event("感情テスト", detail))
+    return {"ok": True}
+
+
 class ChatMessage(BaseModel):
     message: str
 

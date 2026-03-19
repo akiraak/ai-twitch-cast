@@ -25,9 +25,9 @@ DEFAULT_CHARACTER = {
         "neutral": "通常時",
     },
     "emotion_blendshapes": {
-        "joy": {"Joy": 1.0},
-        "surprise": {"Joy": 0.5, "A": 0.3},
-        "thinking": {"Sorrow": 0.3},
+        "joy": {"happy": 1.0},
+        "surprise": {"happy": 0.5},
+        "thinking": {"sad": 0.3},
         "neutral": {},
     },
 }

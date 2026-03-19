@@ -556,6 +556,10 @@ async function ttsTest() {
   await api('POST', '/api/tts/test', { primary_lang: lang1, secondary_lang: lang2 });
 }
 
+async function emotionTest(emotion) {
+  await api('POST', '/api/tts/test-emotion', { emotion });
+}
+
 const bgmTracksEl = document.getElementById('bgm-tracks');
 
 async function loadBgmTracks() {

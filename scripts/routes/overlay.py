@@ -204,6 +204,35 @@ async def debug_subtitle_hide():
     return {"ok": True}
 
 
+@router.post("/api/debug/expression/{name}")
+async def debug_expression(name: str, value: float = 1.0):
+    """デバッグ用：表情テスト（blendshapeイベント直送）"""
+    event = {"type": "blendshape", "shapes": {name: value}}
+    await state.broadcast_overlay(event)
+    return {"ok": True, "sent": event}
+
+
+@router.post("/api/debug/expression-reset")
+async def debug_expression_reset():
+    """デバッグ用：全表情リセット"""
+    shapes = {n: 0.0 for n in ["happy", "angry", "sad", "relaxed", "surprised"]}
+    event = {"type": "blendshape", "shapes": shapes}
+    await state.broadcast_overlay(event)
+    return {"ok": True, "sent": event}
+
+
+@router.post("/api/debug/jslog")
+async def debug_jslog(request: Request):
+    """ブラウザのconsole.logをファイルに保存"""
+    import aiofiles
+    body = await request.json()
+    lines = body.get("lines", [])
+    async with aiofiles.open("jslog.txt", "a") as f:
+        for line in lines:
+            await f.write(line + "\n")
+    return {"ok": True}
+
+
 @router.get("/api/broadcast/volumes")
 async def get_broadcast_volumes():
     """broadcast.html用の音量設定を返す（DB優先 → scenes.json → デフォルト）"""

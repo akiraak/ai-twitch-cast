@@ -168,10 +168,21 @@ class SpeechPipeline:
             elapsed = (time.monotonic() - t0) * 1000
             logger.warning("[tts] C#アプリへのTTS送信失敗 (%.0fms): %s", elapsed, e)
 
-    def apply_emotion(self, emotion):
-        """感情に対応するBlendShapeを適用する"""
+    # 感情→ジェスチャーのデフォルトマッピング
+    EMOTION_GESTURES = {
+        "joy": "nod",
+        "surprise": "surprise",
+        "thinking": "head_tilt",
+        "excited": "happy_bounce",
+        "sad": "sad_droop",
+        "grateful": "bow",
+    }
+
+    def apply_emotion(self, emotion, gesture=None):
+        """感情に対応するBlendShape + ジェスチャーを適用する"""
         char = get_character()
         blendshapes = char.get("emotion_blendshapes", {}).get(emotion, {})
+        logger.info("[emotion] %s → blendshapes=%s", emotion, blendshapes)
         if not blendshapes:
             # ニュートラル: 表情リセット
             all_emotions = set()
@@ -179,9 +190,16 @@ class SpeechPipeline:
                 all_emotions.update(bs.keys())
             blendshapes = {k: 0.0 for k in all_emotions} if all_emotions else {}
 
+        # gestureが未指定の場合、感情からデフォルトマッピング
+        if gesture is None:
+            gesture = self.EMOTION_GESTURES.get(emotion)
+
         # broadcast.html VRMアバターにWebSocket送信
         if self._on_overlay and blendshapes:
-            asyncio.create_task(self._on_overlay({
+            event = {
                 "type": "blendshape",
                 "shapes": blendshapes,
-            }))
+            }
+            if gesture:
+                event["gesture"] = gesture
+            asyncio.create_task(self._on_overlay(event))

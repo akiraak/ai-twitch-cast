@@ -8,6 +8,29 @@
 <script src="/static/js/lib/text-variables.js"></script>
 </head>
 <body>
+<script>
+// console.logキャプチャ → サーバー送信
+(function() {
+  const _buf = [];
+  const _orig = console.log;
+  const _origWarn = console.warn;
+  const _origErr = console.error;
+  function capture(level, args) {
+    const line = '[' + level + '] ' + Array.from(args).map(a => {
+      try { return typeof a === 'object' ? JSON.stringify(a) : String(a); } catch(e) { return String(a); }
+    }).join(' ');
+    _buf.push(new Date().toISOString().substr(11,12) + ' ' + line);
+  }
+  console.log = function() { capture('LOG', arguments); _orig.apply(console, arguments); };
+  console.warn = function() { capture('WARN', arguments); _origWarn.apply(console, arguments); };
+  console.error = function() { capture('ERR', arguments); _origErr.apply(console, arguments); };
+  setInterval(function() {
+    if (_buf.length === 0) return;
+    const lines = _buf.splice(0, 100);
+    fetch('/api/debug/jslog', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({lines}) }).catch(function(){});
+  }, 2000);
+})();
+</script>
 
 <!-- 右クリックメニュー -->
 <div class="edit-context-menu" id="edit-context-menu">
@@ -104,7 +127,7 @@
 }
 </script>
 
-<script type="module" src="/static/js/avatar-renderer.js"></script>
-<script src="/static/js/broadcast-main.js"></script>
+<script type="module" src="/static/js/avatar-renderer.js?v=expr1"></script>
+<script src="/static/js/broadcast-main.js?v=expr1"></script>
 </body>
 </html>

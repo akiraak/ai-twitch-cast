@@ -482,6 +482,9 @@ function connectWS() {
         if (window.avatarVRM && data.shapes) {
           window.avatarVRM.setBlendShapes(data.shapes);
         }
+        if (window.avatarVRM && data.gesture) {
+          window.avatarVRM.playGesture(data.gesture);
+        }
         break;
       case 'lipsync':
         if (window.avatarVRM && data.frames) {

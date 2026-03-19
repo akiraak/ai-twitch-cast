@@ -116,7 +116,8 @@ class TestApplyEmotion:
         callback.assert_called_once()
         event = callback.call_args[0][0]
         assert event["type"] == "blendshape"
-        assert event["shapes"]["Joy"] == 1.0
+        assert event["shapes"]["happy"] == 1.0
+        assert event["gesture"] == "nod"
 
     @pytest.mark.asyncio
     async def test_neutral_resets_blendshapes(self):

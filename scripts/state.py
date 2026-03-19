@@ -34,6 +34,10 @@ async def _broadcast(clients: set, event: dict):
 
 async def broadcast_overlay(event: dict):
     """オーバーレイ（画面表示）にイベントを送信する"""
+    import logging
+    _log = logging.getLogger(__name__)
+    if event.get("type") == "blendshape":
+        _log.info("[ws] blendshape broadcast to %d clients: %s", len(broadcast_clients), event)
     await _broadcast(broadcast_clients, event)
 
 

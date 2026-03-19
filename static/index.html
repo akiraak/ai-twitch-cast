@@ -209,6 +209,13 @@
         </select>
         <button onclick="ttsTest()" style="font-size:0.75rem;">テスト再生</button>
       </div>
+      <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:0.8rem; color:#666;">感情テスト</span>
+        <button onclick="emotionTest('joy')" style="font-size:0.75rem;" title="嬉しい・楽しいとき">😊 joy</button>
+        <button onclick="emotionTest('surprise')" style="font-size:0.75rem;" title="驚いたとき">😲 surprise</button>
+        <button onclick="emotionTest('thinking')" style="font-size:0.75rem;" title="考えているとき">🤔 thinking</button>
+        <button onclick="emotionTest('neutral')" style="font-size:0.75rem;" title="通常時">😐 neutral</button>
+      </div>
       <div class="vol-row" style="margin-top:10px;">
         <span class="vol-label">配信遅延</span>
         <input type="range" id="sync-delay" min="0" max="3000" step="50" value="500" class="vol-slider"
