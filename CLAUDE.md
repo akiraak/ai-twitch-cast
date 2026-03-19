@@ -123,19 +123,21 @@ ai-twitch-cast/
 Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み。
 
 ### 仕組み
-- **Stopフック**: Claude Codeの応答完了時に `.claude/hooks/notify-stop.sh` が自動発火
+- **Stopフック**: Claude Codeの応答完了時にグローバルフックが自動発火
 - `last_assistant_message` を `POST /api/avatar/speak` に送信 → ちょびが要約して発話
-- 短い応答（80文字未満）はスキップ
+- 短い応答（10文字未満）はスキップ
+- **他リポジトリ対応**: `CLAUDE_PROJECT_DIR` からプロジェクト名を抽出し、ai-twitch-cast以外なら「作業報告（リポジトリ名）」として報告
 
 ### 疎結合設計
-- フックは **バックグラウンド実行**（Claude Codeをブロックしない）
+- フックは **`"async": true`** で非ブロッキング実行
 - **stdlib only**（プロジェクトモジュールのimportなし）
 - サーバー未起動時は静かに失敗（エラー出力なし）
-- **無効化**: `settings.local.json` の `Stop` フックを削除するだけ
+- **無効化**: `~/.claude/settings.json` の該当フックを削除するだけ
 
 ### 関連ファイル
-- `.claude/hooks/notify-stop.sh` / `notify-stop.py` — Stopフック（作業完了報告）
-- `.claude/hooks/notify-prompt.sh` / `notify-prompt.py` — UserPromptSubmitフック（指示受信報告）
+- `~/.claude/hooks/notify-stop.py` — Stopフック（作業完了報告、グローバル）
+- `~/.claude/hooks/notify-prompt.py` — UserPromptSubmitフック（指示受信報告、グローバル）
+- `~/.claude/settings.json` — グローバルフック設定
 
 ## WSL2環境について
 

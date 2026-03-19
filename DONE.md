@@ -1,5 +1,13 @@
 # DONE
 
+## Claude Code実況フックのグローバル化（他リポジトリ対応）
+
+- [x] `~/.claude/hooks/notify-stop.py` / `notify-prompt.py` をグローバルフックとして作成
+- [x] `~/.claude/settings.json` にStop/UserPromptSubmitフックを `"async": true` で登録
+- [x] プロジェクトローカルのフックスクリプト4ファイル（`.sh`/`.py` × 2）を削除
+- [x] `.claude/settings.local.json` からStop/UserPromptSubmitフック定義を削除（PostToolUseは維持）
+- [x] 他リポジトリではプロジェクト名付きで報告（例: 「作業報告（other-project）」）
+
 ## 字幕パネルの水平中央配置修正
 
 - [x] `applySettings`の字幕中央揃えコードを常時適用に変更（`bottom != null`条件を除去）
