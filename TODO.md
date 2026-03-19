@@ -17,4 +17,3 @@
 - [ ] トピックについて話すモードを運用してみる → [plans/topic-operation.md](plans/topic-operation.md)
 - [ ] ブラウザテスト（Playwright等）導入の検証
 - [ ] ちょびのバージョンを上げるルールを作る
-- [ ] Claude Code へ話かけて返信することへちょびが反応をする → [plans/claude-code-reaction.md](plans/claude-code-reaction.md)
