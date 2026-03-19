@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>VRM Animation Test</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; color: #eee; font-family: sans-serif; overflow: hidden; }
+
+#canvas-container {
+  position: relative;
+  width: 100vw; height: 100vh;
+}
+#bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+#controls {
+  position: fixed; top: 10px; right: 10px; z-index: 100;
+  background: rgba(0,0,0,0.8); border-radius: 8px; padding: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 95vh; overflow-y: auto; width: 280px;
+}
+#controls h3 { margin: 8px 0 4px; color: #8be; font-size: 13px; border-bottom: 1px solid #444; padding-bottom: 4px; }
+#controls h3:first-child { margin-top: 0; }
+button {
+  padding: 8px 12px; border: 1px solid #555; border-radius: 4px;
+  background: #2a2a4a; color: #eee; cursor: pointer; font-size: 13px;
+  transition: background 0.15s;
+}
+button:hover { background: #3a3a6a; }
+button:active { background: #4a4aaa; }
+button.active { background: #4a7a4a; border-color: #6a6; }
+button.sm { padding: 4px 8px; font-size: 11px; }
+.slider-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.slider-row label { min-width: 80px; }
+.slider-row input[type=range] { flex: 1; }
+.slider-row .val { min-width: 32px; text-align: right; }
+#log {
+  position: fixed; bottom: 10px; left: 10px; z-index: 100;
+  background: rgba(0,0,0,0.8); border-radius: 8px; padding: 12px;
+  font-size: 11px; font-family: monospace; max-width: 500px; max-height: 200px;
+  overflow-y: auto; white-space: pre-wrap;
+}
+</style>
+</head>
+<body>
+
+<div id="canvas-container">
+  <img id="bg" src="resources/background.png" alt="">
+  <canvas id="avatar-canvas"></canvas>
+</div>
+
+<div id="controls">
+  <h3>VRM Animation Test</h3>
+
+  <h3>Custom Gestures</h3>
+  <div id="gesture-buttons" style="display:flex; flex-wrap:wrap; gap:3px;"></div>
+  <div class="slider-row" style="margin-top:4px;">
+    <label>Speed</label>
+    <input type="range" id="gesture-speed" min="0.2" max="3" step="0.1" value="1">
+    <span class="val" id="gesture-speed-val">1.0x</span>
+  </div>
+
+  <h3>BVH Animations</h3>
+  <div class="slider-row">
+    <label>Filter</label>
+    <input type="text" id="bvh-filter" placeholder="e.g. joy, dance, neutral" style="flex:1; padding:4px; background:#1a1a2e; color:#eee; border:1px solid #555; border-radius:4px; font-size:12px;">
+  </div>
+  <div id="bvh-buttons" style="display:flex; flex-wrap:wrap; gap:3px; max-height:300px; overflow-y:auto;"></div>
+
+  <h3>Animation Mixer</h3>
+  <div class="slider-row">
+    <label>Crossfade</label>
+    <input type="range" id="crossfade-duration" min="0" max="2" step="0.1" value="0.5">
+    <span class="val" id="crossfade-duration-val">0.5s</span>
+  </div>
+  <button id="btn-stop-anim">Stop Animation (back to idle)</button>
+
+  <h3>Idle Animation</h3>
+  <div class="slider-row">
+    <label>Scale</label>
+    <input type="range" id="idle-scale" min="0" max="3" step="0.1" value="1">
+    <span class="val" id="idle-scale-val">1.0</span>
+  </div>
+
+  <h3>BlendShape (Expression)</h3>
+  <div id="expression-buttons"></div>
+
+  <h3>Expression Transition</h3>
+  <div class="slider-row">
+    <label>Duration</label>
+    <input type="range" id="transition-duration" min="0" max="2000" step="50" value="300">
+    <span class="val" id="transition-duration-val">300ms</span>
+  </div>
+
+  <h3>VRMA / FBX (Drop files)</h3>
+  <div id="vrma-status">Loading...</div>
+  <input type="file" id="fbx-input" accept=".fbx,.vrma,.bvh" style="font-size:12px; margin-top:4px;">
+
+  <h3>Bone Debug</h3>
+  <button id="btn-list-bones">List Bones</button>
+  <button id="btn-list-expressions">List Expressions</button>
+</div>
+
+<div id="log"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.3.3/lib/three-vrm.module.min.js",
+    "@pixiv/three-vrm-animation": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@3.3.3/lib/three-vrm-animation.module.min.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { BVHLoader } from 'three/addons/loaders/BVHLoader.js';
+import * as VRM from '@pixiv/three-vrm';
+import * as VRMAnim from '@pixiv/three-vrm-animation';
+
+// === Log ===
+const logEl = document.getElementById('log');
+const logBuffer = [];
+function log(msg) {
+  const ts = new Date().toLocaleTimeString();
+  const line = `[${ts}] ${msg}`;
+  logEl.textContent = line + '\n' + logEl.textContent;
+  logEl.scrollTop = 0;
+  console.log(msg);
+  logBuffer.push(line);
+  flushLog();
+}
+// Catch uncaught errors
+window.onerror = (msg, src, line, col, err) => {
+  log(`ERROR: ${msg} (${src}:${line}:${col})`);
+};
+window.onunhandledrejection = (e) => {
+  log(`UNHANDLED: ${e.reason}`);
+};
+// Debounced flush to server
+let flushTimer = null;
+function flushLog() {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    const lines = logBuffer.splice(0);
+    if (lines.length === 0) return;
+    fetch('/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: lines.join('\n') + '\n',
+    }).catch(() => {});
+  }, 500);
+}
+
+// === Three.js setup ===
+const canvas = document.getElementById('avatar-canvas');
+const container = document.getElementById('canvas-container');
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setPixelRatio(Math.max(window.devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(20, 1, 0.1, 100);
+camera.position.set(0, 1.2, 3.0);
+camera.lookAt(0, 1.1, 0);
+
+function resize() {
+  const w = container.clientWidth, h = container.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(0.5, 1.5, 2.0);
+scene.add(dirLight);
+
+// === State ===
+let currentVRM = null;
+let mixer = null;           // THREE.AnimationMixer
+let currentAction = null;   // currently playing AnimationAction
+let idleScale = 1.0;
+let t0 = performance.now() / 1000;
+const clock = new THREE.Clock();
+
+// Expression transition state
+let transitionDuration = 300; // ms
+let targetShapes = {};
+let currentShapes = {};
+let transitionStart = 0;
+let prevShapes = {};
+
+// Blink
+let nextBlink = t0 + 2 + Math.random() * 3;
+let blinkEnd = 0;
+
+// Ear twitch
+let nextEarTwitch = t0 + 3 + Math.random() * 5;
+let earTwitchEnd = 0;
+let earTwitchStart = 0;
+let earTwitchDuration = 0.2;
+
+// === Quaternion helper ===
+function quatAxis(ax, ay, az, deg) {
+  const rad = (deg * Math.PI / 180) / 2;
+  const s = Math.sin(rad);
+  return new THREE.Quaternion(ax * s, ay * s, az * s, Math.cos(rad));
+}
+
+function setBone(vrm, name, q) {
+  const node = vrm.humanoid?.getNormalizedBoneNode(name);
+  if (node) node.quaternion.copy(q);
+}
+
+// === Load VRM ===
+async function loadVRM(url) {
+  const loader = new GLTFLoader();
+  loader.register(p => new VRM.VRMLoaderPlugin(p));
+
+  // Also register VRMAnimation plugin if available
+  if (VRMAnim.VRMAnimationLoaderPlugin) {
+    loader.register(p => new VRMAnim.VRMAnimationLoaderPlugin(p));
+  }
+
+  try {
+    const gltf = await loader.loadAsync(url);
+    const vrm = gltf.userData.vrm;
+    if (!vrm) { log('ERROR: No VRM data'); return; }
+
+    if (currentVRM) {
+      scene.remove(currentVRM.scene);
+      VRM.VRMUtils.deepDispose(currentVRM.scene);
+    }
+
+    VRM.VRMUtils.rotateVRM0(vrm);
+    scene.add(vrm.scene);
+    currentVRM = vrm;
+
+    // Create AnimationMixer
+    mixer = new THREE.AnimationMixer(vrm.scene);
+    mixer.addEventListener('finished', () => {
+      log('Animation finished');
+      currentAction = null;
+    });
+
+    t0 = performance.now() / 1000;
+    log(`VRM loaded: ${url}`);
+
+    // List available expressions
+    listExpressions();
+  } catch (e) {
+    log(`VRM load error: ${e.message}`);
+  }
+}
+
+// === Expression system ===
+function setExpression(shapes, smooth = true) {
+  if (smooth && transitionDuration > 0) {
+    prevShapes = { ...currentShapes };
+    targetShapes = { ...shapes };
+    transitionStart = performance.now();
+  } else {
+    targetShapes = { ...shapes };
+    currentShapes = { ...shapes };
+    prevShapes = { ...shapes };
+  }
+}
+
+function updateExpressionTransition() {
+  if (!transitionStart) return;
+  const elapsed = performance.now() - transitionStart;
+  const progress = Math.min(elapsed / transitionDuration, 1);
+  // Ease in-out
+  const t = progress < 0.5
+    ? 2 * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+  // Collect all shape names
+  const allNames = new Set([...Object.keys(prevShapes), ...Object.keys(targetShapes)]);
+  for (const name of allNames) {
+    const from = prevShapes[name] || 0;
+    const to = targetShapes[name] || 0;
+    currentShapes[name] = from + (to - from) * t;
+  }
+
+  if (progress >= 1) {
+    transitionStart = 0;
+  }
+}
+
+// === VRMA loading ===
+async function loadVRMA(url) {
+  if (!currentVRM) { log('Load VRM first'); return; }
+
+  const loader = new GLTFLoader();
+  if (VRMAnim.VRMAnimationLoaderPlugin) {
+    loader.register(p => new VRMAnim.VRMAnimationLoaderPlugin(p));
+  }
+
+  try {
+    const gltf = await loader.loadAsync(url);
+    const vrmAnimations = gltf.userData.vrmAnimations;
+    if (!vrmAnimations || vrmAnimations.length === 0) {
+      log('ERROR: No VRM animation data in file');
+      return;
+    }
+
+    const vrmAnimation = vrmAnimations[0];
+    const clip = VRMAnim.createVRMAnimationClip(vrmAnimation, currentVRM);
+    playClip(clip, clip.name || url);
+    log(`VRMA loaded: ${url} (${clip.duration.toFixed(1)}s)`);
+  } catch (e) {
+    log(`VRMA load error: ${e.message}`);
+  }
+}
+
+// === FBX loading (Mixamo) ===
+async function loadFBX(file) {
+  if (!currentVRM) { log('Load VRM first'); return; }
+
+  const loader = new FBXLoader();
+  const url = URL.createObjectURL(file);
+
+  try {
+    const fbx = await loader.loadAsync(url);
+    URL.revokeObjectURL(url);
+
+    if (!fbx.animations || fbx.animations.length === 0) {
+      log('ERROR: No animations in FBX');
+      return;
+    }
+
+    const clip = fbx.animations[0];
+    log(`FBX loaded: ${file.name} (${clip.tracks.length} tracks, ${clip.duration.toFixed(1)}s)`);
+
+    // Try direct retargeting via bone name mapping
+    const retargetedClip = retargetMixamoClip(clip, currentVRM);
+    if (retargetedClip) {
+      playClip(retargetedClip, file.name);
+    } else {
+      log('Retargeting failed - playing raw clip');
+      playClip(clip, file.name);
+    }
+  } catch (e) {
+    log(`FBX load error: ${e.message}`);
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Simple Mixamo → VRM bone retargeting
+function retargetMixamoClip(clip, vrm) {
+  const mixamoToVRM = {
+    'mixamorigHips': 'hips',
+    'mixamorigSpine': 'spine',
+    'mixamorigSpine1': 'chest',
+    'mixamorigSpine2': 'upperChest',
+    'mixamorigNeck': 'neck',
+    'mixamorigHead': 'head',
+    'mixamorigLeftShoulder': 'leftShoulder',
+    'mixamorigLeftArm': 'leftUpperArm',
+    'mixamorigLeftForeArm': 'leftLowerArm',
+    'mixamorigLeftHand': 'leftHand',
+    'mixamorigRightShoulder': 'rightShoulder',
+    'mixamorigRightArm': 'rightUpperArm',
+    'mixamorigRightForeArm': 'rightLowerArm',
+    'mixamorigRightHand': 'rightHand',
+    'mixamorigLeftUpLeg': 'leftUpperLeg',
+    'mixamorigLeftLeg': 'leftLowerLeg',
+    'mixamorigLeftFoot': 'leftFoot',
+    'mixamorigLeftToeBase': 'leftToes',
+    'mixamorigRightUpLeg': 'rightUpperLeg',
+    'mixamorigRightLeg': 'rightLowerLeg',
+    'mixamorigRightFoot': 'rightFoot',
+    'mixamorigRightToeBase': 'rightToes',
+  };
+
+  try {
+    const newTracks = [];
+    for (const track of clip.tracks) {
+      // track.name format: "BoneName.quaternion" or "BoneName.position"
+      const dotIdx = track.name.indexOf('.');
+      const boneName = track.name.substring(0, dotIdx);
+      const prop = track.name.substring(dotIdx);
+
+      const vrmBoneName = mixamoToVRM[boneName];
+      if (!vrmBoneName) continue;
+
+      const node = vrm.humanoid?.getNormalizedBoneNode(vrmBoneName);
+      if (!node) continue;
+
+      // Only use rotation tracks (skip position to avoid scale issues)
+      if (prop === '.quaternion') {
+        const newTrack = track.clone();
+        newTrack.name = node.name + prop;
+        newTracks.push(newTrack);
+      }
+    }
+
+    if (newTracks.length === 0) {
+      log(`Retarget: 0 tracks matched (tried ${clip.tracks.length})`);
+      return null;
+    }
+
+    log(`Retarget: ${newTracks.length}/${clip.tracks.length} tracks mapped`);
+    return new THREE.AnimationClip(clip.name || 'retargeted', clip.duration, newTracks);
+  } catch (e) {
+    log(`Retarget error: ${e.message}`);
+    return null;
+  }
+}
+
+// === BVH loading ===
+// BVH bone name → VRM humanoid bone name (case-insensitive lookup)
+const bvhToVRM = {
+  'hips': 'hips',
+  'spine': 'spine',
+  'chest': 'chest',
+  'upperchest': 'upperChest',
+  'neck': 'neck',
+  'head': 'head',
+  'leftshoulder': 'leftShoulder',
+  'leftupperarm': 'leftUpperArm',
+  'leftlowerarm': 'leftLowerArm',
+  'lefthand': 'leftHand',
+  'rightshoulder': 'rightShoulder',
+  'rightupperarm': 'rightUpperArm',
+  'rightlowerarm': 'rightLowerArm',
+  'righthand': 'rightHand',
+  'leftupperleg': 'leftUpperLeg',
+  'leftlowerleg': 'leftLowerLeg',
+  'leftfoot': 'leftFoot',
+  'lefttoes': 'leftToes',
+  'rightupperleg': 'rightUpperLeg',
+  'rightlowerleg': 'rightLowerLeg',
+  'rightfoot': 'rightFoot',
+  'righttoes': 'rightToes',
+};
+
+async function loadBVH(url, name) {
+  if (!currentVRM && !window._fbxModel) { log('Load a model first'); return; }
+
+  const loader = new BVHLoader();
+  try {
+    const bvh = await loader.loadAsync(url);
+    const clip = bvh.clip;
+    if (!clip) { log('ERROR: No animation in BVH'); return; }
+
+    let retargetedClip;
+    if (currentVRM) {
+      // VRM model: retarget via humanoid bone names
+      const newTracks = [];
+      for (const track of clip.tracks) {
+        const dotIdx = track.name.indexOf('.');
+        const boneName = track.name.substring(0, dotIdx);
+        const prop = track.name.substring(dotIdx);
+        const vrmBoneName = bvhToVRM[boneName.toLowerCase()];
+        if (!vrmBoneName) continue;
+        const node = currentVRM.humanoid?.getNormalizedBoneNode(vrmBoneName);
+        if (!node) continue;
+        if (prop === '.quaternion') {
+          const newTrack = track.clone();
+          newTrack.name = node.name + prop;
+          newTracks.push(newTrack);
+        }
+      }
+      if (newTracks.length === 0) { log(`BVH retarget: 0 tracks (${clip.tracks.length} total)`); return; }
+      log(`BVH→VRM: ${newTracks.length}/${clip.tracks.length} tracks (${clip.duration.toFixed(1)}s)`);
+      retargetedClip = new THREE.AnimationClip(name, clip.duration, newTracks);
+    } else if (window._fbxModel) {
+      // FBX model: find matching bones by name
+      const boneMap = {};
+      window._fbxModel.traverse(obj => { if (obj.isBone) boneMap[obj.name] = obj; });
+
+      const newTracks = [];
+      for (const track of clip.tracks) {
+        const dotIdx = track.name.indexOf('.');
+        const boneName = track.name.substring(0, dotIdx);
+        const prop = track.name.substring(dotIdx);
+
+        // BVH bone name → FBX bone name mapping (case-insensitive lookup)
+      const bvhToFBX = {
+        'hips': 'Hips',
+        'spine': 'Spine',
+        'chest': 'Chest',
+        'upperchest': 'Chest',
+        'neck': 'Neck',
+        'head': 'Head',
+        'leftshoulder': 'ShoulderL',
+        'leftupperarm': 'Upper_armL',
+        'leftlowerarm': 'Lower_armL',
+        'lefthand': 'HandL',
+        'rightshoulder': 'ShoulderR',
+        'rightupperarm': 'Upper_armR',
+        'rightlowerarm': 'Lower_armR',
+        'righthand': 'HandR',
+        'leftupperleg': 'Upper_legL',
+        'leftlowerleg': 'Lower_legL',
+        'leftfoot': 'FootL',
+        'lefttoes': 'ToeL',
+        'rightupperleg': 'Upper_legR',
+        'rightlowerleg': 'Lower_legR',
+        'rightfoot': 'FootR',
+        'righttoes': 'ToeR',
+        'lefteye': 'LeftEye',
+        'righteye': 'RightEye',
+      };
+      const fbxName = bvhToFBX[boneName.toLowerCase()];
+      const bone = (fbxName && boneMap[fbxName])
+          || boneMap[boneName]
+          || boneMap['mixamorig:' + boneName]
+          || boneMap['mixamorig_' + boneName];
+        if (!bone) continue;
+
+        if (prop === '.quaternion') {
+          const newTrack = track.clone();
+          newTrack.name = bone.name + prop;
+          newTracks.push(newTrack);
+        }
+      }
+      if (newTracks.length === 0) { log(`BVH retarget: 0 tracks (${clip.tracks.length} total)`); return; }
+      log(`BVH→FBX: ${newTracks.length}/${clip.tracks.length} tracks (${clip.duration.toFixed(1)}s)`);
+      retargetedClip = new THREE.AnimationClip(name, clip.duration, newTracks);
+    }
+
+    if (retargetedClip) playClip(retargetedClip, name);
+  } catch (e) {
+    log(`BVH load error: ${e.message}`);
+  }
+}
+
+// === Play animation clip ===
+// === Custom gesture system ===
+// Gestures are defined as keyframe sequences on VRM humanoid bones.
+// Each gesture: { name, duration, loop, tracks: { boneName: { times, quaternions } } }
+// quaternions: [t0: [x,y,z,deg], t1: [x,y,z,deg], ...] (axis-angle)
+
+function buildGestureClip(gesture, vrm) {
+  const tracks = [];
+  for (const [boneName, data] of Object.entries(gesture.tracks)) {
+    const node = vrm.humanoid?.getNormalizedBoneNode(boneName);
+    if (!node) continue;
+
+    const times = data.times;
+    const values = [];
+    for (const aa of data.values) {
+      const q = quatAxis(aa[0], aa[1], aa[2], aa[3]);
+      values.push(q.x, q.y, q.z, q.w);
+    }
+    const track = new THREE.QuaternionKeyframeTrack(
+      node.name + '.quaternion', times, values
+    );
+    track.setInterpolation(THREE.InterpolateSmooth);
+    tracks.push(track);
+  }
+  return new THREE.AnimationClip(gesture.name, gesture.duration, tracks);
+}
+
+// --- Gesture definitions ---
+// axis-angle format: [axisX, axisY, axisZ, degrees]
+const GESTURES = {
+  nod: {
+    name: 'nod', duration: 1.0, loop: false,
+    tracks: {
+      head: {
+        times:  [0,   0.15, 0.35, 0.55, 0.75, 1.0],
+        values: [[1,0,0,0], [1,0,0,-8], [1,0,0,3], [1,0,0,-6], [1,0,0,2], [1,0,0,0]],
+      },
+      chest: {
+        times:  [0,   0.2,  0.5,  0.8,  1.0],
+        values: [[1,0,0,0], [1,0,0,-2], [1,0,0,1], [1,0,0,-1], [1,0,0,0]],
+      },
+    },
+  },
+  nod_deep: {
+    name: 'nod_deep', duration: 1.2, loop: false,
+    tracks: {
+      head: {
+        times:  [0,   0.2,  0.5,  0.8,  1.2],
+        values: [[1,0,0,0], [1,0,0,-18], [1,0,0,5], [1,0,0,-12], [1,0,0,0]],
+      },
+      chest: {
+        times:  [0,   0.25, 0.6,  1.0,  1.2],
+        values: [[1,0,0,0], [1,0,0,-5], [1,0,0,2], [1,0,0,-2], [1,0,0,0]],
+      },
+      spine: {
+        times:  [0,   0.3,  0.7,  1.2],
+        values: [[1,0,0,0], [1,0,0,-3], [1,0,0,1], [1,0,0,0]],
+      },
+    },
+  },
+  head_tilt_right: {
+    name: 'head_tilt_right', duration: 1.5, loop: false,
+    tracks: {
+      head: {
+        times:  [0,   0.3,  1.0,  1.5],
+        values: [[0,0,1,0], [0,0,1,-15], [0,0,1,-12], [0,0,1,0]],
+      },
+      neck: {
+        times:  [0,   0.35, 1.0,  1.5],
+        values: [[0,0,1,0], [0,0,1,-5], [0,0,1,-3], [0,0,1,0]],
+      },
+    },
+  },
+  head_tilt_left: {
+    name: 'head_tilt_left', duration: 1.5, loop: false,
+    tracks: {
+      head: {
+        times:  [0,   0.3,  1.0,  1.5],
+        values: [[0,0,1,0], [0,0,1,15], [0,0,1,12], [0,0,1,0]],
+      },
+      neck: {
+        times:  [0,   0.35, 1.0,  1.5],
+        values: [[0,0,1,0], [0,0,1,5], [0,0,1,3], [0,0,1,0]],
+      },
+    },
+  },
+  look_away: {
+    name: 'look_away', duration: 2.0, loop: false,
+    tracks: {
+      head: {
+        times:  [0,   0.4,  1.2,  2.0],
+        values: [[0,1,0,0], [0,1,0,25], [0,1,0,20], [0,1,0,0]],
+      },
+      neck: {
+        times:  [0,   0.5,  1.3,  2.0],
+        values: [[0,1,0,0], [0,1,0,8], [0,1,0,5], [0,1,0,0]],
+      },
+    },
+  },
+  thinking: {
+    name: 'thinking', duration: 3.0, loop: false,
+    tracks: {
+      head: {
+        times:  [0,   0.5,  1.5,  2.5,  3.0],
+        values: [[1,0,0.3,0], [1,0,0.3,-8], [1,0,0.3,-5], [1,0,0.3,-3], [1,0,0.3,0]],
+      },
+      neck: {
+        times:  [0,   0.6,  2.0,  3.0],
+        values: [[0,0,1,0], [0,0,1,8], [0,0,1,5], [0,0,1,0]],
+      },
+      spine: {
+        times:  [0,   0.8,  2.2,  3.0],
+        values: [[0,0,1,0], [0,0,1,3], [0,0,1,2], [0,0,1,0]],
+      },
+    },
+  },
+  surprise: {
+    name: 'surprise', duration: 1.2, loop: false,
+    tracks: {
+      head: {
+        times:  [0,   0.1,  0.3,  0.8,  1.2],
+        values: [[1,0,0,0], [1,0,0,8], [1,0,0,5], [1,0,0,2], [1,0,0,0]],
+      },
+      chest: {
+        times:  [0,   0.1,  0.4,  1.0,  1.2],
+        values: [[1,0,0,0], [1,0,0,5], [1,0,0,3], [1,0,0,1], [1,0,0,0]],
+      },
+      spine: {
+        times:  [0,   0.15, 0.5,  1.2],
+        values: [[1,0,0,0], [1,0,0,3], [1,0,0,1], [1,0,0,0]],
+      },
+    },
+  },
+  happy_bounce: {
+    name: 'happy_bounce', duration: 1.6, loop: false,
+    tracks: {
+      spine: {
+        times:  [0,   0.2,  0.4,  0.6,  0.8,  1.0,  1.2,  1.6],
+        values: [[1,0,0,0], [1,0,0,-3], [1,0,0,2], [1,0,0,-3], [1,0,0,2], [1,0,0,-2], [1,0,0,1], [1,0,0,0]],
+      },
+      head: {
+        times:  [0,   0.2,  0.4,  0.6,  0.8,  1.0,  1.6],
+        values: [[0,0,1,0], [0,0,1,5], [0,0,1,-5], [0,0,1,5], [0,0,1,-5], [0,0,1,3], [0,0,1,0]],
+      },
+      chest: {
+        times:  [0,   0.15, 0.35, 0.55, 0.75, 0.95, 1.6],
+        values: [[1,0,0,0], [1,0,0,-2], [1,0,0,2], [1,0,0,-2], [1,0,0,2], [1,0,0,-1], [1,0,0,0]],
+      },
+    },
+  },
+  sad_droop: {
+    name: 'sad_droop', duration: 3.0, loop: false,
+    tracks: {
+      head: {
+        times:  [0,   0.8,  2.2,  3.0],
+        values: [[1,0,0,0], [1,0,0,-15], [1,0,0,-12], [1,0,0,0]],
+      },
+      chest: {
+        times:  [0,   1.0,  2.0,  3.0],
+        values: [[1,0,0,0], [1,0,0,-5], [1,0,0,-4], [1,0,0,0]],
+      },
+      spine: {
+        times:  [0,   1.0,  2.0,  3.0],
+        values: [[1,0,0,0], [1,0,0,-3], [1,0,0,-2], [1,0,0,0]],
+      },
+    },
+  },
+  wave_right: {
+    name: 'wave_right', duration: 2.0, loop: false,
+    tracks: {
+      rightUpperArm: {
+        times:  [0,   0.3,  1.5,  2.0],
+        values: [[0,0,1,-70], [0,0,1,-140], [0,0,1,-135], [0,0,1,-70]],
+      },
+      rightLowerArm: {
+        times:  [0,   0.3,  0.6,  0.9,  1.2,  1.5,  2.0],
+        values: [[0,1,0,20], [0,1,0,40], [0,1,0,10], [0,1,0,40], [0,1,0,10], [0,1,0,35], [0,1,0,20]],
+      },
+      head: {
+        times:  [0,   0.3,  0.8,  1.3,  2.0],
+        values: [[0,0,1,0], [0,0,1,-5], [0,0,1,5], [0,0,1,-3], [0,0,1,0]],
+      },
+    },
+  },
+  bow: {
+    name: 'bow', duration: 2.5, loop: false,
+    tracks: {
+      spine: {
+        times:  [0,   0.5,  1.5,  2.5],
+        values: [[1,0,0,0], [1,0,0,-20], [1,0,0,-18], [1,0,0,0]],
+      },
+      chest: {
+        times:  [0,   0.5,  1.5,  2.5],
+        values: [[1,0,0,0], [1,0,0,-10], [1,0,0,-8], [1,0,0,0]],
+      },
+      head: {
+        times:  [0,   0.4,  1.5,  2.5],
+        values: [[1,0,0,0], [1,0,0,-15], [1,0,0,-12], [1,0,0,0]],
+      },
+    },
+  },
+  shrug: {
+    name: 'shrug', duration: 1.8, loop: false,
+    tracks: {
+      leftShoulder: {
+        times:  [0,   0.3,  1.0,  1.8],
+        values: [[0,0,1,0], [0,0,1,15], [0,0,1,12], [0,0,1,0]],
+      },
+      rightShoulder: {
+        times:  [0,   0.3,  1.0,  1.8],
+        values: [[0,0,1,0], [0,0,1,-15], [0,0,1,-12], [0,0,1,0]],
+      },
+      head: {
+        times:  [0,   0.3,  1.0,  1.8],
+        values: [[0,0,1,0], [0,0,1,8], [0,0,1,6], [0,0,1,0]],
+      },
+    },
+    expressions: {
+      times:  [0,   0.3,  1.0,  1.8],
+      values: [{}, {happy:0.3, aa:0.2}, {happy:0.2, aa:0.1}, {}],
+    },
+  },
+  stretch: {
+    name: 'stretch', duration: 4.0, loop: false,
+    tracks: {
+      spine: {
+        times:  [0,   0.6,  1.5,  2.5,  3.5,  4.0],
+        values: [[1,0,0,0], [1,0,0,5], [1,0,0,8], [1,0,0,6], [1,0,0,2], [1,0,0,0]],
+      },
+      chest: {
+        times:  [0,   0.5,  1.5,  2.5,  3.5,  4.0],
+        values: [[1,0,0,0], [1,0,0,5], [1,0,0,8], [1,0,0,5], [1,0,0,2], [1,0,0,0]],
+      },
+      head: {
+        times:  [0,   0.8,  1.5,  2.5,  3.5,  4.0],
+        values: [[1,0,0,0], [1,0,0,10], [1,0,0,12], [1,0,0,8], [1,0,0,3], [1,0,0,0]],
+      },
+      rightUpperArm: {
+        times:  [0,   0.8,  1.5,  2.5,  3.5,  4.0],
+        values: [[0,0,1,-70], [0,0,1,-160], [0,0,1,-170], [0,0,1,-165], [0,0,1,-100], [0,0,1,-70]],
+      },
+      leftUpperArm: {
+        times:  [0,   0.8,  1.5,  2.5,  3.5,  4.0],
+        values: [[0,0,1,70], [0,0,1,160], [0,0,1,170], [0,0,1,165], [0,0,1,100], [0,0,1,70]],
+      },
+      rightLowerArm: {
+        times:  [0,   0.8,  1.5,  2.5,  3.5,  4.0],
+        values: [[0,1,0,20], [0,1,0,5], [0,1,0,0], [0,1,0,5], [0,1,0,15], [0,1,0,20]],
+      },
+      leftLowerArm: {
+        times:  [0,   0.8,  1.5,  2.5,  3.5,  4.0],
+        values: [[0,1,0,-20], [0,1,0,-5], [0,1,0,0], [0,1,0,-5], [0,1,0,-15], [0,1,0,-20]],
+      },
+    },
+    expressions: {
+      times:  [0,   0.8,  1.5,  2.5,  3.5,  4.0],
+      values: [{}, {happy:0.4, aa:0.5}, {happy:0.6, aa:0.7}, {happy:0.5, aa:0.4}, {happy:0.2, aa:0.1}, {}],
+    },
+  },
+};
+
+// Add expression tracks to gesture definitions
+GESTURES.nod.expressions = {
+  times:  [0,   0.15, 0.6,  1.0],
+  values: [{}, {happy:0.3}, {happy:0.2}, {}],
+};
+GESTURES.nod_deep.expressions = {
+  times:  [0,   0.2,  0.8,  1.2],
+  values: [{}, {happy:0.5}, {happy:0.3}, {}],
+};
+GESTURES.head_tilt_right.expressions = {
+  times:  [0,   0.3,  1.0,  1.5],
+  values: [{}, {sad:0.2}, {sad:0.15}, {}],
+};
+GESTURES.head_tilt_left.expressions = {
+  times:  [0,   0.3,  1.0,  1.5],
+  values: [{}, {sad:0.2}, {sad:0.15}, {}],
+};
+GESTURES.thinking.expressions = {
+  times:  [0,   0.5,  1.5,  2.5,  3.0],
+  values: [{}, {sad:0.3}, {sad:0.25, aa:0.1}, {sad:0.15}, {}],
+};
+GESTURES.surprise.expressions = {
+  times:  [0,   0.1,  0.3,  0.8,  1.2],
+  values: [{}, {happy:0.5, aa:0.5}, {happy:0.4, aa:0.3}, {happy:0.2, aa:0.1}, {}],
+};
+GESTURES.happy_bounce.expressions = {
+  times:  [0,   0.2,  0.6,  1.0,  1.6],
+  values: [{}, {happy:0.8, aa:0.3}, {happy:1.0, aa:0.4}, {happy:0.7, aa:0.2}, {}],
+};
+GESTURES.sad_droop.expressions = {
+  times:  [0,   0.8,  2.2,  3.0],
+  values: [{}, {sad:0.8}, {sad:0.6}, {}],
+};
+GESTURES.wave_right.expressions = {
+  times:  [0,   0.3,  1.0,  1.5,  2.0],
+  values: [{}, {happy:0.6, aa:0.3}, {happy:0.8, aa:0.4}, {happy:0.5, aa:0.2}, {}],
+};
+GESTURES.bow.expressions = {
+  times:  [0,   0.5,  1.5,  2.5],
+  values: [{}, {happy:0.3}, {happy:0.2}, {}],
+};
+GESTURES.look_away.expressions = {
+  times:  [0,   0.4,  1.2,  2.0],
+  values: [{}, {sad:0.2, happy:0.1}, {sad:0.15}, {}],
+};
+
+// Expression animation state for gestures
+let gestureExprState = null; // { times, values, startTime, speed }
+let externalShapes = {};
+
+function playGesture(gestureName) {
+  if (!currentVRM) { log('Load VRM first'); return; }
+  const gesture = GESTURES[gestureName];
+  if (!gesture) { log(`Unknown gesture: ${gestureName}`); return; }
+
+  const speed = parseFloat(document.getElementById('gesture-speed').value);
+  const clip = buildGestureClip(gesture, currentVRM);
+
+  if (!mixer) {
+    mixer = new THREE.AnimationMixer(currentVRM.scene);
+  }
+
+  const crossfade = parseFloat(document.getElementById('crossfade-duration').value);
+  const action = mixer.clipAction(clip);
+  action.clampWhenFinished = true;
+  action.setLoop(gesture.loop ? THREE.LoopRepeat : THREE.LoopOnce);
+  action.timeScale = speed;
+
+  if (currentAction) {
+    action.reset().play();
+    currentAction.crossFadeTo(action, crossfade, true);
+  } else {
+    action.reset().play();
+  }
+
+  currentAction = action;
+
+  // Start expression animation if defined
+  // Capture current expression state for smooth blending
+  const prevExpr = { ...externalShapes };
+  if (gesture.expressions) {
+    // Prepend a transition from current expression to first keyframe
+    const crossfadeSec = parseFloat(document.getElementById('crossfade-duration').value);
+    const blendTimes = [0, crossfadeSec, ...gesture.expressions.times.map(t => t + crossfadeSec)];
+    const blendValues = [prevExpr, gesture.expressions.values[0], ...gesture.expressions.values];
+    gestureExprState = {
+      times: blendTimes,
+      values: blendValues,
+      startTime: performance.now() / 1000,
+      speed: speed,
+    };
+  } else {
+    // Fade out current expression
+    const crossfadeSec = parseFloat(document.getElementById('crossfade-duration').value);
+    if (Object.keys(prevExpr).length > 0 && crossfadeSec > 0) {
+      gestureExprState = {
+        times: [0, crossfadeSec],
+        values: [prevExpr, {}],
+        startTime: performance.now() / 1000,
+        speed: speed,
+      };
+    } else {
+      gestureExprState = null;
+      externalShapes = {};
+    }
+  }
+
+  log(`Gesture: ${gestureName} (${(gesture.duration / speed).toFixed(1)}s, ${speed}x)`);
+}
+
+// Interpolate gesture expressions based on time
+function updateGestureExpressions() {
+  if (!gestureExprState) return;
+
+  const elapsed = (performance.now() / 1000 - gestureExprState.startTime) * gestureExprState.speed;
+  const { times, values } = gestureExprState;
+
+  // Past end: clear
+  if (elapsed >= times[times.length - 1]) {
+    externalShapes = {};
+    gestureExprState = null;
+    return;
+  }
+
+  // Find segment
+  let i = 0;
+  while (i < times.length - 1 && times[i + 1] < elapsed) i++;
+  if (i >= times.length - 1) return;
+
+  const t0 = times[i], t1 = times[i + 1];
+  const progress = (elapsed - t0) / (t1 - t0);
+  // Ease in-out
+  const t = progress < 0.5
+    ? 2 * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+  const from = values[i], to = values[i + 1];
+  const allKeys = new Set([...Object.keys(from), ...Object.keys(to)]);
+  const blended = {};
+  for (const key of allKeys) {
+    const val = (from[key] || 0) + ((to[key] || 0) - (from[key] || 0)) * t;
+    blended[key] = val;
+  }
+  externalShapes = blended;
+}
+
+function playClip(clip, name) {
+  if (!mixer) return;
+
+  const crossfade = parseFloat(document.getElementById('crossfade-duration').value);
+  const newAction = mixer.clipAction(clip);
+  newAction.clampWhenFinished = true;
+  newAction.setLoop(THREE.LoopRepeat);
+
+  if (currentAction) {
+    newAction.reset().play();
+    currentAction.crossFadeTo(newAction, crossfade, true);
+  } else {
+    newAction.reset().play();
+  }
+
+  currentAction = newAction;
+  log(`Playing: ${name} (crossfade ${crossfade}s)`);
+}
+
+function stopAnimation() {
+  if (!mixer || !currentAction) return;
+  const crossfade = parseFloat(document.getElementById('crossfade-duration').value);
+  currentAction.fadeOut(crossfade);
+  currentAction = null;
+  log('Animation stopped');
+}
+
+// === Animation loop ===
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+
+  if (mixer) mixer.update(delta);
+
+  if (!currentVRM) { renderer.render(scene, camera); return; }
+
+  const now = performance.now() / 1000;
+  const t = now - t0;
+  const s = idleScale;
+
+  // Idle animation (only when no clip animation is playing)
+  if (!currentAction || !currentAction.isRunning()) {
+    // Breathing
+    setBone(currentVRM, 'chest', quatAxis(1, 0, 0, Math.sin(t * 1.6) * 0.8 * s));
+    // Body sway
+    setBone(currentVRM, 'spine', quatAxis(0, 0, 1, (Math.sin(t * 0.9) + Math.sin(t * 0.37) * 0.4) * s));
+    // Head
+    const hx = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s;
+    const hy = Math.sin(t * 0.4) * 1.2 * s;
+    const hz = (Math.sin(t * 0.5) * 1.6 + Math.sin(t * 1.1) * 0.6) * s;
+    setBone(currentVRM, 'head', quatAxis(1,0,0,hx).multiply(quatAxis(0,1,0,hy)).multiply(quatAxis(0,0,1,hz)));
+    // Arms
+    setBone(currentVRM, 'rightUpperArm', quatAxis(0, 0, 1, -70 + Math.sin(t * 0.6 + 1.0) * 0.8 * s));
+    setBone(currentVRM, 'leftUpperArm', quatAxis(0, 0, 1, 70 + Math.sin(t * 0.6 + 2.5) * 0.8 * s));
+    setBone(currentVRM, 'rightLowerArm', quatAxis(0, 1, 0, 20 + Math.sin(t * 0.8 + 0.5) * 0.6 * s));
+    setBone(currentVRM, 'leftLowerArm', quatAxis(0, 1, 0, -20 + Math.sin(t * 0.8 + 2.0) * 0.6 * s));
+  }
+
+  // BlendShapes
+  const em = currentVRM.expressionManager;
+  if (em) {
+    // Blink
+    if (now >= nextBlink && blinkEnd === 0) blinkEnd = now + 0.08;
+    if (blinkEnd > 0) {
+      if (now < blinkEnd) { em.setValue('blink', 1.0); }
+      else { em.setValue('blink', 0.0); blinkEnd = 0; nextBlink = now + 2 + Math.random() * 4; }
+    }
+
+    // Ear twitch
+    if (now >= nextEarTwitch && now >= earTwitchEnd) {
+      earTwitchDuration = 0.15 + Math.random() * 0.15;
+      earTwitchEnd = now + earTwitchDuration;
+      earTwitchStart = now;
+      nextEarTwitch = now + 3 + Math.random() * 7;
+    }
+    try {
+      if (now < earTwitchEnd) {
+        em.setValue('ear_stand', Math.sin(((now - earTwitchStart) / earTwitchDuration) * Math.PI));
+      } else {
+        em.setValue('ear_stand', 0.0);
+      }
+    } catch (e) {}
+
+    // Gesture expression animation
+    updateGestureExpressions();
+
+    // Expression transition (smooth)
+    updateExpressionTransition();
+    for (const [name, value] of Object.entries(currentShapes)) {
+      try { em.setValue(name.toLowerCase(), value); } catch (e) {}
+    }
+
+    // External shapes (gesture expressions override)
+    for (const [name, value] of Object.entries(externalShapes)) {
+      try { em.setValue(name, value); } catch (e) {}
+    }
+
+    // Debug: log actual expression values after all sets
+    if (Object.keys(externalShapes).length > 0) {
+      if (!window._lastExtLog || (Date.now() - (window._lastExtLog||0) > 500)) {
+        window._lastExtLog = Date.now();
+        const vals = {};
+        for (const name of Object.keys(externalShapes)) {
+          vals[name] = { set: externalShapes[name], get: em.getValue(name) };
+        }
+        log(`ExprDebug: ${JSON.stringify(vals)}`);
+      }
+    }
+
+    em.update();
+  }
+
+  currentVRM.update(delta);
+  renderer.render(scene, camera);
+}
+
+// === UI: Expressions ===
+function listExpressions() {
+  if (!currentVRM?.expressionManager) return;
+  const em = currentVRM.expressionManager;
+  const container = document.getElementById('expression-buttons');
+  container.innerHTML = '';
+
+  // Preset emotion combos
+  const presets = {
+    'neutral': {},
+    'joy': { happy: 1.0 },
+    'angry': { angry: 0.7 },
+    'sad': { sad: 0.8 },
+    'relaxed': { relaxed: 0.8 },
+    'surprise': { happy: 0.5, aa: 0.3 },
+    'thinking': { sad: 0.3 },
+    'excited': { happy: 1.0, aa: 0.4 },
+    'smug': { happy: 0.3, blink: 0.3 },
+  };
+
+  // Also try VRM 0.x names
+  const presets0x = {
+    'neutral': {},
+    'joy': { happy: 1.0 },
+    'angry': { angry: 0.7 },
+    'sad': { sad: 0.8 },
+    'fun': { relaxed: 0.8 },
+    'surprise': { happy: 0.5, aa: 0.3 },
+    'thinking': { sad: 0.3 },
+    'excited': { happy: 1.0, aa: 0.4 },
+  };
+
+  // Detect available expressions
+  const available = [];
+  const expressionMap = em.expressionMap || {};
+  for (const [name, expr] of Object.entries(expressionMap)) {
+    available.push(name);
+  }
+  log(`Expressions: ${available.join(', ')}`);
+
+  // Use VRM 0.x names if Joy exists, otherwise VRM 1.0 names
+  const usePresets = available.includes('joy') ? presets :
+                     available.includes('happy') ? presets : presets0x;
+
+  for (const [name, shapes] of Object.entries(usePresets)) {
+    const btn = document.createElement('button');
+    btn.textContent = name;
+    btn.style.margin = '2px';
+    btn.onclick = () => {
+      setExpression(shapes);
+      log(`Expression: ${name} → ${JSON.stringify(shapes)}`);
+    };
+    container.appendChild(btn);
+  }
+
+  // Individual expression sliders
+  for (const name of available) {
+    if (['blink', 'blinkleft', 'blinkright', 'ear_stand', 'ear_droop'].includes(name.toLowerCase())) continue;
+    const row = document.createElement('div');
+    row.className = 'slider-row';
+    row.innerHTML = `<label>${name}</label><input type="range" min="0" max="1" step="0.05" value="0"><span class="val">0</span>`;
+    const slider = row.querySelector('input');
+    const valEl = row.querySelector('.val');
+    slider.oninput = () => {
+      const v = parseFloat(slider.value);
+      valEl.textContent = v.toFixed(2);
+      setExpression({ [name]: v }, false);
+    };
+    container.appendChild(row);
+  }
+}
+
+// === UI: Sliders ===
+document.getElementById('idle-scale').oninput = function() {
+  idleScale = parseFloat(this.value);
+  document.getElementById('idle-scale-val').textContent = idleScale.toFixed(1);
+};
+
+document.getElementById('transition-duration').oninput = function() {
+  transitionDuration = parseInt(this.value);
+  document.getElementById('transition-duration-val').textContent = transitionDuration + 'ms';
+};
+
+document.getElementById('crossfade-duration').oninput = function() {
+  document.getElementById('crossfade-duration-val').textContent = parseFloat(this.value).toFixed(1) + 's';
+};
+
+document.getElementById('gesture-speed').oninput = function() {
+  document.getElementById('gesture-speed-val').textContent = parseFloat(this.value).toFixed(1) + 'x';
+};
+
+// === UI: Gesture buttons ===
+{
+  const container = document.getElementById('gesture-buttons');
+  for (const name of Object.keys(GESTURES)) {
+    const btn = document.createElement('button');
+    btn.className = 'sm';
+    btn.textContent = name;
+    btn.onclick = () => playGesture(name);
+    container.appendChild(btn);
+  }
+}
+
+// === UI: VRMA file input ===
+// VRMA drag & drop on whole page
+document.body.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+document.body.addEventListener('drop', e => {
+  e.preventDefault(); e.stopPropagation();
+  for (const f of e.dataTransfer.files) {
+    if (f.name.endsWith('.vrma')) {
+      const url = URL.createObjectURL(f);
+      loadVRMA(url);
+    } else if (f.name.endsWith('.fbx')) {
+      loadFBX(f);
+    } else if (f.name.endsWith('.bvh')) {
+      const url = URL.createObjectURL(f);
+      loadBVH(url, f.name);
+    }
+  }
+});
+
+// FBX file input
+document.getElementById('fbx-input').onchange = function() {
+  if (this.files[0]) loadFBX(this.files[0]);
+};
+
+// === UI: Buttons ===
+document.getElementById('btn-stop-anim').onclick = stopAnimation;
+
+document.getElementById('btn-list-bones').onclick = () => {
+  if (!currentVRM?.humanoid) { log('No VRM loaded'); return; }
+  const bones = [];
+  const humanBones = currentVRM.humanoid.humanBones;
+  for (const [name, bone] of Object.entries(humanBones)) {
+    if (bone?.node) bones.push(name);
+  }
+  log(`Bones (${bones.length}): ${bones.join(', ')}`);
+};
+
+document.getElementById('btn-list-expressions').onclick = () => listExpressions();
+
+// === Load FBX model (with VRM-like structure) ===
+async function loadFBXModel(url) {
+  const loader = new FBXLoader();
+  try {
+    const fbx = await loader.loadAsync(url);
+
+    if (currentVRM) {
+      scene.remove(currentVRM.scene);
+      VRM.VRMUtils.deepDispose(currentVRM.scene);
+      currentVRM = null;
+    }
+    // Remove any previous FBX
+    if (window._fbxModel) {
+      scene.remove(window._fbxModel);
+      window._fbxModel = null;
+    }
+
+    // Scale down if needed (FBX often in cm, Three.js in m)
+    let box = new THREE.Box3().setFromObject(fbx);
+    let height = box.max.y - box.min.y;
+    if (height > 10) {
+      fbx.scale.setScalar(0.01);
+      log(`FBX scaled 0.01 (height was ${height.toFixed(0)})`);
+    }
+
+    scene.add(fbx);
+    window._fbxModel = fbx;
+
+    // Auto-adjust camera to fit model
+    box = new THREE.Box3().setFromObject(fbx);
+    height = box.max.y - box.min.y;
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const dist = height * 2.5;
+    camera.position.set(center.x, center.y, center.z + dist);
+    camera.lookAt(center.x, center.y, center.z);
+    camera.fov = 20;
+    camera.updateProjectionMatrix();
+    log(`Camera adjusted: center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)}) height=${height.toFixed(2)} dist=${dist.toFixed(2)}`);
+
+    // Create AnimationMixer for the FBX
+    mixer = new THREE.AnimationMixer(fbx);
+    mixer.addEventListener('finished', () => {
+      log('Animation finished');
+      currentAction = null;
+    });
+
+    // Play embedded animations if any
+    if (fbx.animations && fbx.animations.length > 0) {
+      const clip = fbx.animations[0];
+      const action = mixer.clipAction(clip);
+      action.play();
+      currentAction = action;
+      log(`FBX built-in animation: ${clip.name} (${clip.duration.toFixed(1)}s)`);
+    }
+
+    t0 = performance.now() / 1000;
+    log(`FBX model loaded: ${url}`);
+
+    // List bones
+    const bones = [];
+    const boneSet = new Set();
+    fbx.traverse(obj => { if (obj.isBone && !boneSet.has(obj.name)) { boneSet.add(obj.name); bones.push(obj.name); } });
+    log(`FBX bones (${bones.length} unique): ${bones.join(', ')}`);
+  } catch (e) {
+    log(`FBX model load error: ${e.message}`);
+  }
+}
+
+// === Init ===
+animate();
+
+// Load VRM by default
+loadVRM('resources/Shinano.vrm');
+
+log('Ready - VRM Animation Test Page');
+log('Drop .vrma or .fbx files to test animations');
+log('@pixiv/three-vrm-animation: ' + (VRMAnim.VRMAnimationLoaderPlugin ? 'OK' : 'NOT FOUND'));
+log('FBXLoader: OK');
+
+const vrmaStatusEl = document.getElementById('vrma-status');
+if (vrmaStatusEl) vrmaStatusEl.textContent =
+  VRMAnim.VRMAnimationLoaderPlugin ? 'Ready (drop .vrma / .fbx / .bvh files)' : 'Plugin not found';
+
+// === BVH animation list ===
+const BVH_DIR = 'animations/VRM-Assets-Pack-For-Silly-Tavern-main/animation/';
+let allBvhFiles = [];
+
+async function loadBvhList() {
+  try {
+    const res = await fetch(BVH_DIR);
+    const html = await res.text();
+    // Python http.server directory listing: <a href="filename">
+    const matches = html.matchAll(/href="([^"]+\.bvh)"/g);
+    allBvhFiles = [...matches].map(m => m[1]).sort();
+    log(`BVH files found: ${allBvhFiles.length}`);
+    renderBvhButtons(allBvhFiles);
+  } catch (e) {
+    log(`BVH list error: ${e.message}`);
+  }
+}
+
+function renderBvhButtons(files) {
+  const container = document.getElementById('bvh-buttons');
+  container.innerHTML = '';
+  for (const file of files) {
+    const btn = document.createElement('button');
+    btn.className = 'sm';
+    btn.textContent = file.replace('.bvh', '');
+    btn.onclick = () => loadBVH(BVH_DIR + file, file);
+    container.appendChild(btn);
+  }
+}
+
+document.getElementById('bvh-filter').oninput = function() {
+  const q = this.value.toLowerCase().trim();
+  if (!q) { renderBvhButtons(allBvhFiles); return; }
+  const filtered = allBvhFiles.filter(f => f.toLowerCase().includes(q));
+  renderBvhButtons(filtered);
+};
+
+log('Loading BVH list...');
+loadBvhList();
+</script>
+</body>
+</html>

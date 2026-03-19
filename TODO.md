@@ -6,7 +6,7 @@
 - [ ] 右クリックメニューからWeb UIで設定できる上も編集可能に。
         サーバからjsonなどで項目の情報を受け取ってそれに合わせて設定画面を表示するようにする
 - [ ] 未配信中でも会話をアバターに送れるようにチャット欄を追加
-- [ ] 表情や体の動きを入れる
+- [>] 表情の滑らかな遷移 + 発話時ジェスチャー → [plans/expression-gesture-implementation.md](plans/expression-gesture-implementation.md)
 
 
 ### サーバ
