@@ -8,7 +8,7 @@ from collections import deque
 logger = logging.getLogger(__name__)
 
 from src import db
-from src.ai_responder import generate_event_response, generate_persona, generate_response, generate_self_note, generate_user_notes, get_character
+from src.ai_responder import generate_event_response, generate_persona, generate_response, generate_self_note, generate_user_notes, get_character, get_character_id
 from src.speech_pipeline import SpeechPipeline
 from src.twitch_chat import TwitchChat
 
@@ -197,7 +197,9 @@ class CommentReader:
         # アバター自身のメモを取得
         self_note = await self._get_self_note()
         # ペルソナ（性格特徴）を取得
-        persona = await asyncio.to_thread(db.get_setting, "persona")
+        char_id = get_character_id()
+        memory = await asyncio.to_thread(db.get_character_memory, char_id)
+        persona = memory.get("persona") or None
         result = await asyncio.to_thread(
             generate_response, author, message, comment_count,
             history=history, stream_context=stream_context,
@@ -295,9 +297,9 @@ class CommentReader:
     async def _get_self_note(self):
         """アバター自身の記憶メモを取得する"""
         try:
-            char_name = get_character().get("name", "ちょビ")
-            user = await asyncio.to_thread(db.get_or_create_user, char_name)
-            return user.get("note", "") or None
+            char_id = get_character_id()
+            memory = await asyncio.to_thread(db.get_character_memory, char_id)
+            return memory.get("self_note", "") or None
         except Exception as e:
             logger.debug("アバターメモ取得失敗: %s", e)
             return None
@@ -305,17 +307,17 @@ class CommentReader:
     async def _update_self_note(self):
         """アバター自身の記憶メモを更新する"""
         try:
-            char_name = get_character().get("name", "ちょビ")
-            user = await asyncio.to_thread(db.get_or_create_user, char_name)
+            char_id = get_character_id()
+            memory = await asyncio.to_thread(db.get_character_memory, char_id)
             recent = await asyncio.to_thread(db.get_recent_comments, 20, 2)
             if not recent:
                 return
-            current_note = user.get("note", "")
+            current_note = memory.get("self_note", "")
             new_note = await asyncio.to_thread(
                 generate_self_note, recent, current_note,
             )
             if new_note and new_note != current_note:
-                await asyncio.to_thread(db.update_user_note, user["id"], new_note)
+                await asyncio.to_thread(db.update_character_self_note, char_id, new_note)
                 logger.info("[note] アバターメモ更新: %s", new_note)
         except Exception as e:
             logger.warning("[note] アバターメモ更新失敗: %s", e)
@@ -328,7 +330,8 @@ class CommentReader:
                 return
             persona = await asyncio.to_thread(generate_persona, recent)
             if persona:
-                await asyncio.to_thread(db.set_setting, "persona", persona)
+                char_id = get_character_id()
+                await asyncio.to_thread(db.update_character_persona, char_id, persona)
                 logger.info("[persona] ペルソナ更新: %s", persona[:80])
         except Exception as e:
             logger.warning("[persona] ペルソナ更新失敗: %s", e)

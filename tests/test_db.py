@@ -16,7 +16,7 @@ class TestSchema:
             "channels", "characters", "shows", "episodes",
             "users", "comments", "actions", "settings",
             "bgm_tracks", "topics", "topic_scripts", "dev_repos",
-            "custom_texts",
+            "custom_texts", "character_memory",
         }
         assert expected.issubset(names)
 
@@ -590,3 +590,52 @@ class TestChildPanels:
         assert child["height"] == 30
         assert child["fontSize"] == 1.2
         assert child["textColor"] == "#ff0000"
+
+
+class TestCharacterMemory:
+    """character_memory テーブルのテスト"""
+
+    def _make_char(self, test_db):
+        ch = test_db.get_or_create_channel("ch")
+        return test_db.get_or_create_character(ch["id"], "ちょビ", '{"name":"ちょビ"}')
+
+    def test_get_creates_empty(self, test_db):
+        char = self._make_char(test_db)
+        mem = test_db.get_character_memory(char["id"])
+        assert mem["persona"] == ""
+        assert mem["self_note"] == ""
+        assert "updated_at" in mem
+
+    def test_update_persona(self, test_db):
+        char = self._make_char(test_db)
+        test_db.update_character_persona(char["id"], "明るい性格")
+        mem = test_db.get_character_memory(char["id"])
+        assert mem["persona"] == "明るい性格"
+        assert mem["self_note"] == ""
+
+    def test_update_self_note(self, test_db):
+        char = self._make_char(test_db)
+        test_db.update_character_self_note(char["id"], "今日はゲームの話で盛り上がった")
+        mem = test_db.get_character_memory(char["id"])
+        assert mem["self_note"] == "今日はゲームの話で盛り上がった"
+        assert mem["persona"] == ""
+
+    def test_upsert_preserves_other_field(self, test_db):
+        char = self._make_char(test_db)
+        test_db.update_character_persona(char["id"], "好奇心旺盛")
+        test_db.update_character_self_note(char["id"], "AIの話をした")
+        mem = test_db.get_character_memory(char["id"])
+        assert mem["persona"] == "好奇心旺盛"
+        assert mem["self_note"] == "AIの話をした"
+
+    def test_character_id_unique(self, test_db):
+        char = self._make_char(test_db)
+        test_db.get_character_memory(char["id"])
+        # 2回目の get でも1行のまま
+        test_db.get_character_memory(char["id"])
+        conn = test_db.get_connection()
+        cnt = conn.execute(
+            "SELECT COUNT(*) as c FROM character_memory WHERE character_id = ?",
+            (char["id"],),
+        ).fetchone()["c"]
+        assert cnt == 1

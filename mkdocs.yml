@@ -37,6 +37,8 @@ nav:
     - ウィンドウキャプチャ: window-capture.md
   - Web UI:
     - デザイン改善提案: webui-design-proposal.md
+  - キャラクター:
+    - 会話生成の仕組み: character-prompt.md
   - 運用:
     - リソース管理: resource-management.md
     - バージョニングルール: versioning.md

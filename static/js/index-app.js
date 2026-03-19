@@ -12,7 +12,7 @@ function switchTab(name, el) {
   el.classList.add('active');
   location.hash = name;
   if (name === 'db') loadDbTables();
-  if (name === 'character') loadLanguageModes();
+  if (name === 'character') { loadLanguageModes(); loadCharacterLayers(); }
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
   if (name === 'debug') { loadScreenshots(); }
@@ -383,8 +383,57 @@ async function loadCharacter() {
     renderEmotions();
     renderBlendshapes();
     document.getElementById('char-status').textContent = '読み込みました';
+    // バナー更新
+    try {
+      const langData = await (await fetch('/api/language')).json();
+      updateCharacterBanner(data, langData);
+    } catch (e2) {
+      updateCharacterBanner(data, null);
+    }
   } catch (e) {
     document.getElementById('char-status').textContent = 'エラー: ' + e.message;
+  }
+}
+
+function updateCharacterBanner(charData, langData) {
+  const nameEl = document.getElementById('cb-name');
+  if (nameEl) nameEl.textContent = charData.name || '---';
+
+  const langEl = document.getElementById('cb-lang');
+  if (langEl && langData) {
+    const active = langData.modes ? langData.modes.find(m => m.active) : null;
+    langEl.textContent = active ? active.name : (langData.current || '---');
+  }
+
+  const personalityEl = document.getElementById('cb-personality');
+  if (personalityEl) {
+    const prompt = charData.system_prompt || '';
+    const match = prompt.match(/##\s*性格\s*\n([\s\S]*?)(?=\n##|$)/);
+    if (match) {
+      const traits = match[1]
+        .split('\n')
+        .map(l => l.replace(/^[-\s*]+/, '').trim())
+        .filter(l => l.length > 0)
+        .slice(0, 3)
+        .join(' / ');
+      personalityEl.textContent = traits;
+      personalityEl.title = match[1].trim();
+    } else {
+      const firstLine = prompt.split('\n').find(l => l.trim()) || '';
+      personalityEl.textContent = firstLine.substring(0, 50);
+      personalityEl.title = prompt;
+    }
+  }
+
+  const rulesEl = document.getElementById('cb-rules');
+  if (rulesEl) {
+    rulesEl.textContent = 'ルール ' + (charData.rules || []).length + '件';
+  }
+
+  const emoEl = document.getElementById('cb-emotions');
+  if (emoEl) {
+    const emotions = Object.keys(charData.emotions || {});
+    emoEl.innerHTML = emotions.map(e => '<span class="cb-emo">' + esc(e) + '</span>').join('');
   }
 }
 
@@ -515,6 +564,48 @@ async function saveCharacter() {
   }
 }
 
+// --- プロンプトレイヤー表示 ---
+async function loadCharacterLayers() {
+  try {
+    const d = await (await fetch('/api/character/layers')).json();
+
+    // 第2層: ペルソナ
+    const personaEl = document.getElementById('layer-persona');
+    if (d.persona) {
+      personaEl.innerHTML = `<div class="layer-text">${esc(d.persona)}</div>`;
+    } else {
+      personaEl.innerHTML = '<div class="layer-empty">未生成（応答が10件以上になると自動生成されます）</div>';
+    }
+
+    // 第3層: セルフメモ
+    const selfEl = document.getElementById('layer-self-note');
+    if (d.self_note) {
+      selfEl.innerHTML = `<div class="layer-text">${esc(d.self_note)}</div>`;
+    } else {
+      selfEl.innerHTML = '<div class="layer-empty">未生成（配信中の会話から自動生成されます）</div>';
+    }
+
+    // 第4層: 視聴者メモ
+    const viewerEl = document.getElementById('layer-viewer-notes');
+    if (d.viewer_notes && d.viewer_notes.length > 0) {
+      viewerEl.innerHTML = d.viewer_notes.map(u =>
+        `<div class="viewer-note-item">` +
+        `<span class="viewer-note-name">${esc(u.name)}</span>` +
+        `<span class="viewer-note-text">${esc(u.note)}</span>` +
+        `<span class="viewer-note-count">${u.comment_count}回</span>` +
+        `</div>`
+      ).join('');
+    } else {
+      viewerEl.innerHTML = '<div class="layer-empty">視聴者メモなし</div>';
+    }
+  } catch (e) {
+    // API未対応の場合（サーバー再起動前）
+    document.getElementById('layer-persona').innerHTML = '<div class="layer-empty">サーバー再起動後に表示されます</div>';
+    document.getElementById('layer-self-note').innerHTML = '<div class="layer-empty">サーバー再起動後に表示されます</div>';
+    document.getElementById('layer-viewer-notes').innerHTML = '<div class="layer-empty">サーバー再起動後に表示されます</div>';
+  }
+}
+
 // --- 言語モード ---
 async function loadLanguageModes() {
   try {
@@ -543,6 +634,7 @@ async function setLanguageMode(mode) {
     if (d.ok) {
       showToast('言語モード変更: ' + mode, 'success');
       loadLanguageModes();
+      loadCharacter();
     } else {
       showToast(d.error || '変更失敗', 'error');
     }
@@ -1069,6 +1161,126 @@ async function startTodo(el, text) {
     showToast('エラー', 'error');
     el.style.opacity = '1';
     el.style.pointerEvents = '';
+  }
+}
+
+// --- 会話生成ドキュメントモーダル ---
+function simpleMarkdownToHtml(md) {
+  const lines = md.split('\n');
+  let html = '';
+  let inCode = false;
+  let inTable = false;
+  let inList = false;
+  let inAdmonition = false;
+  let admonitionContent = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // コードブロック
+    if (line.startsWith('```')) {
+      if (inCode) { html += '</code></pre>'; inCode = false; }
+      else { html += '<pre><code>'; inCode = true; }
+      continue;
+    }
+    if (inCode) { html += esc(line) + '\n'; continue; }
+
+    // admonition (!!! note)
+    if (line.match(/^!!!\s+\w+/)) {
+      const title = line.replace(/^!!!\s+\w+\s*/, '').trim() || line.match(/^!!!\s+(\w+)/)[1];
+      inAdmonition = true;
+      admonitionContent = `<div class="admonition"><div class="admonition-title">${esc(title)}</div>`;
+      continue;
+    }
+    if (inAdmonition) {
+      if (line.startsWith('    ')) {
+        admonitionContent += '<p>' + inlineMarkdown(line.trim()) + '</p>';
+        continue;
+      } else {
+        html += admonitionContent + '</div>';
+        inAdmonition = false;
+      }
+    }
+
+    // テーブル
+    if (line.match(/^\|.+\|$/)) {
+      if (line.match(/^\|[\s-:|]+\|$/)) continue; // separator row
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
+      if (!inTable) {
+        html += '<table><thead><tr>' + cells.map(c => '<th>' + inlineMarkdown(c) + '</th>').join('') + '</tr></thead><tbody>';
+        inTable = true;
+      } else {
+        html += '<tr>' + cells.map(c => '<td>' + inlineMarkdown(c) + '</td>').join('') + '</tr>';
+      }
+      continue;
+    }
+    if (inTable) { html += '</tbody></table>'; inTable = false; }
+
+    // リスト
+    if (line.match(/^\s*-\s/)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += '<li>' + inlineMarkdown(line.replace(/^\s*-\s/, '')) + '</li>';
+      continue;
+    }
+    if (inList && !line.match(/^\s*-\s/)) { html += '</ul>'; inList = false; }
+
+    // 見出し
+    if (line.startsWith('### ')) { html += '<h3>' + inlineMarkdown(line.slice(4)) + '</h3>'; continue; }
+    if (line.startsWith('## ')) { html += '<h2>' + inlineMarkdown(line.slice(3)) + '</h2>'; continue; }
+    if (line.startsWith('# ')) { html += '<h1>' + inlineMarkdown(line.slice(2)) + '</h1>'; continue; }
+
+    // 空行
+    if (!line.trim()) { continue; }
+
+    // 通常テキスト
+    html += '<p>' + inlineMarkdown(line) + '</p>';
+  }
+  if (inTable) html += '</tbody></table>';
+  if (inList) html += '</ul>';
+  if (inAdmonition) html += admonitionContent + '</div>';
+  if (inCode) html += '</code></pre>';
+  return html;
+}
+
+function inlineMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+async function showCharacterPromptDoc() {
+  // 既に開いていたら閉じる
+  const existing = document.querySelector('.doc-modal-overlay');
+  if (existing) { existing.remove(); return; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'doc-modal-overlay';
+  overlay.innerHTML = `<div class="doc-modal">
+    <div class="doc-modal-header">
+      <h3>会話生成の仕組み</h3>
+      <button class="doc-modal-close" title="閉じる">&times;</button>
+    </div>
+    <div class="doc-modal-body"><p style="color:#9a88b5;">読み込み中...</p></div>
+  </div>`;
+
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.remove();
+  });
+  overlay.querySelector('.doc-modal-close').addEventListener('click', () => overlay.remove());
+  document.addEventListener('keydown', function handler(e) {
+    if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handler); }
+  });
+  document.body.appendChild(overlay);
+
+  try {
+    let res = await fetch('/api/docs/character-prompt');
+    if (!res.ok) res = await fetch('/static/docs/character-prompt.md');
+    if (!res.ok) throw new Error('取得失敗');
+    const md = await res.text();
+    overlay.querySelector('.doc-modal-body').innerHTML = simpleMarkdownToHtml(md);
+  } catch (e) {
+    overlay.querySelector('.doc-modal-body').innerHTML = '<p style="color:#c62828;">ドキュメントの読み込みに失敗しました</p>';
   }
 }
 

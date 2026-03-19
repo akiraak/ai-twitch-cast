@@ -1,5 +1,18 @@
 # DONE
 
+## 会話生成ドキュメント + 5層プロンプトWebUI表示 + character_memoryテーブル
+
+- [x] `docs/character-prompt.md` 作成（5層プロンプト構成・言語モード・感情システム等のドキュメント）
+- [x] `mkdocs.yml` にキャラクターセクション追加
+- [x] WebUIキャラクタータブに「会話生成の仕組み →」モーダルダイアログ（Markdown→HTML変換表示）
+- [x] WebUIキャラクタータブに5層プロンプト表示（第1層〜第5層のグループ分け）
+- [x] 第2〜4層のデータ表示API `GET /api/character/layers` 追加
+- [x] `character_memory` テーブル新設（ペルソナ・セルフメモをキャラクターIDに紐付け）
+- [x] 既存データ自動マイグレーション（settings.persona → character_memory、users.note → character_memory）
+- [x] `comment_reader.py` の読み書き先を character_memory に切替（4箇所）
+- [x] `db_viewer.py` の手動メモ更新も character_memory に切替
+- [x] テスト追加（TestCharacterMemory 5件、全421テスト通過）
+
 ## Claude Code長時間実行時にちょびがコメント
 
 - [x] `~/.claude/hooks/long-execution-timer.py` 作成（バックグラウンドタイマー、transcript解析）

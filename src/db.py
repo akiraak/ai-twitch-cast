@@ -238,6 +238,63 @@ def _create_tables(conn):
         migrate_overlay_to_items()
     except Exception:
         pass
+    # Migration: character_memory テーブル（ペルソナ・セルフメモのキャラクター紐付け）
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS character_memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            character_id INTEGER NOT NULL UNIQUE REFERENCES characters(id),
+            persona TEXT NOT NULL DEFAULT '',
+            self_note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    try:
+        _migrate_character_memory(conn)
+    except Exception:
+        pass
+
+
+def _migrate_character_memory(conn):
+    """既存データを character_memory テーブルに移行する（冪等）"""
+    # 既にデータがあればスキップ
+    existing = conn.execute("SELECT COUNT(*) as cnt FROM character_memory").fetchone()
+    if existing["cnt"] > 0:
+        return
+    # 全キャラクターに対して移行
+    characters = conn.execute("SELECT id, config FROM characters").fetchall()
+    if not characters:
+        return
+    now = _now()
+    # グローバル persona を取得
+    persona_row = conn.execute("SELECT value FROM settings WHERE key = 'persona'").fetchone()
+    persona = persona_row["value"] if persona_row else ""
+    for char in characters:
+        char_id = char["id"]
+        # キャラ名を config JSON から取得
+        try:
+            config = _json.loads(char["config"])
+            char_name = config.get("name", "")
+        except (ValueError, TypeError):
+            char_name = ""
+        # users テーブルからセルフメモを取得
+        self_note = ""
+        if char_name:
+            user_row = conn.execute(
+                "SELECT id, note FROM users WHERE name = ?", (char_name,)
+            ).fetchone()
+            if user_row:
+                self_note = user_row["note"] or ""
+                # users テーブルのキャラ行の note をクリア
+                if self_note:
+                    conn.execute("UPDATE users SET note = '' WHERE id = ?", (user_row["id"],))
+        conn.execute(
+            "INSERT INTO character_memory (character_id, persona, self_note, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (char_id, persona, self_note, now, now),
+        )
+    conn.commit()
 
 
 # --- channels ---
@@ -658,6 +715,54 @@ def get_settings_by_prefix(prefix):
         "SELECT key, value FROM settings WHERE key LIKE ?", (prefix + "%",)
     ).fetchall()
     return {row["key"]: row["value"] for row in rows}
+
+
+# --- character_memory ---
+
+def get_character_memory(character_id):
+    """キャラクターのメモリ（ペルソナ・セルフメモ）を取得する"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT persona, self_note, updated_at FROM character_memory WHERE character_id = ?",
+        (character_id,),
+    ).fetchone()
+    if row:
+        return dict(row)
+    # 行がなければ空で作成
+    now = _now()
+    conn.execute(
+        "INSERT INTO character_memory (character_id, persona, self_note, created_at, updated_at) "
+        "VALUES (?, '', '', ?, ?)",
+        (character_id, now, now),
+    )
+    conn.commit()
+    return {"persona": "", "self_note": "", "updated_at": now}
+
+
+def update_character_persona(character_id, persona):
+    """キャラクターのペルソナを更新する"""
+    conn = get_connection()
+    now = _now()
+    conn.execute(
+        "INSERT INTO character_memory (character_id, persona, self_note, created_at, updated_at) "
+        "VALUES (?, ?, '', ?, ?) "
+        "ON CONFLICT(character_id) DO UPDATE SET persona = excluded.persona, updated_at = excluded.updated_at",
+        (character_id, persona, now, now),
+    )
+    conn.commit()
+
+
+def update_character_self_note(character_id, self_note):
+    """キャラクターのセルフメモを更新する"""
+    conn = get_connection()
+    now = _now()
+    conn.execute(
+        "INSERT INTO character_memory (character_id, self_note, persona, created_at, updated_at) "
+        "VALUES (?, ?, '', ?, ?) "
+        "ON CONFLICT(character_id) DO UPDATE SET self_note = excluded.self_note, updated_at = excluded.updated_at",
+        (character_id, self_note, now, now),
+    )
+    conn.commit()
 
 
 # --- capture_windows ---
