@@ -18,10 +18,11 @@
 ## Claude Code 作業実況（Stopフック）
 
 - [x] `.claude/hooks/notify-stop.py` / `notify-stop.sh` 作成（Stopフックで作業完了をちょびに自動報告）
-- [x] `.claude/hooks/notify-prompt.py` のポート修正（8000→WEB_PORT対応）
-- [x] `settings.local.json` にStopフック追加
+- [x] `.claude/hooks/notify-prompt.py` / `notify-prompt.sh` 作成（UserPromptSubmitフックで指示受信をちょびに報告）
+- [x] `settings.local.json` にStop/UserPromptSubmitフック追加
 - [x] CLAUDE.md に実況機能セクション追加
 - [x] 疎結合設計（stdlib only、サーバー側変更ゼロ、削除1手順）
+- [x] shスクリプトのstdin空問題修正（`&`バックグラウンド実行でstdinが切れる→`INPUT=$(cat)`で先読みしてパイプ）
 - [x] プラン: plans/claude-code-narration.md
 
 ## WebUIチャット欄追加（GM→アバター会話）
