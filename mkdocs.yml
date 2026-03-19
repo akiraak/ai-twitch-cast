@@ -39,6 +39,7 @@ nav:
     - デザイン改善提案: webui-design-proposal.md
   - 運用:
     - リソース管理: resource-management.md
+    - バージョニングルール: versioning.md
 
 markdown_extensions:
   - toc:

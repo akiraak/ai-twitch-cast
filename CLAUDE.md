@@ -26,6 +26,7 @@ C#ネイティブ配信アプリ（Windows側でbroadcast.htmlをオフスクリ
   - 完了したタスクはTODO.mdから削除（`[x]`を残さない）
   - 新たに見つかった課題はTODO.mdに追加
 - TODO.mdには未完了タスク（`[ ]`）と作業中タスク（`[>]`）のみを置く
+- **バージョン更新**: 機能追加・大きな変更時は `VERSION` ファイルを更新する。基準は [docs/versioning.md](docs/versioning.md) を参照。コミット時にちょびが自動提案する
 - **ファイルの所有者**: Claude Code（root）が編集したファイルは PostToolUse フックで自動的に `ubuntu:ubuntu` に修正される（`.claude/hooks/fix-permissions.sh`）
 
 ## リソース管理

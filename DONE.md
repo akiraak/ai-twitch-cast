@@ -1,5 +1,12 @@
 # DONE
 
+## バージョニングルール作成
+
+- [x] `docs/versioning.md` 作成（バージョン基準: MAJOR/MINOR/PATCH/上げない、半自動提案フロー）
+- [x] CLAUDE.md の開発ルールにバージョン更新ルール追記
+- [x] `mkdocs.yml` の運用セクションにページ追加
+- [x] `.git/hooks/post-commit` にバージョン提案ロジック追加（DONE.md変更検知 → `/api/avatar/speak` でちょびに提案依頼）
+
 ## ちょびの返信改善 Phase 1+2
 
 - [x] A: キャラ設定全面書き直し（性格5項目+話し方5項目、AI身体体験捏造禁止）
