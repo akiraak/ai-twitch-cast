@@ -19,6 +19,7 @@ win-native-app/WinNativeApp/bin/
 win-native-app/WinNativeApp/obj/
 win-native-app/WinNativeApp/resources/ffmpeg/
 *.log
+jslog.txt
 
 # test-animation resources (large binaries)
 test-animation/resources/
