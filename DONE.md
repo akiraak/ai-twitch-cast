@@ -8,6 +8,7 @@
 - [x] slider/color/toggle/select/text の全フィールドタイプ対応
 - [x] デバウンス付きAPI保存（PUT /api/items/{id}）＋editSave()競合防止
 - [x] スキーマAPIテスト9件追加
+- [x] index.htmlの`_commonPropsHTML()`をスキーマAPIベースに統一（ハードコード排除）
 
 ## WebUI TODOタブ復活＋外部ファイル対応＋複数選択
 

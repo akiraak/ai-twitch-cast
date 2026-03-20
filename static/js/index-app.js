@@ -1684,49 +1684,50 @@ function cssColorToHex(color) {
   return '#000000';
 }
 
+// スキーマAPIから取得した共通プロパティ定義（起動時に1回取得）
+let _commonSchema = null;
+
+async function _loadCommonSchema() {
+  try {
+    const res = await fetch('/api/items/schema');
+    _commonSchema = await res.json();
+  } catch (e) { _commonSchema = null; }
+}
+
 function _commonPropsHTML(s) {
+  if (!_commonSchema || !_commonSchema.groups) return '';
   const row = (label, body) => `<div class="layout-row common-row"><span class="layout-label">${label}</span>${body}</div>`;
-  const slider = (key, min, max, step) =>
-    `<input type="range" class="vol-slider layout-slider" min="${min}" max="${max}" step="${step}" data-key="${s}.${key}" oninput="onLayoutSlider(this)">` +
-    `<input type="number" class="layout-num" id="lv-${s}-${key}" min="${min}" max="${max}" step="${step}" data-key="${s}.${key}" oninput="onLayoutNum(this)">`;
-  const color = (key) => `<input type="color" class="layout-color" data-key="${s}.${key}" oninput="onLayoutColor(this)" style="width:40px; height:24px; border:1px solid #ccc; border-radius:4px; cursor:pointer;">`;
-  const toggle = (key) =>
-    `<label style="position:relative; display:inline-block; width:36px; height:20px; margin-left:8px;">` +
-    `<input type="checkbox" class="layout-toggle" data-key="${s}.${key}" onchange="onLayoutToggle(this)" style="opacity:0; width:0; height:0;">` +
-    `<span style="position:absolute; cursor:pointer; inset:0; background:#ccc; border-radius:20px; transition:.2s;"></span>` +
-    `<span class="toggle-knob" style="position:absolute; left:2px; top:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:.2s;"></span></label>`;
   const group = (title) => `<div style="font-size:0.7rem; color:#7b1fa2; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(124,77,255,0.06); border-radius:3px; border-left:2px solid #7b1fa2;">${title}</div>`;
-  const select = (key, options) => {
-    const opts = options.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-    return `<select class="layout-select" data-key="${s}.${key}" onchange="onLayoutSelect(this)" style="padding:2px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px;">${opts}</select>`;
-  };
-  return `
-    ${row('表示', toggle('visible'))}
-    ${group('配置')}
-    ${row('X位置 (%)', slider('positionX', 0, 100, 0.5))}
-    ${row('Y位置 (%)', slider('positionY', 0, 100, 0.5))}
-    ${row('幅 (%)', slider('width', 5, 100, 0.5))}
-    ${row('高さ (%)', slider('height', 5, 100, 0.5))}
-    ${row('Z順序', slider('zIndex', 0, 100, 1))}
-    ${group('背景')}
-    ${row('色', color('bgColor'))}
-    ${row('透明度', slider('bgOpacity', 0, 1, 0.05))}
-    ${row('ぼかし (px)', slider('backdropBlur', 0, 30, 1))}
-    ${row('角丸 (px)', slider('borderRadius', 0, 30, 1))}
-    ${row('枠サイズ', slider('borderSize', 0, 10, 0.5))}
-    ${row('枠色', color('borderColor'))}
-    ${row('枠透明度', slider('borderOpacity', 0, 1, 0.05))}
-    ${group('文字')}
-    ${row('フォント', select('fontFamily', [['', 'デフォルト'], ['Noto Sans JP', 'Noto Sans JP'], ['Yu Gothic UI', 'Yu Gothic UI'], ['Meiryo', 'メイリオ'], ['Yu Mincho', '游明朝'], ['BIZ UDPGothic', 'BIZ UDPゴシック'], ['M PLUS Rounded 1c', 'M PLUS Rounded 1c'], ['Kosugi Maru', '小杉丸ゴシック'], ['monospace', '等幅']]))}
-    ${row('サイズ (vw)', slider('fontSize', 0.3, 5, 0.05))}
-    ${row('色', color('textColor'))}
-    ${row('水平揃え', select('textAlign', [['left', '左'], ['center', '中央'], ['right', '右']]))}
-    ${row('垂直揃え', select('verticalAlign', [['top', '上'], ['center', '中央'], ['bottom', '下']]))}
-    ${row('縁取りサイズ', slider('textStrokeSize', 0, 10, 0.5))}
-    ${row('縁取り色', color('textStrokeColor'))}
-    ${row('縁取り透明度', slider('textStrokeOpacity', 0, 1, 0.05))}
-    ${row('内余白 (px)', slider('padding', 0, 30, 1))}
-  `;
+
+  return _commonSchema.groups.map(g => {
+    const header = group(g.title);
+    const rows = g.fields.map(f => row(f.label, _renderFieldControl(s, f))).join('');
+    return header + rows;
+  }).join('');
+}
+
+function _renderFieldControl(section, field) {
+  const key = `${section}.${field.key}`;
+  switch (field.type) {
+    case 'slider':
+      return `<input type="range" class="vol-slider layout-slider" min="${field.min}" max="${field.max}" step="${field.step}" data-key="${key}" oninput="onLayoutSlider(this)">` +
+        `<input type="number" class="layout-num" id="lv-${section}-${field.key}" min="${field.min}" max="${field.max}" step="${field.step}" data-key="${key}" oninput="onLayoutNum(this)">`;
+    case 'color':
+      return `<input type="color" class="layout-color" data-key="${key}" oninput="onLayoutColor(this)" style="width:40px; height:24px; border:1px solid #ccc; border-radius:4px; cursor:pointer;">`;
+    case 'toggle':
+      return `<label style="position:relative; display:inline-block; width:36px; height:20px; margin-left:8px;">` +
+        `<input type="checkbox" class="layout-toggle" data-key="${key}" onchange="onLayoutToggle(this)" style="opacity:0; width:0; height:0;">` +
+        `<span style="position:absolute; cursor:pointer; inset:0; background:#ccc; border-radius:20px; transition:.2s;"></span>` +
+        `<span class="toggle-knob" style="position:absolute; left:2px; top:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:.2s;"></span></label>`;
+    case 'select': {
+      const opts = field.options.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+      return `<select class="layout-select" data-key="${key}" onchange="onLayoutSelect(this)" style="padding:2px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px;">${opts}</select>`;
+    }
+    case 'text':
+      return `<input type="text" class="layout-text" data-key="${key}" oninput="onLayoutSelect(this)" style="padding:2px 6px; font-size:0.8rem; border:1px solid #ccc; border-radius:4px; width:100%;">`;
+    default:
+      return '';
+  }
 }
 
 function _injectCommonProps(el, section) {
@@ -1956,27 +1957,29 @@ if (_initTab === 'chat' && _initParam) {
 { if (TAB_NAMES.includes(_initTab)) switchTab(_initTab);
 }
 
-// 固定アイテムの共通コントロール注入
-initCommonProps();
-// 固定パネルに子パネル管理UIを注入
-['avatar', 'subtitle', 'todo', 'topic'].forEach(panelId => {
-  const body = document.querySelector(`[data-section="${panelId}"] .panel-body`);
-  if (body) injectChildPanelSection(body, panelId);
+// スキーマ取得後に共通コントロールを注入（スキーマAPIベース）
+_loadCommonSchema().then(() => {
+  initCommonProps();
+  // 固定パネルに子パネル管理UIを注入
+  ['avatar', 'subtitle', 'todo', 'topic'].forEach(panelId => {
+    const body = document.querySelector(`[data-section="${panelId}"] .panel-body`);
+    if (body) injectChildPanelSection(body, panelId);
+  });
+  // キャプチャ・カスタムテキスト・背景をロード（パネル生成+共通コントロール注入）
+  captureRefreshSources();
+  loadCustomTexts();
+  loadCategoryFiles('background');
+  loadCategoryFiles('avatar');
+  // 全パネルの値を読み込み
+  loadVolumes();
+  loadLayout();
+  loadCharacter();
+  loadLightingPresets();
+  loadBgmTracks();
+  loadTopicStatus();
+  loadTopicScripts();
+  refreshStatus();
 });
-// キャプチャ・カスタムテキスト・背景をロード（パネル生成+共通コントロール注入）
-captureRefreshSources();
-loadCustomTexts();
-loadCategoryFiles('background');
-loadCategoryFiles('avatar');
-// 全パネルの値を読み込み
-loadVolumes();
-loadLayout();
-loadCharacter();
-loadLightingPresets();
-loadBgmTracks();
-loadTopicStatus();
-loadTopicScripts();
-refreshStatus();
 setInterval(refreshStatus, 30000);
 setInterval(captureRefreshSources, 30000);
 setInterval(syncBgmVolumes, 30000);

@@ -225,37 +225,36 @@ class TestWebUICommonProps:
         assert "function _commonPropsHTML(" in js
 
     def test_common_props_generates_controls(self):
+        """スキーマAPIベースで共通コントロールを生成すること"""
+        js = read_js_index()
+        # スキーマAPIから取得した定義でUI生成
+        assert "_commonSchema" in js, "スキーマ変数がない"
+        assert "_renderFieldControl" in js, "_renderFieldControl関数がない"
+        # _renderFieldControlが全フィールドタイプに対応
+        func_match = re.search(
+            r"function _renderFieldControl\(.*?\n\}", js, re.DOTALL
+        )
+        assert func_match
+        body = func_match.group(0)
+        for field_type in ["slider", "color", "toggle", "select"]:
+            assert f"'{field_type}'" in body, (
+                f"_renderFieldControl に {field_type} タイプがない"
+            )
+
+    def test_common_props_has_groups(self):
+        """スキーマAPIのグループ定義から共通コントロールが生成されること"""
+        js = read_js_index()
+        assert "_commonSchema.groups" in js, "スキーマのgroups参照がない"
+        assert "_loadCommonSchema" in js, "スキーマ取得関数がない"
+        assert "/api/items/schema" in js, "スキーマAPIの呼び出しがない"
+
+    def test_no_details_folding(self):
+        """index.htmlの_commonPropsHTMLに折りたたみ<details>が使われていないこと"""
         js = read_js_index()
         func_match = re.search(
             r"function _commonPropsHTML\(.*?\n\}", js, re.DOTALL
         )
         assert func_match
-        body = func_match.group(0)
-        # 共通コントロール（17項目: 配置6 + 背景6 + 文字5）
-        for key in ["visible", "positionX", "positionY", "width", "height", "zIndex",
-                     "bgColor", "bgOpacity", "borderRadius",
-                     "borderColor", "borderSize",
-                     "textColor", "textStrokeSize", "textStrokeColor",
-                     "textStrokeOpacity", "padding"]:
-            assert key in body, f"_commonPropsHTML に {key} がない"
-
-    def test_common_props_has_groups(self):
-        """共通コントロールがグループ分けされていること"""
-        js = read_js_index()
-        func_match = re.search(
-            r"function _commonPropsHTML\(.*?\n\}", js, re.DOTALL
-        )
-        body = func_match.group(0)
-        assert "配置" in body, "配置グループがない"
-        assert "背景" in body, "背景グループがない"
-        assert "文字" in body, "文字グループがない"
-
-    def test_no_details_folding(self):
-        """折りたたみ<details>が使われていないこと"""
-        js = read_js_index()
-        func_match = re.search(
-            r"function _commonPropsHTML\(.*?\n\}", js, re.DOTALL
-        )
         body = func_match.group(0)
         assert "<details" not in body, "_commonPropsHTML に <details> が残っている"
 
