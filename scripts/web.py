@@ -32,7 +32,6 @@ from scripts.routes.capture import router as capture_router
 from scripts.routes.bgm import router as bgm_router
 from scripts.routes.character import router as character_router
 from scripts.routes.db_viewer import router as db_viewer_router
-from scripts.routes.dev_stream import router as dev_stream_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream_control import router as stream_control_router
 from scripts.routes.topic import router as topic_router
@@ -89,7 +88,6 @@ app.include_router(avatar_router)
 app.include_router(bgm_router)
 app.include_router(character_router)
 app.include_router(db_viewer_router)
-app.include_router(dev_stream_router)
 app.include_router(files_router)
 app.include_router(items_router)
 app.include_router(overlay_router)
@@ -150,7 +148,6 @@ async def get_status():
 async def start():
     await state.ensure_reader()
     await state.git_watcher.start()
-    await state.dev_stream_manager.start()
 
     # 状態ファイルを作成（再起動時の自動復旧用）
     STATE_FILE.touch()
@@ -215,12 +212,6 @@ async def _restore_session():
         logger.info("Git監視復旧OK")
     except Exception as e:
         logger.warning("Git監視復旧失敗: %s", e)
-
-    try:
-        await state.dev_stream_manager.start()
-        logger.info("開発リポジトリ監視復旧OK")
-    except Exception as e:
-        logger.warning("開発リポジトリ監視復旧失敗: %s", e)
 
     # C#アプリの配信状態確認（タイムアウト3秒 — アプリ未起動時にブロックしない）
     try:
@@ -293,10 +284,6 @@ async def shutdown():
         pass
     try:
         await state.git_watcher.stop()
-    except Exception:
-        pass
-    try:
-        await state.dev_stream_manager.stop()
     except Exception:
         pass
     logger.info("シャットダウン完了")

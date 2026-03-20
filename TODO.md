@@ -7,7 +7,6 @@
         サーバからjsonなどで項目の情報を受け取ってそれに合わせて設定画面を表示するようにする
 
 ### サーバ
-- [ ] 開発の読み上げのON/OFFをWEBUIに入れる
 - [ ] capture.pyのbroadcast_items全面移行（二重管理解消） → [plans/capture-broadcast-items-migration.md](plans/capture-broadcast-items-migration.md)
 
 ### その他

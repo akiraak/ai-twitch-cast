@@ -124,18 +124,6 @@ def _create_tables(conn):
             spoken_at TEXT,
             created_at TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS dev_repos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            url TEXT NOT NULL UNIQUE,
-            local_path TEXT NOT NULL,
-            branch TEXT DEFAULT 'main',
-            last_commit_hash TEXT,
-            active INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
-        );
-
         CREATE TABLE IF NOT EXISTS custom_texts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             label TEXT NOT NULL DEFAULT '',
@@ -267,6 +255,9 @@ def _create_tables(conn):
         _migrate_comments_split(conn)
     except Exception:
         pass
+    # Migration: dev_repos テーブル削除（機能廃止）
+    conn.execute("DROP TABLE IF EXISTS dev_repos")
+    conn.commit()
 
 
 def _migrate_comments_split(conn):
@@ -1000,69 +991,6 @@ def get_capture_window_by_name(window_name):
     return dict(row) if row else None
 
 
-# --- dev_repos ---
-
-def add_dev_repo(name, url, local_path, branch="main"):
-    """開発配信用リポジトリを追加する"""
-    conn = get_connection()
-    now = _now()
-    cur = conn.execute(
-        "INSERT INTO dev_repos (name, url, local_path, branch, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (name, url, local_path, branch, now, now),
-    )
-    conn.commit()
-    return dict(conn.execute("SELECT * FROM dev_repos WHERE id = ?", (cur.lastrowid,)).fetchone())
-
-
-def get_dev_repos():
-    """全リポジトリ一覧を返す"""
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM dev_repos ORDER BY id").fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_active_dev_repos():
-    """監視中（active=1）のリポジトリ一覧を返す"""
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM dev_repos WHERE active = 1 ORDER BY id").fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_dev_repo(repo_id):
-    """IDでリポジトリを取得する"""
-    conn = get_connection()
-    row = conn.execute("SELECT * FROM dev_repos WHERE id = ?", (repo_id,)).fetchone()
-    return dict(row) if row else None
-
-
-def update_dev_repo_commit(repo_id, commit_hash):
-    """最後に処理したコミットハッシュを更新する"""
-    conn = get_connection()
-    conn.execute(
-        "UPDATE dev_repos SET last_commit_hash = ?, updated_at = ? WHERE id = ?",
-        (commit_hash, _now(), repo_id),
-    )
-    conn.commit()
-
-
-def toggle_dev_repo(repo_id, active):
-    """リポジトリの監視ON/OFFを切り替える"""
-    conn = get_connection()
-    conn.execute(
-        "UPDATE dev_repos SET active = ?, updated_at = ? WHERE id = ?",
-        (1 if active else 0, _now(), repo_id),
-    )
-    conn.commit()
-
-
-def delete_dev_repo(repo_id):
-    """リポジトリをDBから削除する"""
-    conn = get_connection()
-    conn.execute("DELETE FROM dev_repos WHERE id = ?", (repo_id,))
-    conn.commit()
-
-
 # --- custom_texts (broadcast_items経由) ---
 
 def _item_to_custom_text_dict(item):
@@ -1209,7 +1137,6 @@ _ITEM_LABELS = {
     "subtitle": "字幕",
     "todo": "TODO",
     "topic": "トピック",
-    "dev_activity": "開発アクティビティ",
 }
 
 
@@ -1497,7 +1424,7 @@ def migrate_overlay_to_items():
     from scripts.routes.overlay import _OVERLAY_DEFAULTS, _COMMON_DEFAULTS
 
     now = _now()
-    fixed_items = ["avatar", "subtitle", "todo", "topic", "dev_activity"]
+    fixed_items = ["avatar", "subtitle", "todo", "topic"]
     for item_type in fixed_items:
         defaults = _OVERLAY_DEFAULTS.get(item_type, {})
         # overlay.* settingsからDB値を読み込み

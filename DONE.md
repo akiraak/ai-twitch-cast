@@ -1,5 +1,14 @@
 # DONE
 
+## 開発実況リポジトリ監視機能の完全削除
+
+- [x] DevStreamManager・APIルート・テスト・UIタブ・JS関数を丸ごと削除
+- [x] broadcast.htmlのdev-activity-panel・CSS・WebSocketハンドラを削除
+- [x] overlay内のTODOソース切替（_todo_source dev:ルーティング）・/api/todo/sourceを削除
+- [x] DBのdev_reposテーブル定義・全CRUD関数を削除＋DROP TABLEマイグレーション追加
+- [x] repos/ディレクトリ・.gitignoreエントリを削除
+- [x] 全380テスト通過
+
 ## ペルソナ生成の抽象化
 
 - [x] generate_persona / generate_persona_from_prompt のプロンプトに抽象化ルール追加

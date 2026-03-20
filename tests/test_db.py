@@ -15,7 +15,7 @@ class TestSchema:
         expected = {
             "channels", "characters", "shows", "episodes",
             "users", "comments", "actions", "settings",
-            "bgm_tracks", "topics", "topic_scripts", "dev_repos",
+            "bgm_tracks", "topics", "topic_scripts",
             "custom_texts", "character_memory",
         }
         assert expected.issubset(names)
@@ -416,73 +416,6 @@ class TestTopicScripts:
         test_db.add_topic_scripts(topic["id"], [{"content": "text"}])
         script = test_db.get_next_unspoken_script(topic["id"])
         assert script["emotion"] == "neutral"
-
-
-class TestDevRepos:
-    def test_add_and_get(self, test_db):
-        repo = test_db.add_dev_repo("owner/repo", "https://github.com/owner/repo.git", "repos/owner-repo")
-        assert repo["name"] == "owner/repo"
-        assert repo["url"] == "https://github.com/owner/repo.git"
-        assert repo["local_path"] == "repos/owner-repo"
-        assert repo["branch"] == "main"
-        assert repo["active"] == 1
-        assert repo["last_commit_hash"] is None
-
-    def test_add_custom_branch(self, test_db):
-        repo = test_db.add_dev_repo("o/r", "https://example.com/r.git", "repos/r", branch="develop")
-        assert repo["branch"] == "develop"
-
-    def test_url_unique(self, test_db):
-        import sqlite3
-        test_db.add_dev_repo("r1", "https://example.com/r.git", "repos/r1")
-        with __import__("pytest").raises(sqlite3.IntegrityError):
-            test_db.add_dev_repo("r2", "https://example.com/r.git", "repos/r2")
-
-    def test_get_dev_repos(self, test_db):
-        test_db.add_dev_repo("a", "https://a.git", "repos/a")
-        test_db.add_dev_repo("b", "https://b.git", "repos/b")
-        repos = test_db.get_dev_repos()
-        assert len(repos) == 2
-        assert repos[0]["name"] == "a"
-        assert repos[1]["name"] == "b"
-
-    def test_get_dev_repos_empty(self, test_db):
-        assert test_db.get_dev_repos() == []
-
-    def test_get_active_dev_repos(self, test_db):
-        r1 = test_db.add_dev_repo("a", "https://a.git", "repos/a")
-        test_db.add_dev_repo("b", "https://b.git", "repos/b")
-        test_db.toggle_dev_repo(r1["id"], False)
-        active = test_db.get_active_dev_repos()
-        assert len(active) == 1
-        assert active[0]["name"] == "b"
-
-    def test_get_dev_repo(self, test_db):
-        repo = test_db.add_dev_repo("r", "https://r.git", "repos/r")
-        fetched = test_db.get_dev_repo(repo["id"])
-        assert fetched["name"] == "r"
-
-    def test_get_dev_repo_not_found(self, test_db):
-        assert test_db.get_dev_repo(999) is None
-
-    def test_update_commit(self, test_db):
-        repo = test_db.add_dev_repo("r", "https://r.git", "repos/r")
-        test_db.update_dev_repo_commit(repo["id"], "abc123")
-        updated = test_db.get_dev_repo(repo["id"])
-        assert updated["last_commit_hash"] == "abc123"
-
-    def test_toggle_off_and_on(self, test_db):
-        repo = test_db.add_dev_repo("r", "https://r.git", "repos/r")
-        test_db.toggle_dev_repo(repo["id"], False)
-        assert test_db.get_dev_repo(repo["id"])["active"] == 0
-        test_db.toggle_dev_repo(repo["id"], True)
-        assert test_db.get_dev_repo(repo["id"])["active"] == 1
-
-    def test_delete(self, test_db):
-        repo = test_db.add_dev_repo("r", "https://r.git", "repos/r")
-        test_db.delete_dev_repo(repo["id"])
-        assert test_db.get_dev_repo(repo["id"]) is None
-        assert test_db.get_dev_repos() == []
 
 
 class TestCustomTexts:

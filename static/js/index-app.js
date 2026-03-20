@@ -1,5 +1,5 @@
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'chat', 'devstream', 'db', 'debug'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'chat', 'db', 'debug'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -22,7 +22,6 @@ function switchTab(name, el) {
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
   if (name === 'debug') { loadScreenshots(); }
-  if (name === 'devstream') { loadDevstream(); loadTodoList(); }
   if (name === 'layout') loadCustomTexts();
 }
 
@@ -1820,14 +1819,13 @@ if (_initTab === 'chat' && _initParam) {
   const pg = Math.max(1, parseInt(_initParam) || 1);
   _chatOffset = (pg - 1) * _chatLimit;
 }
-{ const _effectiveTab = _initTab === 'todo' ? 'devstream' : _initTab;
-  if (TAB_NAMES.includes(_effectiveTab)) switchTab(_effectiveTab);
+{ if (TAB_NAMES.includes(_initTab)) switchTab(_initTab);
 }
 
 // 固定アイテムの共通コントロール注入
 initCommonProps();
 // 固定パネルに子パネル管理UIを注入
-['avatar', 'subtitle', 'todo', 'topic', 'dev_activity'].forEach(panelId => {
+['avatar', 'subtitle', 'todo', 'topic'].forEach(panelId => {
   const body = document.querySelector(`[data-section="${panelId}"] .panel-body`);
   if (body) injectChildPanelSection(body, panelId);
 });
@@ -1905,136 +1903,3 @@ setInterval(syncBgmVolumes, 30000);
 })();
 
 
-// ===== 開発実況 =====
-
-async function loadDevstream() {
-  try {
-    const [reposRes, sourceRes] = await Promise.all([
-      fetch('/api/dev-stream/repos').then(r => r.json()),
-      fetch('/api/todo/source').then(r => r.json()),
-    ]);
-    // 現在のTODOソースから選択中リポジトリを判定
-    let selectedId = 'self';
-    if (sourceRes.source && sourceRes.source.startsWith('dev:')) {
-      selectedId = sourceRes.source.split(':')[1];
-    }
-    const el = document.getElementById('ds-repos');
-    let html = '';
-    // ai-twitch-cast（自プロジェクト）を先頭に常時表示
-    const selfSelected = selectedId === 'self';
-    const selfStyle = selfSelected ? 'border-left:3px solid #7b1fa2; padding-left:8px; background:#f8f5ff;' : '';
-    html += `<div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #e8e0f0; cursor:pointer; ${selfStyle} transition:background 0.15s;" onclick="dsSelectRepo('self')" onmouseenter="this.style.background='#faf5ff'" onmouseleave="this.style.background='${selfSelected ? '#f8f5ff' : ''}'">
-      <div style="flex:1; min-width:0;">
-        <div style="font-weight:600; font-size:0.9rem;">ai-twitch-cast</div>
-        <div style="font-size:0.75rem; color:#9a88b5;">このプロジェクト${selfSelected ? ' — TODO表示中' : ''}</div>
-      </div>
-      ${selfSelected ? '<span style="font-size:0.75rem; color:#7b1fa2; font-weight:600; white-space:nowrap;">選択中</span>' : ''}
-    </div>`;
-    // 外部リポジトリ
-    for (const repo of reposRes.repos) {
-      const isSelected = String(repo.id) === String(selectedId);
-      const hash = repo.last_commit_hash ? repo.last_commit_hash.substring(0, 8) : '-';
-      const rowStyle = isSelected ? 'border-left:3px solid #7b1fa2; padding-left:8px; background:#f8f5ff;' : '';
-      const statusText = isSelected ? ' — 監視中・TODO表示中' : (repo.active ? ' — 監視中' : '');
-      html += `<div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #e8e0f0; cursor:pointer; ${rowStyle} transition:background 0.15s;" onclick="dsSelectRepo(${repo.id})" onmouseenter="this.style.background='#faf5ff'" onmouseleave="this.style.background='${isSelected ? '#f8f5ff' : ''}'">
-        <div style="flex:1; min-width:0;">
-          <div style="font-weight:600; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(repo.name)}</div>
-          <div style="font-size:0.75rem; color:#9a88b5;">${esc(repo.branch)} / ${hash}${statusText}</div>
-        </div>
-        ${isSelected ? '<span style="font-size:0.75rem; color:#7b1fa2; font-weight:600; white-space:nowrap;">選択中</span>' : ''}
-        <button onclick="event.stopPropagation(); dsCheckRepo(${repo.id})" style="padding:2px 10px; font-size:0.75rem; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer;">Check</button>
-        <button onclick="event.stopPropagation(); dsDeleteRepo(${repo.id}, '${esc(repo.name)}')" style="padding:2px 10px; font-size:0.75rem; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer;">削除</button>
-      </div>`;
-    }
-    el.innerHTML = html;
-    // リポジトリ名ラベルを更新
-    const labelEl = document.getElementById('ds-todo-repo-name');
-    if (labelEl) {
-      if (selfSelected) {
-        labelEl.textContent = '(ai-twitch-cast)';
-      } else {
-        const repo = reposRes.repos.find(r => String(r.id) === String(selectedId));
-        labelEl.textContent = repo ? `(${repo.name})` : '';
-      }
-    }
-  } catch (e) { console.error('devstream repos error', e); }
-}
-
-async function dsAddRepo() {
-  const url = document.getElementById('ds-url').value.trim();
-  const branch = document.getElementById('ds-branch').value.trim() || 'main';
-  const errEl = document.getElementById('ds-add-error');
-  const btn = document.getElementById('ds-add-btn');
-  errEl.style.display = 'none';
-  if (!url) { errEl.textContent = 'URLを入力してください'; errEl.style.display = 'block'; return; }
-  btn.disabled = true;
-  btn.textContent = 'clone中...';
-  try {
-    const r = await fetch('/api/dev-stream/repos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, branch }),
-    });
-    const d = await r.json();
-    if (!d.ok) {
-      errEl.textContent = d.error || '追加に失敗しました';
-      errEl.style.display = 'block';
-      return;
-    }
-    document.getElementById('ds-url').value = '';
-    await loadDevstream();
-  } catch (e) {
-    errEl.textContent = '通信エラー';
-    errEl.style.display = 'block';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '追加';
-  }
-}
-
-async function dsSelectRepo(repoId) {
-  if (repoId === 'self') {
-    // 全外部リポジトリを無効化 → TODOソースがselfに戻る
-    const repos = await (await fetch('/api/dev-stream/repos')).json();
-    for (const r of repos.repos) {
-      if (r.active) {
-        await fetch(`/api/dev-stream/repos/${r.id}/toggle`, {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({active: false}),
-        });
-      }
-    }
-  } else {
-    // 外部リポジトリを有効化（排他ロジックで他は自動無効化）
-    await fetch(`/api/dev-stream/repos/${repoId}/toggle`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({active: true}),
-    });
-  }
-  await loadDevstream();
-  await loadTodoList();
-}
-
-async function dsToggleRepo(id, active) {
-  await fetch(`/api/dev-stream/repos/${id}/toggle`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ active }),
-  });
-  await loadDevstream();
-}
-
-async function dsCheckRepo(id) {
-  const r = await fetch(`/api/dev-stream/repos/${id}/check`, { method: 'POST' });
-  const d = await r.json();
-  if (d.ok) {
-    log(`チェック完了: ${d.commits}件のコミット`);
-  }
-  await loadDevstream();
-}
-
-async function dsDeleteRepo(id, name) {
-  if (!await showConfirm(`「${name}」を削除しますか？`, { title: '削除', okLabel: '削除', danger: true })) return;
-  await fetch(`/api/dev-stream/repos/${id}`, { method: 'DELETE' });
-  await loadDevstream();
-}

@@ -62,7 +62,7 @@ async def update_item_visibility(item_id: str, request: Request):
     if not item:
         return {"error": "not found"}
     db.upsert_broadcast_item(item_id, item["type"], {"visible": visible})
-    prefix = item_id if item_id in ("avatar", "subtitle", "todo", "topic", "version", "dev_activity") else item["type"]
+    prefix = item_id if item_id in ("avatar", "subtitle", "todo", "topic", "version") else item["type"]
     await state.broadcast_overlay({"type": "settings_update", prefix: {"visible": visible}})
     return {"ok": True}
 

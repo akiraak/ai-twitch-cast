@@ -32,7 +32,7 @@ def read_js_text_variables() -> str:
 
 # === ITEM_REGISTRY ===
 
-EXPECTED_ITEMS = ["avatar", "subtitle", "todo", "topic", "dev_activity"]
+EXPECTED_ITEMS = ["avatar", "subtitle", "todo", "topic"]
 
 
 class TestItemRegistry:
@@ -139,7 +139,6 @@ class TestApplySettingsUsesCommon:
             "applyCommonStyle(subtitleEl",
             "applyCommonStyle(todoPanelEl",
             "applyCommonStyle(topicPanelEl",
-            "applyCommonStyle(dap, s.dev_activity",
         ]
         for call in expected_calls:
             assert call in body, f"applySettings に {call} がない"
@@ -205,17 +204,6 @@ class TestEditSaveUsesRegistry:
         broadcast_js = read_js()
         assert "replaceTextVariables(" in broadcast_js
 
-    def test_dev_activity_skips_visible(self):
-        """dev_activityはskipVisible: trueでvisibleを保存しないこと"""
-        js = read_js()
-        match = re.search(r"const ITEM_REGISTRY\s*=\s*\[(.*?)\];", js, re.DOTALL)
-        assert match
-        registry = match.group(1)
-        # dev_activityのエントリにskipVisibleがあること
-        da_match = re.search(
-            r"prefix:\s*'dev_activity'.*?skipVisible:\s*true", registry, re.DOTALL
-        )
-        assert da_match, "dev_activity に skipVisible: true がない"
 
 
 # === broadcast.html の data-editable 属性 ===
@@ -308,25 +296,12 @@ class TestCssVariables:
     def _read_css(self):
         return (STATIC_DIR / "css" / "broadcast.css").read_text(encoding="utf-8")
 
-    def test_dev_activity_panel_in_css(self):
-        css = self._read_css()
-        assert "#dev-activity-panel" in css, "dev-activity-panelのCSSルールがない"
-        assert "#dev-activity-content" in css, "dev-activity-contentのCSSルールがない"
-        assert ".dev-activity-title" in css, "dev-activity-titleのCSSルールがない"
-
     def test_css_uses_item_variables(self):
         """CSS変数 --item-* がCSSで参照されていること"""
         css = self._read_css()
         assert "var(--item-border-radius" in css
         assert "var(--item-text-color" in css
-        assert "var(--item-padding" in css
         assert "var(--item-font-size" in css
-
-    def test_dev_activity_panel_no_inline_styles(self):
-        html = read_html()
-        m = re.search(r'id="dev-activity-panel"[^>]*>', html)
-        assert m, "dev-activity-panelが見つからない"
-        assert 'style=' not in m.group(0), "dev-activity-panelにインラインスタイルが残っている"
 
     def test_existing_items_use_border_radius_var(self):
         """subtitle, todo, topicのborder-radiusがCSS変数を使っていること"""
@@ -353,7 +328,6 @@ class TestDataEditableAttributes:
             "subtitle": "subtitle",
             "todo": "todo-panel",
             "topic": "topic-panel",
-            "dev_activity": "dev-activity-panel",
         }
         for editable_name, element_id in expected.items():
             pattern = rf'id="{element_id}"[^>]*data-editable="{editable_name}"'

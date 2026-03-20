@@ -39,7 +39,6 @@
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
   <div class="tab" onclick="switchTab('topic', this)">トピック</div>
   <div class="tab" onclick="switchTab('chat', this)">チャット</div>
-  <div class="tab" onclick="switchTab('devstream', this)">開発実況</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
   <div class="tab" onclick="switchTab('db', this)">DB</div>
 </div>
@@ -88,8 +87,6 @@
         <details data-section="topic" class="panel-item"><summary>トピック</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">最大幅 (%)</span><input type="range" class="vol-slider layout-slider" min="10" max="60" step="0.5" data-key="topic.maxWidth" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-maxWidth" min="10" max="60" step="0.5" data-key="topic.maxWidth" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">タイトル (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="topic.titleFontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-titleFontSize" min="0.5" max="3" step="0.05" data-key="topic.titleFontSize" oninput="onLayoutNum(this)"></div>
-        </div></details>
-        <details data-section="dev_activity" class="panel-item"><summary>開発アクティビティ</summary><div class="panel-body">
         </div></details>
       </div>
       <!-- 子パネル管理UIは panel-ui.js の injectChildPanelSection() で注入 -->
@@ -382,34 +379,6 @@ topics      1──N  topic_scripts (topic_id)</div>
       <div id="chat-pager-top" class="chat-pager"></div>
       <div id="chat-messages"></div>
       <div id="chat-pager" class="chat-pager"></div>
-    </div>
-  </div>
-
-  <!-- ===== 開発実況 ===== -->
-  <div class="tab-content" id="tab-devstream">
-    <div class="card">
-      <h2>リポジトリ追加</h2>
-      <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
-        <div style="flex:1; min-width:200px;">
-          <label style="font-size:0.75rem; color:#9a88b5;">リポジトリURL</label>
-          <input type="text" id="ds-url" class="text-input" placeholder="https://github.com/owner/repo.git" style="margin:0;">
-        </div>
-        <div style="width:100px;">
-          <label style="font-size:0.75rem; color:#9a88b5;">ブランチ</label>
-          <input type="text" id="ds-branch" class="text-input" placeholder="main" value="main" style="margin:0;">
-        </div>
-        <button onclick="dsAddRepo()" id="ds-add-btn" style="padding:6px 16px; white-space:nowrap;">追加</button>
-      </div>
-      <div id="ds-add-error" style="color:#e53935; font-size:0.8rem; margin-top:4px; display:none;"></div>
-    </div>
-    <div class="card">
-      <h2>リポジトリ一覧</h2>
-      <div id="ds-repos"></div>
-    </div>
-    <div class="card">
-      <h2>TODO一覧 <span id="ds-todo-repo-name" style="font-size:0.75rem; font-weight:normal; color:#9a88b5;"></span></h2>
-      <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:12px;">クリックでアバターが作業開始を読み上げます</p>
-      <div id="todo-list" style="font-size:0.85rem;"></div>
     </div>
   </div>
 

@@ -28,58 +28,23 @@ TODO_PATH = PROJECT_DIR / "TODO.md"
 _todo_last_mtime: float = 0.0
 _todo_watch_task: asyncio.Task | None = None
 
-# TODOソース: "self" (自プロジェクト) or "dev:{repo_id}" (外部リポジトリ)
-_todo_source: str = "self"
-
-
-def _get_todo_path() -> Path:
-    """現在のTODOソースに応じたTODO.mdパスを返す"""
-    if _todo_source == "self":
-        return TODO_PATH
-    if _todo_source.startswith("dev:"):
-        try:
-            repo_id = int(_todo_source.split(":", 1)[1])
-            repo = db.get_dev_repo(repo_id)
-            if repo:
-                return Path(repo["local_path"]) / "TODO.md"
-        except (ValueError, IndexError):
-            pass
-    return TODO_PATH
-
-
-def _get_todo_source_label() -> str | None:
-    """外部リポジトリ選択時にリポジトリ名を返す（selfならNone）"""
-    if _todo_source.startswith("dev:"):
-        try:
-            repo_id = int(_todo_source.split(":", 1)[1])
-            repo = db.get_dev_repo(repo_id)
-            if repo:
-                return repo["name"]
-        except (ValueError, IndexError):
-            pass
-    return None
-
-
 async def broadcast_todo():
     """TODO.mdを読み込み、todo_updateイベントをブロードキャストする"""
     todo_data = await get_todo()
     event = {"type": "todo_update", "items": todo_data["items"]}
-    source_label = _get_todo_source_label()
-    if source_label:
-        event["source"] = source_label
     await state.broadcast_overlay(event)
 
 
 async def _watch_todo_file():
     """TODO.mdのmtimeを監視し、変更があればブロードキャストする"""
     global _todo_last_mtime
-    todo_path = _get_todo_path()
+    todo_path = TODO_PATH
     if todo_path.exists():
         _todo_last_mtime = todo_path.stat().st_mtime
     while True:
         await asyncio.sleep(2)
         try:
-            todo_path = _get_todo_path()
+            todo_path = TODO_PATH
             if not todo_path.exists():
                 continue
             mtime = todo_path.stat().st_mtime
@@ -294,10 +259,6 @@ _OVERLAY_DEFAULTS = {
         "positionX": 1.04, "positionY": 1.85, "width": 31, "height": 20,
         "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95, "zIndex": 20,
     }),
-    "dev_activity": _make_item_defaults({
-        "visible": 0, "positionX": 1, "positionY": 75, "width": 35, "height": 15,
-        "zIndex": 15, "bgOpacity": 0.9, "fontSize": 0.65, "padding": 8,
-    }),
     "sync": {"lipsyncDelay": 100},
 }
 
@@ -342,7 +303,7 @@ async def get_overlay_settings():
 @router.get("/api/todo")
 async def get_todo():
     """TODO.mdから未完了タスクを返す（セクション・作業中マーク対応）"""
-    todo_path = _get_todo_path()
+    todo_path = TODO_PATH
     if not todo_path.exists():
         return {"items": []}
     text = todo_path.read_text(encoding="utf-8")
@@ -374,7 +335,7 @@ async def start_todo(request: Request):
     """TODOを作業中にマークし、アバターに読み上げさせる"""
     body = await request.json()
     task_text = body.get("text", "").strip()
-    todo_path = _get_todo_path()
+    todo_path = TODO_PATH
     if not task_text or not todo_path.exists():
         return {"ok": False, "error": "タスクが見つかりません"}
 
@@ -418,34 +379,6 @@ async def start_todo(request: Request):
     return {"ok": True}
 
 
-@router.get("/api/todo/source")
-async def get_todo_source():
-    """現在のTODOソースを返す"""
-    return {"source": _todo_source, "label": _get_todo_source_label()}
-
-
-@router.post("/api/todo/source")
-async def set_todo_source(request: Request):
-    """TODOソースを切り替える"""
-    global _todo_source, _todo_last_mtime
-    body = await request.json()
-    source = body.get("source", "self")
-    repo_id = body.get("repo_id")
-    if source == "self":
-        _todo_source = "self"
-    elif source == "dev" and repo_id is not None:
-        repo = db.get_dev_repo(int(repo_id))
-        if not repo:
-            return {"ok": False, "error": "リポジトリが見つかりません"}
-        _todo_source = f"dev:{repo_id}"
-    else:
-        return {"ok": False, "error": "不正なソース指定"}
-    # mtime をリセットして即座にブロードキャスト
-    _todo_last_mtime = 0.0
-    await broadcast_todo()
-    return {"ok": True, "source": _todo_source, "label": _get_todo_source_label()}
-
-
 @router.post("/api/overlay/preview")
 async def preview_overlay_settings(request: Request):
     """設定をオーバーレイにリアルタイム反映する（保存なし）"""
@@ -458,7 +391,7 @@ async def preview_overlay_settings(request: Request):
 async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
-    fixed_items = {"avatar", "subtitle", "todo", "topic", "dev_activity"}
+    fixed_items = {"avatar", "subtitle", "todo", "topic"}
     for section, props in body.items():
         if not isinstance(props, dict):
             continue
