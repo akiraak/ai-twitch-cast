@@ -571,6 +571,8 @@ public class MainForm : Form
                 _webView.CoreWebView2.Environment.BrowserVersionString);
 
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+            // デフォルトコンテキストメニューを無効化（broadcast.htmlのカスタムメニューのみ使用）
+            _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             // JSコンソールをC#ログに転送（WebView2 postMessage経由）
             _webView.CoreWebView2.WebMessageReceived += (_, args) =>
             {
@@ -663,6 +665,7 @@ public class MainForm : Form
         try
         {
             await _panelView.EnsureCoreWebView2Async(_webView.CoreWebView2.Environment);
+            _panelView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             _panelView.CoreWebView2.WebMessageReceived += OnPanelMessage;
             // C#アプリのHTTPサーバーからパネルHTMLを取得
             _panelView.CoreWebView2.Navigate($"http://localhost:{_httpPort}/panel");

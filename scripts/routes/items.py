@@ -154,7 +154,7 @@ async def get_item(item_id: str):
     """指定IDのbroadcast_itemを返す"""
     item = db.get_broadcast_item(item_id)
     if not item:
-        return {"error": "not found"}, 404
+        return {"error": "not found"}
     # 子パネルも含める
     children = db.get_child_items(item_id)
     if children:
@@ -164,13 +164,12 @@ async def get_item(item_id: str):
 
 @router.put("/api/items/{item_id}")
 async def update_item(item_id: str, request: Request):
-    """broadcast_itemを更新（共通プロパティ + properties）"""
+    """broadcast_itemを更新（存在しなければ自動作成）"""
     body = await request.json()
     item = db.get_broadcast_item(item_id)
-    if not item:
-        return {"error": "not found"}
-    result = db.upsert_broadcast_item(item_id, item["type"], body)
-    await state.broadcast_overlay({"type": "settings_update", item_id: body})
+    item_type = item["type"] if item else _get_item_type(item_id)
+    result = db.upsert_broadcast_item(item_id, item_type, body)
+    await state.broadcast_overlay({"type": "settings_update", **{item_id: body}})
     return result
 
 

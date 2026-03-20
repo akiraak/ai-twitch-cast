@@ -752,7 +752,7 @@ function removeChildPanel(childId) {
 }
 
 async function addChildPanelToSelected() {
-  hideAll();
+  closeSettingsPanel();
   if (!_selectedEditable) return;
   const parentId = _selectedEditable.dataset.editable;
   // 子パネルには子パネルを追加不可（1階層のみ）
@@ -767,7 +767,7 @@ async function addChildPanelToSelected() {
 }
 
 async function deleteSelectedChildPanel() {
-  hideAll();
+  closeSettingsPanel();
   if (!_selectedEditable) return;
   const childId = _selectedEditable.dataset.editable;
   if (!_selectedEditable.dataset.parentId) return;
@@ -818,8 +818,8 @@ function _renderField(field, value) {
     case 'toggle': {
       const checked = value ? 'checked' : '';
       return `<div class="sp-row"><label>${field.label}</label>` +
-        `<div class="sp-toggle-wrap"><input type="checkbox" ${checked} ${dk} onchange="_onSpToggle(this)">` +
-        `<span class="sp-toggle-track"></span><span class="sp-toggle-knob"></span></div></div>`;
+        `<label class="sp-toggle-wrap"><input type="checkbox" ${checked} ${dk} onchange="_onSpToggle(this)">` +
+        `<span class="sp-toggle-track"></span><span class="sp-toggle-knob"></span></label></div>`;
     }
     case 'select': {
       const opts = field.options.map(([v, l]) =>
@@ -849,21 +849,52 @@ function _toHex(c) {
   return '#000000';
 }
 
-// 設定パネルを開く
-async function openSettingsPanel() {
-  _ctxMenu.style.display = 'none';
+// DOM要素から現在の設定値を読み取る（APIにデータがない場合のフォールバック）
+function _readValuesFromDOM(el) {
+  const vals = {};
+  vals.positionX = parseFloat(el.style.left) || 0;
+  vals.positionY = parseFloat(el.style.top) || 0;
+  const w = parseFloat(el.style.width);
+  if (!isNaN(w)) vals.width = w;
+  const h = parseFloat(el.style.height);
+  if (!isNaN(h)) vals.height = h;
+  vals.zIndex = getElZIndex(el);
+  vals.visible = el.style.display !== 'none' ? 1 : 0;
+  const cs = getComputedStyle(el);
+  if (cs.backgroundColor) vals.bgColor = cs.backgroundColor;
+  if (cs.borderRadius) vals.borderRadius = parseFloat(cs.borderRadius) || 0;
+  if (cs.fontSize) vals.fontSize = parseFloat(cs.fontSize) / window.innerWidth * 100 || 1;
+  if (cs.color) vals.textColor = cs.color;
+  return vals;
+}
+
+// 設定パネルを開く（右クリック位置に直接表示）
+async function openSettingsPanel(x, y) {
   if (!_selectedEditable) return;
   const itemId = _selectedEditable.dataset.editable;
   if (!itemId) return;
 
-  const [schema, itemData] = await Promise.all([
+  const [schema, rawItemData] = await Promise.all([
     _fetchSchema(itemId),
     fetch(`/api/items/${encodeURIComponent(itemId)}`).then(r => r.json()).catch(() => ({})),
   ]);
   if (!schema || !schema.groups) return;
 
+  // APIからデータが取れない場合（キャプチャ等）、DOM要素から現在値を読み取る
+  const hasData = rawItemData && !rawItemData.error && !Array.isArray(rawItemData) && rawItemData.id;
+  const itemData = hasData ? rawItemData : _readValuesFromDOM(_selectedEditable);
+
   _spItemId = itemId;
-  _spTitle.textContent = '設定: ' + (schema.label || itemId);
+  _spTitle.textContent = schema.label || itemId;
+
+  // アクションボタン（子パネル追加/削除）
+  const isChild = !!_selectedEditable.dataset.parentId;
+  const actionsEl = document.getElementById('sp-actions');
+  if (isChild) {
+    actionsEl.innerHTML = `<button class="sp-action-btn sp-danger" onclick="deleteSelectedChildPanel()">この子パネルを削除</button>`;
+  } else {
+    actionsEl.innerHTML = `<button class="sp-action-btn" onclick="addChildPanelToSelected()">テキスト子パネルを追加</button>`;
+  }
 
   // グループ→HTML生成（先頭グループは開いた状態）
   _spBody.innerHTML = schema.groups.map((g, i) => {
@@ -872,11 +903,8 @@ async function openSettingsPanel() {
     return `<details class="sp-group"${open}><summary>${g.title}</summary>${fields}</details>`;
   }).join('');
 
-  // 位置: 右クリックメニューの位置付近
-  const x = parseInt(_ctxMenu.style.left) || 100;
-  const y = parseInt(_ctxMenu.style.top) || 100;
-  _spPanel.style.left = x + 'px';
-  _spPanel.style.top = y + 'px';
+  _spPanel.style.left = (x || 100) + 'px';
+  _spPanel.style.top = (y || 100) + 'px';
   _spPanel.classList.add('open');
   _clampToViewport(_spPanel);
 }
@@ -926,12 +954,15 @@ function _onSpChange(el) {
   _scheduleSpSave(el.dataset.spKey, el.value);
 }
 
-// デバウンス付き保存
+// デバウンス付き保存 + DOM即時反映
 function _scheduleSpSave(key, value) {
   if (!_spItemId) return;
+  // DOM要素に即座に適用（WebSocket応答を待たない）
+  if (_selectedEditable) {
+    applyCommonStyle(_selectedEditable, {[key]: value});
+  }
   clearTimeout(_spSaveTimer);
   _spSaveTimer = setTimeout(async () => {
-    _saving = true;
     try {
       await fetch(`/api/items/${encodeURIComponent(_spItemId)}`, {
         method: 'PUT',
@@ -939,7 +970,6 @@ function _scheduleSpSave(key, value) {
         body: JSON.stringify({[key]: value}),
       });
     } catch (e) { console.log('設定保存エラー:', e.message); }
-    _saving = false;
   }, 200);
 }
 
@@ -956,9 +986,6 @@ if (isEmbedded) document.body.classList.add('embedded');
 let _saveTimer = null;
 let _saving = false;  // editSave中はsettings_updateを無視
 let _selectedEditable = null;
-const _ctxMenu = document.getElementById('edit-context-menu');
-const _zDialog = document.getElementById('zindex-dialog');
-const _zdInput = document.getElementById('zd-input');
 
 function getElZIndex(el) {
   if (el._savedZIndex != null) return parseInt(el._savedZIndex) || 0;
@@ -973,50 +1000,12 @@ function _clampToViewport(el) {
   if (rect.top > maxY) el.style.top = Math.max(0, maxY) + 'px';
 }
 
+// 右クリック → 直接設定パネルを開く
 function showContextMenu(el, x, y) {
-  hideAll();
   selectEditable(el);
   _selectedEditable = el;
   el.classList.add('selected');
-  // 子パネルかどうかでメニュー項目を切替
-  const isChild = !!el.dataset.parentId;
-  document.getElementById('ctx-add-child').style.display = isChild ? 'none' : '';
-  document.getElementById('ctx-delete-child').style.display = isChild ? '' : 'none';
-  // 表示状態に応じてトグルラベルを切替
-  const isVisible = el.style.display !== 'none';
-  document.getElementById('ctx-toggle-vis').textContent = isVisible ? '表示OFF' : '表示ON';
-  _ctxMenu.style.left = x + 'px';
-  _ctxMenu.style.top = y + 'px';
-  _ctxMenu.style.display = 'block';
-  _clampToViewport(_ctxMenu);
-}
-
-async function toggleSelectedVisibility() {
-  hideAll();
-  if (!_selectedEditable) return;
-  const itemId = _selectedEditable.dataset.editable;
-  if (!itemId) return;
-  const isVisible = _selectedEditable.style.display !== 'none';
-  const newVisible = isVisible ? 0 : 1;
-  try {
-    await fetch(`/api/items/${encodeURIComponent(itemId)}/visibility`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({visible: newVisible}),
-    });
-    _selectedEditable.style.display = newVisible ? '' : 'none';
-  } catch (e) { console.log('表示切替エラー:', e.message); }
-}
-
-function openZIndexDialog() {
-  _ctxMenu.style.display = 'none';
-  if (!_selectedEditable) return;
-  _zdInput.value = getElZIndex(_selectedEditable);
-  // メニューがあった位置に表示
-  _zDialog.style.left = _ctxMenu.style.left;
-  _zDialog.style.top = _ctxMenu.style.top;
-  _zDialog.style.display = 'block';
-  _clampToViewport(_zDialog);
+  openSettingsPanel(x, y);
 }
 
 let _editingEl = null;
@@ -1058,41 +1047,17 @@ function deselectEditable() {
 }
 
 function hideAll() {
-  _ctxMenu.style.display = 'none';
-  _zDialog.style.display = 'none';
   if (_selectedEditable) {
     _selectedEditable.classList.remove('selected');
     _selectedEditable = null;
   }
-  // 設定パネルはhideAllでは閉じない（明示的にcloseSettingsPanel()で閉じる）
 }
 
-function _setElZIndex(el, z) {
-  if (el._savedZIndex != null) el._savedZIndex = String(z);
-  else el.style.zIndex = z;
-}
-
-function editZIndex(delta) {
-  if (!_selectedEditable) return;
-  const newZ = Math.max(0, Math.min(100, getElZIndex(_selectedEditable) + delta));
-  _setElZIndex(_selectedEditable, newZ);
-  _zdInput.value = newZ;
-  scheduleSave();
-}
-
-function setZIndexDirect(val) {
-  if (!_selectedEditable) return;
-  const newZ = Math.max(0, Math.min(100, parseInt(val) || 0));
-  _setElZIndex(_selectedEditable, newZ);
-  _zdInput.value = newZ;
-  scheduleSave();
-}
-
-// メニュー/ダイアログ外・パーツ外クリックで閉じる
+// パーツ外クリックで閉じる
 document.addEventListener('mousedown', (e) => {
   // 設定パネル内のクリックは無視
   if (_spPanel.contains(e.target)) return;
-  if (!_ctxMenu.contains(e.target) && !_zDialog.contains(e.target)) {
+  {
     hideAll();
     const clickedEditable = e.target.closest('[data-editable]');
     // 編集中パーツ自身のクリックはsetupEditableに任せる
@@ -1539,6 +1504,11 @@ async function editSave() {
 
 function initEditMode() {
   document.querySelectorAll('[data-editable]').forEach(setupEditable);
+
+  // 非editableエリアでもブラウザデフォルトの右クリックメニューを抑制
+  document.addEventListener('contextmenu', (e) => {
+    if (!e.target.closest('[data-editable]')) e.preventDefault();
+  });
 
   // カーソルキーで選択中の要素を微調整移動
   document.addEventListener('keydown', (e) => {

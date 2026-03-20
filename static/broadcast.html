@@ -32,35 +32,14 @@
 })();
 </script>
 
-<!-- 右クリックメニュー -->
-<div class="edit-context-menu" id="edit-context-menu">
-  <div class="ctx-item" id="ctx-toggle-vis" onclick="toggleSelectedVisibility()">表示OFF</div>
-  <div class="ctx-item" onclick="openSettingsPanel()">設定を編集...</div>
-  <div class="ctx-item" onclick="openZIndexDialog()">Z順序を変更...</div>
-  <div class="ctx-item" id="ctx-add-child" onclick="addChildPanelToSelected()">テキスト子パネルを追加</div>
-  <div class="ctx-item ctx-danger" id="ctx-delete-child" onclick="deleteSelectedChildPanel()">この子パネルを削除</div>
-</div>
-
-<!-- フローティング設定パネル -->
+<!-- フローティング設定パネル（右クリックで直接表示） -->
 <div class="settings-panel" id="settings-panel">
   <div class="sp-header" id="sp-header">
     <span class="sp-title" id="sp-title">設定</span>
     <button class="sp-close" onclick="closeSettingsPanel()">&times;</button>
   </div>
+  <div class="sp-actions" id="sp-actions"></div>
   <div class="sp-body" id="sp-body"></div>
-</div>
-
-<!-- Z値ダイアログ -->
-<div class="zindex-dialog" id="zindex-dialog">
-  <div class="zd-row">
-    <button onclick="editZIndex(-1)">▼</button>
-    <input type="number" id="zd-input" min="0" max="100" step="1" onchange="setZIndexDirect(this.value)">
-    <button onclick="editZIndex(1)">▲</button>
-  </div>
-  <div class="zd-shortcuts">
-    <button onclick="setZIndexDirect(0)">最背面</button>
-    <button onclick="setZIndexDirect(100)">最前面</button>
-  </div>
 </div>
 
 <!-- 背景画像（APIから選択済み背景を取得、なければデフォルト） -->

@@ -10,7 +10,15 @@
 - [x] スキーマAPIテスト9件追加
 - [x] index.htmlの`_commonPropsHTML()`をスキーマAPIベースに統一（ハードコード排除）
 - [x] C#アプリはWebView2経由で自動対応（追加実装不要）
-- [x] 右クリックメニューに「表示OFF/ON」クイックトグル追加
+- [x] 右クリック→設定パネル直接表示に変更（中間メニュー・Z値ダイアログ廃止）
+- [x] 設定パネル上部に「テキスト子パネルを追加」/「削除」ボタン配置
+- [x] C# WebView2のデフォルトコンテキストメニュー無効化
+- [x] PUT /api/items/{id} でアイテム自動作成（upsert）
+- [x] 設定パネルの値をDOMフォールバックで取得（broadcast_items未登録のキャプチャ対応）
+- [x] settings_updateのWebSocketキー名修正（item_idリテラル→変数展開）
+- [x] 設定変更のDOM即時反映（applyCommonStyle直接適用）
+- [x] 設定パネルヘッダーをsticky固定（スクロール時にタイトル＋×が残る）
+- [x] トグルスイッチのクリック修正（div→label化）＋サイズ固定
 
 ## WebUI TODOタブ復活＋外部ファイル対応＋複数選択
 

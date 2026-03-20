@@ -225,87 +225,6 @@
     outline-offset: 2px;
   }
 
-  /* === 右クリックメニュー === */
-  .edit-context-menu {
-    display: none;
-    position: fixed;
-    z-index: 10000;
-    background: rgba(20, 15, 30, 0.95);
-    border: 1px solid #7c4dff;
-    border-radius: 6px;
-    padding: 4px 0;
-    font-family: system-ui, sans-serif;
-    font-size: 13px;
-    color: #eee;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-    min-width: 140px;
-  }
-  .edit-context-menu .ctx-item {
-    padding: 6px 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .edit-context-menu .ctx-item:hover {
-    background: rgba(124, 77, 255, 0.2);
-  }
-  .edit-context-menu .ctx-item.ctx-danger { color: #ff6b6b; }
-  .edit-context-menu .ctx-item.ctx-danger:hover { background: rgba(255, 80, 80, 0.2); }
-
-  /* === Z値ダイアログ === */
-  .zindex-dialog {
-    display: none;
-    position: fixed;
-    z-index: 10001;
-    background: rgba(20, 15, 30, 0.95);
-    border: 1px solid #7c4dff;
-    border-radius: 8px;
-    padding: 12px 16px;
-    font-family: system-ui, sans-serif;
-    font-size: 13px;
-    color: #eee;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-  }
-  .zindex-dialog .zd-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-  .zindex-dialog button {
-    padding: 4px 12px;
-    border: 1px solid #7c4dff;
-    border-radius: 4px;
-    background: transparent;
-    color: #b388ff;
-    font-size: 14px;
-    cursor: pointer;
-  }
-  .zindex-dialog button:hover { background: #7c4dff33; }
-  .zindex-dialog input[type="number"] {
-    width: 55px;
-    padding: 3px 4px;
-    border: 1px solid #555;
-    border-radius: 4px;
-    background: #222;
-    color: #eee;
-    font-size: 14px;
-    text-align: center;
-  }
-  .zindex-dialog .zd-shortcuts {
-    display: flex;
-    gap: 6px;
-    border-top: 1px solid rgba(124, 77, 255, 0.2);
-    padding-top: 8px;
-  }
-  .zindex-dialog .zd-shortcuts button {
-    flex: 1;
-    font-size: 11px;
-    padding: 4px 6px;
-  }
   [data-editable].dragging {
     outline: 2px solid #ff4081;
     outline-offset: 2px;
@@ -471,11 +390,14 @@
   .settings-panel.open { display: block; }
 
   .sp-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 6px 10px;
-    background: rgba(124, 77, 255, 0.15);
+    background: rgba(20, 15, 30, 0.98);
     border-bottom: 1px solid rgba(124, 77, 255, 0.3);
     cursor: grab;
     user-select: none;
@@ -487,6 +409,28 @@
     cursor: pointer; padding: 0 4px; line-height: 1;
   }
   .sp-close:hover { color: #fff; }
+
+  .sp-actions {
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(124, 77, 255, 0.15);
+  }
+  .sp-actions:empty { display: none; }
+  .sp-action-btn {
+    display: block;
+    width: 100%;
+    padding: 5px 8px;
+    margin: 2px 0;
+    border: 1px solid #7c4dff;
+    border-radius: 4px;
+    background: transparent;
+    color: #b388ff;
+    font-size: 11px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .sp-action-btn:hover { background: rgba(124, 77, 255, 0.15); }
+  .sp-action-btn.sp-danger { color: #ff6b6b; border-color: #ff6b6b; }
+  .sp-action-btn.sp-danger:hover { background: rgba(255, 80, 80, 0.15); }
 
   .sp-body { padding: 4px 0; }
 
@@ -571,12 +515,17 @@
     position: relative;
     display: inline-block;
     width: 32px; height: 18px;
+    min-width: 32px;
+    flex-shrink: 0;
+    cursor: pointer;
   }
   .sp-toggle-wrap input {
     opacity: 0; width: 0; height: 0;
+    position: absolute;
   }
   .sp-toggle-track {
-    position: absolute; cursor: pointer; inset: 0;
+    position: absolute; cursor: pointer;
+    top: 0; left: 0; width: 32px; height: 18px;
     background: #555; border-radius: 18px;
     transition: background 0.2s;
   }
