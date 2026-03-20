@@ -40,7 +40,6 @@
   <div class="tab" onclick="switchTab('topic', this)">トピック</div>
   <div class="tab" onclick="switchTab('chat', this)">チャット</div>
   <div class="tab" onclick="switchTab('devstream', this)">開発実況</div>
-  <div class="tab" onclick="switchTab('todo', this)">TODO</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
   <div class="tab" onclick="switchTab('db', this)">DB</div>
 </div>
@@ -388,12 +387,8 @@ topics      1──N  topic_scripts (topic_id)</div>
       <h2>リポジトリ一覧</h2>
       <div id="ds-repos"></div>
     </div>
-  </div>
-
-  <!-- ===== TODO ===== -->
-  <div class="tab-content" id="tab-todo">
     <div class="card">
-      <h2>TODO一覧</h2>
+      <h2>TODO一覧 <span id="ds-todo-repo-name" style="font-size:0.75rem; font-weight:normal; color:#9a88b5;"></span></h2>
       <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:12px;">クリックでアバターが作業開始を読み上げます</p>
       <div id="todo-list" style="font-size:0.85rem;"></div>
     </div>

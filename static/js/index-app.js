@@ -1,5 +1,5 @@
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'chat', 'devstream', 'db', 'debug', 'todo'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'chat', 'devstream', 'db', 'debug'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -22,8 +22,7 @@ function switchTab(name, el) {
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
   if (name === 'debug') { loadScreenshots(); }
-  if (name === 'todo') loadTodoList();
-  if (name === 'devstream') loadDevstream();
+  if (name === 'devstream') { loadDevstream(); loadTodoList(); }
   if (name === 'layout') loadCustomTexts();
 }
 
@@ -1700,7 +1699,9 @@ if (_initTab === 'chat' && _initParam) {
   const pg = Math.max(1, parseInt(_initParam) || 1);
   _chatOffset = (pg - 1) * _chatLimit;
 }
-if (TAB_NAMES.includes(_initTab)) switchTab(_initTab);
+{ const _effectiveTab = _initTab === 'todo' ? 'devstream' : _initTab;
+  if (TAB_NAMES.includes(_effectiveTab)) switchTab(_effectiveTab);
+}
 
 // 固定アイテムの共通コントロール注入
 initCommonProps();
@@ -1787,32 +1788,54 @@ setInterval(syncBgmVolumes, 30000);
 
 async function loadDevstream() {
   try {
-    const r = await fetch('/api/dev-stream/repos');
-    const d = await r.json();
-    const el = document.getElementById('ds-repos');
-    if (!d.repos.length) {
-      el.innerHTML = '<span style="color:#9a88b5;">リポジトリなし</span>';
-      return;
+    const [reposRes, sourceRes] = await Promise.all([
+      fetch('/api/dev-stream/repos').then(r => r.json()),
+      fetch('/api/todo/source').then(r => r.json()),
+    ]);
+    // 現在のTODOソースから選択中リポジトリを判定
+    let selectedId = 'self';
+    if (sourceRes.source && sourceRes.source.startsWith('dev:')) {
+      selectedId = sourceRes.source.split(':')[1];
     }
-    el.innerHTML = d.repos.map(repo => {
-      const active = repo.active ? true : false;
+    const el = document.getElementById('ds-repos');
+    let html = '';
+    // ai-twitch-cast（自プロジェクト）を先頭に常時表示
+    const selfSelected = selectedId === 'self';
+    const selfStyle = selfSelected ? 'border-left:3px solid #7b1fa2; padding-left:8px; background:#f8f5ff;' : '';
+    html += `<div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #e8e0f0; cursor:pointer; ${selfStyle} transition:background 0.15s;" onclick="dsSelectRepo('self')" onmouseenter="this.style.background='#faf5ff'" onmouseleave="this.style.background='${selfSelected ? '#f8f5ff' : ''}'">
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:0.9rem;">ai-twitch-cast</div>
+        <div style="font-size:0.75rem; color:#9a88b5;">このプロジェクト${selfSelected ? ' — TODO表示中' : ''}</div>
+      </div>
+      ${selfSelected ? '<span style="font-size:0.75rem; color:#7b1fa2; font-weight:600; white-space:nowrap;">選択中</span>' : ''}
+    </div>`;
+    // 外部リポジトリ
+    for (const repo of reposRes.repos) {
+      const isSelected = String(repo.id) === String(selectedId);
       const hash = repo.last_commit_hash ? repo.last_commit_hash.substring(0, 8) : '-';
-      const toggleLabel = active ? '有効' : '無効';
-      const toggleColor = active ? '#2e7d32' : '#999';
-      const opacity = active ? '1' : '0.6';
-      const border = active ? 'border-left:3px solid #4caf50; padding-left:8px;' : '';
-      return `<div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #e8e0f0; opacity:${opacity}; ${border}">
+      const rowStyle = isSelected ? 'border-left:3px solid #7b1fa2; padding-left:8px; background:#f8f5ff;' : '';
+      const statusText = isSelected ? ' — 監視中・TODO表示中' : (repo.active ? ' — 監視中' : '');
+      html += `<div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #e8e0f0; cursor:pointer; ${rowStyle} transition:background 0.15s;" onclick="dsSelectRepo(${repo.id})" onmouseenter="this.style.background='#faf5ff'" onmouseleave="this.style.background='${isSelected ? '#f8f5ff' : ''}'">
         <div style="flex:1; min-width:0;">
           <div style="font-weight:600; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(repo.name)}</div>
-          <div style="font-size:0.75rem; color:#9a88b5;">
-            ${esc(repo.branch)} / ${hash}${active ? ' — 監視中・TODO表示中' : ''}
-          </div>
+          <div style="font-size:0.75rem; color:#9a88b5;">${esc(repo.branch)} / ${hash}${statusText}</div>
         </div>
-        <button onclick="dsToggleRepo(${repo.id}, ${!active})" style="padding:2px 10px; font-size:0.75rem; background:${toggleColor}; color:#fff; border:none; border-radius:4px; cursor:pointer;">${toggleLabel}</button>
-        <button onclick="dsCheckRepo(${repo.id})" style="padding:2px 10px; font-size:0.75rem; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer;">Check</button>
-        <button onclick="dsDeleteRepo(${repo.id}, '${esc(repo.name)}')" style="padding:2px 10px; font-size:0.75rem; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer;">削除</button>
+        ${isSelected ? '<span style="font-size:0.75rem; color:#7b1fa2; font-weight:600; white-space:nowrap;">選択中</span>' : ''}
+        <button onclick="event.stopPropagation(); dsCheckRepo(${repo.id})" style="padding:2px 10px; font-size:0.75rem; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer;">Check</button>
+        <button onclick="event.stopPropagation(); dsDeleteRepo(${repo.id}, '${esc(repo.name)}')" style="padding:2px 10px; font-size:0.75rem; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer;">削除</button>
       </div>`;
-    }).join('');
+    }
+    el.innerHTML = html;
+    // リポジトリ名ラベルを更新
+    const labelEl = document.getElementById('ds-todo-repo-name');
+    if (labelEl) {
+      if (selfSelected) {
+        labelEl.textContent = '(ai-twitch-cast)';
+      } else {
+        const repo = reposRes.repos.find(r => String(r.id) === String(selectedId));
+        labelEl.textContent = repo ? `(${repo.name})` : '';
+      }
+    }
   } catch (e) { console.error('devstream repos error', e); }
 }
 
@@ -1846,6 +1869,29 @@ async function dsAddRepo() {
     btn.disabled = false;
     btn.textContent = '追加';
   }
+}
+
+async function dsSelectRepo(repoId) {
+  if (repoId === 'self') {
+    // 全外部リポジトリを無効化 → TODOソースがselfに戻る
+    const repos = await (await fetch('/api/dev-stream/repos')).json();
+    for (const r of repos.repos) {
+      if (r.active) {
+        await fetch(`/api/dev-stream/repos/${r.id}/toggle`, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({active: false}),
+        });
+      }
+    }
+  } else {
+    // 外部リポジトリを有効化（排他ロジックで他は自動無効化）
+    await fetch(`/api/dev-stream/repos/${repoId}/toggle`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({active: true}),
+    });
+  }
+  await loadDevstream();
+  await loadTodoList();
 }
 
 async function dsToggleRepo(id, active) {
