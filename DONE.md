@@ -9,6 +9,8 @@
 - [x] デバウンス付きAPI保存（PUT /api/items/{id}）＋editSave()競合防止
 - [x] スキーマAPIテスト9件追加
 - [x] index.htmlの`_commonPropsHTML()`をスキーマAPIベースに統一（ハードコード排除）
+- [x] C#アプリはWebView2経由で自動対応（追加実装不要）
+- [x] 右クリックメニューに「表示OFF/ON」クイックトグル追加
 
 ## WebUI TODOタブ復活＋外部ファイル対応＋複数選択
 

@@ -982,10 +982,30 @@ function showContextMenu(el, x, y) {
   const isChild = !!el.dataset.parentId;
   document.getElementById('ctx-add-child').style.display = isChild ? 'none' : '';
   document.getElementById('ctx-delete-child').style.display = isChild ? '' : 'none';
+  // 表示状態に応じてトグルラベルを切替
+  const isVisible = el.style.display !== 'none';
+  document.getElementById('ctx-toggle-vis').textContent = isVisible ? '表示OFF' : '表示ON';
   _ctxMenu.style.left = x + 'px';
   _ctxMenu.style.top = y + 'px';
   _ctxMenu.style.display = 'block';
   _clampToViewport(_ctxMenu);
+}
+
+async function toggleSelectedVisibility() {
+  hideAll();
+  if (!_selectedEditable) return;
+  const itemId = _selectedEditable.dataset.editable;
+  if (!itemId) return;
+  const isVisible = _selectedEditable.style.display !== 'none';
+  const newVisible = isVisible ? 0 : 1;
+  try {
+    await fetch(`/api/items/${encodeURIComponent(itemId)}/visibility`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({visible: newVisible}),
+    });
+    _selectedEditable.style.display = newVisible ? '' : 'none';
+  } catch (e) { console.log('表示切替エラー:', e.message); }
 }
 
 function openZIndexDialog() {
