@@ -1,5 +1,10 @@
 # DONE
 
+## ペルソナ生成の抽象化
+
+- [x] generate_persona / generate_persona_from_prompt のプロンプトに抽象化ルール追加
+- [x] 具体的な技術用語・固有名詞・フレーズ羅列を禁止し、性格特性として記述する指示に変更
+
 ## C#チャットのAI返信表示バグ修正
 
 - [x] MainForm.cs: WSイベントのキー名不一致を修正（message→trigger_text, response→speech）
