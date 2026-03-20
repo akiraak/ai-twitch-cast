@@ -245,6 +245,23 @@ class TestComments:
         assert timeline[1]["text"] == "hi!"
 
 
+    def test_clear_comments(self, test_db):
+        ep_id, user_id = self._setup(test_db)
+        test_db.save_comment(ep_id, user_id, "msg1")
+        test_db.save_comment(ep_id, user_id, "msg2")
+        assert len(test_db.get_recent_comments(limit=10)) == 2
+        test_db.clear_comments()
+        assert len(test_db.get_recent_comments(limit=10)) == 0
+
+    def test_clear_avatar_comments(self, test_db):
+        ep_id, _ = self._setup(test_db)
+        test_db.save_avatar_comment(ep_id, "comment", "trigger", "speech1")
+        test_db.save_avatar_comment(ep_id, "event", "trigger2", "speech2")
+        assert len(test_db.get_recent_avatar_comments(limit=10)) == 2
+        test_db.clear_avatar_comments()
+        assert len(test_db.get_recent_avatar_comments(limit=10)) == 0
+
+
 class TestSettings:
     def test_set_and_get(self, test_db):
         test_db.set_setting("key1", "value1")

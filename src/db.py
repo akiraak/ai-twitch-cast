@@ -652,6 +652,22 @@ def get_recent_timeline(limit=20, hours=2):
     return [dict(r) for r in reversed(rows)]
 
 
+# --- comments 削除 ---
+
+def clear_comments():
+    """commentsテーブルの全レコードを削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM comments")
+    conn.commit()
+
+
+def clear_avatar_comments():
+    """avatar_commentsテーブルの全レコードを削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM avatar_comments")
+    conn.commit()
+
+
 # --- actions ---
 
 def save_action(episode_id, action_type, detail=""):

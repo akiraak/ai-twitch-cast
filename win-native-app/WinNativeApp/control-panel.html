@@ -354,6 +354,15 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   </div>
 
   <div class="section">
+    <div class="section-title">Twitch</div>
+    <textarea id="twitchTitle" style="width:100%;padding:4px 6px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit;resize:vertical;min-height:36px;" placeholder="配信タイトル" rows="2"></textarea>
+    <div class="btn-row" style="margin-top:6px;">
+      <button class="btn" onclick="updateTwitchTitle()">タイトル更新</button>
+    </div>
+    <div id="twitchMsg" style="font-size:11px;min-height:14px;margin-top:2px;"></div>
+  </div>
+
+  <div class="section">
     <div class="section-title">Capture</div>
     <div class="select-row">
       <select id="windowSelect"><option>Loading windows...</option></select>
@@ -751,9 +760,42 @@ function esc(s) {
   return d.innerHTML;
 }
 
+// === Twitch Info ===
+async function loadTwitchInfo() {
+  try {
+    const res = await fetch(serverUrl + '/api/twitch/channel');
+    const data = await res.json();
+    if (data.title !== undefined) $('twitchTitle').value = data.title;
+  } catch (e) {}
+}
+
+async function updateTwitchTitle() {
+  const title = $('twitchTitle').value.trim();
+  const msg = $('twitchMsg');
+  if (!title) { msg.textContent = 'タイトルを入力してください'; msg.style.color = 'var(--red)'; return; }
+  msg.textContent = '更新中...'; msg.style.color = 'var(--text-dim)';
+  try {
+    const res = await fetch(serverUrl + '/api/twitch/channel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      msg.textContent = '更新しました'; msg.style.color = 'var(--green)';
+    } else {
+      msg.textContent = 'エラー: ' + (data.detail || '不明'); msg.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    msg.textContent = 'エラー: ' + e.message; msg.style.color = 'var(--red)';
+  }
+  setTimeout(() => { msg.textContent = ''; }, 3000);
+}
+
 // Init
 send({action:'init'});
 appendLog('Panel started', 'info');
+loadTwitchInfo();
 </script>
 </body>
 </html>

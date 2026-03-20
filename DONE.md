@@ -1,5 +1,13 @@
 # DONE
 
+## C#プレビューにTwitch配信情報設定＋Go Live時コメント削除＋不要なWeb preview削除
+
+- [x] C#コントロールパネル（control-panel.html）のStreamタブにTwitch情報セクション追加（タイトル表示・編集UI）
+- [x] Go Live時にcomments/avatar_commentsテーブルを自動クリア（db.clear_comments/clear_avatar_comments）
+- [x] 不要なWeb版プレビューページ削除（static/preview.html + GET /preview ルート）
+- [x] テスト追加（clear_comments/clear_avatar_comments）
+- [x] 全433テスト通過
+
 ## commentsテーブル再設計（comments/avatar_comments分離）
 
 - [x] commentsテーブルを視聴者コメント専用に簡素化（text, user_id, episode_id）

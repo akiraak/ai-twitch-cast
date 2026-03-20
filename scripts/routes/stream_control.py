@@ -139,6 +139,10 @@ async def broadcast_go_live():
     """配信開始"""
     global _is_streaming
     try:
+        # 前回配信のコメントをクリア
+        db.clear_comments()
+        db.clear_avatar_comments()
+
         st = await _capture_stream_status()
         if not st.get("streaming"):
             await _capture_stream_start()
