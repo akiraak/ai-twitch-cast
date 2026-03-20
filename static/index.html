@@ -142,14 +142,33 @@
     <div class="card">
       <h2><span class="layer-badge">第2層</span> ペルソナ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分ごとAI抽出（応答10件以上で生成）</span></h2>
       <div id="layer-persona" class="layer-content"><span style="color:#9a88b5;">読み込み中...</span></div>
+      <div id="layer-persona-edit" style="display:none;">
+        <textarea id="layer-persona-textarea" rows="3" style="width:100%; font-size:0.85rem; resize:vertical; margin-top:8px;"></textarea>
+        <div class="btn-row" style="margin-top:6px;">
+          <button style="font-size:0.75rem; padding:4px 12px;" onclick="saveLayerMemory('persona')">保存</button>
+          <button class="secondary" style="font-size:0.75rem; padding:4px 12px;" onclick="cancelLayerEdit('persona')">キャンセル</button>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:6px;">
+        <button class="secondary" style="font-size:0.7rem; padding:3px 8px;" onclick="startLayerEdit('persona')">編集</button>
+        <button class="secondary" style="font-size:0.7rem; padding:3px 8px;" onclick="generatePersonaFromPrompt()">AI初期生成</button>
+      </div>
     </div>
     <div class="card">
       <h2><span class="layer-badge">第3層</span> セルフメモ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分ごと更新・配信中の記憶</span></h2>
       <div id="layer-self-note" class="layer-content"><span style="color:#9a88b5;">読み込み中...</span></div>
+      <div class="btn-row" style="margin-top:6px;">
+        <button class="secondary" style="font-size:0.7rem; padding:3px 8px;" onclick="regenerateSelfNote()">AI再生成</button>
+      </div>
     </div>
     <div class="card">
-      <h2><span class="layer-badge">第4層</span> 視聴者メモ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分バッチ更新・初回挨拶時に注入</span></h2>
-      <div id="layer-viewer-notes" class="layer-content"><span style="color:#9a88b5;">読み込み中...</span></div>
+      <details>
+        <summary style="cursor:pointer; user-select:none;">
+          <h2 style="display:inline;"><span class="layer-badge">第4層</span> 視聴者メモ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分バッチ更新・初回挨拶時に注入</span></h2>
+          <span id="layer-viewer-count" style="font-size:0.7rem; color:#9a88b5; margin-left:8px;"></span>
+        </summary>
+        <div id="layer-viewer-notes" class="layer-content" style="margin-top:8px;"><span style="color:#9a88b5;">読み込み中...</span></div>
+      </details>
     </div>
     <div class="card" style="background:linear-gradient(135deg, #f8f6ff, #f3e5f5); border:1px dashed #d0c0e8;">
       <h2><span class="layer-badge" style="background:#e0d8f0; color:#6a5590;">第5層</span> リアルタイム状態 <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">配信タイトル・トピック・TODO</span></h2>

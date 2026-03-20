@@ -307,16 +307,16 @@ class CommentReader:
     async def _update_self_note(self):
         """アバター自身の記憶メモを更新する"""
         try:
+            from datetime import datetime, timedelta, timezone
             char_id = get_character_id()
             memory = await asyncio.to_thread(db.get_character_memory, char_id)
-            recent = await asyncio.to_thread(db.get_recent_comments, 20, 2)
+            recent = await asyncio.to_thread(db.get_recent_comments, 50, 2)
             if not recent:
                 return
-            current_note = memory.get("self_note", "")
             new_note = await asyncio.to_thread(
-                generate_self_note, recent, current_note,
+                generate_self_note, recent,
             )
-            if new_note and new_note != current_note:
+            if new_note and new_note != memory.get("self_note", ""):
                 await asyncio.to_thread(db.update_character_self_note, char_id, new_note)
                 logger.info("[note] アバターメモ更新: %s", new_note)
         except Exception as e:
@@ -325,12 +325,14 @@ class CommentReader:
     async def _update_persona(self):
         """ペルソナ（性格特徴）を応答パターンから更新する"""
         try:
-            recent = await asyncio.to_thread(db.get_recent_comments, 50, 24)
+            char_id = get_character_id()
+            memory = await asyncio.to_thread(db.get_character_memory, char_id)
+            current_persona = memory.get("persona", "")
+            recent = await asyncio.to_thread(db.get_recent_comments, 50, 2)
             if not recent:
                 return
-            persona = await asyncio.to_thread(generate_persona, recent)
+            persona = await asyncio.to_thread(generate_persona, recent, current_persona)
             if persona:
-                char_id = get_character_id()
                 await asyncio.to_thread(db.update_character_persona, char_id, persona)
                 logger.info("[persona] ペルソナ更新: %s", persona[:80])
         except Exception as e:
@@ -365,34 +367,31 @@ class CommentReader:
                 try:
                     since = last_run.isoformat()
                     last_run = datetime.now(timezone.utc)
+                    # ユーザーメモ更新（直近15分にコメントがあった場合のみ）
                     users = await asyncio.to_thread(db.get_users_commented_since, since)
-                    if not users:
-                        continue
-                    # 各ユーザーの直近コメントを取得
-                    users_data = []
-                    for u in users:
-                        comments = await asyncio.to_thread(
-                            db.get_user_recent_comments, u["name"], 10, 2,
-                        )
-                        if comments:
-                            users_data.append({
-                                "name": u["name"],
-                                "note": u.get("note", ""),
-                                "comments": comments,
-                            })
-                    if not users_data:
-                        continue
-                    logger.info("[note] ユーザーメモ更新中... (%d人)", len(users_data))
-                    notes = await asyncio.to_thread(generate_user_notes, users_data)
-                    for u in users:
-                        if u["name"] in notes and notes[u["name"]]:
-                            await asyncio.to_thread(
-                                db.update_user_note, u["id"], notes[u["name"]],
+                    if users:
+                        users_data = []
+                        for u in users:
+                            comments = await asyncio.to_thread(
+                                db.get_user_recent_comments, u["name"], 20, 2,
                             )
-                    logger.info("[note] ユーザーメモ更新完了: %s", notes)
-                    # アバター自身のメモも更新
+                            if comments:
+                                users_data.append({
+                                    "name": u["name"],
+                                    "note": u.get("note", ""),
+                                    "comments": comments,
+                                })
+                        if users_data:
+                            logger.info("[note] ユーザーメモ更新中... (%d人)", len(users_data))
+                            notes = await asyncio.to_thread(generate_user_notes, users_data)
+                            for u in users:
+                                if u["name"] in notes and notes[u["name"]]:
+                                    await asyncio.to_thread(
+                                        db.update_user_note, u["id"], notes[u["name"]],
+                                    )
+                            logger.info("[note] ユーザーメモ更新完了: %s", notes)
+                    # アバター自身のメモ・ペルソナは常に更新（直近コメントの有無に依存しない）
                     await self._update_self_note()
-                    # ペルソナ（性格特徴）も更新
                     await self._update_persona()
                 except Exception as e:
                     logger.error("[note] ユーザーメモ更新失敗: %s", e)

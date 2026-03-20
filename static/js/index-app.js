@@ -573,6 +573,7 @@ async function saveCharacter() {
 async function loadCharacterLayers() {
   try {
     const d = await (await fetch('/api/character/layers')).json();
+    _layerData = d;
 
     // 第2層: ペルソナ
     const personaEl = document.getElementById('layer-persona');
@@ -592,12 +593,17 @@ async function loadCharacterLayers() {
 
     // 第4層: 視聴者メモ
     const viewerEl = document.getElementById('layer-viewer-notes');
+    const countEl = document.getElementById('layer-viewer-count');
+    if (countEl) countEl.textContent = d.viewer_notes && d.viewer_notes.length > 0 ? `(${d.viewer_notes.length}人)` : '';
     if (d.viewer_notes && d.viewer_notes.length > 0) {
       viewerEl.innerHTML = d.viewer_notes.map(u =>
-        `<div class="viewer-note-item">` +
+        `<div class="viewer-note-item" data-user-id="${u.id}">` +
+        `<div class="viewer-note-header">` +
         `<span class="viewer-note-name">${esc(u.name)}</span>` +
-        `<span class="viewer-note-text">${esc(u.note)}</span>` +
         `<span class="viewer-note-count">${u.comment_count}回</span>` +
+        `<button class="viewer-note-edit-btn" onclick="startViewerNoteEdit(this, ${u.id}, '${esc(u.name)}')">編集</button>` +
+        `</div>` +
+        `<div class="viewer-note-text">${esc(u.note)}</div>` +
         `</div>`
       ).join('');
     } else {
@@ -608,6 +614,114 @@ async function loadCharacterLayers() {
     document.getElementById('layer-persona').innerHTML = '<div class="layer-empty">サーバー再起動後に表示されます</div>';
     document.getElementById('layer-self-note').innerHTML = '<div class="layer-empty">サーバー再起動後に表示されます</div>';
     document.getElementById('layer-viewer-notes').innerHTML = '<div class="layer-empty">サーバー再起動後に表示されます</div>';
+  }
+}
+
+// --- 視聴者メモ編集 ---
+function startViewerNoteEdit(btn, userId, userName) {
+  const item = btn.closest('.viewer-note-item');
+  const textEl = item.querySelector('.viewer-note-text');
+  const currentText = textEl.textContent;
+  textEl.style.display = 'none';
+  btn.style.display = 'none';
+
+  const editDiv = document.createElement('div');
+  editDiv.className = 'viewer-note-edit';
+  editDiv.innerHTML = `<textarea rows="3">${esc(currentText)}</textarea>` +
+    `<div class="btn-row" style="margin-top:4px;">` +
+    `<button style="font-size:0.7rem; padding:3px 10px;" onclick="saveViewerNote(this, ${userId})">保存</button>` +
+    `<button class="secondary" style="font-size:0.7rem; padding:3px 10px;" onclick="cancelViewerNoteEdit(this)">キャンセル</button>` +
+    `</div>`;
+  item.appendChild(editDiv);
+}
+
+function cancelViewerNoteEdit(btn) {
+  const item = btn.closest('.viewer-note-item');
+  item.querySelector('.viewer-note-edit').remove();
+  item.querySelector('.viewer-note-text').style.display = '';
+  item.querySelector('.viewer-note-edit-btn').style.display = '';
+}
+
+async function saveViewerNote(btn, userId) {
+  const item = btn.closest('.viewer-note-item');
+  const text = item.querySelector('.viewer-note-edit textarea').value.trim();
+  try {
+    const res = await fetch('/api/character/viewer-note', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: userId, note: text}),
+    });
+    const d = await res.json();
+    if (d.ok) loadCharacterLayers();
+  } catch (e) {
+    console.error('視聴者メモ保存失敗:', e);
+  }
+}
+
+// --- レイヤー編集 ---
+let _layerData = {};  // loadCharacterLayersで取得したデータを保持
+
+function startLayerEdit(type) {
+  const key = type === 'self-note' ? 'self_note' : type;
+  const textarea = document.getElementById(`layer-${type}-textarea`);
+  textarea.value = _layerData[key] || '';
+  document.getElementById(`layer-${type}`).style.display = 'none';
+  document.getElementById(`layer-${type}-edit`).style.display = 'block';
+}
+
+function cancelLayerEdit(type) {
+  document.getElementById(`layer-${type}-edit`).style.display = 'none';
+  document.getElementById(`layer-${type}`).style.display = '';
+}
+
+async function saveLayerMemory(type) {
+  const textarea = document.getElementById(`layer-${type}-textarea`);
+  const text = textarea.value.trim();
+  try {
+    const res = await fetch(`/api/character/${type}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text}),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      cancelLayerEdit(type);
+      loadCharacterLayers();
+    }
+  } catch (e) {
+    console.error('レイヤー保存失敗:', e);
+  }
+}
+
+async function generatePersonaFromPrompt() {
+  if (!await showConfirm('システムプロンプトからペルソナをAI生成します。現在のペルソナは上書きされます。', { title: 'ペルソナ初期生成', okLabel: '生成' })) return;
+  const personaEl = document.getElementById('layer-persona');
+  personaEl.innerHTML = '<div class="layer-empty">AI生成中...</div>';
+  try {
+    const res = await fetch('/api/character/persona/generate', {method: 'POST'});
+    const d = await res.json();
+    if (d.ok) {
+      loadCharacterLayers();
+    }
+  } catch (e) {
+    console.error('ペルソナ生成失敗:', e);
+    personaEl.innerHTML = '<div class="layer-empty">生成失敗</div>';
+  }
+}
+
+async function regenerateSelfNote() {
+  if (!await showConfirm('直近の会話からセルフメモをAI再生成します。現在のメモは上書きされます。', { title: 'セルフメモ再生成', okLabel: '生成' })) return;
+  const selfEl = document.getElementById('layer-self-note');
+  selfEl.innerHTML = '<div class="layer-empty">AI生成中...</div>';
+  try {
+    const res = await fetch('/api/character/self-note/generate', {method: 'POST'});
+    const d = await res.json();
+    if (d.ok) {
+      loadCharacterLayers();
+    }
+  } catch (e) {
+    console.error('セルフメモ生成失敗:', e);
+    selfEl.innerHTML = '<div class="layer-empty">生成失敗</div>';
   }
 }
 

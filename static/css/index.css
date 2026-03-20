@@ -227,13 +227,16 @@
   .layer-empty { color: #9a88b5; font-style: italic; }
   .layer-text { padding: 10px 14px; background: #faf8ff; border-radius: 6px; border: 1px solid #e8e0f0; color: #2a1f40; white-space: pre-wrap; }
   .viewer-note-item {
-    display: flex; align-items: baseline; gap: 8px;
-    padding: 6px 10px; border-bottom: 1px solid #f0eaf8;
+    padding: 8px 10px; border-bottom: 1px solid #f0eaf8;
   }
   .viewer-note-item:last-child { border-bottom: none; }
-  .viewer-note-name { font-weight: 600; color: #7b1fa2; font-size: 0.82rem; min-width: 80px; flex-shrink: 0; }
-  .viewer-note-text { color: #2a1f40; font-size: 0.82rem; flex: 1; }
-  .viewer-note-count { font-size: 0.7rem; color: #9a88b5; flex-shrink: 0; }
+  .viewer-note-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .viewer-note-name { font-weight: 600; color: #7b1fa2; font-size: 0.82rem; }
+  .viewer-note-count { font-size: 0.7rem; color: #9a88b5; }
+  .viewer-note-edit-btn { font-size: 0.65rem; padding: 1px 6px; background: none; border: 1px solid #d0c0e8; color: #9a88b5; border-radius: 3px; cursor: pointer; }
+  .viewer-note-edit-btn:hover { background: #f3e5f5; color: #7b1fa2; }
+  .viewer-note-text { color: #2a1f40; font-size: 0.82rem; line-height: 1.5; white-space: pre-wrap; }
+  .viewer-note-edit textarea { width: 100%; font-size: 0.82rem; margin-top: 4px; resize: vertical; }
 
   /* ドキュメントモーダル */
   .doc-modal-overlay {

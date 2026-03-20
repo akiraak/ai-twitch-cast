@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from src.ai_responder import (
     DEFAULT_CHARACTER,
+    generate_persona_from_prompt,
     generate_response,
     generate_event_response,
     generate_user_notes,
@@ -171,3 +172,44 @@ class TestGenerateSelfNote:
             current_note="fallback"
         )
         assert result == "fallback"
+
+    def test_timestamps_included_in_prompt(self, test_db, mock_env, mock_gemini):
+        """タイムスタンプ付きコメントがプロンプトに含まれることを確認"""
+        mock_gemini.models.generate_content.return_value.text = json.dumps({"note": "test"})
+        comments = [
+            {"user_name": "alice", "message": "hi", "response": "hey",
+             "created_at": "2026-03-19T10:30:00"},
+        ]
+        generate_self_note(comments)
+        call_args = mock_gemini.models.generate_content.call_args
+        prompt = call_args.kwargs.get("contents", call_args[1].get("contents", ""))
+        assert "2026-03-19T10:30" in prompt
+
+    def test_timestamps_missing_handled(self, test_db, mock_env, mock_gemini):
+        """タイムスタンプがないコメントでもエラーにならない"""
+        mock_gemini.models.generate_content.return_value.text = json.dumps({"note": "ok"})
+        comments = [{"user_name": "bob", "message": "yo", "response": "sup"}]
+        result = generate_self_note(comments)
+        assert result == "ok"
+
+
+class TestGeneratePersonaFromPrompt:
+    def setup_method(self):
+        set_language_mode("ja")
+        invalidate_character_cache()
+
+    def test_generates_from_system_prompt(self, test_db, mock_env, mock_gemini):
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "persona": "好奇心旺盛でツッコミ気質"
+        })
+        result = generate_persona_from_prompt()
+        assert result == "好奇心旺盛でツッコミ気質"
+        # プロンプトにキャラクター設定が含まれていることを確認
+        call_args = mock_gemini.models.generate_content.call_args
+        prompt = call_args.kwargs.get("contents", call_args[1].get("contents", ""))
+        assert "キャラクター設定" in prompt
+
+    def test_invalid_json_returns_empty(self, test_db, mock_env, mock_gemini):
+        mock_gemini.models.generate_content.return_value.text = "bad"
+        result = generate_persona_from_prompt()
+        assert result == ""

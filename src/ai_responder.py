@@ -211,13 +211,14 @@ def generate_user_notes(users_with_comments):
 
     parts = [
         f"あなたは{char.get('name', 'ちょび')}の記憶係です。",
-        "視聴者との会話から、各ユーザーの特徴を短いメモにまとめてください。",
+        "視聴者との会話から、各ユーザーの特徴をメモにまとめてください。",
         "",
         "## ルール",
-        "- 各メモは50文字以内で簡潔に",
+        "- 各メモは200文字以内",
         "- 事実のみ簡潔に記録する。キャラクター口調で書かない",
         "- 趣味・興味・性格・特徴など、次の会話で役立つ情報を抽出",
-        "- 既存メモがある場合は内容を更新・補足（古い情報は削除OK）",
+        "- 既存メモがある場合は内容の90%を維持し、新しい情報を追記・微調整する",
+        "- 古くなった情報や矛盾する部分は自然に更新する",
         "- 会話から特徴が読み取れない場合は既存メモをそのまま返す",
         "- 既存メモがなく特徴も読み取れない場合は空文字を返す",
         "",
@@ -259,7 +260,7 @@ def generate_self_note(recent_comments, current_note=""):
     """アバター自身の記憶メモを生成する
 
     Args:
-        recent_comments: 直近の会話 [{user_name, message, response}, ...]
+        recent_comments: 直近の会話 [{user_name, message, response, created_at}, ...]
         current_note: 現在のメモ
 
     Returns:
@@ -272,16 +273,20 @@ def generate_self_note(recent_comments, current_note=""):
     char = get_character()
     char_name = char.get("name", "ちょビ")
 
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
     parts = [
         f"あなたは{char_name}の記憶係です。",
-        f"{char_name}が配信中に話したことや感じたことを短いメモにまとめてください。",
+        f"{char_name}が直近2時間に話したことや感じたことをメモにまとめてください。",
+        "",
+        f"現在時刻: {now_str}",
         "",
         "## ルール",
-        "- 100文字以内で簡潔に",
+        "- 400文字以内で簡潔に",
         "- 事実のみ簡潔に記録する。キャラクター口調で書かない",
-        "- 今日話したトピック、盛り上がった話題、印象的なやりとりを記録",
+        "- 話したトピック、盛り上がった話題、印象的なやりとりを記録",
         "- 視聴者との関係性（誰とどんな話をしたか）も含める",
-        "- 既存メモがある場合は更新・補足（古い情報は削除OK）",
         "- 次の会話で自然に活かせる情報を優先",
         "",
         "## 出力形式",
@@ -293,7 +298,10 @@ def generate_self_note(recent_comments, current_note=""):
         lines.append(f"既存メモ: {current_note}")
     lines.append("直近の会話:")
     for c in recent_comments:
-        lines.append(f"  {c['user_name']}: {c['message']}")
+        timestamp = ""
+        if c.get("created_at"):
+            timestamp = f" [{c['created_at'][:16]}]"
+        lines.append(f"  {c['user_name']}{timestamp}: {c['message']}")
         if c.get("response"):
             lines.append(f"  {char_name}: {c['response']}")
 
@@ -313,44 +321,39 @@ def generate_self_note(recent_comments, current_note=""):
         return current_note or ""
 
 
-def generate_persona(recent_comments):
-    """応答パターンからペルソナ（性格・話し方の特徴）を抽出する
+def generate_persona_from_prompt():
+    """システムプロンプトからペルソナを初期生成する
 
-    Args:
-        recent_comments: 直近の会話 [{user_name, message, response}, ...]
+    応答履歴がまだない状態で、キャラクター設定からペルソナを抽出する。
 
     Returns:
         str: ペルソナ記述、または空文字
     """
-    if not recent_comments:
-        return ""
-
-    # 自分の応答だけ抽出
-    responses = [c["response"] for c in recent_comments if c.get("response")]
-    if len(responses) < 10:
-        return ""
-
     client = get_client()
     char = get_character()
     char_name = char.get("name", "ちょビ")
+    system_prompt = char.get("system_prompt", "")
+    rules = char.get("rules", [])
 
     parts = [
-        f"以下は配信者「{char_name}」の直近の返答一覧です。",
-        "返答の内容から、性格・話し方の特徴・興味のある話題を分析してください。",
+        f"以下は配信者「{char_name}」のキャラクター設定です。",
+        "この設定から、性格・話し方の特徴・興味のある話題を分析してください。",
         "",
         "## ルール",
         "- 事実のみ記述。良し悪しの判断はしない",
-        "- 200文字以内",
-        "- 話し方の癖、好きな話題、リアクションの傾向を含める",
+        "- 400文字以内",
+        "- 話し方の癖、性格の傾向、特徴を含める",
         "- キャラクター口調で書かない。客観的な分析として書く",
         "",
         "## 出力形式",
         '{"persona": "分析結果"}',
     ]
 
-    lines = ["直近の返答:"]
-    for r in responses[-30:]:
-        lines.append(f"- {r}")
+    lines = [f"キャラクター設定:", system_prompt]
+    if rules:
+        lines.append("\nルール:")
+        for r in rules:
+            lines.append(f"- {r}")
 
     response = client.models.generate_content(
         model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
@@ -366,6 +369,81 @@ def generate_persona(recent_comments):
         return result.get("persona", "")
     except (json.JSONDecodeError, AttributeError):
         return ""
+
+
+def generate_persona(recent_comments, current_persona=""):
+    """応答パターンからペルソナ（性格・話し方の特徴）を更新する
+
+    既存ペルソナの90%を維持しつつ、最近の応答から新しい特徴を反映する。
+
+    Args:
+        recent_comments: 直近の会話 [{user_name, message, response}, ...]
+        current_persona: 現在のペルソナ記述
+
+    Returns:
+        str: 更新されたペルソナ記述、または空文字
+    """
+    if not recent_comments:
+        return current_persona or ""
+
+    # 自分の応答だけ抽出
+    responses = [c["response"] for c in recent_comments if c.get("response")]
+    if len(responses) < 10:
+        return current_persona or ""
+
+    client = get_client()
+    char = get_character()
+    char_name = char.get("name", "ちょビ")
+
+    parts = [
+        f"以下は配信者「{char_name}」の直近の返答一覧です。",
+    ]
+    if current_persona:
+        parts.extend([
+            "既存のペルソナ分析を基に、最近の返答から新しい特徴を反映してください。",
+            "",
+            "## 更新方針",
+            "- 既存ペルソナの内容を90%維持する（大きく書き換えない）",
+            "- 最近の返答で見られた新しい傾向・話題を追記・微調整する",
+            "- 古くなった情報や矛盾する部分は自然に更新する",
+        ])
+    else:
+        parts.append("返答の内容から、性格・話し方の特徴・興味のある話題を分析してください。")
+
+    parts.extend([
+        "",
+        "## ルール",
+        "- 事実のみ記述。良し悪しの判断はしない",
+        "- 400文字以内",
+        "- 話し方の癖、好きな話題、リアクションの傾向を含める",
+        "- キャラクター口調で書かない。客観的な分析として書く",
+        "",
+        "## 出力形式",
+        '{"persona": "分析結果"}',
+    ])
+
+    lines = []
+    if current_persona:
+        lines.append(f"既存ペルソナ:\n{current_persona}")
+        lines.append("")
+    lines.append("直近の返答:")
+    for r in responses[-30:]:
+        lines.append(f"- {r}")
+
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents="\n".join(lines),
+        config=types.GenerateContentConfig(
+            system_instruction="\n".join(parts),
+            response_mime_type="application/json",
+        ),
+    )
+
+    try:
+        result = json.loads(response.text)
+        return result.get("persona", current_persona or "")
+    except (json.JSONDecodeError, AttributeError):
+        return current_persona or ""
 
 
 def generate_topic_line(title, description="", last_speeches=None, recent_comments=None):

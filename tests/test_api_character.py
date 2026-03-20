@@ -1,5 +1,6 @@
 """キャラクター・言語モード APIのテスト"""
 
+from src.ai_responder import invalidate_character_cache
 from src.prompt_builder import set_language_mode
 
 
@@ -30,6 +31,37 @@ class TestUpdateCharacter:
     def test_validation_error(self, api_client):
         resp = api_client.put("/api/character", json={"name": "x"})
         assert resp.status_code == 422
+
+
+class TestGetCharacterLayers:
+    def test_returns_layers(self, api_client):
+        resp = api_client.get("/api/character/layers")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "persona" in data
+        assert "self_note" in data
+        assert "viewer_notes" in data
+
+
+class TestUpdatePersona:
+    def setup_method(self):
+        invalidate_character_cache()
+
+    def test_update_persona(self, api_client):
+        resp = api_client.put("/api/character/persona", json={"text": "テスト用ペルソナ"})
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        # 更新が反映されていることを確認
+        layers = api_client.get("/api/character/layers").json()
+        assert layers["persona"] == "テスト用ペルソナ"
+
+    def test_clear_persona(self, api_client):
+        api_client.put("/api/character/persona", json={"text": "初期値"})
+        resp = api_client.put("/api/character/persona", json={"text": ""})
+        assert resp.status_code == 200
+        layers = api_client.get("/api/character/layers").json()
+        assert layers["persona"] == ""
+
 
 
 class TestGetLanguage:
