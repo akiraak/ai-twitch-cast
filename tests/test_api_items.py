@@ -307,6 +307,105 @@ class TestChildPanelAPI:
         assert len(child_in_root) == 0
 
 
+class TestItemSchema:
+    """設定スキーマAPIのテスト"""
+
+    def test_get_common_schema(self, api_client):
+        """パラメータなしで共通スキーマが返ること"""
+        resp = api_client.get("/api/items/schema")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "groups" in data
+        titles = [g["title"] for g in data["groups"]]
+        assert "表示" in titles
+        assert "配置" in titles
+        assert "背景" in titles
+        assert "文字" in titles
+        # 共通スキーマにはitem_id/item_typeがない
+        assert "item_id" not in data
+
+    def test_get_schema_with_item_id(self, api_client):
+        """item_id指定で固有プロパティ + 共通スキーマが返ること"""
+        resp = api_client.get("/api/items/schema?item_id=subtitle")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["item_id"] == "subtitle"
+        assert data["item_type"] == "subtitle"
+        assert data["label"] == "字幕"
+        # 固有設定グループが先頭にある
+        assert data["groups"][0]["title"] == "固有設定"
+        specific_keys = [f["key"] for f in data["groups"][0]["fields"]]
+        assert "bottom" in specific_keys
+        assert "maxWidth" in specific_keys
+        assert "fadeDuration" in specific_keys
+        # 共通グループも含まれる
+        titles = [g["title"] for g in data["groups"]]
+        assert "配置" in titles
+
+    def test_get_schema_avatar(self, api_client):
+        """avatarの固有プロパティ（scale）が含まれること"""
+        resp = api_client.get("/api/items/schema?item_id=avatar")
+        data = resp.json()
+        assert data["item_type"] == "avatar"
+        specific_keys = [f["key"] for f in data["groups"][0]["fields"]]
+        assert "scale" in specific_keys
+
+    def test_get_schema_custom_text(self, api_client):
+        """customtext:のIDでcustom_textスキーマが返ること"""
+        resp = api_client.get("/api/items/schema?item_id=customtext:1")
+        data = resp.json()
+        assert data["item_type"] == "custom_text"
+        specific_keys = [f["key"] for f in data["groups"][0]["fields"]]
+        assert "label" in specific_keys
+        assert "content" in specific_keys
+
+    def test_get_schema_capture(self, api_client):
+        """capture:のIDで共通スキーマのみ返ること（固有定義なし）"""
+        resp = api_client.get("/api/items/schema?item_id=capture:1")
+        data = resp.json()
+        assert data["item_type"] == "capture"
+        # 固有スキーマがないので全グループが共通
+        assert data["groups"][0]["title"] == "表示"
+
+    def test_get_schema_child(self, api_client):
+        """child:のIDでchild_textスキーマが返ること"""
+        resp = api_client.get("/api/items/schema?item_id=child:avatar:1")
+        data = resp.json()
+        assert data["item_type"] == "child_text"
+
+    def test_schema_field_structure(self, api_client):
+        """スキーマフィールドに必要な属性が含まれること"""
+        resp = api_client.get("/api/items/schema")
+        data = resp.json()
+        # 配置グループのpositionXを検証
+        layout_group = next(g for g in data["groups"] if g["title"] == "配置")
+        pos_x = next(f for f in layout_group["fields"] if f["key"] == "positionX")
+        assert pos_x["type"] == "slider"
+        assert pos_x["min"] == 0
+        assert pos_x["max"] == 100
+        assert pos_x["step"] == 0.5
+        assert "label" in pos_x
+
+    def test_schema_select_has_options(self, api_client):
+        """selectタイプにoptionsが含まれること"""
+        resp = api_client.get("/api/items/schema")
+        data = resp.json()
+        text_group = next(g for g in data["groups"] if g["title"] == "文字")
+        font = next(f for f in text_group["fields"] if f["key"] == "fontFamily")
+        assert font["type"] == "select"
+        assert isinstance(font["options"], list)
+        assert len(font["options"]) >= 2
+        # 各optionは[value, label]の形式
+        assert len(font["options"][0]) == 2
+
+    def test_schema_uses_db_label(self, api_client, test_db):
+        """DBにアイテムが存在する場合そのlabelを使うこと"""
+        test_db.upsert_broadcast_item("todo", "todo", {"positionX": 36})
+        resp = api_client.get("/api/items/schema?item_id=todo")
+        data = resp.json()
+        assert data["label"] == "TODO"
+
+
 class TestOverlaySettingsCompat:
     """旧API /api/overlay/settings の互換性テスト"""
 

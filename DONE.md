@@ -1,5 +1,14 @@
 # DONE
 
+## 右クリックメニュー設定編集（スキーマAPI＋フローティングパネル）
+
+- [x] サーバ駆動スキーマAPI（`GET /api/items/schema`）を実装（共通＋アイテム固有プロパティ定義）
+- [x] broadcast.htmlの右クリックメニューに「設定を編集...」を追加
+- [x] フローティング設定パネル（ドラッグ移動・折り畳みグループ・スキーマからUI動的生成）
+- [x] slider/color/toggle/select/text の全フィールドタイプ対応
+- [x] デバウンス付きAPI保存（PUT /api/items/{id}）＋editSave()競合防止
+- [x] スキーマAPIテスト9件追加
+
 ## WebUI TODOタブ復活＋外部ファイル対応＋複数選択
 
 - [x] WebUIにTODOタブを復活（開発実況削除で巻き添えで消えていたHTML/タブ切替を復元）
