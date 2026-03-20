@@ -712,7 +712,8 @@ async function sendChat() {
       body: JSON.stringify({ message: msg }),
     });
     const data = await res.json();
-    if (data.response) appendChatAi(data.response);
+    if (data.speech) appendChatAi(data.speech);
+    if (data.english) appendChatEnglish(data.english);
   } catch (e) {
     appendChatErr('Error: ' + e.message);
   } finally {
