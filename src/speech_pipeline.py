@@ -22,6 +22,7 @@ class SpeechPipeline:
     def __init__(self, on_overlay=None):
         self._on_overlay = on_overlay
         self._current_audio = None
+        self._speak_lock = asyncio.Lock()
 
     @staticmethod
     def strip_lang_tags(text):
@@ -48,7 +49,7 @@ class SpeechPipeline:
 
     async def speak(self, text, voice=None, subtitle=None, chat_result=None,
                     tts_text=None, post_to_chat=None):
-        """TTS生成・ブラウザソース経由で再生する
+        """TTS生成・ブラウザソース経由で再生する（排他制御付き）
 
         Args:
             text: 読み上げるテキスト
@@ -58,6 +59,14 @@ class SpeechPipeline:
             tts_text: TTS用テキスト（言語タグ付き）
             post_to_chat: チャット投稿コールバック（async関数）
         """
+        async with self._speak_lock:
+            await self._speak_impl(text, voice=voice, subtitle=subtitle,
+                                   chat_result=chat_result, tts_text=tts_text,
+                                   post_to_chat=post_to_chat)
+
+    async def _speak_impl(self, text, voice=None, subtitle=None, chat_result=None,
+                          tts_text=None, post_to_chat=None):
+        """speak()の実体（ロック取得済み前提）"""
         wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
         tts_ok = False
         t_start = time.monotonic()
