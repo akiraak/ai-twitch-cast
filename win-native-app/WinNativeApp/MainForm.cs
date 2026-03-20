@@ -613,8 +613,8 @@ public class MainForm : Form
                         {
                             type = "comment",
                             author = commentData.GetProperty("author").GetString(),
-                            message = commentData.GetProperty("message").GetString(),
-                            response = commentData.GetProperty("response").GetString(),
+                            message = commentData.GetProperty("trigger_text").GetString(),
+                            speech = commentData.GetProperty("speech").GetString(),
                             english = commentData.TryGetProperty("english", out var eng) ? eng.GetString() : "",
                             emotion = commentData.TryGetProperty("emotion", out var emo) ? emo.GetString() : "neutral",
                         });

@@ -1,5 +1,11 @@
 # DONE
 
+## C#チャットのAI返信表示バグ修正
+
+- [x] MainForm.cs: WSイベントのキー名不一致を修正（message→trigger_text, response→speech）
+- [x] control-panel.html: C#→HTML受信側・fetch応答側の両方でspeechキーに修正
+- [x] commentsテーブル再設計時にC#側が追従していなかったのが原因
+
 ## C#プレビューにTwitch配信情報設定＋Go Live時コメント削除＋不要なWeb preview削除
 
 - [x] C#コントロールパネル（control-panel.html）のStreamタブにTwitch情報セクション追加（タイトル表示・編集UI）

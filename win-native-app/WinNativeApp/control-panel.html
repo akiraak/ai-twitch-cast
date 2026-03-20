@@ -480,7 +480,7 @@ wv?.addEventListener('message', e => {
     case 'serverUrl': serverUrl = m.url; break;
     case 'comment':
       appendChatMsg(m.author, m.message);
-      appendChatAi(m.response);
+      appendChatAi(m.speech);
       if (m.english) appendChatEnglish(m.english);
       break;
   }
