@@ -1,5 +1,5 @@
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'chat', 'db', 'debug'];
+const TAB_NAMES = ['layout', 'character', 'sound', 'topic', 'chat', 'todo', 'db', 'debug'];
 
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -21,6 +21,7 @@ function switchTab(name, el) {
   if (name === 'character') { loadLanguageModes(); loadCharacterLayers(); }
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
+  if (name === 'todo') loadTodoList();
   if (name === 'debug') { loadScreenshots(); }
   if (name === 'layout') loadCustomTexts();
 }
@@ -49,26 +50,61 @@ function escHtml(s) {
 }
 
 // 汎用確認ダイアログ（Promise を返す）
-function showConfirm(message, { title = '確認', okLabel = 'OK', cancelLabel = 'キャンセル', danger = false } = {}) {
+/**
+ * 汎用モーダルダイアログ
+ * @param {string} message - メッセージ
+ * @param {object} opts
+ * @param {string} opts.title - タイトル
+ * @param {string} opts.okLabel - OKボタンラベル
+ * @param {string} opts.cancelLabel - キャンセルボタンラベル
+ * @param {boolean} opts.danger - 赤いOKボタン
+ * @param {string|null} opts.input - テキスト入力のプレースホルダー（nullなら入力なし）
+ * @param {string} opts.inputValue - テキスト入力の初期値
+ * @returns {Promise} 確認ダイアログ: true/false、入力ダイアログ: 文字列/null
+ */
+function showModal(message, { title = '確認', okLabel = 'OK', cancelLabel = 'キャンセル', danger = false, input = null, inputValue = '' } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     const btnClass = danger ? 'danger' : 'primary';
+    const inputHtml = input !== null
+      ? `<input type="text" class="modal-input" placeholder="${esc(input)}" value="${esc(inputValue)}">`
+      : '';
     overlay.innerHTML = `<div class="modal-box">
       <h3>${esc(title)}</h3>
       <p>${esc(message)}</p>
+      ${inputHtml}
       <div class="btn-group">
         <button class="${btnClass}" data-action="ok">${esc(okLabel)}</button>
         <button class="secondary" data-action="cancel">${esc(cancelLabel)}</button>
       </div>
     </div>`;
+    const inputEl = overlay.querySelector('.modal-input');
+    const doResolve = (action) => {
+      overlay.remove();
+      if (action === 'ok') {
+        resolve(input !== null ? (inputEl ? inputEl.value : '') : true);
+      } else {
+        resolve(input !== null ? null : false);
+      }
+    };
     overlay.addEventListener('click', e => {
       const action = e.target.dataset?.action;
-      if (action === 'ok') { overlay.remove(); resolve(true); }
-      else if (action === 'cancel') { overlay.remove(); resolve(false); }
+      if (action) doResolve(action);
     });
+    if (inputEl) {
+      inputEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter') doResolve('ok');
+        if (e.key === 'Escape') doResolve('cancel');
+      });
+    }
     document.body.appendChild(overlay);
+    if (inputEl) { inputEl.focus(); inputEl.select(); }
   });
+}
+
+function showConfirm(message, opts = {}) {
+  return showModal(message, opts);
 }
 
 function setStatus(id, msg, type) {
@@ -1228,7 +1264,84 @@ async function loadLightingPresets() {
 }
 
 // --- TODO ---
+let _todoFiles = [];
+let _todoActive = 'project';
+let _todoProjectDir = '';
+
+async function loadTodoFileList() {
+  try {
+    const d = await (await fetch('/api/todo/files')).json();
+    _todoFiles = d.files || [];
+    _todoActive = d.active || 'project';
+    _todoProjectDir = d.project_dir || '';
+    const sel = document.getElementById('todo-file-select');
+    const projectLabel = _todoProjectDir ? _todoProjectDir + '/' : 'プロジェクト';
+    let html = `<option value="project">${esc(projectLabel)}</option>`;
+    for (const f of _todoFiles) {
+      const selected = f.id === _todoActive ? ' selected' : '';
+      html += `<option value="${esc(f.id)}"${selected}>${esc(f.name)}</option>`;
+    }
+    if (_todoActive === 'project') {
+      html = html.replace('value="project"', 'value="project" selected');
+    }
+    sel.innerHTML = html;
+    const delBtn = document.getElementById('todo-delete-btn');
+    delBtn.style.display = _todoActive !== 'project' ? '' : 'none';
+  } catch (e) {}
+}
+
+async function switchTodoFile(id) {
+  try {
+    await api('POST', '/api/todo/switch', { id });
+    loadTodoList();
+  } catch (e) {
+    showToast('切り替えエラー', 'error');
+  }
+}
+
+async function uploadTodoFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const label = await showModal('このTODOファイルの名称を入力してください', {
+    title: 'TODO追加',
+    okLabel: '追加',
+    input: '例: cooking-basket',
+    inputValue: file.name.replace(/\.(md|txt)$/i, ''),
+  });
+  if (label === null) { input.value = ''; return; }
+  const name = label.trim() || file.name;
+  try {
+    const res = await api('POST', '/api/todo/upload', { content: text, name });
+    if (res.ok) {
+      showToast('TODO追加: ' + name);
+      loadTodoList();
+    }
+  } catch (e) {
+    showToast('アップロードエラー', 'error');
+  }
+  input.value = '';
+}
+
+async function deleteActiveTodoFile() {
+  if (_todoActive === 'project') return;
+  const f = _todoFiles.find(x => x.id === _todoActive);
+  const name = f ? f.name : _todoActive;
+  if (!await showConfirm(`「${name}」を削除しますか？`, { title: '削除', okLabel: '削除', danger: true })) return;
+  try {
+    const res = await fetch(`/api/todo/files/${_todoActive}`, { method: 'DELETE' });
+    const d = await res.json();
+    if (d.ok) {
+      showToast('削除: ' + name);
+      loadTodoList();
+    }
+  } catch (e) {
+    showToast('削除エラー', 'error');
+  }
+}
+
 async function loadTodoList() {
+  loadTodoFileList();
   try {
     const data = await (await fetch('/api/todo')).json();
     const el = document.getElementById('todo-list');
@@ -1248,7 +1361,10 @@ async function loadTodoList() {
       const checkbox = isActive
         ? '<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:4px; background:#7b1fa2; flex-shrink:0; font-size:0.7rem; color:#fff;">▶</span>'
         : '<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border:2px solid #d0c0e8; border-radius:4px; flex-shrink:0;"></span>';
-      html += `<div style="padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer; ${bg} transition:background 0.15s; display:flex; align-items:center; gap:8px;" onmouseenter="this.style.background='#f0e8ff'" onmouseleave="this.style.background='${isActive ? '#f3e5f5' : ''}'"><span style="flex:1; display:flex; align-items:center; gap:8px;" onclick="startTodo(this.parentElement, '${esc(item.text).replace(/'/g, "\\'")}')">${checkbox}${esc(item.text)}</span><button class="todo-copy-btn" onclick="event.stopPropagation();copyTodo(this,'${esc(item.text).replace(/'/g, "\\'")}')" title="コピー"></button></div>`;
+      const action = isActive
+        ? `onclick="stopTodo(this.parentElement, '${esc(item.text).replace(/'/g, "\\'")}')"`
+        : `onclick="startTodo(this.parentElement, '${esc(item.text).replace(/'/g, "\\'")}')"`;
+      html += `<div style="padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer; ${bg} transition:background 0.15s; display:flex; align-items:center; gap:8px;" onmouseenter="this.style.background='#f0e8ff'" onmouseleave="this.style.background='${isActive ? '#f3e5f5' : ''}'"><span style="flex:1; display:flex; align-items:center; gap:8px;" ${action}>${checkbox}${esc(item.text)}</span><button class="todo-copy-btn" onclick="event.stopPropagation();copyTodo(this,'${esc(item.text).replace(/'/g, "\\'")}')" title="コピー"></button></div>`;
     }
     el.innerHTML = html;
   } catch (e) {
@@ -1262,6 +1378,24 @@ async function copyTodo(btn, text) {
   await navigator.clipboard.writeText(text);
   btn.style.backgroundImage = `url("${ICON_CHECK}")`;
   setTimeout(() => { btn.style.backgroundImage = `url("${ICON_COPY}")`; }, 1000);
+}
+
+async function stopTodo(el, text) {
+  el.style.opacity = '0.5';
+  el.style.pointerEvents = 'none';
+  try {
+    const res = await api('POST', '/api/todo/stop', { text });
+    if (res.ok) {
+      showToast('作業解除: ' + text);
+    } else {
+      showToast(res.error || 'エラー', 'error');
+    }
+    loadTodoList();
+  } catch (e) {
+    showToast('エラー', 'error');
+    el.style.opacity = '1';
+    el.style.pointerEvents = '';
+  }
 }
 
 async function startTodo(el, text) {

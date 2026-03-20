@@ -1,5 +1,6 @@
 """overlay.py のテスト（TODOパース・ブロードキャスト・共通プロパティ）"""
 
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -78,6 +79,151 @@ class TestBroadcastTodo:
             assert event["type"] == "todo_update"
             assert len(event["items"]) == 1
             assert event["items"][0]["text"] == "アイテム"
+
+
+class TestTodoUploadedSource:
+    """DB保存TODOソースのテスト"""
+
+    async def test_get_todo_from_db(self, test_db):
+        """DBファイルのコンテンツをパースする"""
+        from src import db
+        file_id = "test1"
+        db.set_setting("todo.active", file_id)
+        db.set_setting("todo.files", json.dumps([{"id": file_id, "name": "test.md"}]))
+        db.set_setting(f"todo.file.{file_id}.content", "## 機能\n- [ ] タスクX\n- [ ] タスクY\n")
+        from scripts.routes.overlay import get_todo
+        result = await get_todo()
+        assert len(result["items"]) == 2
+        assert result["items"][0]["text"] == "タスクX"
+        assert result["items"][0]["status"] == "todo"
+
+    async def test_get_todo_with_in_progress(self, test_db):
+        """DB管理のin_progressが反映される"""
+        from src import db
+        file_id = "test2"
+        db.set_setting("todo.active", file_id)
+        db.set_setting("todo.files", json.dumps([{"id": file_id, "name": "test.md"}]))
+        db.set_setting(f"todo.file.{file_id}.content", "## 機能\n- [ ] タスクX\n- [ ] タスクY\n")
+        db.set_setting(f"todo.ip.{file_id}", json.dumps(["タスクX"]))
+        from scripts.routes.overlay import get_todo
+        result = await get_todo()
+        assert result["items"][0]["status"] == "in_progress"
+        assert result["items"][0]["section"] == "作業中"
+
+    async def test_get_todo_empty_content(self, test_db):
+        """コンテンツが空なら空リスト"""
+        from src import db
+        file_id = "test3"
+        db.set_setting("todo.active", file_id)
+        db.set_setting("todo.files", json.dumps([{"id": file_id, "name": "test.md"}]))
+        db.set_setting(f"todo.file.{file_id}.content", "")
+        from scripts.routes.overlay import get_todo
+        result = await get_todo()
+        assert result["items"] == []
+
+
+class TestTodoFilesAPI:
+    """TODO files管理APIのテスト"""
+
+    def test_list_files_default(self, api_client):
+        resp = api_client.get("/api/todo/files")
+        data = resp.json()
+        assert data["active"] == "project"
+        assert data["files"] == []
+
+    def test_upload_and_list(self, api_client):
+        resp = api_client.post("/api/todo/upload", json={
+            "content": "## テスト\n- [ ] アップロードタスク\n",
+            "name": "cooking-basket",
+        })
+        assert resp.json()["ok"] is True
+        file_id = resp.json()["id"]
+        # ファイル一覧を確認
+        resp = api_client.get("/api/todo/files")
+        data = resp.json()
+        assert data["active"] == file_id
+        assert len(data["files"]) == 1
+        assert data["files"][0]["name"] == "cooking-basket"
+        # TODOリストを確認
+        resp = api_client.get("/api/todo")
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["text"] == "アップロードタスク"
+
+    def test_switch_to_project(self, api_client):
+        api_client.post("/api/todo/upload", json={"content": "- [ ] X\n", "name": "x.md"})
+        resp = api_client.post("/api/todo/switch", json={"id": "project"})
+        assert resp.json()["ok"] is True
+        resp = api_client.get("/api/todo/files")
+        assert resp.json()["active"] == "project"
+
+    def test_switch_between_files(self, api_client):
+        r1 = api_client.post("/api/todo/upload", json={"content": "- [ ] A\n", "name": "a.md"})
+        id_a = r1.json()["id"]
+        r2 = api_client.post("/api/todo/upload", json={"content": "- [ ] B\n", "name": "b.md"})
+        id_b = r2.json()["id"]
+        # bがアクティブ
+        resp = api_client.get("/api/todo")
+        assert resp.json()["items"][0]["text"] == "B"
+        # aに切り替え
+        api_client.post("/api/todo/switch", json={"id": id_a})
+        resp = api_client.get("/api/todo")
+        assert resp.json()["items"][0]["text"] == "A"
+
+    def test_delete_file(self, api_client):
+        r = api_client.post("/api/todo/upload", json={"content": "- [ ] X\n", "name": "x.md"})
+        file_id = r.json()["id"]
+        resp = api_client.delete(f"/api/todo/files/{file_id}")
+        assert resp.json()["ok"] is True
+        # projectに戻る
+        resp = api_client.get("/api/todo/files")
+        assert resp.json()["active"] == "project"
+        assert resp.json()["files"] == []
+
+    def test_upload_same_name_updates(self, api_client):
+        """同名ファイルはIDを維持して内容を更新"""
+        r1 = api_client.post("/api/todo/upload", json={"content": "- [ ] old\n", "name": "todo.md"})
+        id1 = r1.json()["id"]
+        r2 = api_client.post("/api/todo/upload", json={"content": "- [ ] new\n", "name": "todo.md"})
+        id2 = r2.json()["id"]
+        assert id1 == id2
+        resp = api_client.get("/api/todo")
+        assert resp.json()["items"][0]["text"] == "new"
+        resp = api_client.get("/api/todo/files")
+        assert len(resp.json()["files"]) == 1
+
+    def test_start_todo_db_file(self, api_client, monkeypatch):
+        """DBファイルでstart_todoがDB管理で動作する"""
+        import scripts.state as st
+        mock_reader = type("R", (), {"speak_event": AsyncMock()})()
+        monkeypatch.setattr(st, "reader", mock_reader)
+        api_client.post("/api/todo/upload", json={
+            "content": "- [ ] タスクA\n- [ ] タスクB\n",
+            "name": "test.md",
+        })
+        resp = api_client.post("/api/todo/start", json={"text": "タスクA"})
+        assert resp.json()["ok"] is True
+        resp = api_client.get("/api/todo")
+        items = resp.json()["items"]
+        in_progress = [i for i in items if i["status"] == "in_progress"]
+        assert len(in_progress) == 1
+        assert in_progress[0]["text"] == "タスクA"
+
+    def test_stop_todo_db_file(self, api_client, monkeypatch):
+        """DBファイルでstop_todoがDB管理で動作する"""
+        import scripts.state as st
+        mock_reader = type("R", (), {"speak_event": AsyncMock()})()
+        monkeypatch.setattr(st, "reader", mock_reader)
+        api_client.post("/api/todo/upload", json={
+            "content": "- [ ] タスクA\n",
+            "name": "test.md",
+        })
+        api_client.post("/api/todo/start", json={"text": "タスクA"})
+        resp = api_client.post("/api/todo/stop", json={"text": "タスクA"})
+        assert resp.json()["ok"] is True
+        resp = api_client.get("/api/todo")
+        items = resp.json()["items"]
+        assert all(i["status"] == "todo" for i in items)
 
 
 class TestCommonDefaults:

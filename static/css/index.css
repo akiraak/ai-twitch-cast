@@ -135,6 +135,8 @@
   }
   .modal-box h3, .update-dialog-inner h3 { color: #7b1fa2; margin-bottom: 12px; font-size: 1.1rem; }
   .modal-box p, .update-dialog-inner p { color: #6a5590; font-size: 0.9rem; margin-bottom: 20px; }
+  .modal-input { width: 100%; padding: 8px 12px; font-size: 0.9rem; border: 1px solid #d0c0e8; border-radius: 6px; margin-bottom: 16px; box-sizing: border-box; outline: none; }
+  .modal-input:focus { border-color: #7b1fa2; box-shadow: 0 0 0 2px rgba(123,31,162,0.15); }
   .modal-box .btn-group, .update-dialog-inner .btn-group { display: flex; gap: 10px; justify-content: center; }
   .modal-box .btn-group button, .update-dialog-inner .btn-group button { padding: 8px 24px; font-size: 0.9rem; }
 

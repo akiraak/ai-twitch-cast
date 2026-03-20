@@ -39,6 +39,7 @@
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
   <div class="tab" onclick="switchTab('topic', this)">トピック</div>
   <div class="tab" onclick="switchTab('chat', this)">チャット</div>
+  <div class="tab" onclick="switchTab('todo', this)">TODO</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
   <div class="tab" onclick="switchTab('db', this)">DB</div>
 </div>
@@ -379,6 +380,23 @@ topics      1──N  topic_scripts (topic_id)</div>
       <div id="chat-pager-top" class="chat-pager"></div>
       <div id="chat-messages"></div>
       <div id="chat-pager" class="chat-pager"></div>
+    </div>
+  </div>
+
+  <!-- ===== TODO ===== -->
+  <div class="tab-content" id="tab-todo">
+    <div class="card">
+      <h2>TODO一覧</h2>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+        <select id="todo-file-select" onchange="switchTodoFile(this.value)" style="font-size:0.85rem; padding:4px 8px; border-radius:4px; border:1px solid #d0c0e8; min-width:180px;"></select>
+        <label style="display:inline-block; padding:4px 12px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.8rem;">
+          ファイルを追加
+          <input type="file" accept=".md,.txt" onchange="uploadTodoFile(this)" style="display:none;">
+        </label>
+        <button class="secondary" style="font-size:0.75rem; padding:3px 10px;" id="todo-delete-btn" onclick="deleteActiveTodoFile()" title="選択中のファイルを削除">削除</button>
+      </div>
+      <p style="font-size:0.8rem; color:#9a88b5; margin-bottom:12px;">クリックでアバターが作業開始を読み上げます</p>
+      <div id="todo-list" style="font-size:0.85rem;"></div>
     </div>
   </div>
 
