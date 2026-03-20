@@ -1,5 +1,19 @@
 # DONE
 
+## commentsテーブル再設計（comments/avatar_comments分離）
+
+- [x] commentsテーブルを視聴者コメント専用に簡素化（text, user_id, episode_id）
+- [x] avatar_commentsテーブル新設（trigger_type, trigger_text, text, emotion）
+- [x] 既存データのマイグレーション（RENAME COLUMN + DROP COLUMN + データコピー）
+- [x] AI応答辞書のキー変更（response → speech）、Geminiプロンプト更新
+- [x] 会話履歴をタイムライン形式に変更（get_recent_timeline: UNION ALL）
+- [x] comment_reader: コメントとアバター発話を分離保存、_save_avatar_comment新設
+- [x] WSイベントのフィールド名変更（message → trigger_text, response → speech）
+- [x] APIエンドポイント更新（/api/chat/history タイムライン形式、DB viewer）
+- [x] フロントエンド更新（broadcast.html, broadcast-main.js, index-app.js, CSS）
+- [x] デバッグ字幕エンドポイント修正
+- [x] 全431テスト通過
+
 ## キャラクター記憶システム改善
 
 - [x] メモ更新ループのガード条件修正: ペルソナ・セルフメモの更新をユーザーコメント有無と独立に実行

@@ -98,14 +98,21 @@ async def chat_send(body: ChatMessage):
 
 @router.get("/api/chat/history")
 async def chat_history(limit: int = 50, offset: int = 0):
-    """コメント履歴を返す（新しい順）"""
+    """チャット履歴をタイムライン形式で返す（新しい順）"""
     conn = db.get_connection()
-    total = conn.execute("SELECT COUNT(*) as cnt FROM comments").fetchone()["cnt"]
+    total_comments = conn.execute("SELECT COUNT(*) as cnt FROM comments").fetchone()["cnt"]
+    total_avatar = conn.execute("SELECT COUNT(*) as cnt FROM avatar_comments").fetchone()["cnt"]
+    total = total_comments + total_avatar
     rows = conn.execute(
-        """SELECT u.name as author, c.message, c.response, c.emotion,
-                  c.created_at
-           FROM comments c JOIN users u ON c.user_id = u.id
-           ORDER BY c.id DESC LIMIT ? OFFSET ?""",
+        """SELECT * FROM (
+               SELECT 'comment' as type, u.name as author, c.text as trigger_text,
+                      NULL as speech, NULL as emotion, c.created_at
+               FROM comments c JOIN users u ON c.user_id = u.id
+               UNION ALL
+               SELECT 'avatar_comment' as type, NULL as author, ac.trigger_text,
+                      ac.text as speech, ac.emotion, ac.created_at
+               FROM avatar_comments ac
+           ) ORDER BY created_at DESC LIMIT ? OFFSET ?""",
         (limit, offset),
     ).fetchall()
     return {"comments": [dict(r) for r in rows], "total": total, "offset": offset, "limit": limit}

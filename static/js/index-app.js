@@ -1287,7 +1287,7 @@ async function startTodo(el, text) {
 let _chatOffset = 0;
 const _chatLimit = 50;
 
-const _chatHeaderHtml = '<div class="chat-header"><span class="chat-c-time">日時</span><span class="chat-c-name">発言者</span><span class="chat-c-resp">コメント</span><span class="chat-c-arrow"></span><span class="chat-c-msg">きっかけ</span></div>';
+const _chatHeaderHtml = '<div class="chat-header"><span class="chat-c-time">日時</span><span class="chat-c-name">発言者</span><span class="chat-c-msg">内容</span></div>';
 
 function _chatFormatTime(iso) {
   if (!iso) {
@@ -1300,20 +1300,27 @@ function _chatFormatTime(iso) {
 
 function chatRowHtml(c) {
   const time = _chatFormatTime(c.created_at);
-  const name = esc(c.author || 'システム');
-  const msg = esc(c.message || '');
-  const resp = esc(c.response || '');
-  return `<div class="chat-row"><span class="chat-c-time">${time}</span><span class="chat-c-name">${name}</span><span class="chat-c-resp" title="${escHtml(c.response || '')}">${resp}</span><span class="chat-c-arrow">←</span><span class="chat-c-msg" title="${escHtml(c.message || '')}">${msg}</span></div>`;
+  if (c.type === 'avatar_comment') {
+    const speech = esc(c.speech || '');
+    return `<div class="chat-row chat-avatar"><span class="chat-c-time">${time}</span><span class="chat-c-name">ちょビ</span><span class="chat-c-resp" title="${escHtml(c.speech || '')}">${speech}</span></div>`;
+  }
+  const name = esc(c.author || '');
+  const msg = esc(c.trigger_text || '');
+  return `<div class="chat-row"><span class="chat-c-time">${time}</span><span class="chat-c-name">${name}</span><span class="chat-c-msg" title="${escHtml(c.trigger_text || '')}">${msg}</span></div>`;
 }
 
 function prependChatMessage(data) {
   const el = document.getElementById('chat-messages');
   if (!el || _chatOffset > 0) return;
+  // WSのcommentイベントは両方含むので、アバター応答→視聴者コメントの順で挿入（新しい順）
+  const avatarRow = chatRowHtml({type: 'avatar_comment', speech: data.speech, created_at: data.created_at});
+  const commentRow = chatRowHtml({type: 'comment', author: data.author, trigger_text: data.trigger_text, created_at: data.created_at});
+  const html = avatarRow + commentRow;
   const header = el.querySelector('.chat-header');
   if (header) {
-    header.insertAdjacentHTML('afterend', chatRowHtml(data));
+    header.insertAdjacentHTML('afterend', html);
   } else {
-    el.insertAdjacentHTML('afterbegin', chatRowHtml(data));
+    el.insertAdjacentHTML('afterbegin', html);
   }
 }
 

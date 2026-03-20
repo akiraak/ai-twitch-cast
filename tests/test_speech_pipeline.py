@@ -48,15 +48,15 @@ class TestNotifyOverlay:
     async def test_sends_comment_event(self):
         callback = AsyncMock()
         sp = SpeechPipeline(on_overlay=callback)
-        result = {"response": "[lang:en]Hello[/lang]!", "english": "こんにちは", "emotion": "joy"}
+        result = {"speech": "[lang:en]Hello[/lang]!", "english": "こんにちは", "emotion": "joy"}
         await sp.notify_overlay("alice", "hi", result)
 
         callback.assert_called_once()
         event = callback.call_args[0][0]
         assert event["type"] == "comment"
         assert event["author"] == "alice"
-        assert event["message"] == "hi"
-        assert event["response"] == "Hello!"  # lang tags stripped
+        assert event["trigger_text"] == "hi"
+        assert event["speech"] == "Hello!"  # lang tags stripped
         assert event["english"] == "こんにちは"
         assert event["emotion"] == "joy"
 
@@ -64,13 +64,13 @@ class TestNotifyOverlay:
     async def test_no_callback_does_nothing(self):
         sp = SpeechPipeline(on_overlay=None)
         # Should not raise
-        await sp.notify_overlay("alice", "hi", {"response": "test", "emotion": "neutral"})
+        await sp.notify_overlay("alice", "hi", {"speech": "test", "emotion": "neutral"})
 
     @pytest.mark.asyncio
     async def test_english_defaults_to_empty(self):
         callback = AsyncMock()
         sp = SpeechPipeline(on_overlay=callback)
-        result = {"response": "テスト", "emotion": "neutral"}
+        result = {"speech": "テスト", "emotion": "neutral"}
         await sp.notify_overlay("bob", "msg", result)
 
         event = callback.call_args[0][0]

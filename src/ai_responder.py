@@ -112,14 +112,14 @@ def invalidate_character_cache():
     _character_id = None
 
 
-def generate_response(author, message, comment_count=0, history=None, stream_context=None, user_note=None, already_greeted=False, self_note=None, persona=None):
+def generate_response(author, message, comment_count=0, timeline=None, stream_context=None, user_note=None, already_greeted=False, self_note=None, persona=None):
     """コメントに対するAI応答を生成する
 
     Args:
         author: コメント投稿者名
         message: コメント内容
         comment_count: このユーザーの過去コメント数
-        history: 直近の会話履歴 [{user_name, message, response}, ...]
+        timeline: 直近の会話タイムライン [{type, user_name, text, ...}, ...]
         stream_context: 配信情報 {title, topic, todo_items}
         user_note: このユーザーについてのメモ
         already_greeted: この配信で既に挨拶済みか
@@ -127,7 +127,7 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
         persona: ペルソナ（過去の応答から抽出した性格特徴）
 
     Returns:
-        dict: {"response": str, "emotion": str}
+        dict: {"speech": str, "emotion": str}
     """
     client = get_client()
     system_prompt = build_system_prompt(get_character(), stream_context=stream_context, self_note=self_note, persona=persona)
@@ -144,24 +144,25 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
     if user_note:
         context_parts.append(f"メモ: {user_note}（※メモの内容を直接言及しないこと。会話の雰囲気づくりに自然に活かす程度に）")
     # 禁止パターン（直前3件の自分の応答の書き出しを繰り返さない）
-    if history:
-        recent_responses = [h["response"][:30] for h in history[-3:] if h.get("response")]
-        if recent_responses:
-            context_parts.append(f"禁止パターン（同じ書き出しを避けろ）: {', '.join(recent_responses)}")
+    if timeline:
+        recent_speeches = [h["text"][:30] for h in timeline[-3:] if h.get("type") == "avatar_comment"]
+        if recent_speeches:
+            context_parts.append(f"禁止パターン（同じ書き出しを避けろ）: {', '.join(recent_speeches)}")
     context = f"（{'、'.join(context_parts)}）"
 
     # 会話履歴をcontentsに組み立て（Geminiのマルチターン形式）
     contents = []
-    if history:
-        for h in history:
-            contents.append(types.Content(
-                role="user",
-                parts=[types.Part(text=f"{h['user_name']}さんのコメント: {h['message']}")]
-            ))
-            if h.get("response"):
+    if timeline:
+        for h in timeline:
+            if h["type"] == "comment":
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text=f"{h['user_name']}さんのコメント: {h['text']}")]
+                ))
+            elif h["type"] == "avatar_comment":
                 contents.append(types.Content(
                     role="model",
-                    parts=[types.Part(text=h["response"])]
+                    parts=[types.Part(text=h["text"])]
                 ))
 
     contents.append(types.Content(
@@ -182,7 +183,7 @@ def generate_response(author, message, comment_count=0, history=None, stream_con
     try:
         result = json.loads(response.text)
     except (json.JSONDecodeError, AttributeError):
-        result = {"response": message, "emotion": "neutral", "english": ""}
+        result = {"speech": message, "emotion": "neutral", "english": ""}
 
     result.setdefault("english", "")
 
@@ -198,7 +199,7 @@ def generate_user_notes(users_with_comments):
     """複数ユーザーのメモをバッチ生成する
 
     Args:
-        users_with_comments: [{name, note, comments: [{message, response}]}, ...]
+        users_with_comments: [{name, note, comments: [{text}]}, ...]
 
     Returns:
         dict: {user_name: new_note, ...}
@@ -231,11 +232,9 @@ def generate_user_notes(users_with_comments):
         lines = [f"### {u['name']}"]
         if u.get("note"):
             lines.append(f"既存メモ: {u['note']}")
-        lines.append("直近の会話:")
+        lines.append("直近のコメント:")
         for c in u["comments"]:
-            lines.append(f"  {u['name']}: {c['message']}")
-            if c.get("response"):
-                lines.append(f"  {char.get('name', 'ちょび')}: {c['response']}")
+            lines.append(f"  {u['name']}: {c['text']}")
         user_sections.append("\n".join(lines))
 
     system_prompt = "\n".join(parts)
@@ -256,17 +255,17 @@ def generate_user_notes(users_with_comments):
         return {}
 
 
-def generate_self_note(recent_comments, current_note=""):
+def generate_self_note(timeline, current_note=""):
     """アバター自身の記憶メモを生成する
 
     Args:
-        recent_comments: 直近の会話 [{user_name, message, response, created_at}, ...]
+        timeline: 直近の会話タイムライン [{type, user_name, text, created_at, ...}, ...]
         current_note: 現在のメモ
 
     Returns:
         str: 更新されたメモ
     """
-    if not recent_comments:
+    if not timeline:
         return current_note or ""
 
     client = get_client()
@@ -297,13 +296,14 @@ def generate_self_note(recent_comments, current_note=""):
     if current_note:
         lines.append(f"既存メモ: {current_note}")
     lines.append("直近の会話:")
-    for c in recent_comments:
+    for c in timeline:
         timestamp = ""
         if c.get("created_at"):
             timestamp = f" [{c['created_at'][:16]}]"
-        lines.append(f"  {c['user_name']}{timestamp}: {c['message']}")
-        if c.get("response"):
-            lines.append(f"  {char_name}: {c['response']}")
+        if c["type"] == "comment":
+            lines.append(f"  {c['user_name']}{timestamp}: {c['text']}")
+        elif c["type"] == "avatar_comment":
+            lines.append(f"  {char_name}{timestamp}: {c['text']}")
 
     response = client.models.generate_content(
         model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
@@ -371,23 +371,23 @@ def generate_persona_from_prompt():
         return ""
 
 
-def generate_persona(recent_comments, current_persona=""):
+def generate_persona(avatar_comments, current_persona=""):
     """応答パターンからペルソナ（性格・話し方の特徴）を更新する
 
     既存ペルソナの90%を維持しつつ、最近の応答から新しい特徴を反映する。
 
     Args:
-        recent_comments: 直近の会話 [{user_name, message, response}, ...]
+        avatar_comments: 直近のアバター発話 [{text, ...}, ...]
         current_persona: 現在のペルソナ記述
 
     Returns:
         str: 更新されたペルソナ記述、または空文字
     """
-    if not recent_comments:
+    if not avatar_comments:
         return current_persona or ""
 
-    # 自分の応答だけ抽出
-    responses = [c["response"] for c in recent_comments if c.get("response")]
+    # アバターの発話テキストを抽出
+    responses = [c["text"] for c in avatar_comments if c.get("text")]
     if len(responses) < 10:
         return current_persona or ""
 
@@ -446,14 +446,14 @@ def generate_persona(recent_comments, current_persona=""):
         return current_persona or ""
 
 
-def generate_topic_line(title, description="", last_speeches=None, recent_comments=None):
+def generate_topic_line(title, description="", last_speeches=None, timeline=None):
     """トピックについて1件の発話を生成する（前回の発話から続く自然な流れ）
 
     Args:
         title: トピックのタイトル
         description: トピックの説明
         last_speeches: 直近の自分の発話リスト（流れを作るため）
-        recent_comments: 直近の視聴者コメント [{user_name, message, response}, ...]
+        timeline: 直近の会話タイムライン [{type, user_name, text, ...}, ...]
 
     Returns:
         dict: {"content": str, "emotion": str}
@@ -486,13 +486,14 @@ def generate_topic_line(title, description="", last_speeches=None, recent_commen
         parts.append("## あなたの直前の発話（この続きを話してください）")
         for s in last_speeches[-3:]:
             parts.append(f"- {s}")
-    if recent_comments:
+    if timeline:
         parts.append("")
-        parts.append("## 直近の視聴者との会話")
-        for c in recent_comments[-5:]:
-            parts.append(f"- {c['user_name']}: {c['message']}")
-            if c.get("response"):
-                parts.append(f"  → {c['response']}")
+        parts.append("## 直近の会話")
+        for c in timeline[-5:]:
+            if c["type"] == "comment":
+                parts.append(f"- {c['user_name']}: {c['text']}")
+            elif c["type"] == "avatar_comment":
+                parts.append(f"  → {c['text']}")
 
     parts.extend(["", "## 言語ルール"])
     for rule in lang["rules"]:
@@ -551,7 +552,7 @@ def generate_event_response(event_type, detail, last_event_responses=None):
         last_event_responses: 直前のイベント応答リスト（繰り返し防止用）
 
     Returns:
-        dict: {"response": str, "emotion": str, "english": str}
+        dict: {"speech": str, "emotion": str, "english": str}
     """
     client = get_client()
     char = get_character()
@@ -585,14 +586,14 @@ def generate_event_response(event_type, detail, last_event_responses=None):
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        f'{{"response": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "english": "{english_label}"}}',
+        f'{{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "english": "{english_label}"}}',
         f"emotionは次のいずれか: {emotion_list}",
         "",
-        "## responseとtts_textの違い（重要・厳守）",
-        "- response: チャットや字幕に表示。タグやマークアップは絶対に含めない。",
-        "- tts_text: TTS音声合成用。responseと同じ内容だが、日本語以外の部分に [lang:xx]...[/lang] タグを付ける。",
-        '  - 例: response="Claude Codeすごい！" → tts_text="[lang:en]Claude Code[/lang]すごい！"',
-        "  - 日本語のみの場合はresponseと同じ内容にする。",
+        "## speechとtts_textの違い（重要・厳守）",
+        "- speech: チャットや字幕に表示。タグやマークアップは絶対に含めない。",
+        "- tts_text: TTS音声合成用。speechと同じ内容だが、日本語以外の部分に [lang:xx]...[/lang] タグを付ける。",
+        '  - 例: speech="Claude Codeすごい！" → tts_text="[lang:en]Claude Code[/lang]すごい！"',
+        "  - 日本語のみの場合はspeechと同じ内容にする。",
     ])
 
     system_prompt = "\n".join(parts)
@@ -610,7 +611,7 @@ def generate_event_response(event_type, detail, last_event_responses=None):
     try:
         result = json.loads(response.text)
     except (json.JSONDecodeError, AttributeError):
-        result = {"response": detail, "emotion": "neutral", "english": ""}
+        result = {"speech": detail, "emotion": "neutral", "english": ""}
 
     result.setdefault("english", "")
     if result.get("emotion") not in emotions:
@@ -619,13 +620,13 @@ def generate_event_response(event_type, detail, last_event_responses=None):
     return result
 
 
-def generate_topic_title(recent_comments=None, current_topic=None, stream_context=None, self_note=None):
+def generate_topic_title(timeline=None, current_topic=None, stream_context=None, self_note=None):
     """会話や配信状況から次のトピックを自動生成する
 
     50%の確率で会話ベースのトピック、50%でキャラの記憶から突拍子もないトピックを生成。
 
     Args:
-        recent_comments: 直近の会話 [{user_name, message, response}, ...]
+        timeline: 直近の会話タイムライン [{type, user_name, text, ...}, ...]
         current_topic: 現在のトピック名（あれば別のものを生成）
         stream_context: 配信情報 {title, topic, todo_items}
         self_note: アバター自身の記憶メモ
@@ -638,7 +639,7 @@ def generate_topic_title(recent_comments=None, current_topic=None, stream_contex
     char = get_character()
 
     # 50%で会話ベース、50%でキャラの記憶・興味から自由なトピック
-    use_conversation = random.random() < 0.5 and bool(recent_comments)
+    use_conversation = random.random() < 0.5 and bool(timeline)
 
     if use_conversation:
         parts = [
@@ -672,12 +673,13 @@ def generate_topic_title(recent_comments=None, current_topic=None, stream_contex
         if stream_context.get("todo_items"):
             parts.append(f"- 作業中: {', '.join(stream_context['todo_items'])}")
 
-    if use_conversation and recent_comments:
+    if use_conversation and timeline:
         parts.extend(["", "## 直近の会話"])
-        for c in recent_comments[-10:]:
-            parts.append(f"- {c['user_name']}: {c['message']}")
-            if c.get("response"):
-                parts.append(f"  → {c['response']}")
+        for c in timeline[-10:]:
+            if c["type"] == "comment":
+                parts.append(f"- {c['user_name']}: {c['text']}")
+            elif c["type"] == "avatar_comment":
+                parts.append(f"  → {c['text']}")
 
     parts.extend([
         "",

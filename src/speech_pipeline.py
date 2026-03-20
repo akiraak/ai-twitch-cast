@@ -29,15 +29,15 @@ class SpeechPipeline:
         """テキストから [lang:xx]...[/lang] タグを除去する"""
         return re.sub(r'\[/?lang(?::\w+)?\]', '', text)
 
-    async def notify_overlay(self, author, message, result):
+    async def notify_overlay(self, author, trigger_text, result):
         """オーバーレイにコメント情報を送信する"""
         if not self._on_overlay:
             return
         await self._on_overlay({
             "type": "comment",
             "author": author,
-            "message": message,
-            "response": self.strip_lang_tags(result["response"]),
+            "trigger_text": trigger_text,
+            "speech": self.strip_lang_tags(result["speech"]),
             "english": result.get("english", ""),
             "emotion": result["emotion"],
         })
@@ -54,7 +54,7 @@ class SpeechPipeline:
         Args:
             text: 読み上げるテキスト
             voice: TTS音声名
-            subtitle: 字幕データ {author, message, result}
+            subtitle: 字幕データ {author, trigger_text, result}
             chat_result: チャット投稿データ
             tts_text: TTS用テキスト（言語タグ付き）
             post_to_chat: チャット投稿コールバック（async関数）
@@ -111,7 +111,7 @@ class SpeechPipeline:
                 # 音声がFFmpegに投入されたので、字幕・口パクを発火
                 if subtitle:
                     await self.notify_overlay(
-                        subtitle["author"], subtitle["message"], subtitle["result"],
+                        subtitle["author"], subtitle["trigger_text"], subtitle["result"],
                     )
                 if lipsync_frames:
                     await self._on_overlay({

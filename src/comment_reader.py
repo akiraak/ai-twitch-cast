@@ -118,15 +118,15 @@ class CommentReader:
             self._speech.apply_emotion(script["emotion"])
             await self._speech.speak(script["content"], subtitle={
                 "author": "ちょビ",
-                "message": script["content"],
-                "result": {"response": script["content"], "emotion": script["emotion"], "english": english},
-            }, chat_result={"response": script["content"], "english": english},
+                "trigger_text": script["content"],
+                "result": {"speech": script["content"], "emotion": script["emotion"], "english": english},
+            }, chat_result={"speech": script["content"], "english": english},
                 tts_text=script.get("tts_text"), post_to_chat=self._post_to_chat)
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
             # アバター発話をDBに保存
             logger.info("[topic] DB保存呼び出し: episode=%s", self._episode_id)
-            await self._save_avatar_speech("[トピック]", script["content"], script["emotion"])
+            await self._save_avatar_comment("topic", "[トピック]", script["content"], script["emotion"])
         except Exception as e:
             logger.error("自発的発話失敗: %s", e, exc_info=True)
 
@@ -146,8 +146,8 @@ class CommentReader:
             await self._save_to_db(user, message, result)
             await asyncio.to_thread(db.update_user_last_seen, user["id"])
             self._speech.apply_emotion(result["emotion"])
-            await self._speech.speak(result["response"], subtitle={
-                "author": author, "message": message, "result": result,
+            await self._speech.speak(result["speech"], subtitle={
+                "author": author, "trigger_text": message, "result": result,
             }, tts_text=result.get("tts_text"))
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
@@ -156,7 +156,7 @@ class CommentReader:
             return result
         except Exception as e:
             logger.error("WebUI応答失敗: %s", e)
-            return {"response": "", "emotion": "neutral", "english": ""}
+            return {"speech": "", "emotion": "neutral", "english": ""}
 
     async def _respond(self, author, message):
         """1件のコメントにAIで応答して読み上げる"""
@@ -178,8 +178,8 @@ class CommentReader:
             await asyncio.to_thread(db.update_user_last_seen, user["id"])
             self._speech.apply_emotion(result["emotion"])
             # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
-            await self._speech.speak(result["response"], subtitle={
-                "author": author, "message": message, "result": result,
+            await self._speech.speak(result["speech"], subtitle={
+                "author": author, "trigger_text": message, "result": result,
             }, chat_result=result, tts_text=result.get("tts_text"),
                 post_to_chat=self._post_to_chat)
             self._speech.apply_emotion("neutral")
@@ -192,7 +192,7 @@ class CommentReader:
     async def _generate_ai_response(self, author, message, comment_count, user_note="", already_greeted=False):
         """AI応答を生成する（会話履歴・配信コンテキスト付き）"""
         logger.info("[ai] 応答生成中...")
-        history = await asyncio.to_thread(db.get_recent_comments, 10, 2)
+        timeline = await asyncio.to_thread(db.get_recent_timeline, 10, 2)
         stream_context = await self._get_stream_context()
         # アバター自身のメモを取得
         self_note = await self._get_self_note()
@@ -202,11 +202,11 @@ class CommentReader:
         persona = memory.get("persona") or None
         result = await asyncio.to_thread(
             generate_response, author, message, comment_count,
-            history=history, stream_context=stream_context,
+            timeline=timeline, stream_context=stream_context,
             user_note=user_note or None, already_greeted=already_greeted,
             self_note=self_note, persona=persona,
         )
-        logger.info("[ai] [%s] %s", result["emotion"], result["response"])
+        logger.info("[ai] [%s] %s", result["emotion"], result["speech"])
         return result
 
     async def _get_stream_context(self):
@@ -247,16 +247,22 @@ class CommentReader:
         """コメントと応答をDBに保存する"""
         if not self._episode_id:
             return
+        # 視聴者コメントを保存
         await asyncio.to_thread(
-            db.save_comment,
-            self._episode_id, user["id"], message, result["response"], result["emotion"],
+            db.save_comment, self._episode_id, user["id"], message,
         )
         await asyncio.to_thread(db.increment_comment_count, user["id"])
+        # アバターの応答を保存
+        await asyncio.to_thread(
+            db.save_avatar_comment, self._episode_id, "comment",
+            f"{user['name']}さんのコメント: {message}",
+            result["speech"], result["emotion"],
+        )
 
     async def _post_to_chat(self, result):
         """AI応答をTwitchチャットに投稿する"""
         try:
-            text = SpeechPipeline.strip_lang_tags(result["response"])
+            text = SpeechPipeline.strip_lang_tags(result["speech"])
             english = result.get("english", "")
             if english:
                 text = f"{text} ({english})"
@@ -271,17 +277,17 @@ class CommentReader:
             # 直前のイベント応答を取得（繰り返し防止）
             last_responses = None
             try:
-                recent = await asyncio.to_thread(db.get_recent_comments, 5, 1)
-                last_responses = [c["response"] for c in recent if c.get("response") and c.get("user_name") == "システム"]
+                recent = await asyncio.to_thread(db.get_recent_avatar_comments, 5, 1, trigger_type="event")
+                last_responses = [c["text"] for c in recent if c.get("text")]
             except Exception:
                 pass
             result = await asyncio.to_thread(generate_event_response, event_type, detail, last_event_responses=last_responses)
-            logger.info("[event] [%s] %s", result["emotion"], result["response"])
+            logger.info("[event] [%s] %s", result["emotion"], result["speech"])
             self._speech.apply_emotion(result["emotion"])
             # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
-            await self._speech.speak(result["response"], voice=voice, subtitle={
+            await self._speech.speak(result["speech"], voice=voice, subtitle={
                 "author": "システム",
-                "message": f"[{event_type}] {detail}",
+                "trigger_text": f"[{event_type}] {detail}",
                 "result": result,
             }, chat_result=result, tts_text=result.get("tts_text"),
                 post_to_chat=self._post_to_chat)
@@ -290,7 +296,7 @@ class CommentReader:
             if self._topic_talker:
                 self._topic_talker.mark_spoken()
             # アバター発話をDBに保存
-            await self._save_avatar_speech(f"[{event_type}] {detail}", result["response"], result["emotion"])
+            await self._save_avatar_comment("event", f"[{event_type}] {detail}", result["speech"], result["emotion"])
         except Exception as e:
             logger.error("イベント発話失敗: %s", e)
 
@@ -310,11 +316,11 @@ class CommentReader:
             from datetime import datetime, timedelta, timezone
             char_id = get_character_id()
             memory = await asyncio.to_thread(db.get_character_memory, char_id)
-            recent = await asyncio.to_thread(db.get_recent_comments, 50, 2)
-            if not recent:
+            timeline = await asyncio.to_thread(db.get_recent_timeline, 50, 2)
+            if not timeline:
                 return
             new_note = await asyncio.to_thread(
-                generate_self_note, recent,
+                generate_self_note, timeline,
             )
             if new_note and new_note != memory.get("self_note", ""):
                 await asyncio.to_thread(db.update_character_self_note, char_id, new_note)
@@ -328,31 +334,28 @@ class CommentReader:
             char_id = get_character_id()
             memory = await asyncio.to_thread(db.get_character_memory, char_id)
             current_persona = memory.get("persona", "")
-            recent = await asyncio.to_thread(db.get_recent_comments, 50, 2)
-            if not recent:
+            avatar_comments = await asyncio.to_thread(db.get_recent_avatar_comments, 50, 2)
+            if not avatar_comments:
                 return
-            persona = await asyncio.to_thread(generate_persona, recent, current_persona)
+            persona = await asyncio.to_thread(generate_persona, avatar_comments, current_persona)
             if persona:
                 await asyncio.to_thread(db.update_character_persona, char_id, persona)
                 logger.info("[persona] ペルソナ更新: %s", persona[:80])
         except Exception as e:
             logger.warning("[persona] ペルソナ更新失敗: %s", e)
 
-    async def _save_avatar_speech(self, message, response, emotion="neutral"):
-        """アバターの発話をDBに保存する（会話履歴に含めるため）"""
+    async def _save_avatar_comment(self, trigger_type, trigger_text, text, emotion="neutral"):
+        """アバターのコメントをDBに保存する"""
         if not self._episode_id:
-            logger.warning("[avatar-save] episode_id未設定のためスキップ: %s", message[:30])
+            logger.warning("[avatar-save] episode_id未設定のためスキップ: %s", trigger_text[:30])
             return
         try:
-            char_name = get_character().get("name", "ちょビ")
-            user = await asyncio.to_thread(db.get_or_create_user, char_name)
             await asyncio.to_thread(
-                db.save_comment, self._episode_id, user["id"], message, response, emotion,
+                db.save_avatar_comment, self._episode_id, trigger_type, trigger_text, text, emotion,
             )
-            await asyncio.to_thread(db.increment_comment_count, user["id"])
-            logger.info("[avatar-save] 保存OK: ep=%s, msg=%s", self._episode_id, message[:30])
+            logger.info("[avatar-save] 保存OK: ep=%s, type=%s", self._episode_id, trigger_type)
         except Exception as e:
-            logger.warning("アバター発話DB保存失敗: %s", e)
+            logger.warning("アバターコメントDB保存失敗: %s", e)
 
     async def _note_update_loop(self):
         """15分ごとにユーザーメモをバッチ更新する"""

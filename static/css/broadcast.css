@@ -50,7 +50,7 @@
   #subtitle.visible { opacity: 1; }
   #subtitle.fading { opacity: 0; transition: opacity 1.5s ease; }
   #subtitle .comment { display: none; }
-  #subtitle .response {
+  #subtitle .speech {
     font-size: 1.875vw;
     color: #ffffff;
     font-weight: bold;
@@ -216,7 +216,7 @@
 
   /* === 共通テキスト色オーバーライド（WebUIから設定時に適用、!importantでID詳細度に勝つ） === */
   .custom-text-color,
-  .custom-text-color .response,
+  .custom-text-color .speech,
   .custom-text-color .english,
   .custom-text-color .todo-item,
   .custom-text-color .todo-title,

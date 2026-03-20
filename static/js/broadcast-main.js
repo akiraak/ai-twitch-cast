@@ -232,7 +232,7 @@ function applySettings(s) {
     subtitleEl.style.top = '';
     subtitleEl.style.left = '50%';
     subtitleEl.style.transform = 'translateX(-50%)';
-    if (s.subtitle.fontSize != null) subtitleEl.querySelector('.response').style.fontSize = s.subtitle.fontSize + 'vw';
+    if (s.subtitle.fontSize != null) subtitleEl.querySelector('.speech').style.fontSize = s.subtitle.fontSize + 'vw';
     if (s.subtitle.maxWidth != null) subtitleEl.style.maxWidth = s.subtitle.maxWidth + '%';
     if (s.subtitle.fadeDuration != null) subtitleEl.dataset.fadeDuration = s.subtitle.fadeDuration;
   }
@@ -282,8 +282,8 @@ function showSubtitle(data) {
   clearTimeout(fadeTimer);
   subtitleEl.classList.remove('fading');
   subtitleEl.querySelector('.author').textContent = '';
-  subtitleEl.querySelector('.message').textContent = data.message;
-  subtitleEl.querySelector('.response').textContent = data.response;
+  subtitleEl.querySelector('.trigger-text').textContent = data.trigger_text;
+  subtitleEl.querySelector('.speech').textContent = data.speech;
   subtitleEl.querySelector('.english').textContent = data.english || '';
   subtitleEl.classList.add('visible');
 }
@@ -1303,7 +1303,7 @@ async function editSave() {
     overlaySettings.subtitle.positionY = 0;
     const bottom = parseFloat(subtitleEl.style.bottom);
     if (!isNaN(bottom)) overlaySettings.subtitle.bottom = bottom;
-    const respFs = parseFloat(subtitleEl.querySelector('.response')?.style.fontSize);
+    const respFs = parseFloat(subtitleEl.querySelector('.speech')?.style.fontSize);
     if (!isNaN(respFs)) overlaySettings.subtitle.fontSize = respFs;
     const maxW = parseFloat(subtitleEl.style.maxWidth);
     if (!isNaN(maxW)) overlaySettings.subtitle.maxWidth = maxW;

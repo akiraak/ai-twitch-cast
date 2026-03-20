@@ -183,18 +183,18 @@ class TestComments:
 
     def test_save_comment(self, test_db):
         ep_id, user_id = self._setup(test_db)
-        cid = test_db.save_comment(ep_id, user_id, "こんにちは", "やほー！", "joy")
+        cid = test_db.save_comment(ep_id, user_id, "こんにちは")
         assert cid is not None
 
     def test_get_recent_comments(self, test_db):
         ep_id, user_id = self._setup(test_db)
-        test_db.save_comment(ep_id, user_id, "msg1", "res1")
-        test_db.save_comment(ep_id, user_id, "msg2", "res2")
+        test_db.save_comment(ep_id, user_id, "msg1")
+        test_db.save_comment(ep_id, user_id, "msg2")
         recent = test_db.get_recent_comments(limit=10)
         assert len(recent) == 2
         # 時系列順（古い→新しい）
-        assert recent[0]["message"] == "msg1"
-        assert recent[1]["message"] == "msg2"
+        assert recent[0]["text"] == "msg1"
+        assert recent[1]["text"] == "msg2"
 
     def test_recent_comments_limit(self, test_db):
         ep_id, user_id = self._setup(test_db)
@@ -212,11 +212,37 @@ class TestComments:
 
     def test_get_user_recent_comments(self, test_db):
         ep_id, user_id = self._setup(test_db)
-        test_db.save_comment(ep_id, user_id, "hello", "hi!")
+        test_db.save_comment(ep_id, user_id, "hello")
         results = test_db.get_user_recent_comments("viewer")
         assert len(results) == 1
-        assert results[0]["message"] == "hello"
-        assert results[0]["response"] == "hi!"
+        assert results[0]["text"] == "hello"
+
+    def test_save_avatar_comment(self, test_db):
+        ep_id, _ = self._setup(test_db)
+        cid = test_db.save_avatar_comment(ep_id, "comment", "aliceさんのコメント: hi", "やほー！", "joy")
+        assert cid is not None
+
+    def test_get_recent_avatar_comments(self, test_db):
+        ep_id, _ = self._setup(test_db)
+        test_db.save_avatar_comment(ep_id, "comment", "trigger1", "speech1")
+        test_db.save_avatar_comment(ep_id, "event", "trigger2", "speech2")
+        all_ac = test_db.get_recent_avatar_comments(limit=10)
+        assert len(all_ac) == 2
+        # trigger_typeフィルタ
+        events = test_db.get_recent_avatar_comments(limit=10, trigger_type="event")
+        assert len(events) == 1
+        assert events[0]["text"] == "speech2"
+
+    def test_get_recent_timeline(self, test_db):
+        ep_id, user_id = self._setup(test_db)
+        test_db.save_comment(ep_id, user_id, "hello")
+        test_db.save_avatar_comment(ep_id, "comment", "viewerさんのコメント: hello", "hi!")
+        timeline = test_db.get_recent_timeline(limit=10)
+        assert len(timeline) == 2
+        assert timeline[0]["type"] == "comment"
+        assert timeline[0]["text"] == "hello"
+        assert timeline[1]["type"] == "avatar_comment"
+        assert timeline[1]["text"] == "hi!"
 
 
 class TestSettings:

@@ -73,8 +73,16 @@ def _create_tables(conn):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             episode_id INTEGER NOT NULL REFERENCES episodes(id),
             user_id INTEGER NOT NULL REFERENCES users(id),
-            message TEXT NOT NULL,
-            response TEXT NOT NULL DEFAULT '',
+            text TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS avatar_comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            episode_id INTEGER NOT NULL REFERENCES episodes(id),
+            trigger_type TEXT NOT NULL,
+            trigger_text TEXT NOT NULL,
+            text TEXT NOT NULL,
             emotion TEXT NOT NULL DEFAULT 'neutral',
             created_at TEXT NOT NULL
         );
@@ -254,6 +262,65 @@ def _create_tables(conn):
         _migrate_character_memory(conn)
     except Exception:
         pass
+    # Migration: comments → comments + avatar_comments 分離
+    try:
+        _migrate_comments_split(conn)
+    except Exception:
+        pass
+
+
+def _migrate_comments_split(conn):
+    """commentsテーブルからavatar_commentsを分離するマイグレーション（冪等）"""
+    # messageカラムが存在する＝未マイグレーション
+    try:
+        conn.execute("SELECT message FROM comments LIMIT 1")
+    except sqlite3.OperationalError:
+        return  # 既にマイグレーション済み
+
+    # avatar_commentsテーブルが空なら既存データをコピー
+    existing = conn.execute("SELECT COUNT(*) as cnt FROM avatar_comments").fetchone()
+    if existing["cnt"] == 0:
+        # キャラクター名を取得
+        char_names = set()
+        try:
+            chars = conn.execute("SELECT config FROM characters").fetchall()
+            for c in chars:
+                try:
+                    name = _json.loads(c["config"]).get("name", "")
+                    if name:
+                        char_names.add(name)
+                except (ValueError, TypeError):
+                    pass
+        except Exception:
+            pass
+
+        rows = conn.execute(
+            """SELECT c.episode_id, c.message, c.response, c.emotion, c.created_at,
+                      u.name as user_name
+               FROM comments c JOIN users u ON c.user_id = u.id
+               WHERE c.response != ''"""
+        ).fetchall()
+        for r in rows:
+            user_name = r["user_name"]
+            if user_name in char_names:
+                trigger_type = "topic"
+            elif user_name == "システム":
+                trigger_type = "event"
+            else:
+                trigger_type = "comment"
+            conn.execute(
+                "INSERT INTO avatar_comments (episode_id, trigger_type, trigger_text, text, emotion, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (r["episode_id"], trigger_type, r["message"], r["response"],
+                 r["emotion"], r["created_at"]),
+            )
+        conn.commit()
+
+    # カラムリネーム・削除
+    conn.execute("ALTER TABLE comments RENAME COLUMN message TO text")
+    conn.execute("ALTER TABLE comments DROP COLUMN response")
+    conn.execute("ALTER TABLE comments DROP COLUMN emotion")
+    conn.commit()
 
 
 def _migrate_character_memory(conn):
@@ -464,11 +531,15 @@ def get_users_commented_since(since_iso):
 
 
 def get_user_recent_comments(user_name, limit=10, hours=2):
-    """指定ユーザーの直近コメントを取得する"""
+    """指定ユーザーの直近コメントを取得する
+
+    Returns:
+        list[dict]: [{text, created_at}, ...]
+    """
     conn = get_connection()
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     rows = conn.execute(
-        """SELECT c.message, c.response, c.created_at
+        """SELECT c.text, c.created_at
            FROM comments c JOIN users u ON c.user_id = u.id
            WHERE u.name = ? AND c.created_at > ?
            ORDER BY c.created_at DESC LIMIT ?""",
@@ -479,30 +550,104 @@ def get_user_recent_comments(user_name, limit=10, hours=2):
 
 # --- comments ---
 
-def save_comment(episode_id, user_id, message, response="", emotion="neutral"):
+def save_comment(episode_id, user_id, text):
+    """視聴者のコメントを保存する"""
     conn = get_connection()
     cur = conn.execute(
-        "INSERT INTO comments (episode_id, user_id, message, response, emotion, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (episode_id, user_id, message, response, emotion, _now()),
+        "INSERT INTO comments (episode_id, user_id, text, created_at) VALUES (?, ?, ?, ?)",
+        (episode_id, user_id, text, _now()),
     )
     conn.commit()
     return cur.lastrowid
 
 
 def get_recent_comments(limit=20, hours=2):
-    """直近N時間以内のコメントを取得する（配信またぎ対応）
+    """直近N時間以内の視聴者コメントを取得する
 
     Returns:
-        list[dict]: [{user_name, message, response, emotion, created_at}, ...]
+        list[dict]: [{user_name, text, created_at}, ...]
     """
     conn = get_connection()
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     rows = conn.execute(
-        """SELECT u.name as user_name, c.message, c.response, c.emotion, c.created_at
+        """SELECT u.name as user_name, c.text, c.created_at
            FROM comments c JOIN users u ON c.user_id = u.id
            WHERE c.created_at > ?
            ORDER BY c.created_at DESC LIMIT ?""",
         (since, limit),
+    ).fetchall()
+    return [dict(r) for r in reversed(rows)]
+
+
+# --- avatar_comments ---
+
+def save_avatar_comment(episode_id, trigger_type, trigger_text, text, emotion="neutral"):
+    """アバターのコメントを保存する"""
+    conn = get_connection()
+    cur = conn.execute(
+        "INSERT INTO avatar_comments (episode_id, trigger_type, trigger_text, text, emotion, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (episode_id, trigger_type, trigger_text, text, emotion, _now()),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_recent_avatar_comments(limit=20, hours=2, trigger_type=None):
+    """直近N時間以内のアバターコメントを取得する
+
+    Args:
+        limit: 最大件数
+        hours: 遡る時間
+        trigger_type: フィルタ（'comment', 'topic', 'event'）。Noneなら全件
+
+    Returns:
+        list[dict]: [{trigger_type, trigger_text, text, emotion, created_at}, ...]
+    """
+    conn = get_connection()
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    if trigger_type:
+        rows = conn.execute(
+            """SELECT trigger_type, trigger_text, text, emotion, created_at
+               FROM avatar_comments
+               WHERE created_at > ? AND trigger_type = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (since, trigger_type, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT trigger_type, trigger_text, text, emotion, created_at
+               FROM avatar_comments
+               WHERE created_at > ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (since, limit),
+        ).fetchall()
+    return [dict(r) for r in reversed(rows)]
+
+
+def get_recent_timeline(limit=20, hours=2):
+    """直近N時間以内のコメント+アバター発話を時系列で取得する
+
+    Returns:
+        list[dict]: [{type, user_name, text, trigger_type, trigger_text, emotion, created_at}, ...]
+    """
+    conn = get_connection()
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    rows = conn.execute(
+        """SELECT * FROM (
+               SELECT 'comment' as type, u.name as user_name, c.text,
+                      NULL as trigger_type, NULL as trigger_text, NULL as emotion,
+                      c.created_at
+               FROM comments c JOIN users u ON c.user_id = u.id
+               WHERE c.created_at > ?
+               UNION ALL
+               SELECT 'avatar_comment' as type, NULL as user_name, ac.text,
+                      ac.trigger_type, ac.trigger_text, ac.emotion,
+                      ac.created_at
+               FROM avatar_comments ac
+               WHERE ac.created_at > ?
+           ) ORDER BY created_at DESC LIMIT ?""",
+        (since, since, limit),
     ).fetchall()
     return [dict(r) for r in reversed(rows)]
 

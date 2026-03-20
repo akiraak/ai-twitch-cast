@@ -106,13 +106,13 @@ class TopicTalker:
         self._generating = True
         try:
             current_title = current_topic["title"] if current_topic else None
-            recent_comments = db.get_recent_comments(10, 2)
+            timeline = db.get_recent_timeline(10, 2)
 
             action = "自動生成" if not current_topic else "自動ローテーション"
             logger.info("[topic] トピック%s中...", action)
             new_title = await asyncio.to_thread(
                 generate_topic_title,
-                recent_comments=recent_comments,
+                timeline=timeline,
                 current_topic=current_title,
                 stream_context=stream_context,
                 self_note=self_note,
@@ -143,15 +143,15 @@ class TopicTalker:
             spoken = db.get_spoken_scripts(topic["id"])
             last_speeches = [s["content"] for s in spoken[-3:]] if spoken else None
 
-            # 直近の会話履歴
-            recent_comments = db.get_recent_comments(5, 2)
+            # 直近の会話タイムライン
+            timeline = db.get_recent_timeline(5, 2)
 
             logger.info("[topic] セリフ生成中...")
             result = await asyncio.to_thread(
                 generate_topic_line,
                 topic["title"], topic["description"],
                 last_speeches=last_speeches,
-                recent_comments=recent_comments,
+                timeline=timeline,
             )
 
             # 発話履歴としてDBに保存

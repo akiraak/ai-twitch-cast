@@ -193,8 +193,8 @@ async def debug_subtitle():
     """デバッグ用：字幕を仮表示する"""
     await state.broadcast_overlay({
         "type": "comment",
-        "message": "こんにちは！テスト表示です",
-        "response": "これはデバッグ用の字幕サンプルです。位置やサイズを調整してください！",
+        "trigger_text": "こんにちは！テスト表示です",
+        "speech": "これはデバッグ用の字幕サンプルです。位置やサイズを調整してください！",
         "english": "This is a debug subtitle sample.",
     })
     return {"ok": True}

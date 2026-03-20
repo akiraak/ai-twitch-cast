@@ -17,9 +17,16 @@ router = APIRouter()
 CUSTOM_QUERIES = {
     "comments": {
         "query": """
-            SELECT c.id, u.name as user, c.message, c.response, c.emotion, c.created_at
+            SELECT c.id, u.name as user, c.text, c.created_at
             FROM comments c JOIN users u ON c.user_id = u.id
             ORDER BY c.id DESC LIMIT ? OFFSET ?
+        """,
+    },
+    "avatar_comments": {
+        "query": """
+            SELECT id, trigger_type, trigger_text, text, emotion, created_at
+            FROM avatar_comments
+            ORDER BY id DESC LIMIT ? OFFSET ?
         """,
     },
     "topic_scripts": {
@@ -86,10 +93,10 @@ async def update_notes():
         char_name = get_character().get("name", "ちょビ")
         char_id = get_character_id()
         memory = await asyncio.to_thread(db.get_character_memory, char_id)
-        recent = await asyncio.to_thread(db.get_recent_comments, 20, 2)
-        if recent:
+        timeline = await asyncio.to_thread(db.get_recent_timeline, 20, 2)
+        if timeline:
             current_note = memory.get("self_note", "")
-            new_note = await asyncio.to_thread(generate_self_note, recent, current_note)
+            new_note = await asyncio.to_thread(generate_self_note, timeline, current_note)
             if new_note and new_note != current_note:
                 await asyncio.to_thread(db.update_character_self_note, char_id, new_note)
                 updated += 1
