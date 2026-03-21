@@ -4,33 +4,8 @@
 <meta charset="UTF-8">
 <title>AI Twitch Cast - Broadcast</title>
 <link rel="stylesheet" href="/static/css/broadcast.css">
-<script src="/static/js/lib/api-client.js"></script>
-<script src="/static/js/lib/text-variables.js"></script>
 </head>
 <body>
-<script>
-// console.logキャプチャ → サーバー送信
-(function() {
-  const _buf = [];
-  const _orig = console.log;
-  const _origWarn = console.warn;
-  const _origErr = console.error;
-  function capture(level, args) {
-    const line = '[' + level + '] ' + Array.from(args).map(a => {
-      try { return typeof a === 'object' ? JSON.stringify(a) : String(a); } catch(e) { return String(a); }
-    }).join(' ');
-    _buf.push(new Date().toISOString().substr(11,12) + ' ' + line);
-  }
-  console.log = function() { capture('LOG', arguments); _orig.apply(console, arguments); };
-  console.warn = function() { capture('WARN', arguments); _origWarn.apply(console, arguments); };
-  console.error = function() { capture('ERR', arguments); _origErr.apply(console, arguments); };
-  setInterval(function() {
-    if (_buf.length === 0) return;
-    const lines = _buf.splice(0, 100);
-    fetch('/api/debug/jslog', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({lines}) }).catch(function(){});
-  }, 2000);
-})();
-</script>
 
 <!-- フローティング設定パネル（右クリックで直接表示） -->
 <div class="settings-panel" id="settings-panel">
@@ -44,17 +19,6 @@
 
 <!-- 背景画像（APIから選択済み背景を取得、なければデフォルト） -->
 <img id="background" src="/resources/images/background.png" alt="">
-<script>
-(async () => {
-  try {
-    const res = await fetch('/api/files/background/list');
-    const data = await res.json();
-    if (data.ok && data.active) {
-      document.getElementById('background').src = '/resources/images/backgrounds/' + data.active;
-    }
-  } catch (e) {}
-})();
-</script>
 
 <!-- キャプチャレイヤーコンテナ -->
 <div id="capture-container"></div>
@@ -111,7 +75,24 @@
 }
 </script>
 
+<!-- 共通ライブラリ -->
+<script src="/static/js/lib/api-client.js"></script>
+<script src="/static/js/lib/text-variables.js"></script>
+
+<!-- broadcast モジュール（読み込み順序重要） -->
+<script src="/static/js/broadcast/globals.js"></script>
+<script src="/static/js/broadcast/style-utils.js"></script>
+<script src="/static/js/broadcast/panels.js"></script>
+<script src="/static/js/broadcast/capture.js"></script>
+<script src="/static/js/broadcast/custom-text.js"></script>
+<script src="/static/js/broadcast/child-panel.js"></script>
+<script src="/static/js/broadcast/settings.js"></script>
+<script src="/static/js/broadcast/settings-panel.js"></script>
+<script src="/static/js/broadcast/edit-mode.js"></script>
+<script src="/static/js/broadcast/websocket.js"></script>
+<script src="/static/js/broadcast/init.js"></script>
+
+<!-- VRMアバター（ES Module） -->
 <script type="module" src="/static/js/avatar-renderer.js?v=expr1"></script>
-<script src="/static/js/broadcast-main.js?v=expr1"></script>
 </body>
 </html>

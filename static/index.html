@@ -417,6 +417,23 @@ topics      1──N  topic_scripts (topic_id)</div>
 </div>
 
 <script src="/static/js/panel-ui.js"></script>
-<script src="/static/js/index-app.js?v=4"></script>
+
+<!-- admin モジュール（読み込み順序重要） -->
+<script src="/static/js/admin/utils.js"></script>
+<script src="/static/js/admin/status.js"></script>
+<script src="/static/js/admin/panel-items.js"></script>
+<script src="/static/js/admin/character.js"></script>
+<script src="/static/js/admin/language.js"></script>
+<script src="/static/js/admin/sound.js"></script>
+<script src="/static/js/admin/topic.js"></script>
+<script src="/static/js/admin/db.js"></script>
+<script src="/static/js/admin/todo.js"></script>
+<script src="/static/js/admin/chat.js"></script>
+<script src="/static/js/admin/markdown.js"></script>
+<script src="/static/js/admin/lighting.js"></script>
+<script src="/static/js/admin/debug.js"></script>
+<script src="/static/js/admin/layout.js"></script>
+<script src="/static/js/admin/files.js"></script>
+<script src="/static/js/admin/init.js"></script>
 </body>
 </html>

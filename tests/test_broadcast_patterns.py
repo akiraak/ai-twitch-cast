@@ -1,4 +1,4 @@
-"""broadcast.html / broadcast-main.js のパターン検証テスト。
+"""broadcast.html / broadcast JS のパターン検証テスト。
 
 アイテム共通化で導入した構造（ITEM_REGISTRY, applyCommonStyle, data-editable）の
 回帰を防止する。実行環境にブラウザは不要（ソースコード解析のみ）。
@@ -11,7 +11,12 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
 def read_js() -> str:
-    return (STATIC_DIR / "js" / "broadcast-main.js").read_text(encoding="utf-8")
+    """broadcast/ 配下の全JSファイルを結合して返す"""
+    broadcast_dir = STATIC_DIR / "js" / "broadcast"
+    parts = []
+    for f in sorted(broadcast_dir.glob("*.js")):
+        parts.append(f.read_text(encoding="utf-8"))
+    return "\n".join(parts)
 
 
 def read_html() -> str:
@@ -23,7 +28,12 @@ def read_html_index() -> str:
 
 
 def read_js_index() -> str:
-    return (STATIC_DIR / "js" / "index-app.js").read_text(encoding="utf-8")
+    """admin/ 配下の全JSファイルを結合して返す"""
+    admin_dir = STATIC_DIR / "js" / "admin"
+    parts = []
+    for f in sorted(admin_dir.glob("*.js")):
+        parts.append(f.read_text(encoding="utf-8"))
+    return "\n".join(parts)
 
 
 def read_js_text_variables() -> str:

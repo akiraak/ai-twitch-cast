@@ -1,5 +1,17 @@
 # DONE
 
+## WebUI描画のファイル構成の最適化
+
+- [x] broadcast-main.js（1,625行）を11ファイルに分割（`js/broadcast/`）
+  - globals, style-utils, panels, capture, custom-text, child-panel, settings, settings-panel, edit-mode, websocket, init
+- [x] index-app.js（2,098行）を16ファイルに分割（`js/admin/`）
+  - utils, status, panel-items, character, language, sound, topic, db, todo, chat, markdown, lighting, debug, layout, files, init
+- [x] broadcast.htmlのインラインスクリプト2つを外部ファイルに移動
+- [x] テストの`read_js()`/`read_js_index()`を分割後のディレクトリ読み込みに更新
+- [x] バンドラー不要、`<script>`タグベースで既存onclick互換維持
+- [x] 全420テスト通過
+- [x] プラン → [plans/webui-file-optimization.md](plans/webui-file-optimization.md)
+
 ## 配信言語設定の再設計
 
 - [x] 言語モード5プリセット → 基本言語・サブ言語・混ぜ具合の3項目設定に再設計
