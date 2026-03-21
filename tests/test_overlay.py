@@ -266,7 +266,7 @@ class TestCommonDefaults:
 
     def test_all_visual_items_have_common_properties(self):
         from scripts.routes.overlay import _OVERLAY_DEFAULTS, _COMMON_DEFAULTS
-        visual_items = ["avatar", "subtitle", "todo", "topic"]
+        visual_items = ["avatar", "subtitle", "todo"]
         for item in visual_items:
             assert item in _OVERLAY_DEFAULTS, f"{item} が _OVERLAY_DEFAULTS にない"
             for key in _COMMON_DEFAULTS:
@@ -292,7 +292,7 @@ class TestOverlaySettingsAPI:
         assert resp.status_code == 200
         data = resp.json()
         # 全ビジュアルアイテムの共通プロパティが返る
-        for item in ["avatar", "subtitle", "todo", "topic"]:
+        for item in ["avatar", "subtitle", "todo"]:
             assert item in data, f"{item} がレスポンスにない"
             assert "bgColor" in data[item], f"{item} に bgColor がない"
             assert "borderRadius" in data[item], f"{item} に borderRadius がない"

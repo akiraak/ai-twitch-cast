@@ -174,8 +174,6 @@ def build_system_prompt(char, stream_context=None, self_note=None, persona=None)
         parts.extend(["", "## 現在の配信情報"])
         if stream_context.get("title"):
             parts.append(f"- 配信タイトル: {stream_context['title']}")
-        if stream_context.get("topic"):
-            parts.append(f"- 話題のトピック: {stream_context['topic']}")
         if stream_context.get("todo_items"):
             parts.append("- 作業中のタスク:")
             for item in stream_context["todo_items"]:

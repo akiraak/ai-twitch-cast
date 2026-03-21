@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import time
 from collections import deque
 
 logger = logging.getLogger(__name__)
@@ -16,18 +15,16 @@ from src.twitch_chat import TwitchChat
 class CommentReader:
     """Twitchコメントを読み上げるサービス"""
 
-    def __init__(self, on_overlay=None, topic_talker=None):
+    def __init__(self, on_overlay=None):
         self._chat = TwitchChat()
         self._on_overlay = on_overlay
-        self._topic_talker = topic_talker
         self._speech = SpeechPipeline(on_overlay=on_overlay)
         self._queue = deque()
-        self._topic_queue = deque()  # トピック発話の2文目以降
+        self._segment_queue = deque()  # 長文分割の2文目以降
         self._process_task = None
         self._note_task = None
         self._running = False
         self._episode_id = None
-        self._idle_since = None  # キューが空になった時刻
 
     def set_episode(self, episode_id):
         """現在のエピソードIDを設定する"""
@@ -57,7 +54,7 @@ class CommentReader:
         self._process_task = None
         self._note_task = None
         self._queue.clear()
-        self._topic_queue.clear()
+        self._segment_queue.clear()
         self._episode_id = None
         logger.info("コメント読み上げを停止しました")
 
@@ -79,40 +76,26 @@ class CommentReader:
         try:
             while self._running:
                 if self._queue:
-                    # コメント最優先 → トピックの残りセグメントはキャンセル
-                    if self._topic_queue:
-                        logger.info("[topic] コメント到着 → トピック残り%dセグメントをキャンセル", len(self._topic_queue))
-                        self._topic_queue.clear()
-                    self._idle_since = None
+                    # コメント最優先 → 残りセグメントはキャンセル
+                    if self._segment_queue:
+                        logger.info("[segment] コメント到着 → 残り%dセグメントをキャンセル", len(self._segment_queue))
+                        self._segment_queue.clear()
                     author, message = self._queue.popleft()
                     await self._respond(author, message)
-                elif self._topic_queue:
-                    # トピックの続きセグメント
-                    seg = self._topic_queue.popleft()
-                    await self._speak_topic_segment(seg)
-                elif self._topic_talker and self._should_auto_speak():
-                    await self._auto_speak()
-                    # 発話後にidleタイマーをリセット（即座に連続発話しないように）
-                    self._idle_since = time.monotonic()
+                elif self._segment_queue:
+                    # 長文分割の続きセグメント
+                    seg = self._segment_queue.popleft()
+                    await self._speak_segment(seg)
                 else:
-                    if self._idle_since is None:
-                        self._idle_since = time.monotonic()
                     await asyncio.sleep(0.5)
         except asyncio.CancelledError:
             pass
 
-    def _should_auto_speak(self):
-        """自発的発話すべきかを判定する"""
-        if self._idle_since is None:
-            return False
-        idle_seconds = time.monotonic() - self._idle_since
-        return self._topic_talker.should_speak(idle_seconds)
-
-    async def _speak_topic_segment(self, seg):
-        """トピックの1セグメントを発話する"""
+    async def _speak_segment(self, seg):
+        """分割された1セグメントを発話する"""
         try:
             translation = seg.get("translation", "")
-            logger.info("[topic] セグメント発話: [%s] %s", seg["emotion"], seg["content"])
+            logger.info("[segment] セグメント発話: [%s] %s", seg["emotion"], seg["content"])
             self._speech.apply_emotion(seg["emotion"])
             await self._speech.speak(seg["content"], subtitle={
                 "author": "ちょビ",
@@ -123,34 +106,9 @@ class CommentReader:
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
             # アバター発話をDBに保存
-            await self._save_avatar_comment("topic", "[トピック]", seg["content"], seg["emotion"])
+            await self._save_avatar_comment("segment", "[セグメント]", seg["content"], seg["emotion"])
         except Exception as e:
-            logger.error("トピックセグメント発話失敗: %s", e, exc_info=True)
-
-    async def _auto_speak(self):
-        """トピックに基づいて自発的に発話する（複数セグメント対応）"""
-        try:
-            # トピック自動生成・ローテーションチェック
-            stream_context = await self._get_stream_context()
-            self_note = await self._get_self_note()
-            new_topic = await self._topic_talker.maybe_rotate_topic(
-                stream_context=stream_context, self_note=self_note,
-            )
-            if new_topic:
-                logger.info("[topic] トピック自動変更: %s", new_topic["title"])
-
-            segments = await self._topic_talker.get_next()
-            if not segments:
-                return
-
-            # 1文目は即座に発話
-            await self._speak_topic_segment(segments[0])
-
-            # 2文目以降はキューに入れる（コメントが来たらキャンセルされる）
-            for seg in segments[1:]:
-                self._topic_queue.append(seg)
-        except Exception as e:
-            logger.error("自発的発話失敗: %s", e, exc_info=True)
+            logger.error("セグメント発話失敗: %s", e, exc_info=True)
 
     async def respond_webui(self, message):
         """WebUIからの会話に応答する（GMのメッセージをTwitchチャットに投稿）"""
@@ -178,8 +136,6 @@ class CommentReader:
             }, tts_text=result.get("tts_text"), se=se_info)
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
-            if self._topic_talker:
-                self._topic_talker.mark_spoken()
             return result
         except Exception as e:
             logger.error("WebUI応答失敗: %s", e)
@@ -231,15 +187,12 @@ class CommentReader:
             # 2文目以降はキューに入れる（コメント到着でキャンセル）
             for i in range(1, len(content_parts)):
                 tts_text = tts_parts[i] if i < len(tts_parts) else content_parts[i]
-                self._topic_queue.append({
+                self._segment_queue.append({
                     "content": content_parts[i],
                     "emotion": result["emotion"],
                     "tts_text": tts_text,
                     "translation": "",
                 })
-
-            if self._topic_talker:
-                self._topic_talker.mark_spoken()
         except Exception as e:
             logger.error("応答失敗: %s", e)
 
@@ -275,16 +228,6 @@ class CommentReader:
                 context["title"] = info["title"]
         except Exception as e:
             logger.debug("配信タイトル取得失敗: %s", e)
-        # 現在のトピック
-        if self._topic_talker:
-            status = self._topic_talker.get_status()
-            if status.get("active") and status.get("topic"):
-                context["topic"] = status["topic"]["title"]
-            # トピックコンテキスト（教材の解析済みテキスト等）
-            topic_context = self._topic_talker.get_context()
-            if topic_context:
-                # 長すぎる場合は先頭だけ渡す
-                context["topic_context"] = topic_context[:2000]
         # TODO（作業中タスク）
         try:
             from pathlib import Path
@@ -352,8 +295,6 @@ class CommentReader:
                 post_to_chat=self._post_to_chat)
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
-            if self._topic_talker:
-                self._topic_talker.mark_spoken()
             # アバター発話をDBに保存
             await self._save_avatar_comment("event", f"[{event_type}] {detail}", result["speech"], result["emotion"])
         except Exception as e:

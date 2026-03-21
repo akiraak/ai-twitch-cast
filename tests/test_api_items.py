@@ -53,7 +53,7 @@ class TestBroadcastItemsDB:
         assert "t1" in ids
 
     def test_update_layout(self, test_db):
-        test_db.upsert_broadcast_item("lay1", "topic", {"positionX": 1, "positionY": 2})
+        test_db.upsert_broadcast_item("lay1", "todo", {"positionX": 1, "positionY": 2})
         test_db.update_broadcast_item_layout("lay1", {
             "positionX": 10, "positionY": 20, "zIndex": 30,
         })

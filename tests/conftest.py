@@ -80,11 +80,6 @@ def api_client(test_db, mock_env, mock_gemini, monkeypatch):
     monkeypatch.setattr(st, "broadcast_se", AsyncMock())
     monkeypatch.setattr(st, "broadcast_to_broadcast", AsyncMock())
 
-    # topic_talkerは実物（test_dbを使う）
-    from src.topic_talker import TopicTalker
-    tt = TopicTalker()
-    monkeypatch.setattr(st, "topic_talker", tt)
-
     # reader/git_watcherはモック
     mock_reader = MagicMock()
     mock_reader.is_running = False

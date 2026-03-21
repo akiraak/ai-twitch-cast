@@ -79,14 +79,6 @@ function applySettings(s) {
     if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'vw';
     loadTodo();
   }
-  // === topic ===
-  if (s.topic) {
-    applyCommonStyle(topicPanelEl, s.topic);
-    if (s.topic.maxWidth != null) topicPanelEl.style.maxWidth = s.topic.maxWidth + '%';
-    if (s.topic.titleFontSize != null) {
-      document.getElementById('topic-title-text').style.fontSize = s.topic.titleFontSize + 'vw';
-    }
-  }
   // === sync ===
   if (s.sync) {
     if (s.sync.lipsyncDelay != null) {

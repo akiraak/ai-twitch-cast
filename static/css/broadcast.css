@@ -194,10 +194,6 @@
   .custom-text-color .todo-item,
   .custom-text-color .todo-title,
   .custom-text-color .todo-section,
-  .custom-text-color .topic-title,
-  .custom-text-color .topic-desc,
-  .custom-text-color .topic-stats,
-  .custom-text-color .topic-label,
   .custom-text-color .custom-text-content,
   .custom-text-color #version-text {
     color: var(--item-text-color) !important;
@@ -286,80 +282,6 @@
   .snap-guide.center {
     background: rgba(255, 60, 60, 0.9);
     box-shadow: 0 0 8px 2px rgba(255, 60, 60, 0.6), 0 0 20px 4px rgba(255, 60, 60, 0.3);
-  }
-
-  /* === トピックパネル（左上） === */
-  #topic-panel {
-    position: absolute;
-    top: 1.85%; left: 1.04%;
-    z-index: 20;
-    max-width: 31%; min-width: 15%;
-    --bg-opacity: 0.95;
-    background: linear-gradient(135deg, rgba(0, 0, 0, var(--bg-opacity)), rgba(5, 0, 10, var(--bg-opacity)));
-    border: 1px solid rgba(124, 77, 255, 0.3);
-    border-radius: var(--item-border-radius, 0.5vw);
-    padding: 0;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    pointer-events: none;
-    opacity: 1;
-    overflow: hidden;
-  }
-  #topic-panel.idle { border-color: rgba(255, 255, 255, 0.1); }
-  #topic-panel .topic-header {
-    display: flex; align-items: center; gap: 0.4vw;
-    padding: 0.4vw 0.73vw;
-    background: linear-gradient(90deg, rgba(124, 77, 255, 0.15), transparent);
-    border-bottom: 1px solid rgba(124, 77, 255, 0.1);
-  }
-  #topic-panel .topic-dot {
-    width: 0.42vw; height: 0.42vw;
-    border-radius: 50%;
-    background: #b388ff;
-    box-shadow: 0 0 0.3vw rgba(124, 77, 255, 0.6);
-    animation: dot-pulse 2s ease-in-out infinite;
-  }
-  #topic-panel .topic-dot.paused {
-    background: #666; box-shadow: none; animation: none;
-  }
-  @keyframes dot-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-  #topic-panel .topic-label {
-    font-size: 0.78vw; color: #b388ff;
-    font-weight: bold; letter-spacing: 0.1vw;
-    text-shadow: 0 0 0.4vw rgba(124, 77, 255, 0.3);
-  }
-  #topic-panel .topic-body { padding: 0.6vw 0.73vw; }
-  #topic-panel .topic-title {
-    font-size: 1.25vw; color: #ffffff;
-    font-weight: bold; line-height: 1.4;
-    word-break: break-word;
-  }
-  #topic-panel .topic-desc {
-    font-size: 0.83vw; color: rgba(255, 255, 255, 0.5);
-    margin-top: 0.3vw; line-height: 1.4;
-  }
-  #topic-panel .topic-images {
-    margin-top: 0.5vw;
-    text-align: center;
-  }
-  #topic-panel .topic-images img {
-    max-width: 100%;
-    max-height: 20vw;
-    border-radius: 0.3vw;
-    object-fit: contain;
-  }
-  #topic-panel .topic-image-nav {
-    font-size: 0.65vw;
-    color: rgba(255, 255, 255, 0.5);
-    margin-top: 0.2vw;
-  }
-  #topic-panel .topic-stats {
-    font-size: 0.68vw; color: rgba(255, 255, 255, 0.35);
-    margin-top: 0.4vw; padding-top: 0.4vw;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   /* === 子パネル === */

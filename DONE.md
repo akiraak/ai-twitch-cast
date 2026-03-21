@@ -1,5 +1,13 @@
 # DONE
 
+## トピック機能・授業モード完全削除
+
+- [x] バックエンド: TopicTalker・トピックAPI・授業モード関連コード削除（state.py, comment_reader.py, ai_responder.py, db.py, prompt_builder.py, avatar.py, web.py, overlay.py, items.py）
+- [x] フロントエンド: トピックパネル・管理画面タブ・CSS・JS全削除（broadcast.html, globals.js, panels.js, settings.js, edit-mode.js, websocket.js, init.js, index.html, topic.js）
+- [x] DB: topics/topic_scriptsテーブルDROPマイグレーション追加
+- [x] テスト: test_topic_talker.py, test_api_topic.py削除、関連テスト修正（404テスト全通過）
+- [x] プラン → [plans/remove-topic-rebuild-lesson.md](plans/remove-topic-rebuild-lesson.md)
+
 ## 画像/URLで授業モード
 
 - [x] ベース1: コンテンツソース抽象化（`analyze_images()` / `analyze_url()` → コンテキストテキスト生成）

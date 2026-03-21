@@ -18,12 +18,6 @@
       "fontSize": 1.25,
       "titleFontSize": 2.3,
       "bgOpacity": 0.6
-    },
-    "topic": {
-      "positionX": 1.04,
-      "positionY": 10,
-      "maxWidth": 31,
-      "titleFontSize": 1.25
     }
   },
   "audio_volumes": {

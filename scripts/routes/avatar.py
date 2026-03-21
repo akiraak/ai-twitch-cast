@@ -90,25 +90,25 @@ async def tts_test_emotion(body: EmotionTestRequest):
 async def tts_test_multi():
     """連続発話テスト（長文生成→句読点分割→順次再生）"""
     import random
-    from src.ai_responder import generate_topic_line
+    from src.ai_responder import generate_event_response
     from src.speech_pipeline import SpeechPipeline
 
     topics = [
-        ("最近ハマっていること", "最近自分が夢中になっていることについて具体的に語る"),
-        ("プログラミングの面白さ", "プログラミングの魅力やエピソードを語る"),
-        ("好きな食べ物", "好きな食べ物について熱く語る"),
-        ("朝型と夜型", "自分はどっち派か、理由も含めて語る"),
-        ("AIの未来", "AIがこれからどうなるか、自分の考えを語る"),
+        "最近自分が夢中になっていることについて具体的に語ってください（3〜4文で詳しく）",
+        "プログラミングの魅力やエピソードを語ってください（3〜4文で詳しく）",
+        "好きな食べ物について熱く語ってください（3〜4文で詳しく）",
+        "朝型と夜型、自分はどっち派か理由も含めて語ってください（3〜4文で詳しく）",
+        "AIがこれからどうなるか、自分の考えを語ってください（3〜4文で詳しく）",
     ]
-    title, desc = random.choice(topics)
+    detail = random.choice(topics)
 
     result = await asyncio.to_thread(
-        generate_topic_line, title, description=desc,
+        generate_event_response, "連続発話テスト", detail,
     )
 
     # 句読点で自動分割してセグメント化
-    content_parts = SpeechPipeline.split_sentences(result["content"])
-    tts_parts = SpeechPipeline.split_sentences(result.get("tts_text", result["content"]))
+    content_parts = SpeechPipeline.split_sentences(result["speech"])
+    tts_parts = SpeechPipeline.split_sentences(result.get("tts_text", result["speech"]))
     segments = []
     for i, content in enumerate(content_parts):
         tts_text = tts_parts[i] if i < len(tts_parts) else content
@@ -121,9 +121,9 @@ async def tts_test_multi():
 
     async def _play():
         await state.ensure_reader()
-        await state.reader._speak_topic_segment(segments[0])
+        await state.reader._speak_segment(segments[0])
         for seg in segments[1:]:
-            state.reader._topic_queue.append(seg)
+            state.reader._segment_queue.append(seg)
 
     asyncio.create_task(_play())
     contents = [s["content"] for s in segments]

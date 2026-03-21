@@ -449,13 +449,6 @@ async function editSave() {
     const bgOp = parseFloat(subtitleEl.style.getPropertyValue('--bg-opacity'));
     if (!isNaN(bgOp)) overlaySettings.subtitle.bgOpacity = bgOp;
   }
-  if (overlaySettings.topic) {
-    const maxW = parseFloat(topicPanelEl.style.maxWidth);
-    if (!isNaN(maxW)) overlaySettings.topic.maxWidth = maxW;
-    const titleFs = parseFloat(document.getElementById('topic-title-text')?.style.fontSize);
-    if (!isNaN(titleFs)) overlaySettings.topic.titleFontSize = titleFs;
-  }
-
   try {
     await fetch('/api/overlay/settings', {
       method: 'POST',

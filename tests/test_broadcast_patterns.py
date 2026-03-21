@@ -42,7 +42,7 @@ def read_js_text_variables() -> str:
 
 # === ITEM_REGISTRY ===
 
-EXPECTED_ITEMS = ["avatar", "subtitle", "todo", "topic"]
+EXPECTED_ITEMS = ["avatar", "subtitle", "todo"]
 
 
 class TestItemRegistry:
@@ -148,7 +148,6 @@ class TestApplySettingsUsesCommon:
             "applyCommonStyle(avatarArea",
             "applyCommonStyle(subtitleEl",
             "applyCommonStyle(todoPanelEl",
-            "applyCommonStyle(topicPanelEl",
         ]
         for call in expected_calls:
             assert call in body, f"applySettings に {call} がない"
@@ -193,16 +192,6 @@ class TestEditSaveUsesRegistry:
         assert "subtitle.maxWidth" in body or ".maxWidth" in body
         assert "subtitle.fadeDuration" in body or ".fadeDuration" in body
         assert "subtitle.bgOpacity" in body or ".bgOpacity" in body
-
-    def test_saves_topic_specific_props(self):
-        """topic固有プロパティ（maxWidth, titleFontSize）が保存されること"""
-        js = read_js()
-        func_match = re.search(
-            r"async function editSave\(\)\s*\{(.*?)\n\}", js, re.DOTALL
-        )
-        body = func_match.group(1)
-        assert "overlaySettings.topic" in body
-        assert "topic.maxWidth" in body or "topic].maxWidth" in body
 
     def test_custom_text_variable_expansion(self):
         """テキスト変数展開関数が共通ファイルに存在すること"""
@@ -313,9 +302,9 @@ class TestCssVariables:
         assert "var(--item-font-size" in css
 
     def test_existing_items_use_border_radius_var(self):
-        """subtitle, todo, topicのborder-radiusがCSS変数を使っていること"""
+        """subtitle, todoのborder-radiusがCSS変数を使っていること"""
         css = self._read_css()
-        for panel in ["#subtitle", "#todo-panel", "#topic-panel"]:
+        for panel in ["#subtitle", "#todo-panel"]:
             # パネルのCSSブロックを探してborder-radius: var(を確認
             idx = css.find(panel + " {") if panel + " {" in css else css.find(panel + " {\n")
             if idx == -1:
@@ -336,7 +325,6 @@ class TestDataEditableAttributes:
             "avatar": "avatar-area",
             "subtitle": "subtitle",
             "todo": "todo-panel",
-            "topic": "topic-panel",
         }
         for editable_name, element_id in expected.items():
             pattern = rf'id="{element_id}"[^>]*data-editable="{editable_name}"'

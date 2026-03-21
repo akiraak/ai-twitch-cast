@@ -15,7 +15,7 @@ class TestSchema:
         expected = {
             "channels", "characters", "shows", "episodes",
             "users", "comments", "actions", "settings",
-            "bgm_tracks", "se_tracks", "topics", "topic_scripts",
+            "bgm_tracks", "se_tracks",
             "custom_texts", "character_memory",
         }
         assert expected.issubset(names)
@@ -368,101 +368,6 @@ class TestActions:
         ep = test_db.start_episode(show["id"], char["id"])
         aid = test_db.save_action(ep["id"], "commit", "fix bug")
         assert aid is not None
-
-
-class TestTopics:
-    def test_create_topic(self, test_db):
-        topic = test_db.create_topic("Python", "Pythonについて話す")
-        assert topic["title"] == "Python"
-        assert topic["status"] == "active"
-
-    def test_get_active_topic(self, test_db):
-        test_db.create_topic("topic1")
-        test_db.create_topic("topic2")
-        active = test_db.get_active_topic()
-        # 最新のアクティブトピック
-        assert active["title"] == "topic2"
-
-    def test_get_active_topic_none(self, test_db):
-        assert test_db.get_active_topic() is None
-
-    def test_deactivate_topic(self, test_db):
-        topic = test_db.create_topic("topic")
-        test_db.deactivate_topic(topic["id"])
-        assert test_db.get_active_topic() is None
-
-    def test_deactivate_all(self, test_db):
-        test_db.create_topic("t1")
-        test_db.create_topic("t2")
-        test_db.deactivate_all_topics()
-        assert test_db.get_active_topic() is None
-
-
-class TestTopicScripts:
-    def test_add_and_get_scripts(self, test_db):
-        topic = test_db.create_topic("topic")
-        scripts = [
-            {"content": "セリフ1", "emotion": "joy", "sort_order": 0},
-            {"content": "セリフ2", "emotion": "neutral", "sort_order": 1},
-        ]
-        test_db.add_topic_scripts(topic["id"], scripts)
-        all_scripts = test_db.get_all_scripts(topic["id"])
-        assert len(all_scripts) == 2
-        assert all_scripts[0]["content"] == "セリフ1"
-        assert all_scripts[1]["content"] == "セリフ2"
-
-    def test_next_unspoken(self, test_db):
-        topic = test_db.create_topic("topic")
-        test_db.add_topic_scripts(topic["id"], [
-            {"content": "first", "sort_order": 0},
-            {"content": "second", "sort_order": 1},
-        ])
-        script = test_db.get_next_unspoken_script(topic["id"])
-        assert script["content"] == "first"
-
-    def test_mark_spoken(self, test_db):
-        topic = test_db.create_topic("topic")
-        test_db.add_topic_scripts(topic["id"], [
-            {"content": "line1", "sort_order": 0},
-            {"content": "line2", "sort_order": 1},
-        ])
-        first = test_db.get_next_unspoken_script(topic["id"])
-        test_db.mark_script_spoken(first["id"])
-        next_script = test_db.get_next_unspoken_script(topic["id"])
-        assert next_script["content"] == "line2"
-
-    def test_count_unspoken(self, test_db):
-        topic = test_db.create_topic("topic")
-        test_db.add_topic_scripts(topic["id"], [
-            {"content": "a", "sort_order": 0},
-            {"content": "b", "sort_order": 1},
-        ])
-        assert test_db.count_unspoken_scripts(topic["id"]) == 2
-        first = test_db.get_next_unspoken_script(topic["id"])
-        test_db.mark_script_spoken(first["id"])
-        assert test_db.count_unspoken_scripts(topic["id"]) == 1
-
-    def test_get_spoken_scripts(self, test_db):
-        topic = test_db.create_topic("topic")
-        test_db.add_topic_scripts(topic["id"], [
-            {"content": "a", "sort_order": 0},
-        ])
-        assert test_db.get_spoken_scripts(topic["id"]) == []
-        script = test_db.get_next_unspoken_script(topic["id"])
-        test_db.mark_script_spoken(script["id"])
-        spoken = test_db.get_spoken_scripts(topic["id"])
-        assert len(spoken) == 1
-        assert spoken[0]["content"] == "a"
-
-    def test_no_unspoken_returns_none(self, test_db):
-        topic = test_db.create_topic("topic")
-        assert test_db.get_next_unspoken_script(topic["id"]) is None
-
-    def test_default_emotion(self, test_db):
-        topic = test_db.create_topic("topic")
-        test_db.add_topic_scripts(topic["id"], [{"content": "text"}])
-        script = test_db.get_next_unspoken_script(topic["id"])
-        assert script["emotion"] == "neutral"
 
 
 class TestCustomTexts:

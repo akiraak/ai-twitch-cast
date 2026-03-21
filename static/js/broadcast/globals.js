@@ -26,7 +26,6 @@
 const subtitleEl = document.getElementById('subtitle');
 const todoPanelEl = document.getElementById('todo-panel');
 const todoListEl = document.getElementById('todo-list');
-const topicPanelEl = document.getElementById('topic-panel');
 let fadeTimer = null;
 let todoSettings = {};
 
@@ -49,7 +48,6 @@ const ITEM_REGISTRY = [
   { id: 'avatar-area', prefix: 'avatar', hasSize: true, defaultZ: 5 },
   { id: 'subtitle', prefix: 'subtitle', hasSize: false, defaultZ: 20 },
   { id: 'todo-panel', prefix: 'todo', hasSize: true, defaultZ: 20 },
-  { id: 'topic-panel', prefix: 'topic', hasSize: false, defaultZ: 20 },
 ];
 
 // === アバターストリーム ===

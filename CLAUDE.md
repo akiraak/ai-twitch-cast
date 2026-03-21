@@ -67,14 +67,13 @@ ai-twitch-cast/
 │   ├── twitch_chat.py        # Twitchチャット受信
 │   ├── ai_responder.py       # AI応答生成（会話履歴・配信コンテキスト・ユーザーメモ対応）
 │   ├── comment_reader.py     # コメント読み上げサービス（15分バッチでユーザーメモ更新）
-│   ├── topic_talker.py       # トピック管理と自発的発話
 │   ├── git_watcher.py        # Gitコミット監視（クールダウン60秒+バッチ通知）
 │   ├── db.py                 # データベース管理（SQLite）
 │   └── wsl_path.py           # WSL関連ユーティリティ
 ├── scripts/                  # 実行スクリプト
 │   ├── web.py                # Webインターフェース（startup自動復旧・shutdownハンドラ付き）
 │   ├── state.py              # 共有状態（コントローラー・WebSocket・GitWatcher）
-│   ├── routes/               # ルートモジュール（avatar/capture/character/overlay/twitch/topic/bgm/db_viewer/stream_control）
+│   ├── routes/               # ルートモジュール（avatar/capture/character/overlay/twitch/bgm/db_viewer/stream_control）
 │   ├── convert_to_vrm.py     # FBX→VRM変換（Blenderスクリプト）
 │   ├── fix_vrm_mtoon.py      # VRM MToonシェーダ修正
 │   └── comment_reader.py     # Twitchコメント読み上げ
@@ -86,7 +85,7 @@ ai-twitch-cast/
 │   ├── vrm/                  # VRMモデル
 │   ├── audio/
 │   └── video/
-├── tests/                    # pytestテスト（271テスト）
+├── tests/                    # pytestテスト（404テスト）
 │   ├── conftest.py           # 共通フィクスチャ（test_db, api_client, mock_gemini）
 │   ├── test_db.py            # DB CRUD テスト
 │   ├── test_ai_responder.py  # AI応答生成テスト
@@ -180,7 +179,6 @@ python3 -m pytest tests/test_db.py   # 特定ファイルのみ
 | `test_prompt_builder.py` | `src/prompt_builder.py` | 言語モード・システムプロンプト構築 |
 | `test_speech_pipeline.py` | `src/speech_pipeline.py` | TTS・リップシンク・オーバーレイ・感情連動 |
 | `test_tts.py` | `src/tts.py` | 言語タグ変換・TTSスタイル |
-| `test_topic_talker.py` | `src/topic_talker.py` | トピック管理・自発的発話 |
 | `test_git_watcher.py` | `src/git_watcher.py` | コミット検出・ライフサイクル・バッチ通知 |
 | `test_scene_config.py` | `src/scene_config.py` | 設定読み書き |
 | `test_wsl_path.py` | `src/wsl_path.py` | WSLパス変換・IP取得 |
@@ -190,7 +188,6 @@ python3 -m pytest tests/test_db.py   # 特定ファイルのみ
 | `test_native_app_patterns.py` | C#ソースコード | 危険パターンの再発防止（ソース解析のみ） |
 | `test_api_character.py` | キャラクターAPI | CRUD・言語モード |
 | `test_api_stream.py` | 配信制御API | シーン・音量・アバター |
-| `test_api_topic.py` | トピックAPI | CRUD・スクリプト・一時停止 |
 
 ### テスト規約
 - **新しいDB関数を追加したら `test_db.py` にテストを追加すること**

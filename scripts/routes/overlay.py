@@ -312,10 +312,6 @@ _OVERLAY_DEFAULTS = {
         "positionX": 36, "positionY": 2, "width": 28, "height": 70,
         "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20,
     }),
-    "topic": _make_item_defaults({
-        "positionX": 1.04, "positionY": 1.85, "width": 31, "height": 20,
-        "maxWidth": 31, "titleFontSize": 1.25, "bgOpacity": 0.95, "zIndex": 20,
-    }),
     "sync": {"lipsyncDelay": 100},
 }
 
@@ -533,7 +529,7 @@ async def preview_overlay_settings(request: Request):
 async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
-    fixed_items = {"avatar", "subtitle", "todo", "topic"}
+    fixed_items = {"avatar", "subtitle", "todo"}
     for section, props in body.items():
         if not isinstance(props, dict):
             continue

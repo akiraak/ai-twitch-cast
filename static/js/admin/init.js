@@ -13,7 +13,7 @@ if (_initTab === 'chat' && _initParam) {
 _loadCommonSchema().then(() => {
   initCommonProps();
   // 固定パネルに子パネル管理UIを注入
-  ['avatar', 'subtitle', 'todo', 'topic'].forEach(panelId => {
+  ['avatar', 'subtitle', 'todo'].forEach(panelId => {
     const body = document.querySelector(`[data-section="${panelId}"] .panel-body`);
     if (body) injectChildPanelSection(body, panelId);
   });
@@ -28,9 +28,6 @@ _loadCommonSchema().then(() => {
   loadCharacter();
   loadLightingPresets();
   loadBgmTracks();
-  loadTopicStatus();
-  loadTopicScripts();
-  loadLessonImages();
   refreshStatus();
 });
 setInterval(refreshStatus, 30000);

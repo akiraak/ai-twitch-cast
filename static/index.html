@@ -37,7 +37,6 @@
   <div class="tab active" onclick="switchTab('layout', this)">配信画面</div>
   <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
-  <div class="tab" onclick="switchTab('topic', this)">トピック</div>
   <div class="tab" onclick="switchTab('chat', this)">チャット</div>
   <div class="tab" onclick="switchTab('todo', this)">TODO</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
@@ -84,10 +83,6 @@
         </div></details>
         <details data-section="todo" class="panel-item"><summary>TODO</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">タイトル文字 (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="todo.titleFontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-titleFontSize" min="0.5" max="3" step="0.05" data-key="todo.titleFontSize" oninput="onLayoutNum(this)"></div>
-        </div></details>
-        <details data-section="topic" class="panel-item"><summary>トピック</summary><div class="panel-body">
-          <div class="layout-row"><span class="layout-label">最大幅 (%)</span><input type="range" class="vol-slider layout-slider" min="10" max="60" step="0.5" data-key="topic.maxWidth" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-maxWidth" min="10" max="60" step="0.5" data-key="topic.maxWidth" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">タイトル (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="topic.titleFontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-topic-titleFontSize" min="0.5" max="3" step="0.05" data-key="topic.titleFontSize" oninput="onLayoutNum(this)"></div>
         </div></details>
       </div>
       <!-- 子パネル管理UIは panel-ui.js の injectChildPanelSection() で注入 -->
@@ -327,67 +322,6 @@
   </div>
 
   <!-- ===== トピック ===== -->
-  <div class="tab-content" id="tab-topic">
-    <div class="card">
-      <h2>トピック設定</h2>
-      <div id="topic-current" style="margin-bottom:12px;"></div>
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        <input type="text" id="topic-title" class="text-input" placeholder="トピック（例：今月のおすすめアニメ）">
-        <textarea id="topic-desc" class="text-input" placeholder="説明（任意）" rows="2" style="resize:vertical;"></textarea>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button onclick="setTopic()">設定</button>
-          <button onclick="clearTopic()" style="background:#9a88b5;">解除</button>
-          <button onclick="topicSpeakNow()" style="background:#7b1fa2;">今すぐ発話</button>
-          <button id="topic-pause-btn" onclick="toggleTopicPause()" style="background:#e65100;">停止</button>
-        </div>
-      </div>
-      <div class="status" id="topic-status"></div>
-    </div>
-    <div class="card">
-      <h2>授業モード</h2>
-      <div style="margin-bottom:8px;">
-        <div style="display:flex; gap:8px; margin-bottom:8px;">
-          <button id="lesson-tab-images" onclick="switchLessonTab('images')" style="flex:1;">画像アップロード</button>
-          <button id="lesson-tab-url" onclick="switchLessonTab('url')" style="flex:1; background:#9a88b5;">URL入力</button>
-        </div>
-        <div id="lesson-images-section">
-          <div style="margin-bottom:8px;">
-            <input type="file" id="lesson-file-input" accept=".png,.jpg,.jpeg,.webp" multiple style="font-size:0.85rem;">
-            <button onclick="uploadLessonImages()" style="margin-left:8px; font-size:0.85rem;">アップロード</button>
-          </div>
-          <div id="lesson-image-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;"></div>
-        </div>
-        <div id="lesson-url-section" style="display:none;">
-          <input type="text" id="lesson-url" class="text-input" placeholder="https://example.com/article">
-        </div>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button onclick="startLesson()" style="background:#2e7d32;">授業開始</button>
-        <button onclick="clearTopic()" style="background:#c62828;">授業終了</button>
-      </div>
-      <div id="lesson-status" style="margin-top:8px; font-size:0.85rem; color:#666;"></div>
-    </div>
-    <div class="card">
-      <h2>発話設定</h2>
-      <div class="vol-row">
-        <span class="vol-label">idle閾値（秒）</span>
-        <input type="number" id="topic-idle" value="30" min="10" max="300" style="width:80px;" class="text-input">
-      </div>
-      <div class="vol-row" style="margin-top:8px;">
-        <span class="vol-label">最低間隔（秒）</span>
-        <input type="number" id="topic-interval" value="45" min="10" max="300" style="width:80px;" class="text-input">
-      </div>
-      <button onclick="updateTopicSettings()" style="margin-top:8px;">設定を更新</button>
-    </div>
-    <div class="card">
-      <h2>スクリプト一覧 <span id="topic-script-badge" style="font-size:0.75rem; font-weight:normal; color:#9a88b5;"></span></h2>
-      <div id="topic-generating" style="display:none; padding:8px 12px; margin-bottom:8px; background:#f3e5f5; border-radius:6px; color:#7b1fa2; font-size:0.85rem;">
-        生成中...（Web検索+Deep Think）
-      </div>
-      <div id="topic-scripts"></div>
-    </div>
-  </div>
-
   <!-- ===== DB ===== -->
   <div class="tab-content" id="tab-db">
     <div class="card">
@@ -416,8 +350,6 @@
            │                    │       │
            └─── shows ──────────┘       └─ actions
 
-topics ── topic_scripts
-
 bgm_tracks (独立)
 
 channels    1──N  characters    (channel_id)
@@ -426,8 +358,7 @@ shows       1──N  episodes      (show_id)
 characters  1──N  episodes      (character_id)
 episodes    1──N  comments      (episode_id)
 episodes    1──N  actions       (episode_id)
-users       1──N  comments      (user_id)
-topics      1──N  topic_scripts (topic_id)</div>
+users       1──N  comments      (user_id)</div>
     </div>
   </div>
 
@@ -487,7 +418,6 @@ topics      1──N  topic_scripts (topic_id)</div>
 <script src="/static/js/admin/character.js"></script>
 <script src="/static/js/admin/language.js"></script>
 <script src="/static/js/admin/sound.js"></script>
-<script src="/static/js/admin/topic.js"></script>
 <script src="/static/js/admin/db.js"></script>
 <script src="/static/js/admin/todo.js"></script>
 <script src="/static/js/admin/chat.js"></script>

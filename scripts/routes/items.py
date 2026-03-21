@@ -84,12 +84,6 @@ _ITEM_SPECIFIC_SCHEMA = {
             {"key": "titleFontSize", "label": "タイトルサイズ (vw)", "type": "slider", "min": 0.5, "max": 3, "step": 0.05},
         ]},
     ],
-    "topic": [
-        {"title": "固有設定", "fields": [
-            {"key": "maxWidth", "label": "最大幅 (%)", "type": "slider", "min": 10, "max": 60, "step": 1},
-            {"key": "titleFontSize", "label": "タイトルサイズ (vw)", "type": "slider", "min": 0.5, "max": 3, "step": 0.05},
-        ]},
-    ],
     "custom_text": [
         {"title": "コンテンツ", "fields": [
             {"key": "label", "label": "ラベル", "type": "text"},
@@ -102,7 +96,6 @@ _SCHEMA_ITEM_LABELS = {
     "avatar": "アバター",
     "subtitle": "字幕",
     "todo": "TODO",
-    "topic": "トピック",
     "custom_text": "カスタムテキスト",
     "capture": "キャプチャ",
     "child_text": "子テキスト",
@@ -117,7 +110,7 @@ def _get_item_type(item_id: str) -> str:
         return "capture"
     if item_id.startswith("child:"):
         return "child_text"
-    return item_id  # avatar, subtitle, todo, topic
+    return item_id  # avatar, subtitle, todo
 
 
 @router.get("/api/items/schema")
@@ -190,7 +183,7 @@ async def update_item_visibility(item_id: str, request: Request):
     if not item:
         return {"error": "not found"}
     db.upsert_broadcast_item(item_id, item["type"], {"visible": visible})
-    prefix = item_id if item_id in ("avatar", "subtitle", "todo", "topic", "version") else item["type"]
+    prefix = item_id if item_id in ("avatar", "subtitle", "todo", "version") else item["type"]
     await state.broadcast_overlay({"type": "settings_update", prefix: {"visible": visible}})
     return {"ok": True}
 

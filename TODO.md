@@ -3,7 +3,6 @@
 ## 機能追加
 
 ### その他
-- [ ] 画像/URLで授業モードの手動テスト・動作検証 → [plans/english-teacher-mode.md](plans/english-teacher-mode.md)
 - [ ] ブラウザテスト（Playwright等）導入の検証
 
 ## バグ

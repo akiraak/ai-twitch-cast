@@ -95,9 +95,7 @@ async function init() {
   } catch (e) {}
 
   await loadTodo();
-  await loadTopicPanel();
   // TODOはWebSocket pushで更新されるためポーリング不要
-  setInterval(loadTopicPanel, 15000);
   connectWS();
 
   initEditMode();

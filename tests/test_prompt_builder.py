@@ -205,10 +205,9 @@ class TestBuildSystemPrompt:
         assert "English" in prompt
 
     def test_stream_context_included(self):
-        ctx = {"title": "テスト配信", "topic": "Python", "todo_items": ["バグ修正"]}
+        ctx = {"title": "テスト配信", "todo_items": ["バグ修正"]}
         prompt = build_system_prompt(DEFAULT_CHARACTER, stream_context=ctx)
         assert "テスト配信" in prompt
-        assert "Python" in prompt
         assert "バグ修正" in prompt
 
     def test_stream_context_partial(self):
