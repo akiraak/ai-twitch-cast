@@ -25,6 +25,9 @@ function connectWS() {
       case 'topic_update':
         updateTopicPanel(data);
         break;
+      case 'topic_image_index':
+        showTopicImage(data.index);
+        break;
       case 'settings_update':
         if (!_saving) {
           applySettings(data);

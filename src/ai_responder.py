@@ -1,12 +1,16 @@
 """AI応答モジュール - キャラクター設定に基づいてコメントに応答する"""
 
 import json
+import logging
 import os
+from pathlib import Path
 
 from google.genai import types
 
 from src.gemini_client import get_client
 from src.prompt_builder import build_language_rules, build_system_prompt, get_stream_language
+
+logger = logging.getLogger(__name__)
 
 # DBが空のときに使うデフォルトキャラクター設定
 DEFAULT_CHARACTER = {
@@ -711,3 +715,140 @@ def generate_topic_title(timeline=None, current_topic=None, stream_context=None,
         return result.get("title", "雑談")
     except (json.JSONDecodeError, AttributeError):
         return "雑談"
+
+
+# --- コンテンツソース抽象化（画像解析・URL解析） ---
+
+
+def _make_image_part(image_path: str) -> types.Part:
+    """画像ファイルからGemini APIのPartを作成する"""
+    mime_map = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+    ext = Path(image_path).suffix.lower()
+    mime_type = mime_map.get(ext, "image/jpeg")
+    with open(image_path, "rb") as f:
+        data = f.read()
+    return types.Part(inline_data=types.Blob(mime_type=mime_type, data=data))
+
+
+def analyze_images(image_paths: list[str], prompt: str) -> str:
+    """複数画像をGeminiに送り、promptに従って解析結果テキストを返す
+
+    Args:
+        image_paths: 画像ファイルパスのリスト
+        prompt: 解析指示のプロンプト
+
+    Returns:
+        str: 解析結果テキスト
+    """
+    client = get_client()
+    parts = [_make_image_part(p) for p in image_paths]
+    parts.append(types.Part(text=prompt))
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents=[types.Content(role="user", parts=parts)],
+    )
+    return response.text
+
+
+def analyze_url(url: str) -> dict:
+    """URLのページ内容を取得し、タイトルとテキストを返す
+
+    Args:
+        url: 解析するWebページのURL
+
+    Returns:
+        dict: {"title": str, "text": str, "image_url": str or None}
+    """
+    import requests
+    from bs4 import BeautifulSoup
+
+    resp = requests.get(url, timeout=15, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; AI-Twitch-Cast/1.0)",
+    })
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # タイトル取得（OGP優先）
+    title = ""
+    if soup.title:
+        title = soup.title.string or ""
+    og_title = soup.find("meta", property="og:title")
+    if og_title and og_title.get("content"):
+        title = og_title["content"]
+
+    # OGP画像
+    og_image = soup.find("meta", property="og:image")
+    image_url = og_image["content"] if og_image and og_image.get("content") else None
+
+    # 本文テキスト抽出（不要なタグを除去）
+    for tag in soup(["script", "style", "nav", "header", "footer", "aside"]):
+        tag.decompose()
+    text = soup.get_text(separator="\n", strip=True)
+
+    # テキストが長すぎる場合は切り詰め（Gemini APIのコンテキスト制限考慮）
+    max_chars = 30000
+    if len(text) > max_chars:
+        text = text[:max_chars] + "\n...(以下省略)"
+        logger.info("[analyze_url] テキスト切り詰め: %d → %d文字", len(text), max_chars)
+
+    return {"title": title, "text": text, "image_url": image_url}
+
+
+def generate_lesson_script(context: str, num_images: int = 0) -> list[dict]:
+    """コンテキストから授業スクリプト（複数ステップ）を生成する
+
+    Args:
+        context: 教材の解析済みテキスト
+        num_images: 教材画像の枚数（0ならURL等の画像なしソース）
+
+    Returns:
+        list[dict]: [{"step": int, "content": str, "tts_text": str, "image_index": int or None}, ...]
+    """
+    if num_images > 0:
+        image_rule = f"- image_index: このステップで表示する画像の番号（0〜{num_images - 1}）、画像不要ならnull"
+    else:
+        image_rule = "- image_index: 常にnull（画像なし）"
+
+    prompt = f"""以下のコンテンツについて、授業スクリプトをJSON配列で生成してください。
+科目・内容はコンテンツから判断してください。
+
+各ステップの形式:
+[
+  {{"step": 1, "content": "表示テキスト", "tts_text": "読み上げテキスト", "image_index": 0}},
+  ...
+]
+
+ルール:
+- content: 字幕に表示するテキスト
+- tts_text: 音声読み上げ用（数式は日本語で読み下し、英語は[lang:en]タグで囲む）
+{image_rule}
+- 1ステップの発話は100文字以内
+- 導入→解説→まとめの流れで構成
+- フレンドリーな先生のトーンで
+- 5〜15ステップ程度
+
+コンテンツ:
+{context}"""
+
+    client = get_client()
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+        config=types.GenerateContentConfig(response_mime_type="application/json"),
+    )
+
+    try:
+        result = json.loads(response.text)
+        if not isinstance(result, list):
+            logger.warning("[lesson] スクリプト生成: リスト形式でない応答")
+            return []
+        return result
+    except (json.JSONDecodeError, AttributeError) as e:
+        logger.error("[lesson] スクリプトJSON解析失敗: %s", e)
+        return []

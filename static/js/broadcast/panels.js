@@ -20,11 +20,16 @@ function fadeSubtitle() {
 }
 
 // === トピックパネル ===
+// トピック画像の状態管理
+let _topicImageUrls = [];
+let _topicImageIndex = 0;
+
 function updateTopicPanel(data) {
   const titleEl = document.getElementById('topic-title-text');
   const descEl = document.getElementById('topic-desc-text');
   const statsEl = document.getElementById('topic-stats');
   const dotEl = document.getElementById('topic-dot');
+  const imagesEl = document.getElementById('topic-images');
   const isIdle = !data || !data.active || data.paused;
 
   if (isIdle) {
@@ -32,6 +37,9 @@ function updateTopicPanel(data) {
     titleEl.textContent = '----';
     descEl.textContent = '';
     descEl.style.display = 'none';
+    imagesEl.style.display = 'none';
+    _topicImageUrls = [];
+    _topicImageIndex = 0;
     statsEl.textContent = '';
     dotEl.classList.add('paused');
     return;
@@ -40,11 +48,41 @@ function updateTopicPanel(data) {
   titleEl.textContent = data.topic.title;
   descEl.textContent = data.topic.description || '';
   descEl.style.display = data.topic.description ? '' : 'none';
+
+  // 画像表示
+  if (data.image_urls && data.image_urls.length > 0) {
+    _topicImageUrls = data.image_urls;
+    _topicImageIndex = 0;
+    showTopicImage(0);
+  } else {
+    imagesEl.style.display = 'none';
+    _topicImageUrls = [];
+  }
+
   const parts = [];
   if (data.remaining_scripts != null) parts.push(`残り ${data.remaining_scripts}件`);
   if (data.spoken_count != null) parts.push(`発話済み ${data.spoken_count}件`);
   statsEl.textContent = parts.join(' / ');
   dotEl.classList.toggle('paused', false);
+}
+
+function showTopicImage(index) {
+  const imagesEl = document.getElementById('topic-images');
+  const imgEl = document.getElementById('topic-image');
+  const counterEl = document.getElementById('topic-image-counter');
+
+  if (!_topicImageUrls.length || index < 0 || index >= _topicImageUrls.length) {
+    imagesEl.style.display = 'none';
+    return;
+  }
+  _topicImageIndex = index;
+  imgEl.src = _topicImageUrls[index];
+  imagesEl.style.display = '';
+  if (_topicImageUrls.length > 1) {
+    counterEl.textContent = `${index + 1} / ${_topicImageUrls.length}`;
+  } else {
+    counterEl.textContent = '';
+  }
 }
 
 async function loadTopicPanel() {

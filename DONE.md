@@ -1,5 +1,16 @@
 # DONE
 
+## 画像/URLで授業モード
+
+- [x] ベース1: コンテンツソース抽象化（`analyze_images()` / `analyze_url()` → コンテキストテキスト生成）
+- [x] ベース2: トピックへの画像URL/コンテキスト紐付け（`set_topic()` に `image_urls`/`context` 引数追加）
+- [x] ベース3: 配信画面のトピック画像表示（`#topic-panel` に画像+ページ送り、`topic_image_index` WebSocketイベント）
+- [x] ベース4: 教材ファイルアップロード（`files.py` に `teaching` カテゴリ追加）
+- [x] 拡張5: 授業スクリプト生成（`generate_lesson_script()` — コンテキストからJSON配列ステップ生成）
+- [x] 拡張6: WebUI操作（画像/URL入力タブ切り替え、授業開始/終了ボタン、`POST /api/topic/lesson`）
+- [x] 共通7: テスト（472テスト全通過）
+- [x] プラン → [plans/english-teacher-mode.md](plans/english-teacher-mode.md)
+
 ## 配信バッファリング（くるくる）対策
 
 - [x] VBVバッファサイズ拡大（bitrate/2 → bitrate×2、Twitch推奨値に合わせ）

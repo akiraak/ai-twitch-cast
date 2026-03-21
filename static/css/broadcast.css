@@ -341,6 +341,21 @@
     font-size: 0.83vw; color: rgba(255, 255, 255, 0.5);
     margin-top: 0.3vw; line-height: 1.4;
   }
+  #topic-panel .topic-images {
+    margin-top: 0.5vw;
+    text-align: center;
+  }
+  #topic-panel .topic-images img {
+    max-width: 100%;
+    max-height: 20vw;
+    border-radius: 0.3vw;
+    object-fit: contain;
+  }
+  #topic-panel .topic-image-nav {
+    font-size: 0.65vw;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 0.2vw;
+  }
   #topic-panel .topic-stats {
     font-size: 0.68vw; color: rgba(255, 255, 255, 0.35);
     margin-top: 0.4vw; padding-top: 0.4vw;

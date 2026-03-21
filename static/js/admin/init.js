@@ -30,6 +30,7 @@ _loadCommonSchema().then(() => {
   loadBgmTracks();
   loadTopicStatus();
   loadTopicScripts();
+  loadLessonImages();
   refreshStatus();
 });
 setInterval(refreshStatus, 30000);

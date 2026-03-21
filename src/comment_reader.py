@@ -280,6 +280,11 @@ class CommentReader:
             status = self._topic_talker.get_status()
             if status.get("active") and status.get("topic"):
                 context["topic"] = status["topic"]["title"]
+            # トピックコンテキスト（教材の解析済みテキスト等）
+            topic_context = self._topic_talker.get_context()
+            if topic_context:
+                # 長すぎる場合は先頭だけ渡す
+                context["topic_context"] = topic_context[:2000]
         # TODO（作業中タスク）
         try:
             from pathlib import Path

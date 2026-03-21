@@ -26,6 +26,8 @@ class TopicTalker:
         self._generating = False
         self._paused = True
         self._topic_set_time = 0.0  # トピック設定時刻
+        self._image_urls = []  # 配信画面表示用の画像URL（Web公開パス/外部URL）
+        self._context = None  # AI発話時のコンテキスト（解析済みテキスト等）
 
     @property
     def idle_threshold(self):
@@ -47,18 +49,38 @@ class TopicTalker:
         """発話したことを記録する（コメント応答・イベント発話も含む）"""
         self._last_speak_time = time.monotonic()
 
-    async def set_topic(self, title, description=""):
-        """新しいトピックを設定する"""
+    async def set_topic(self, title, description="", image_urls=None, context=None):
+        """新しいトピックを設定する
+
+        Args:
+            title: トピックのタイトル
+            description: トピックの説明
+            image_urls: 配信画面表示用の画像URLリスト（Web公開パス or 外部URL）
+            context: AI発話時のコンテキスト（解析済みテキスト等）
+        """
         db.deactivate_all_topics()
         topic = db.create_topic(title, description)
+        self._image_urls = image_urls or []
+        self._context = context
         self._paused = False
         self._topic_set_time = time.monotonic()
-        logger.info("[topic] トピック設定: %s", title)
+        logger.info("[topic] トピック設定: %s (画像%d枚, コンテキスト%s)",
+                     title, len(self._image_urls), "あり" if self._context else "なし")
         return topic
+
+    def get_context(self):
+        """トピックに紐付けられたコンテキストを返す"""
+        return self._context
+
+    def get_image_urls(self):
+        """トピックに紐付けられた画像URLリストを返す"""
+        return self._image_urls
 
     async def clear_topic(self):
         """トピックを解除する"""
         db.deactivate_all_topics()
+        self._image_urls = []
+        self._context = None
         logger.info("[topic] トピック解除")
 
     def _should_rotate(self):

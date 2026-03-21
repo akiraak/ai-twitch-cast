@@ -87,6 +87,20 @@ class TestSetTopic:
         active = test_db.get_active_topic()
         assert active["title"] == "Topic2"
 
+    async def test_with_image_urls_and_context(self, test_db):
+        tt = TopicTalker()
+        urls = ["/resources/images/teaching/p1.jpg", "/resources/images/teaching/p2.jpg"]
+        topic = await tt.set_topic("授業", "英語教材", image_urls=urls, context="教材テキスト")
+        assert topic["title"] == "授業"
+        assert tt.get_image_urls() == urls
+        assert tt.get_context() == "教材テキスト"
+
+    async def test_default_no_images_or_context(self, test_db):
+        tt = TopicTalker()
+        await tt.set_topic("雑談")
+        assert tt.get_image_urls() == []
+        assert tt.get_context() is None
+
 
 class TestClearTopic:
     async def test_deactivates_all(self, test_db):
@@ -94,6 +108,13 @@ class TestClearTopic:
         await tt.set_topic("topic")
         await tt.clear_topic()
         assert test_db.get_active_topic() is None
+
+    async def test_clears_images_and_context(self, test_db):
+        tt = TopicTalker()
+        await tt.set_topic("授業", image_urls=["/img.jpg"], context="ctx")
+        await tt.clear_topic()
+        assert tt.get_image_urls() == []
+        assert tt.get_context() is None
 
 
 class TestGetStatus:

@@ -134,3 +134,106 @@ async function loadTopicScripts() {
     }).join('');
   } catch(e) {}
 }
+
+// === 授業モード ===
+let _lessonTab = 'images';
+
+function switchLessonTab(tab) {
+  _lessonTab = tab;
+  document.getElementById('lesson-images-section').style.display = tab === 'images' ? '' : 'none';
+  document.getElementById('lesson-url-section').style.display = tab === 'url' ? '' : 'none';
+  document.getElementById('lesson-tab-images').style.background = tab === 'images' ? '' : '#9a88b5';
+  document.getElementById('lesson-tab-url').style.background = tab === 'url' ? '' : '#9a88b5';
+}
+
+async function uploadLessonImages() {
+  const input = document.getElementById('lesson-file-input');
+  if (!input.files.length) return;
+  const st = document.getElementById('lesson-status');
+  st.textContent = 'アップロード中...';
+  let uploaded = 0;
+  for (const file of input.files) {
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const r = await fetch('/api/files/teaching/upload', {method: 'POST', body: form});
+      const d = await r.json();
+      if (d.ok) uploaded++;
+    } catch(e) {}
+  }
+  st.textContent = `${uploaded}/${input.files.length}枚アップロード完了`;
+  input.value = '';
+  loadLessonImages();
+}
+
+async function loadLessonImages() {
+  try {
+    const r = await fetch('/api/files/teaching/list');
+    const d = await r.json();
+    const el = document.getElementById('lesson-image-list');
+    if (!d.ok || !d.files.length) {
+      el.innerHTML = '<span style="color:#9a88b5; font-size:0.85rem;">教材画像なし</span>';
+      return;
+    }
+    el.innerHTML = d.files.map(f =>
+      `<div style="position:relative; width:80px; height:80px; border:2px solid #ddd; border-radius:6px; overflow:hidden; cursor:pointer;">` +
+      `<img src="/resources/images/teaching/${esc(f.file)}" style="width:100%; height:100%; object-fit:cover;">` +
+      `<button onclick="event.stopPropagation(); deleteLessonImage('${esc(f.file)}')" style="position:absolute; bottom:2px; right:2px; width:18px; height:18px; padding:0; font-size:10px; background:rgba(198,40,40,0.8); color:#fff; border:none; border-radius:50%; cursor:pointer;">×</button>` +
+      `</div>`
+    ).join('');
+  } catch(e) {}
+}
+
+async function deleteLessonImage(file) {
+  if (!confirm(`${file}を削除しますか？`)) return;
+  await fetch(`/api/files/teaching?file=${encodeURIComponent(file)}`, {method: 'DELETE'});
+  loadLessonImages();
+}
+
+async function startLesson() {
+  const st = document.getElementById('lesson-status');
+  let body;
+
+  if (_lessonTab === 'images') {
+    // 画像モード: teaching内の全ファイルを使用
+    try {
+      const r = await fetch('/api/files/teaching/list');
+      const d = await r.json();
+      const files = d.files ? d.files.map(f => f.file) : [];
+      if (!files.length) {
+        st.textContent = '教材画像をアップロードしてください';
+        return;
+      }
+      body = {source: 'images', files};
+    } catch(e) {
+      st.textContent = 'エラー: ' + e;
+      return;
+    }
+  } else {
+    // URLモード
+    const url = document.getElementById('lesson-url').value.trim();
+    if (!url) {
+      st.textContent = 'URLを入力してください';
+      return;
+    }
+    body = {source: 'url', url};
+  }
+
+  st.innerHTML = '<span style="color:#7b1fa2;">コンテキスト生成 → スクリプト生成中...</span>';
+  try {
+    const r = await fetch('/api/topic/lesson', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      st.textContent = `授業開始！（${d.script_count}ステップ）`;
+      loadTopicStatus();
+      loadTopicScripts();
+    } else {
+      st.textContent = 'エラー: ' + d.error;
+    }
+  } catch(e) {
+    st.textContent = 'エラー: ' + e;
+  }
+}

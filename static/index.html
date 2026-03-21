@@ -344,6 +344,30 @@
       <div class="status" id="topic-status"></div>
     </div>
     <div class="card">
+      <h2>授業モード</h2>
+      <div style="margin-bottom:8px;">
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <button id="lesson-tab-images" onclick="switchLessonTab('images')" style="flex:1;">画像アップロード</button>
+          <button id="lesson-tab-url" onclick="switchLessonTab('url')" style="flex:1; background:#9a88b5;">URL入力</button>
+        </div>
+        <div id="lesson-images-section">
+          <div style="margin-bottom:8px;">
+            <input type="file" id="lesson-file-input" accept=".png,.jpg,.jpeg,.webp" multiple style="font-size:0.85rem;">
+            <button onclick="uploadLessonImages()" style="margin-left:8px; font-size:0.85rem;">アップロード</button>
+          </div>
+          <div id="lesson-image-list" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;"></div>
+        </div>
+        <div id="lesson-url-section" style="display:none;">
+          <input type="text" id="lesson-url" class="text-input" placeholder="https://example.com/article">
+        </div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button onclick="startLesson()" style="background:#2e7d32;">授業開始</button>
+        <button onclick="clearTopic()" style="background:#c62828;">授業終了</button>
+      </div>
+      <div id="lesson-status" style="margin-top:8px; font-size:0.85rem; color:#666;"></div>
+    </div>
+    <div class="card">
       <h2>発話設定</h2>
       <div class="vol-row">
         <span class="vol-label">idle閾値（秒）</span>

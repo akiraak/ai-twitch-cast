@@ -28,6 +28,11 @@ CATEGORIES = {
         "extensions": {".png", ".jpg", ".jpeg", ".webp", ".gif"},
         "config_key": "files.active_background",
     },
+    "teaching": {
+        "dir": RESOURCES_DIR / "images" / "teaching",
+        "extensions": {".png", ".jpg", ".jpeg", ".webp"},
+        "config_key": "files.active_teaching",
+    },
 }
 
 
