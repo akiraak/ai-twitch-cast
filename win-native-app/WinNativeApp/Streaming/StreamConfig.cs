@@ -5,7 +5,7 @@ public class StreamConfig
     public int Width { get; set; } = 1280;
     public int Height { get; set; } = 720;
     public int Framerate { get; set; } = 30;
-    public string VideoBitrate { get; set; } = "3500k";
+    public string VideoBitrate { get; set; } = "2500k";
     public string AudioBitrate { get; set; } = "128k";
     public string Preset { get; set; } = "ultrafast";
     /// <summary>

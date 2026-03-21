@@ -70,6 +70,16 @@ public sealed class FfmpegProcess : IDisposable
     // 音声レベルメーター（ミキシング済みチャンクから計算、瞬時値）
     private volatile float _lastRmsDb = -100f;
     private volatile float _lastPeakDb = -100f;
+
+    // ストリーム健全性追跡（診断・改善用）
+    private double _lastSpeed;                 // 最新のFFmpegエンコード速度
+    private volatile int _lastFps;             // 最新のFFmpeg出力fps
+    private long _summaryTick;                 // 定期サマリーの最終出力時刻
+    private long _slowWriteCount;              // パイプ書き込みが100ms超えた回数
+    private long _maxWriteMs;                  // パイプ書き込みの最大時間
+    private double _speedWarnThreshold = 0.95; // speed警告の閾値（段階的に下げる）
+    private long _lastDropSnapshot;            // 前回サマリー時のドロップ数
+    private long _lastAudioDropSnapshot;       // 前回サマリー時の音声ドロップ数
     public float LastRmsDb => _lastRmsDb;
     public float LastPeakDb => _lastPeakDb;
     public bool IsBgmActive => _bgmPlaying;
@@ -81,6 +91,10 @@ public sealed class FfmpegProcess : IDisposable
     public long DropCount => Interlocked.Read(ref _dropCount);
     public long AudioDropCount => Interlocked.Read(ref _audioDropCount);
     public TimeSpan Uptime => IsRunning ? DateTime.UtcNow - _startTime : TimeSpan.Zero;
+    public double LastSpeed => _lastSpeed;
+    public int LastFps => _lastFps;
+    public long SlowWriteCount => Interlocked.Read(ref _slowWriteCount);
+    public long MaxWriteMs => Interlocked.Read(ref _maxWriteMs);
 
     public FfmpegProcess(StreamConfig config, WaveFormat? audioFormat = null)
     {
@@ -300,6 +314,17 @@ public sealed class FfmpegProcess : IDisposable
                 _videoPipe!.Write(nv12, 0, nv12WriteSize);
                 sw.Stop();
                 Interlocked.Increment(ref _frameCount);
+                var writeMs = sw.ElapsedMilliseconds;
+
+                // パイプ書き込み遅延の追跡（FFmpegがRTMP送信に追いつけないと100ms超）
+                if (writeMs > 100)
+                {
+                    Interlocked.Increment(ref _slowWriteCount);
+                    var prevMax = Interlocked.Read(ref _maxWriteMs);
+                    if (writeMs > prevMax)
+                        Interlocked.Exchange(ref _maxWriteMs, writeMs);
+                    Log.Warning("[FFmpeg] Video pipe write slow: {WriteMs}ms (network/encode backpressure)", writeMs);
+                }
 
                 // NV12変換が遅い場合は警告（フレーム間隔の75%超）
                 var frameIntervalMs = 1000 / _config.Framerate;
@@ -311,7 +336,7 @@ public sealed class FfmpegProcess : IDisposable
                 var fc = Interlocked.Read(ref _frameCount);
                 if (fc <= 5 || fc % 30 == 0)
                     Log.Debug("[FFmpeg] NV12 convert={ConvMs}ms write={TotalMs}ms, frames={F} drops={D}",
-                        convertMs, sw.ElapsedMilliseconds, fc, DropCount);
+                        convertMs, writeMs, fc, DropCount);
             }
             catch (IOException)
             {
@@ -647,8 +672,21 @@ public sealed class FfmpegProcess : IDisposable
         if (_process == null) return;
         _stopping = true;
 
-        Log.Information("[FFmpeg] Stopping (frames={F}, drops={D}, audioDrops={AD})...",
-            FrameCount, DropCount, AudioDropCount);
+        var totalFrames = FrameCount;
+        var totalDrops = DropCount;
+        var totalAudioDrops = AudioDropCount;
+        var dropRate = totalFrames > 0 ? (double)totalDrops / (totalFrames + totalDrops) * 100 : 0;
+        var slowWrites = Interlocked.Read(ref _slowWriteCount);
+        var maxWrite = Interlocked.Read(ref _maxWriteMs);
+        var uptime = Uptime;
+
+        Log.Information("[FFmpeg] === 配信終了レポート ({Uptime:hh\\:mm\\:ss}) === " +
+            "フレーム: {Frames} ドロップ: {Drops} ({DropRate:F1}%) | " +
+            "音声ドロップ: {AudioDrops} | 最終speed: {Speed:F3}x fps: {Fps} | " +
+            "パイプ遅延: slow={SlowWrites}回 max={MaxWrite}ms",
+            uptime, totalFrames, totalDrops, dropRate,
+            totalAudioDrops, _lastSpeed, _lastFps,
+            slowWrites, maxWrite);
 
         try
         {
@@ -711,6 +749,11 @@ public sealed class FfmpegProcess : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
             await using var writer = new StreamWriter(logPath, append: false);
             var startTick = Environment.TickCount64;
+            _summaryTick = startTick;
+            _speedWarnThreshold = 0.95;
+            var speedRegex = new System.Text.RegularExpressions.Regex(@"speed=\s*([\d.]+)x");
+            var fpsRegex = new System.Text.RegularExpressions.Regex(@"fps=\s*(\d+)");
+
             while (_process is { HasExited: false } && !_stopping)
             {
                 var line = await _process.StandardError.ReadLineAsync();
@@ -725,18 +768,63 @@ public sealed class FfmpegProcess : IDisposable
                     Log.Information("[FFmpeg] Encoding started detected (audio queue will flush)");
                 }
 
-                // エンコード速度監視: speed < 0.95x なら警告
-                var speedMatch = System.Text.RegularExpressions.Regex.Match(line, @"speed=\s*([\d.]+)x");
+                // speed & fps追跡
+                var speedMatch = speedRegex.Match(line);
                 if (speedMatch.Success &&
                     double.TryParse(speedMatch.Groups[1].Value, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out var speed) &&
-                    speed < 0.95)
+                        System.Globalization.CultureInfo.InvariantCulture, out var speed))
                 {
-                    Log.Warning("[FFmpeg] Encoding falling behind: speed={Speed}x", speed);
+                    _lastSpeed = speed;
+
+                    // 段階的speed警告（同じ閾値では1回だけ、0.05刻み: 0.95→0.90→0.85→0.80）
+                    if (speed < _speedWarnThreshold)
+                    {
+                        var bitrateKbps = ParseBitrateKbps(_config.VideoBitrate);
+                        var recommendedBitrate = (int)(bitrateKbps * speed * 0.9); // 10%マージン
+                        Log.Warning("[FFmpeg] Speed dropped below {Threshold:F2}x: speed={Speed}x fps={Fps} " +
+                            "— ネットワーク帯域不足の可能性。推奨ビットレート: {Rec}k (現在: {Cur}k)",
+                            _speedWarnThreshold, speed, _lastFps, recommendedBitrate, bitrateKbps);
+                        // 次の閾値に下げる（0.05刻み）
+                        _speedWarnThreshold = Math.Round(_speedWarnThreshold - 0.05, 2);
+                    }
+                }
+
+                var fpsMatch = fpsRegex.Match(line);
+                if (fpsMatch.Success && int.TryParse(fpsMatch.Groups[1].Value, out var fps))
+                    _lastFps = fps;
+
+                // 60秒ごとの定期サマリー（配信全体の健全性を一目で確認）
+                var now = Environment.TickCount64;
+                if (now - _summaryTick > 60_000)
+                {
+                    _summaryTick = now;
+                    var totalFrames = FrameCount;
+                    var totalDrops = DropCount;
+                    var totalAudioDrops = AudioDropCount;
+                    var dropRate = totalFrames > 0 ? (double)totalDrops / (totalFrames + totalDrops) * 100 : 0;
+                    var recentDrops = totalDrops - _lastDropSnapshot;
+                    var recentAudioDrops = totalAudioDrops - _lastAudioDropSnapshot;
+                    _lastDropSnapshot = totalDrops;
+                    _lastAudioDropSnapshot = totalAudioDrops;
+                    var slowWrites = Interlocked.Read(ref _slowWriteCount);
+                    var maxWrite = Interlocked.Read(ref _maxWriteMs);
+                    var uptime = Uptime;
+
+                    Log.Information("[FFmpeg] === 配信サマリー ({Uptime:hh\\:mm\\:ss}) === " +
+                        "speed={Speed:F3}x fps={Fps}/{Target} | " +
+                        "フレーム: {Frames} ドロップ: {Drops} ({DropRate:F1}%, 直近+{Recent}) | " +
+                        "音声ドロップ: {AudioDrops} (直近+{RecentAudio}) | " +
+                        "パイプ遅延: slow={SlowWrites}回 max={MaxWrite}ms | " +
+                        "キュー: audio={AudioQueue}",
+                        uptime, _lastSpeed, _lastFps, _config.Framerate,
+                        totalFrames, totalDrops, dropRate, recentDrops,
+                        totalAudioDrops, recentAudioDrops,
+                        slowWrites, maxWrite,
+                        _audioQueue.Count);
                 }
 
                 // 起動後60秒間はSerilogにも出力（音声途切れ診断用）
-                if (Environment.TickCount64 - startTick < 60_000)
+                if (now - startTick < 60_000)
                     Log.Debug("[FFmpeg:stderr] {Line}", line);
             }
         }

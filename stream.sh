@@ -15,7 +15,7 @@
 #   --save-frames     キャプチャフレームをPNG保存（デバッグ用）
 #   --resolution WxH  解像度（デフォルト: 1920x1080）
 #   --fps N           フレームレート（デフォルト: 30）
-#   --bitrate Nk      映像ビットレート（デフォルト: 3500k）
+#   --bitrate Nk      映像ビットレート（デフォルト: 2500k）
 
 cd "$(dirname "$0")"
 

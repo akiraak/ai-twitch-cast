@@ -20,6 +20,9 @@
 - [x] 高分解能タイマー導入（`timeBeginPeriod(1)` で1ms精度）
 - [x] NV12変換遅延の警告ログ追加（フレーム間隔75%超でWarning）
 - [x] エンコード速度監視（speed < 0.95xでWarning）
+- [x] **効果検証**: 3500kではspeed 1.03x→0.87x低下（ネットワーク帯域不足）、2500kでspeed 1.01x安定を確認
+- [x] デフォルトビットレートを2500kに変更（ネットワーク帯域に合わせ）
+- [x] 診断ログ強化: 60秒サマリー、パイプ遅延警告、段階的speed警告、配信終了レポート
 - [x] プラン → [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 
 ## 長文発話と句読点分割（連続発話機能）
