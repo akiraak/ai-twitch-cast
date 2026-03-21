@@ -6,7 +6,7 @@
 - [x] フロントエンド: トピックパネル・管理画面タブ・CSS・JS全削除（broadcast.html, globals.js, panels.js, settings.js, edit-mode.js, websocket.js, init.js, index.html, topic.js）
 - [x] DB: topics/topic_scriptsテーブルDROPマイグレーション追加
 - [x] テスト: test_topic_talker.py, test_api_topic.py削除、関連テスト修正（404テスト全通過）
-- [x] プラン → [plans/remove-topic-rebuild-lesson.md](plans/remove-topic-rebuild-lesson.md)
+- [x] プラン → [plans/archive/remove-topic-rebuild-lesson.md](plans/archive/remove-topic-rebuild-lesson.md)
 
 ## 画像/URLで授業モード
 
@@ -42,7 +42,7 @@
 - [x] コメント到着時に残りセグメントをキャンセル（`_topic_queue.clear()`）
 - [x] WebUIキャラクタータブに「文字数上限」スライダー追加（30〜200字）
 - [x] サウンドタブに「連続発話」テストボタン追加
-- [x] プラン → [plans/multi-part-speech.md](plans/multi-part-speech.md)
+- [x] プラン → [plans/archive/multi-part-speech.md](plans/archive/multi-part-speech.md)
 
 ## WebUI描画のファイル構成の最適化
 
@@ -54,7 +54,7 @@
 - [x] テストの`read_js()`/`read_js_index()`を分割後のディレクトリ読み込みに更新
 - [x] バンドラー不要、`<script>`タグベースで既存onclick互換維持
 - [x] 全420テスト通過
-- [x] プラン → [plans/webui-file-optimization.md](plans/webui-file-optimization.md)
+- [x] プラン → [plans/archive/webui-file-optimization.md](plans/archive/webui-file-optimization.md)
 
 ## 配信言語設定の再設計
 
