@@ -3,6 +3,14 @@
 ## 機能追加
 
 ### その他
+- [>] 画像/URLで授業モード（教材画像やURLから自動授業） → [plans/english-teacher-mode.md](plans/english-teacher-mode.md)
+  - [ ] ベース1: コンテンツソース抽象化（analyze_images/analyze_url → コンテキストテキスト）
+  - [ ] ベース2: トピックへのコンテキスト/画像紐付け（image_paths/context追加、コメント応答連携）
+  - [ ] ベース3: 配信画面のトピック画像/情報表示（#topic-panel拡張、image_indexで切り替え）
+  - [ ] ベース4: 教材ファイルアップロード（files.pyにteachingカテゴリ追加）
+  - [ ] 拡張5: 授業スクリプト生成（コンテキスト→ステップ+image_index形式のスクリプト生成）
+  - [ ] 拡張6: WebUI操作（画像/URL入力、授業開始/終了ボタン）
+  - [ ] 共通7: テスト
 - [ ] ブラウザテスト（Playwright等）導入の検証
 
 ## バグ
