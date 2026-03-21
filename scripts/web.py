@@ -30,6 +30,7 @@ from scripts import state
 from scripts.routes.avatar import router as avatar_router
 from scripts.routes.capture import router as capture_router
 from scripts.routes.bgm import router as bgm_router
+from scripts.routes.se import router as se_router
 from scripts.routes.character import router as character_router
 from scripts.routes.db_viewer import router as db_viewer_router
 from scripts.routes.overlay import router as overlay_router
@@ -68,8 +69,11 @@ STATIC_DIR = PROJECT_DIR / "static"
 STATE_FILE = PROJECT_DIR / ".server_state"
 BGM_DIR = PROJECT_DIR / "resources" / "audio" / "bgm"
 BGM_DIR.mkdir(parents=True, exist_ok=True)
+SE_DIR = PROJECT_DIR / "resources" / "audio" / "se"
+SE_DIR.mkdir(parents=True, exist_ok=True)
 RESOURCES_DIR = PROJECT_DIR / "resources"
 app.mount("/bgm", StaticFiles(directory=str(BGM_DIR)), name="bgm")
+app.mount("/se", StaticFiles(directory=str(SE_DIR)), name="se")
 app.mount("/resources", StaticFiles(directory=str(RESOURCES_DIR)), name="resources")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -86,6 +90,7 @@ app.include_router(stream_control_router)
 app.include_router(capture_router)
 app.include_router(avatar_router)
 app.include_router(bgm_router)
+app.include_router(se_router)
 app.include_router(character_router)
 app.include_router(db_viewer_router)
 app.include_router(files_router)
@@ -174,6 +179,10 @@ async def startup():
             logger.info("配信言語復元: primary=%s, sub=%s, mix=%s", primary, sub, mix)
     except Exception:
         pass
+
+    # SE自動登録
+    from scripts.routes.se import scan_and_register_se
+    scan_and_register_se()
 
     # TODO.mdファイル監視を開始
     from scripts.routes.overlay import start_todo_watcher

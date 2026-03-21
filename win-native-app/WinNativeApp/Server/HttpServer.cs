@@ -45,6 +45,9 @@ public class HttpServer : IDisposable
     public Action? OnBgmStop { get; set; }
     public Action<string, float>? OnBgmVolume { get; set; }  // (source, volume)
 
+    // SE（効果音）制御コールバック（MainFormが設定）
+    public Action<string, float>? OnSePlay { get; set; }      // (url, volume)
+
     public int Port => _port;
 
     public HttpServer(int port = 9090)
@@ -455,6 +458,7 @@ public class HttpServer : IDisposable
                 "bgm_play" => HandleWsBgmPlay(msg),
                 "bgm_stop" => HandleWsBgmStop(),
                 "bgm_volume" => HandleWsBgmVolume(msg),
+                "se_play" => HandleWsSePlay(msg),
                 _ => new { ok = false, error = $"unknown action: {action}" }
             };
 
@@ -610,6 +614,20 @@ public class HttpServer : IDisposable
 
         var trackVolume = msg.TryGetProperty("volume", out var v) ? (float)v.GetDouble() : 1.0f;
         Task.Run(() => { try { OnBgmPlay(url, trackVolume); } catch (Exception ex) { Log.Error(ex, "[BGM] Play callback failed"); } });
+        return new { ok = true };
+    }
+
+    private object HandleWsSePlay(JsonElement msg)
+    {
+        var url = msg.TryGetProperty("url", out var u) ? u.GetString() : null;
+        if (string.IsNullOrEmpty(url))
+            return new { ok = false, error = "url is required" };
+
+        if (OnSePlay == null)
+            return new { ok = false, error = "SE handler not available" };
+
+        var volume = msg.TryGetProperty("volume", out var v) ? (float)v.GetDouble() : 1.0f;
+        Task.Run(() => { try { OnSePlay(url, volume); } catch (Exception ex) { Log.Error(ex, "[SE] Play callback failed"); } });
         return new { ok = true };
     }
 

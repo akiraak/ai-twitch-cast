@@ -77,6 +77,7 @@ def api_client(test_db, mock_env, mock_gemini, monkeypatch):
     monkeypatch.setattr(st, "broadcast_overlay", AsyncMock())
     monkeypatch.setattr(st, "broadcast_tts", AsyncMock())
     monkeypatch.setattr(st, "broadcast_bgm", AsyncMock())
+    monkeypatch.setattr(st, "broadcast_se", AsyncMock())
     monkeypatch.setattr(st, "broadcast_to_broadcast", AsyncMock())
 
     # topic_talkerは実物（test_dbを使う）

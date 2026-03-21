@@ -61,11 +61,17 @@ public class MainForm : Form
     private WaveChannel32? _ttsChannel;
     private MeteringWaveProvider? _ttsMeter;
 
+    // SE state
+    private WaveChannel32? _seChannel;
+    private MeteringWaveProvider? _seMeter;
+    private static readonly string SeCacheDir = Path.Combine(Path.GetTempPath(), "ai-twitch-cast-se");
+
     // 音量トラッキング（0.0〜2.0 for master, 0.0〜1.0 for others）
     private float _volumeMaster = 0.8f;
     private float _volumeTts = 0.8f;
     private float _volumeBgm = 1.0f;
     private float _volumeTrack = 1.0f;  // 曲別ボリューム（bgm_playで受信）
+    private float _volumeSe = 0.8f;
 
     // 音量メータータイマー（50ms間隔で音声レベルをパネルに送信）
     private System.Windows.Forms.Timer? _meterTimer;
@@ -504,6 +510,7 @@ public class MainForm : Form
         else if (type == "tts") _volumeTts = vol;
         else if (type == "bgm") _volumeBgm = vol;
         else if (type == "track") _volumeTrack = vol;
+        else if (type == "se") _volumeSe = vol;
 
         // master or bgm or track変更時: BGMローカル再生 + FFmpegミキサーに反映
         if (type == "master" || type == "bgm" || type == "track")
@@ -512,6 +519,10 @@ public class MainForm : Form
         // master or tts変更時: 再生中TTSの音量をリアルタイム更新
         if (type == "master" || type == "tts")
             ApplyTtsVolume();
+
+        // master or se変更時: 再生中SEの音量をリアルタイム更新
+        if (type == "master" || type == "se")
+            ApplySeVolume();
     }
 
     /// <summary>TTS実効音量を計算し、ローカル再生とFFmpegミキサーに適用する。</summary>
@@ -545,6 +556,22 @@ public class MainForm : Form
     private float EffectiveBgmVolume()
     {
         return Math.Min(1.0f, _volumeBgm * _volumeBgm) * (_volumeMaster * _volumeMaster) * _volumeTrack;
+    }
+
+    /// <summary>SE実効音量を計算し、ローカル再生に適用する。</summary>
+    private void ApplySeVolume()
+    {
+        var effectiveVol = EffectiveSeVolume();
+        var ch = _seChannel;
+        if (ch != null)
+            ch.Volume = Math.Clamp(effectiveVol, 0f, 1f);
+        _ffmpeg?.SetSeVolume(effectiveVol);
+    }
+
+    /// <summary>SE実効音量: perceptual gain（二乗カーブ）</summary>
+    private float EffectiveSeVolume()
+    {
+        return Math.Min(1.0f, _volumeSe * _volumeSe) * (_volumeMaster * _volumeMaster);
     }
 
     private async void OnLoad(object? sender, EventArgs e)
@@ -587,9 +614,11 @@ public class MainForm : Form
                         var m = (float)volSync.GetProperty("master").GetDouble();
                         var t = (float)volSync.GetProperty("tts").GetDouble();
                         var b = (float)volSync.GetProperty("bgm").GetDouble();
+                        var se = volSync.TryGetProperty("se", out var seVal) ? (float)seVal.GetDouble() : _volumeSe;
                         UpdateVolume("master", m);
                         UpdateVolume("tts", t);
                         UpdateVolume("bgm", b);
+                        UpdateVolume("se", se);
                         var syncDelay = volSync.TryGetProperty("lipsyncDelay", out var ld) ? (int)ld.GetDouble() : -1;
                         var panelMsg = new Dictionary<string, object>
                         {
@@ -597,6 +626,7 @@ public class MainForm : Form
                             ["master"] = (int)(m * 100),
                             ["tts"] = (int)(t * 100),
                             ["bgm"] = (int)(b * 100),
+                            ["se"] = (int)(se * 100),
                         };
                         if (syncDelay >= 0) panelMsg["syncDelay"] = syncDelay;
                         SendPanelMessage(panelMsg);
@@ -780,6 +810,12 @@ public class MainForm : Form
                 if (source == "track")
                     SendPanelMessage(new { type = "track_volume", volume = (int)(clamped * 100) });
             });
+        };
+
+        // SE制御コールバック
+        _httpServer.OnSePlay = (url, volume) =>
+        {
+            BeginInvoke(() => PlaySe(url, volume));
         };
 
         try
@@ -1375,6 +1411,97 @@ public class MainForm : Form
         try { waveOut?.Stop(); } catch { }
         try { waveOut?.Dispose(); } catch { }
         try { reader?.Dispose(); } catch { }
+    }
+
+    /// <summary>SE（効果音）を再生する。BGMと違いループなし（一回再生）。</summary>
+    private void PlaySe(string url, float volume)
+    {
+        // 再生中のSEがあれば停止
+        StopSePlayback();
+
+        var fullUrl = url.StartsWith("http") ? url : _serverBaseUrl + url;
+        Log.Information("[SE] Play: {Url}, vol={Vol:F2}", fullUrl, volume);
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                // キャッシュチェック
+                Directory.CreateDirectory(SeCacheDir);
+                var urlHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(fullUrl)))[..16];
+                var ext = Path.GetExtension(new Uri(fullUrl).AbsolutePath);
+                if (string.IsNullOrEmpty(ext)) ext = ".wav";
+                var cachePath = Path.Combine(SeCacheDir, $"{urlHash}{ext}");
+
+                if (!File.Exists(cachePath))
+                {
+                    Log.Information("[SE] Downloading {Url}...", fullUrl);
+                    using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                    var data = await httpClient.GetByteArrayAsync(fullUrl);
+                    await File.WriteAllBytesAsync(cachePath, data);
+                    Log.Information("[SE] Downloaded: {Size} bytes", data.Length);
+                }
+
+                BeginInvoke(() =>
+                {
+                    try
+                    {
+                        var reader = new MediaFoundationReader(cachePath);
+                        var channel = new WaveChannel32(reader) { Volume = Math.Clamp(volume, 0f, 1f) };
+                        var meter = new MeteringWaveProvider(channel);
+                        _seChannel = channel;
+                        _seMeter = meter;
+                        var waveOut = new WaveOutEvent();
+                        waveOut.Init(meter);
+                        waveOut.Volume = 1.0f;
+                        waveOut.Play();
+                        Log.Information("[SE] Playback started, vol={Vol:F2}", volume);
+
+                        waveOut.PlaybackStopped += (_, _) =>
+                        {
+                            if (_seChannel == channel) { _seChannel = null; _seMeter = null; }
+                            waveOut.Dispose();
+                            reader.Dispose();
+                        };
+
+                        // 配信中: PCMにデコードしてFFmpegミキサーに渡す
+                        if (_ffmpeg is { IsRunning: true })
+                        {
+                            var ffmpeg = _ffmpeg;
+                            Task.Run(() =>
+                            {
+                                try
+                                {
+                                    var pcm = DecodeBgmToPcm(cachePath); // 同じデコーダを流用
+                                    ffmpeg?.WriteSeData(pcm, volume);
+                                    Log.Information("[SE] PCM for streaming: {Size} bytes", pcm.Length);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log.Error(ex, "[SE] PCM decode failed");
+                                }
+                            });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "[SE] Playback start failed");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[SE] Failed: {Url}", fullUrl);
+            }
+        });
+    }
+
+    /// <summary>SE再生を停止する。</summary>
+    private void StopSePlayback()
+    {
+        _seChannel = null;
+        _seMeter = null;
     }
 
     /// <summary>

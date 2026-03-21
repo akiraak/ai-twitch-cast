@@ -50,6 +50,12 @@ public sealed class FfmpegProcess : IDisposable
     private float _bgmVolume = 1.0f;
     private volatile bool _bgmPlaying;
 
+    // SEミキサー用フィールド（一回再生、ループなし）
+    private readonly ConcurrentQueue<byte[]> _seQueue = new();
+    private byte[]? _seCurrentChunk;
+    private int _seCurrentOffset;
+    private float _seVolume = 1.0f;
+
     // タイマーベース音声ジェネレータ（WASAPI不要、TTS+BGMをPCM合成→FFmpegパイプ）
     private System.Threading.Timer? _audioGenTimer;
     private long _audioGenLastTick;
@@ -61,6 +67,7 @@ public sealed class FfmpegProcess : IDisposable
     public float LastPeakDb => _lastPeakDb;
     public bool IsBgmActive => _bgmPlaying;
     public bool IsTtsActive => _ttsCurrentChunk != null || !_ttsQueue.IsEmpty;
+    public bool IsSeActive => _seCurrentChunk != null || !_seQueue.IsEmpty;
 
     public bool IsRunning => _process is { HasExited: false };
     public long FrameCount => Interlocked.Read(ref _frameCount);
@@ -343,6 +350,25 @@ public sealed class FfmpegProcess : IDisposable
     }
 
     /// <summary>
+    /// SE PCMデータをミキサーキューに追加する（一回再生、ループなし）。
+    /// </summary>
+    public void WriteSeData(byte[] f32lePcm, float volume)
+    {
+        if (_audioPipe is not { IsConnected: true } || _stopping) return;
+        _seVolume = volume;
+        _seQueue.Enqueue(f32lePcm);
+        Log.Information("[FFmpeg] SE PCM enqueued: {Size} bytes ({Dur:F1}s), vol={Vol:F2}",
+            f32lePcm.Length, f32lePcm.Length / (48000.0 * 2 * 4), volume);
+    }
+
+    /// <summary>SE音量を変更する。</summary>
+    public void SetSeVolume(float volume)
+    {
+        _seVolume = volume;
+        Log.Debug("[FFmpeg] SE volume set: {Vol:F2}", volume);
+    }
+
+    /// <summary>
     /// タイマーベースの音声ジェネレータを開始する。
     /// 壁時計時間を追跡し、実際の経過時間分の音声を生成する。
     /// Windowsタイマー解像度（15.6ms）に依存せずリアルタイムレートを維持。
@@ -369,6 +395,7 @@ public sealed class FfmpegProcess : IDisposable
 
                 var chunk = new byte[chunkSize]; // all zeros = silence
                 MixBgmInto(chunk);
+                MixSeInto(chunk);
                 MixTtsInto(chunk);
                 _audioQueue.Enqueue(chunk);
 
@@ -480,6 +507,42 @@ public sealed class FfmpegProcess : IDisposable
         }
     }
 
+    /// <summary>
+    /// チャンクにSE PCMを加算合成する（in-place）。TTSと同じパターンだがループなし。
+    /// </summary>
+    private void MixSeInto(byte[] chunk)
+    {
+        int pos = 0;
+        while (pos + 3 < chunk.Length)
+        {
+            if (_seCurrentChunk == null || _seCurrentOffset >= _seCurrentChunk.Length)
+            {
+                if (!_seQueue.TryDequeue(out _seCurrentChunk))
+                    break;
+                _seCurrentOffset = 0;
+            }
+
+            int available = _seCurrentChunk.Length - _seCurrentOffset;
+            int remaining = chunk.Length - pos;
+            int toMix = Math.Min(available, remaining);
+            toMix = (toMix / 4) * 4;
+
+            if (toMix <= 0) break;
+
+            var vol = _seVolume;
+            for (int i = 0; i < toMix; i += 4)
+            {
+                float existing = BitConverter.ToSingle(chunk, pos + i);
+                float se = BitConverter.ToSingle(_seCurrentChunk, _seCurrentOffset + i) * vol;
+                float mixed = Math.Clamp(existing + se, -1.0f, 1.0f);
+                BitConverter.TryWriteBytes(chunk.AsSpan(pos + i), mixed);
+            }
+
+            _seCurrentOffset += toMix;
+            pos += toMix;
+        }
+    }
+
     /// <summary>ミキシング済みf32leチャンクからRMS/瞬時peakを計算する。</summary>
     private void MeasureLevel(byte[] chunk, long nowTick)
     {
@@ -576,9 +639,11 @@ public sealed class FfmpegProcess : IDisposable
             catch { /* already disposed */ }
             _audioGenTimer = null;
 
-            // BGMも停止
+            // BGM・SEも停止
             _bgmPlaying = false;
             _bgmPcm = null;
+            _seCurrentChunk = null;
+            while (_seQueue.TryDequeue(out _)) { }
 
             // パイプを先に閉じる → AudioWriterLoopのブロック中Write()を解除
             try { _videoPipe?.Dispose(); }

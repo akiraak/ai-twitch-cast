@@ -71,6 +71,20 @@ async def broadcast_bgm(event: dict):
         _logger.warning("[BGM] C#アプリへの送信失敗: %s", e)
 
 
+async def broadcast_se(event: dict):
+    """SE（効果音）をC#アプリに送信する"""
+    import logging
+    _logger = logging.getLogger(__name__)
+    try:
+        from scripts.services.capture_client import ws_request
+        if event.get("type") == "se_play":
+            result = await ws_request("se_play", url=event.get("url", ""), volume=event.get("volume", 1.0))
+            _logger.info("[SE] C#アプリに送信: se_play url=%s volume=%.2f result=%s",
+                         event.get("url"), event.get("volume", 1.0), result)
+    except Exception as e:
+        _logger.warning("[SE] C#アプリへの送信失敗: %s", e)
+
+
 async def broadcast_to_broadcast(event: dict):
     """broadcast.html専用イベントを送信する（シーン切替・音量等）"""
     await _broadcast(broadcast_clients, event)

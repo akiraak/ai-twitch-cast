@@ -242,7 +242,7 @@ def _get_volume(source):
     val = load_config_value(f"audio_volumes.{source}")
     if val is not None:
         return float(val)
-    return {"master": 0.8, "tts": 0.8, "bgm": 1.0}.get(source, 1.0)
+    return {"master": 0.8, "tts": 0.8, "bgm": 1.0, "se": 0.8}.get(source, 1.0)
 
 
 @router.get("/api/broadcast/volume")
@@ -252,13 +252,14 @@ async def broadcast_get_volumes():
         "master": _get_volume("master"),
         "tts": _get_volume("tts"),
         "bgm": _get_volume("bgm"),
+        "se": _get_volume("se"),
     }
 
 
 @router.post("/api/broadcast/volume")
 async def broadcast_set_volume(body: VolumeRequest):
     """音量を設定してDBに保存し、broadcast.htmlに反映する"""
-    if body.source not in ("master", "tts", "bgm"):
+    if body.source not in ("master", "tts", "bgm", "se"):
         raise HTTPException(status_code=400, detail=f"不明なソース: {body.source}")
 
     db.set_setting(f"volume.{body.source}", body.volume)

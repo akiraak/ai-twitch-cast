@@ -189,6 +189,26 @@ def build_system_prompt(char, stream_context=None, self_note=None, persona=None)
         "- 迷ったらneutralを選べ。joyは特別なときだけ",
     ])
 
+    # SE（効果音）セクション
+    from src.se_resolver import get_available_categories
+    se_categories = get_available_categories()
+    if se_categories:
+        parts.extend([
+            "",
+            "## SE（効果音）選択（任意）",
+            "会話の内容に合った効果音を選んでください。ただし：",
+            "- 全ての返答にSEは不要。特別な瞬間（挨拶・驚き・嬉しいニュース等）にのみ使う",
+            "- 5回に1回程度の頻度で十分。使いすぎ注意",
+            "- 同じSEを連続で使わない",
+            "",
+            "使用可能なSEカテゴリ:",
+        ])
+        for cat in se_categories:
+            desc = f" — {cat['description']}" if cat["description"] else ""
+            parts.append(f"- {cat['name']}{desc}")
+        parts.append("")
+        parts.append('SEが不要な場合は "se" を null にしてください。')
+
     parts.extend([
         "",
         "## 重要：多様性",
@@ -198,7 +218,7 @@ def build_system_prompt(char, stream_context=None, self_note=None, persona=None)
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        '{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "translation": "翻訳テキスト"}',
+        '{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "translation": "翻訳テキスト", "se": "カテゴリ名 or null"}',
         f"emotionは次のいずれか: {emotion_list}",
         "",
         "## speechとtts_textの違い（重要・厳守）",

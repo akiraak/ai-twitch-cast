@@ -279,6 +279,24 @@
       <div class="status" id="bgm-status"></div>
     </div>
     <div class="card">
+      <h2>SE（効果音）</h2>
+      <div class="vol-row" style="margin-bottom:12px;">
+        <span class="vol-label">音量</span>
+        <input type="range" id="vol-se" min="0" max="100" step="1" value="80" class="vol-slider"
+          oninput="onVolume('se', this)">
+        <span class="vol-pct" id="vol-se-pct">80%</span>
+      </div>
+      <div style="margin-bottom:10px;">
+        <div style="font-size:0.85rem; color:#6a5590; margin-bottom:6px;">テスト再生</div>
+        <div id="se-test-buttons" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+      </div>
+      <div id="se-tracks"></div>
+      <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+        <input type="file" id="se-upload-file" accept="audio/*" style="font-size:0.8rem; flex:1;">
+        <button onclick="seUpload()" style="font-size:0.8rem;">アップロード</button>
+      </div>
+    </div>
+    <div class="card">
       <h2>YouTubeから追加</h2>
       <div style="display:flex; gap:8px;">
         <input type="text" id="yt-url" class="text-input" placeholder="YouTube URL" style="flex:1;">

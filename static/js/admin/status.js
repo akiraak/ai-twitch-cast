@@ -21,7 +21,7 @@ let _syncDelayTimer;
 async function loadVolumes() {
   try {
     const data = await (await fetch('/api/broadcast/volume')).json();
-    for (const key of ['master', 'tts', 'bgm']) {
+    for (const key of ['master', 'tts', 'bgm', 'se']) {
       const slider = document.getElementById(`vol-${key}`);
       if (document.activeElement === slider) continue;
       const val = data[key] ?? 1.0;

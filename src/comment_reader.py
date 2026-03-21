@@ -146,9 +146,14 @@ class CommentReader:
             await self._save_to_db(user, message, result)
             await asyncio.to_thread(db.update_user_last_seen, user["id"])
             self._speech.apply_emotion(result["emotion"])
+            # SE解決
+            se_info = None
+            if result.get("se"):
+                from src.se_resolver import resolve_se
+                se_info = resolve_se(result["se"])
             await self._speech.speak(result["speech"], subtitle={
                 "author": author, "trigger_text": message, "result": result,
-            }, tts_text=result.get("tts_text"))
+            }, tts_text=result.get("tts_text"), se=se_info)
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
             if self._topic_talker:
@@ -177,11 +182,18 @@ class CommentReader:
             await self._save_to_db(user, message, result)
             await asyncio.to_thread(db.update_user_last_seen, user["id"])
             self._speech.apply_emotion(result["emotion"])
+            # SE解決
+            se_info = None
+            if result.get("se"):
+                from src.se_resolver import resolve_se
+                se_info = resolve_se(result["se"])
+                if se_info:
+                    logger.info("[se] AI選択: category=%s → %s", result["se"], se_info["filename"])
             # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
             await self._speech.speak(result["speech"], subtitle={
                 "author": author, "trigger_text": message, "result": result,
             }, chat_result=result, tts_text=result.get("tts_text"),
-                post_to_chat=self._post_to_chat)
+                post_to_chat=self._post_to_chat, se=se_info)
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
             if self._topic_talker:

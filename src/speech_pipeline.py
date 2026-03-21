@@ -48,7 +48,7 @@ class SpeechPipeline:
             await self._on_overlay({"type": "speaking_end"})
 
     async def speak(self, text, voice=None, subtitle=None, chat_result=None,
-                    tts_text=None, post_to_chat=None):
+                    tts_text=None, post_to_chat=None, se=None):
         """TTS生成・ブラウザソース経由で再生する（排他制御付き）
 
         Args:
@@ -58,15 +58,22 @@ class SpeechPipeline:
             chat_result: チャット投稿データ
             tts_text: TTS用テキスト（言語タグ付き）
             post_to_chat: チャット投稿コールバック（async関数）
+            se: SE情報 {filename, volume, duration, url} or None
         """
         async with self._speak_lock:
             await self._speak_impl(text, voice=voice, subtitle=subtitle,
                                    chat_result=chat_result, tts_text=tts_text,
-                                   post_to_chat=post_to_chat)
+                                   post_to_chat=post_to_chat, se=se)
 
     async def _speak_impl(self, text, voice=None, subtitle=None, chat_result=None,
-                          tts_text=None, post_to_chat=None):
+                          tts_text=None, post_to_chat=None, se=None):
         """speak()の実体（ロック取得済み前提）"""
+        # === SE再生（TTS前） ===
+        if se:
+            await self.send_se_to_native_app(se)
+            se_duration = se.get("duration", 1.0)
+            await asyncio.sleep(se_duration + 0.3)
+
         wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
         tts_ok = False
         t_start = time.monotonic()
@@ -176,6 +183,27 @@ class SpeechPipeline:
         except Exception as e:
             elapsed = (time.monotonic() - t0) * 1000
             logger.warning("[tts] C#アプリへのTTS送信失敗 (%.0fms): %s", elapsed, e)
+
+    async def send_se_to_native_app(self, se):
+        """SE音声をC#アプリに送信する"""
+        t0 = time.monotonic()
+        try:
+            from scripts.routes.stream_control import _get_volume
+            from scripts.services.capture_client import ws_request
+
+            master = _get_volume("master")
+            se_vol = _get_volume("se")
+            track_vol = se.get("volume", 1.0)
+            volume = min(1.0, se_vol * se_vol) * (master * master) * track_vol
+
+            await ws_request("se_play", timeout=5.0, url=se["url"], volume=volume)
+            logger.info(
+                "[se] C#アプリにSE送信完了: url=%s vol=%.2f (%.0fms)",
+                se["url"], volume, (time.monotonic() - t0) * 1000,
+            )
+        except Exception as e:
+            elapsed = (time.monotonic() - t0) * 1000
+            logger.warning("[se] C#アプリへのSE送信失敗 (%.0fms): %s", elapsed, e)
 
     # 感情→ジェスチャーのデフォルトマッピング
     EMOTION_GESTURES = {

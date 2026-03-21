@@ -107,6 +107,15 @@ def _create_tables(conn):
             source_url TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS se_tracks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            volume REAL NOT NULL DEFAULT 1.0,
+            duration REAL NOT NULL DEFAULT 1.0
+        );
+
         CREATE TABLE IF NOT EXISTS topics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -729,6 +738,53 @@ def delete_bgm_track_volume(filename):
     """BGMトラックのボリュームレコードを削除する"""
     conn = get_connection()
     conn.execute("DELETE FROM bgm_tracks WHERE filename = ?", (filename,))
+    conn.commit()
+
+
+# --- SE tracks ---
+
+def get_all_se_tracks():
+    """全SEトラック情報を返す（filename → {category, description, volume, duration}）"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT filename, category, description, volume, duration FROM se_tracks"
+    ).fetchall()
+    return {row["filename"]: {
+        "category": row["category"],
+        "description": row["description"],
+        "volume": row["volume"],
+        "duration": row["duration"],
+    } for row in rows}
+
+
+def get_se_tracks_by_category(category):
+    """カテゴリでSEトラックを検索する"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT filename, category, description, volume, duration FROM se_tracks WHERE category = ?",
+        (category,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_se_track(filename, category="", description="", volume=1.0, duration=1.0):
+    """SEトラックを追加/更新する"""
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO se_tracks (filename, category, description, volume, duration) "
+        "VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT(filename) DO UPDATE SET "
+        "category = excluded.category, description = excluded.description, "
+        "volume = excluded.volume, duration = excluded.duration",
+        (filename, category, description, volume, duration),
+    )
+    conn.commit()
+
+
+def delete_se_track(filename):
+    """SEトラックを削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM se_tracks WHERE filename = ?", (filename,))
     conn.commit()
 
 

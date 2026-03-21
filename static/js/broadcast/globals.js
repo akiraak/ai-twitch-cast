@@ -31,7 +31,7 @@ let fadeTimer = null;
 let todoSettings = {};
 
 // === 音量管理（C#アプリに送信用、ブラウザでは音声再生しない） ===
-let volumes = { master: 0.8, tts: 0.8, bgm: 1.0 };
+let volumes = { master: 0.8, tts: 0.8, bgm: 1.0, se: 0.8 };
 
 // === リップシンク同期（配信時は遅延、非配信時はリアルタイム） ===
 let _isStreaming = false;

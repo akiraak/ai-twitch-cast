@@ -15,7 +15,7 @@ class TestSchema:
         expected = {
             "channels", "characters", "shows", "episodes",
             "users", "comments", "actions", "settings",
-            "bgm_tracks", "topics", "topic_scripts",
+            "bgm_tracks", "se_tracks", "topics", "topic_scripts",
             "custom_texts", "character_memory",
         }
         assert expected.issubset(names)
@@ -286,6 +286,53 @@ class TestSettings:
     def test_stores_as_string(self, test_db):
         test_db.set_setting("num", 42)
         assert test_db.get_setting("num") == "42"
+
+
+class TestSeTracks:
+    def test_upsert_and_get_all(self, test_db):
+        test_db.upsert_se_track("greeting.wav", category="greeting", description="挨拶", volume=0.8, duration=0.6)
+        tracks = test_db.get_all_se_tracks()
+        assert "greeting.wav" in tracks
+        assert tracks["greeting.wav"]["category"] == "greeting"
+        assert tracks["greeting.wav"]["volume"] == 0.8
+        assert tracks["greeting.wav"]["duration"] == 0.6
+
+    def test_get_by_category(self, test_db):
+        test_db.upsert_se_track("a.wav", category="surprise", volume=1.0, duration=0.5)
+        test_db.upsert_se_track("b.wav", category="surprise", volume=0.9, duration=0.7)
+        test_db.upsert_se_track("c.wav", category="greeting", volume=1.0, duration=0.6)
+        results = test_db.get_se_tracks_by_category("surprise")
+        assert len(results) == 2
+        filenames = {r["filename"] for r in results}
+        assert filenames == {"a.wav", "b.wav"}
+
+    def test_get_by_category_empty(self, test_db):
+        assert test_db.get_se_tracks_by_category("nonexistent") == []
+
+    def test_upsert_updates(self, test_db):
+        test_db.upsert_se_track("test.wav", category="old", volume=0.5, duration=1.0)
+        test_db.upsert_se_track("test.wav", category="new", volume=0.8, duration=1.5)
+        tracks = test_db.get_all_se_tracks()
+        assert tracks["test.wav"]["category"] == "new"
+        assert tracks["test.wav"]["volume"] == 0.8
+        assert tracks["test.wav"]["duration"] == 1.5
+
+    def test_delete(self, test_db):
+        test_db.upsert_se_track("del.wav", category="test")
+        test_db.delete_se_track("del.wav")
+        assert "del.wav" not in test_db.get_all_se_tracks()
+
+    def test_delete_nonexistent(self, test_db):
+        # エラーにならない
+        test_db.delete_se_track("nonexistent.wav")
+
+    def test_default_values(self, test_db):
+        test_db.upsert_se_track("default.wav")
+        tracks = test_db.get_all_se_tracks()
+        assert tracks["default.wav"]["category"] == ""
+        assert tracks["default.wav"]["description"] == ""
+        assert tracks["default.wav"]["volume"] == 1.0
+        assert tracks["default.wav"]["duration"] == 1.0
 
 
 class TestBgmTracks:
