@@ -6,6 +6,7 @@
 - [ ] ブラウザテスト（Playwright等）導入の検証
 
 ## バグ
+- [ ] 配信バッファリング改善の効果検証（Phase 4: ネットワーク耐性は効果を見て判断） → [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 
 ## 検討
 - [ ] 遅延が大きく発生した場合にスキップしてでも最新の配信内容に追いつく機能の検証 → [plans/latency-skip-catchup.md](plans/latency-skip-catchup.md)

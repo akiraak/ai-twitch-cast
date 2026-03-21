@@ -1,5 +1,16 @@
 # DONE
 
+## 配信バッファリング（くるくる）対策
+
+- [x] VBVバッファサイズ拡大（bitrate/2 → bitrate×2、Twitch推奨値に合わせ）
+- [x] デフォルトビットレート引き上げ（2500k → 3500k、Twitch 720p推奨帯）
+- [x] FFmpegフラグ追加（`-fflags +nobuffer -flush_packets 1`）
+- [x] 音声パイプバッファ拡大（64KB → 256KB、タイマージッター吸収）
+- [x] 高分解能タイマー導入（`timeBeginPeriod(1)` で1ms精度）
+- [x] NV12変換遅延の警告ログ追加（フレーム間隔75%超でWarning）
+- [x] エンコード速度監視（speed < 0.95xでWarning）
+- [x] プラン → [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
+
 ## 長文発話と句読点分割（連続発話機能）
 
 - [x] AIの文字数制限を緩和（40字固定 → DB設定 `speech.max_chars` で30〜200字に変更可能）

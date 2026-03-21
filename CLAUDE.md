@@ -102,7 +102,8 @@ ai-twitch-cast/
 ├── DONE.md                   # 完了タスク
 ├── TODO.md                   # タスク一覧
 ├── plans/                    # 作業プラン（詳細な実装計画）
-│   └── websocket-optimization.md # サーバ↔配信アプリ WebSocket統合プラン
+│   ├── websocket-optimization.md # サーバ↔配信アプリ WebSocket統合プラン
+│   └── stream-buffering-fix.md   # 配信バッファリング（くるくる）問題の分析と改善
 ├── LICENSE
 └── README.md
 ```

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using NAudio.Wave;
 using Serilog;
 
@@ -8,6 +9,12 @@ namespace WinNativeApp.Streaming;
 
 public sealed class FfmpegProcess : IDisposable
 {
+    // Windows Multimedia Timer API: タイマー分解能を1msに設定（デフォルト15.6ms）
+    [DllImport("winmm.dll", ExactSpelling = true)]
+    private static extern uint timeBeginPeriod(uint uMilliseconds);
+    [DllImport("winmm.dll", ExactSpelling = true)]
+    private static extern uint timeEndPeriod(uint uMilliseconds);
+
     private Process? _process;
     private readonly StreamConfig _config;
     private readonly string _videoPipeName;
@@ -89,6 +96,9 @@ public sealed class FfmpegProcess : IDisposable
     {
         if (IsRunning) throw new InvalidOperationException("FFmpeg already running");
 
+        // タイマー分解能を1msに設定（音声ジェネレータの10msタイマー精度向上）
+        timeBeginPeriod(1);
+
         var ffmpeg = FindFfmpeg();
         Log.Information("[FFmpeg] Path: {Path}", ffmpeg);
 
@@ -98,11 +108,11 @@ public sealed class FfmpegProcess : IDisposable
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
             outBufferSize: 8 * 1024 * 1024, inBufferSize: 0);
 
-        // 音声用名前付きパイプ（64KBバッファ — 映像パイプとの遅延差を最小化）
+        // 音声用名前付きパイプ（256KBバッファ — タイマージッター吸収）
         _audioPipe = new NamedPipeServerStream(
             _audioPipeName, PipeDirection.Out, 1,
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
-            outBufferSize: 64 * 1024, inBufferSize: 0);
+            outBufferSize: 256 * 1024, inBufferSize: 0);
 
         // ダブルバッファ事前確保（BGRA入力コピー用）
         var bgraFrameSize = _config.Width * _config.Height * 4;
@@ -137,10 +147,12 @@ public sealed class FfmpegProcess : IDisposable
             encoderArgs,
             $"-b:v {_config.VideoBitrate}",
             $"-maxrate {_config.VideoBitrate}",
-            $"-bufsize {ParseBitrateKbps(_config.VideoBitrate) / 2}k",
+            $"-bufsize {ParseBitrateKbps(_config.VideoBitrate) * 2}k",
             "-pix_fmt yuv420p",
             $"-g {_config.Framerate * 2}",
             "-flags +low_delay",
+            "-fflags +nobuffer",
+            "-flush_packets 1",
             // Audio encode
             $"-c:a aac -b:a {_config.AudioBitrate} -ar 44100",
             // Output
@@ -288,6 +300,12 @@ public sealed class FfmpegProcess : IDisposable
                 _videoPipe!.Write(nv12, 0, nv12WriteSize);
                 sw.Stop();
                 Interlocked.Increment(ref _frameCount);
+
+                // NV12変換が遅い場合は警告（フレーム間隔の75%超）
+                var frameIntervalMs = 1000 / _config.Framerate;
+                if (convertMs > frameIntervalMs * 3 / 4)
+                    Log.Warning("[FFmpeg] NV12 conversion slow: {Ms}ms (threshold {Thresh}ms)",
+                        convertMs, frameIntervalMs * 3 / 4);
 
                 // 30フレームごとに変換+書き込み時間をログ
                 var fc = Interlocked.Read(ref _frameCount);
@@ -679,6 +697,9 @@ public sealed class FfmpegProcess : IDisposable
         _process?.Dispose();
         _process = null;
 
+        // タイマー分解能を元に戻す
+        timeEndPeriod(1);
+
         Log.Information("[FFmpeg] Stopped");
     }
 
@@ -702,6 +723,16 @@ public sealed class FfmpegProcess : IDisposable
                 {
                     _encodingStarted = true;
                     Log.Information("[FFmpeg] Encoding started detected (audio queue will flush)");
+                }
+
+                // エンコード速度監視: speed < 0.95x なら警告
+                var speedMatch = System.Text.RegularExpressions.Regex.Match(line, @"speed=\s*([\d.]+)x");
+                if (speedMatch.Success &&
+                    double.TryParse(speedMatch.Groups[1].Value, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var speed) &&
+                    speed < 0.95)
+                {
+                    Log.Warning("[FFmpeg] Encoding falling behind: speed={Speed}x", speed);
                 }
 
                 // 起動後60秒間はSerilogにも出力（音声途切れ診断用）
