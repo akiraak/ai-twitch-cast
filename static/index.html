@@ -100,19 +100,18 @@
 
   <!-- ===== キャラクター ===== -->
   <div class="tab-content" id="tab-character">
-    <!-- 共通: 配信言語 -->
-    <div class="card">
-      <h2>配信言語</h2>
-      <div id="language-modes"></div>
-      <div id="lang-description" style="margin-top:10px; padding:10px 14px; background:#f3e5f5; border-radius:8px; font-size:0.85rem; color:#4a148c; display:none;"></div>
-    </div>
     <!-- サブタブ -->
     <div class="char-subtabs">
-      <div class="char-subtab active" onclick="switchCharSubtab('text', this)">テキスト生成</div>
-      <div class="char-subtab" onclick="switchCharSubtab('speech', this)">読み上げ</div>
+      <div class="char-subtab active" onclick="switchCharSubtab('appearance', this)">ビジュアル</div>
+      <div class="char-subtab" onclick="switchCharSubtab('script', this)">セリフ</div>
     </div>
-    <!-- テキスト生成 -->
-    <div class="char-subcontent active" id="char-sub-text">
+    <!-- セリフ -->
+    <div class="char-subcontent" id="char-sub-script">
+      <div class="card">
+        <h2>配信言語</h2>
+        <div id="language-modes"></div>
+        <div id="lang-description" style="margin-top:10px; padding:10px 14px; background:#f3e5f5; border-radius:8px; font-size:0.85rem; color:#4a148c; display:none;"></div>
+      </div>
       <div class="layer-header">
         <span>5層プロンプト合成</span>
         <a href="#" onclick="event.preventDefault(); showCharacterPromptDoc()" style="font-size:0.75rem; font-weight:normal; color:#7c4dff; text-decoration:none;">会話生成の仕組み →</a>
@@ -185,9 +184,6 @@
         <h2><span class="layer-badge" style="background:#e0d8f0; color:#6a5590;">第5層</span> リアルタイム状態 <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">配信タイトル・トピック・TODO</span></h2>
         <div style="font-size:0.82rem; color:#6a5590;">配信中に自動注入されます（Twitchタイトル・現在のトピック・作業中タスク）</div>
       </div>
-    </div>
-    <!-- 読み上げ -->
-    <div class="char-subcontent" id="char-sub-speech">
       <div class="card">
         <h2>テスト再生</h2>
         <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
@@ -206,6 +202,9 @@
           <button onclick="emotionTest('neutral')" style="font-size:0.75rem;" title="通常時">neutral</button>
         </div>
       </div>
+    </div>
+    <!-- 見た目 -->
+    <div class="char-subcontent active" id="char-sub-appearance">
       <div class="card">
         <h2>ライティング</h2>
         <div style="margin-bottom:12px;">
