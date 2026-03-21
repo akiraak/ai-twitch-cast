@@ -29,6 +29,26 @@ class SpeechPipeline:
         """テキストから [lang:xx]...[/lang] タグを除去する"""
         return re.sub(r'\[/?lang(?::\w+)?\]', '', text)
 
+    @staticmethod
+    def split_sentences(text):
+        """テキストを日本語の句読点で分割してセグメントのリストを返す。
+
+        全角の「。」「！」「？」でのみ分割する（英語のピリオド等では分割しない）。
+        短い文（30文字以下）は分割しない。
+
+        Returns:
+            list[str]: 分割されたテキストのリスト（最低1要素）
+        """
+        if len(text) <= 30:
+            return [text]
+
+        # 全角句読点の後で分割（句読点は前のセグメントに含める）
+        parts = re.split(r'(?<=[。！？])', text)
+        # 空文字を除去してstrip
+        segments = [p.strip() for p in parts if p.strip()]
+
+        return segments if segments else [text]
+
     async def notify_overlay(self, author, trigger_text, result):
         """オーバーレイにコメント情報を送信する"""
         if not self._on_overlay:

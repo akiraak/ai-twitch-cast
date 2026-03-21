@@ -119,7 +119,8 @@ class TestGetNext:
         result = await tt.get_next()
         assert result is None
 
-    async def test_generates_and_saves(self, test_db, mock_gemini):
+    async def test_short_text_single_segment(self, test_db, mock_gemini):
+        """短い文章は分割されず1セグメント"""
         import json
         mock_gemini.models.generate_content.return_value.text = json.dumps({
             "content": "Pythonいいよね", "emotion": "joy", "translation": "Python is great",
@@ -127,8 +128,32 @@ class TestGetNext:
         tt = TopicTalker()
         await tt.set_topic("Python")
         result = await tt.get_next()
-        assert result["content"] == "Pythonいいよね"
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["content"] == "Pythonいいよね"
         # DBにスクリプトが保存される
+        spoken = test_db.get_spoken_scripts(test_db.get_active_topic()["id"])
+        assert len(spoken) == 1
+
+    async def test_long_text_split_into_segments(self, test_db, mock_gemini):
+        """長い文章は句読点で自動分割される"""
+        import json
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "content": "Pythonってほんと便利だよね。特にasyncが使いやすくて最高！",
+            "emotion": "joy",
+            "translation": "Python is really useful. Especially async is great!",
+        })
+        tt = TopicTalker()
+        await tt.set_topic("Python")
+        result = await tt.get_next()
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["content"] == "Pythonってほんと便利だよね。"
+        assert result[1]["content"] == "特にasyncが使いやすくて最高！"
+        # 感情は全セグメント共通
+        assert result[0]["emotion"] == "joy"
+        assert result[1]["emotion"] == "joy"
+        # DBには全文が1レコードで保存
         spoken = test_db.get_spoken_scripts(test_db.get_active_topic()["id"])
         assert len(spoken) == 1
 

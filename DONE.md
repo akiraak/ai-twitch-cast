@@ -1,5 +1,16 @@
 # DONE
 
+## 長文発話と句読点分割（連続発話機能）
+
+- [x] AIの文字数制限を緩和（40字固定 → DB設定 `speech.max_chars` で30〜200字に変更可能）
+- [x] 長文を全角句読点（。！？）で自動分割して順次再生（`SpeechPipeline.split_sentences()`）
+- [x] コメント応答・トピック発話の両方で分割対応
+- [x] 分割キューイング: 1文目は即再生、2文目以降は `_topic_queue` に入れる
+- [x] コメント到着時に残りセグメントをキャンセル（`_topic_queue.clear()`）
+- [x] WebUIキャラクタータブに「文字数上限」スライダー追加（30〜200字）
+- [x] サウンドタブに「連続発話」テストボタン追加
+- [x] プラン → [plans/multi-part-speech.md](plans/multi-part-speech.md)
+
 ## WebUI描画のファイル構成の最適化
 
 - [x] broadcast-main.js（1,625行）を11ファイルに分割（`js/broadcast/`）

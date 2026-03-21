@@ -60,14 +60,19 @@ async def get_scripts():
 
 @router.post("/api/topic/speak")
 async def speak_now():
-    """手動で1つ発話する（テスト用）"""
-    script = await state.topic_talker.get_next()
-    if not script:
+    """手動でトピック発話する（複数セグメント対応）"""
+    segments = await state.topic_talker.get_next()
+    if not segments:
         return {"ok": False, "error": "発話するスクリプトがありません"}
     try:
-        await state.reader.speak_event("トピック", script["content"])
+        # 1文目は即座に発話
+        await state.reader._speak_topic_segment(segments[0])
+        # 2文目以降はトピックキューに入れる
+        for seg in segments[1:]:
+            state.reader._topic_queue.append(seg)
         await _notify_overlay()
-        return {"ok": True, "content": script["content"]}
+        contents = [s["content"] for s in segments]
+        return {"ok": True, "segments": contents, "count": len(segments)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

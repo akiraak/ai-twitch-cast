@@ -22,6 +22,7 @@ class CommentReader:
         self._topic_talker = topic_talker
         self._speech = SpeechPipeline(on_overlay=on_overlay)
         self._queue = deque()
+        self._topic_queue = deque()  # トピック発話の2文目以降
         self._process_task = None
         self._note_task = None
         self._running = False
@@ -56,6 +57,7 @@ class CommentReader:
         self._process_task = None
         self._note_task = None
         self._queue.clear()
+        self._topic_queue.clear()
         self._episode_id = None
         logger.info("コメント読み上げを停止しました")
 
@@ -77,9 +79,17 @@ class CommentReader:
         try:
             while self._running:
                 if self._queue:
+                    # コメント最優先 → トピックの残りセグメントはキャンセル
+                    if self._topic_queue:
+                        logger.info("[topic] コメント到着 → トピック残り%dセグメントをキャンセル", len(self._topic_queue))
+                        self._topic_queue.clear()
                     self._idle_since = None
                     author, message = self._queue.popleft()
                     await self._respond(author, message)
+                elif self._topic_queue:
+                    # トピックの続きセグメント
+                    seg = self._topic_queue.popleft()
+                    await self._speak_topic_segment(seg)
                 elif self._topic_talker and self._should_auto_speak():
                     await self._auto_speak()
                     # 発話後にidleタイマーをリセット（即座に連続発話しないように）
@@ -98,8 +108,27 @@ class CommentReader:
         idle_seconds = time.monotonic() - self._idle_since
         return self._topic_talker.should_speak(idle_seconds)
 
+    async def _speak_topic_segment(self, seg):
+        """トピックの1セグメントを発話する"""
+        try:
+            translation = seg.get("translation", "")
+            logger.info("[topic] セグメント発話: [%s] %s", seg["emotion"], seg["content"])
+            self._speech.apply_emotion(seg["emotion"])
+            await self._speech.speak(seg["content"], subtitle={
+                "author": "ちょビ",
+                "trigger_text": seg["content"],
+                "result": {"speech": seg["content"], "emotion": seg["emotion"], "translation": translation},
+            }, chat_result={"speech": seg["content"], "translation": translation},
+                tts_text=seg.get("tts_text"), post_to_chat=self._post_to_chat)
+            self._speech.apply_emotion("neutral")
+            await self._speech.notify_overlay_end()
+            # アバター発話をDBに保存
+            await self._save_avatar_comment("topic", "[トピック]", seg["content"], seg["emotion"])
+        except Exception as e:
+            logger.error("トピックセグメント発話失敗: %s", e, exc_info=True)
+
     async def _auto_speak(self):
-        """トピックに基づいて自発的に発話する"""
+        """トピックに基づいて自発的に発話する（複数セグメント対応）"""
         try:
             # トピック自動生成・ローテーションチェック
             stream_context = await self._get_stream_context()
@@ -110,23 +139,16 @@ class CommentReader:
             if new_topic:
                 logger.info("[topic] トピック自動変更: %s", new_topic["title"])
 
-            script = await self._topic_talker.get_next()
-            if not script:
+            segments = await self._topic_talker.get_next()
+            if not segments:
                 return
-            translation = script.get("translation", "")
-            logger.info("[topic] 自発的発話: [%s] %s", script["emotion"], script["content"])
-            self._speech.apply_emotion(script["emotion"])
-            await self._speech.speak(script["content"], subtitle={
-                "author": "ちょビ",
-                "trigger_text": script["content"],
-                "result": {"speech": script["content"], "emotion": script["emotion"], "translation": translation},
-            }, chat_result={"speech": script["content"], "translation": translation},
-                tts_text=script.get("tts_text"), post_to_chat=self._post_to_chat)
-            self._speech.apply_emotion("neutral")
-            await self._speech.notify_overlay_end()
-            # アバター発話をDBに保存
-            logger.info("[topic] DB保存呼び出し: episode=%s", self._episode_id)
-            await self._save_avatar_comment("topic", "[トピック]", script["content"], script["emotion"])
+
+            # 1文目は即座に発話
+            await self._speak_topic_segment(segments[0])
+
+            # 2文目以降はキューに入れる（コメントが来たらキャンセルされる）
+            for seg in segments[1:]:
+                self._topic_queue.append(seg)
         except Exception as e:
             logger.error("自発的発話失敗: %s", e, exc_info=True)
 
@@ -164,7 +186,7 @@ class CommentReader:
             return {"speech": "", "emotion": "neutral", "translation": ""}
 
     async def _respond(self, author, message):
-        """1件のコメントにAIで応答して読み上げる"""
+        """1件のコメントにAIで応答して読み上げる（長文は分割して順次再生）"""
         try:
             user = await asyncio.to_thread(db.get_or_create_user, author)
             already_greeted = False
@@ -181,21 +203,41 @@ class CommentReader:
             )
             await self._save_to_db(user, message, result)
             await asyncio.to_thread(db.update_user_last_seen, user["id"])
-            self._speech.apply_emotion(result["emotion"])
-            # SE解決
+
+            # 句読点で分割
+            from src.speech_pipeline import SpeechPipeline
+            content_parts = SpeechPipeline.split_sentences(result["speech"])
+            tts_parts = SpeechPipeline.split_sentences(result.get("tts_text", result["speech"]))
+
+            # SE解決（1文目のみ）
             se_info = None
             if result.get("se"):
                 from src.se_resolver import resolve_se
                 se_info = resolve_se(result["se"])
                 if se_info:
                     logger.info("[se] AI選択: category=%s → %s", result["se"], se_info["filename"])
-            # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
-            await self._speech.speak(result["speech"], subtitle={
-                "author": author, "trigger_text": message, "result": result,
-            }, chat_result=result, tts_text=result.get("tts_text"),
+
+            # 1文目: SE・字幕・チャット投稿付きで即再生
+            first_tts = tts_parts[0] if tts_parts else content_parts[0]
+            first_result = {**result, "speech": content_parts[0]}
+            self._speech.apply_emotion(result["emotion"])
+            await self._speech.speak(content_parts[0], subtitle={
+                "author": author, "trigger_text": message, "result": first_result,
+            }, chat_result=result, tts_text=first_tts,
                 post_to_chat=self._post_to_chat, se=se_info)
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
+
+            # 2文目以降はキューに入れる（コメント到着でキャンセル）
+            for i in range(1, len(content_parts)):
+                tts_text = tts_parts[i] if i < len(tts_parts) else content_parts[i]
+                self._topic_queue.append({
+                    "content": content_parts[i],
+                    "emotion": result["emotion"],
+                    "tts_text": tts_text,
+                    "translation": "",
+                })
+
             if self._topic_talker:
                 self._topic_talker.mark_spoken()
         except Exception as e:

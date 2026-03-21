@@ -86,6 +86,50 @@ async def tts_test_emotion(body: EmotionTestRequest):
     return {"ok": True}
 
 
+@router.post("/api/tts/test-multi")
+async def tts_test_multi():
+    """連続発話テスト（長文生成→句読点分割→順次再生）"""
+    import random
+    from src.ai_responder import generate_topic_line
+    from src.speech_pipeline import SpeechPipeline
+
+    topics = [
+        ("最近ハマっていること", "最近自分が夢中になっていることについて具体的に語る"),
+        ("プログラミングの面白さ", "プログラミングの魅力やエピソードを語る"),
+        ("好きな食べ物", "好きな食べ物について熱く語る"),
+        ("朝型と夜型", "自分はどっち派か、理由も含めて語る"),
+        ("AIの未来", "AIがこれからどうなるか、自分の考えを語る"),
+    ]
+    title, desc = random.choice(topics)
+
+    result = await asyncio.to_thread(
+        generate_topic_line, title, description=desc,
+    )
+
+    # 句読点で自動分割してセグメント化
+    content_parts = SpeechPipeline.split_sentences(result["content"])
+    tts_parts = SpeechPipeline.split_sentences(result.get("tts_text", result["content"]))
+    segments = []
+    for i, content in enumerate(content_parts):
+        tts_text = tts_parts[i] if i < len(tts_parts) else content
+        segments.append({
+            "content": content,
+            "emotion": result["emotion"],
+            "tts_text": tts_text,
+            "translation": result.get("translation", "") if i == 0 else "",
+        })
+
+    async def _play():
+        await state.ensure_reader()
+        await state.reader._speak_topic_segment(segments[0])
+        for seg in segments[1:]:
+            state.reader._topic_queue.append(seg)
+
+    asyncio.create_task(_play())
+    contents = [s["content"] for s in segments]
+    return {"ok": True, "segments": contents, "count": len(segments)}
+
+
 class WebUIChatRequest(BaseModel):
     message: str
 

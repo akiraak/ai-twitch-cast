@@ -26,7 +26,7 @@ function switchTab(name, el) {
     location.hash = name;
   }
   if (name === 'db') loadDbTables();
-  if (name === 'character') { loadLanguageModes(); loadCharacterLayers(); }
+  if (name === 'character') { loadLanguageModes(); loadCharacterLayers(); loadSpeechSettings(); }
   if (name === 'sound') loadBgmTracks();
   if (name === 'topic') { loadTopicStatus(); loadTopicScripts(); }
   if (name === 'todo') loadTodoList();

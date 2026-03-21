@@ -134,10 +134,21 @@ def build_system_prompt(char, stream_context=None, self_note=None, persona=None)
     emotions = char.get("emotions", {})
     emotion_list = ", ".join(emotions.keys())
 
+    from src import db
+    max_chars = int(db.get_setting("speech.max_chars", "100"))
+    # 文字数に応じた文数ガイド
+    if max_chars <= 50:
+        sentence_guide = "1〜2文"
+    elif max_chars <= 100:
+        sentence_guide = "1〜3文"
+    else:
+        sentence_guide = "2〜4文"
+
     parts = [
         char["system_prompt"],
         "",
         "## ルール",
+        f"- {sentence_guide}、日本語で{max_chars}文字以内を目指す",
     ]
     for rule in char.get("rules", []):
         parts.append(f"- {rule}")

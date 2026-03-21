@@ -39,6 +39,55 @@ class TestStripLangTags:
 
 
 # =====================================================
+# split_sentences
+# =====================================================
+
+
+class TestSplitSentences:
+    def test_short_text_no_split(self):
+        """30文字以下は分割しない"""
+        assert SpeechPipeline.split_sentences("短いテキスト") == ["短いテキスト"]
+
+    def test_split_on_maru(self):
+        """「。」で分割"""
+        result = SpeechPipeline.split_sentences("Pythonってほんと便利だよね。特にasyncが使いやすくて最高だよ")
+        assert result == ["Pythonってほんと便利だよね。", "特にasyncが使いやすくて最高だよ"]
+
+    def test_split_on_exclamation(self):
+        """「！」で分割"""
+        result = SpeechPipeline.split_sentences("すごいニュースがあるんだよ！実はPythonの新バージョンが出たんだ")
+        assert result == ["すごいニュースがあるんだよ！", "実はPythonの新バージョンが出たんだ"]
+
+    def test_split_on_question(self):
+        """「？」で分割"""
+        result = SpeechPipeline.split_sentences("みんなはどう思う？俺はめっちゃいいと思うんだよねほんとにすごいよ")
+        assert result == ["みんなはどう思う？", "俺はめっちゃいいと思うんだよねほんとにすごいよ"]
+
+    def test_multiple_sentences(self):
+        """複数文の分割"""
+        result = SpeechPipeline.split_sentences("まず一つ目の話をしようか。次に二つ目の話だよ。最後に三つ目の話をするね")
+        assert result == ["まず一つ目の話をしようか。", "次に二つ目の話だよ。", "最後に三つ目の話をするね"]
+
+    def test_no_punctuation_no_split(self):
+        """句読点がない長文は分割しない"""
+        text = "句読点がないけどめっちゃ長い文章だよこれはどうなるかな"
+        assert SpeechPipeline.split_sentences(text) == [text]
+
+    def test_empty_string(self):
+        assert SpeechPipeline.split_sentences("") == [""]
+
+    def test_exactly_30_chars(self):
+        """ちょうど30文字は分割しない"""
+        text = "あ" * 30
+        assert SpeechPipeline.split_sentences(text) == [text]
+
+    def test_no_split_on_ascii_punctuation(self):
+        """半角の.!?では分割しない（英語混在テキスト）"""
+        text = "今日はClaude Codeで開発してるよ! What do you think? すごくない"
+        assert SpeechPipeline.split_sentences(text) == [text]
+
+
+# =====================================================
 # notify_overlay
 # =====================================================
 

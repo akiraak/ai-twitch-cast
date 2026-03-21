@@ -76,7 +76,12 @@ async function topicSpeakNow() {
   try {
     const r = await fetch('/api/topic/speak', {method: 'POST'});
     const d = await r.json();
-    st.textContent = d.ok ? '発話完了' : d.error;
+    if (d.ok) {
+      const msg = d.count > 1 ? `発話完了（${d.count}セグメント）` : '発話完了';
+      st.textContent = msg;
+    } else {
+      st.textContent = d.error;
+    }
     loadTopicStatus();
     loadTopicScripts();
   } catch(e) { st.textContent = 'エラー: ' + e; }

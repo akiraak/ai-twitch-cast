@@ -8,6 +8,22 @@ async function emotionTest(emotion) {
   await api('POST', '/api/tts/test-emotion', { emotion });
 }
 
+async function ttsTestMulti() {
+  const st = document.getElementById('tts-multi-status');
+  st.textContent = '生成中...';
+  try {
+    const r = await fetch('/api/tts/test-multi', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      st.textContent = `${d.count}セグメント: ${d.segments.join(' → ')}`;
+    } else {
+      st.textContent = 'エラー: ' + (d.error || '不明');
+    }
+  } catch (e) {
+    st.textContent = 'エラー: ' + e.message;
+  }
+}
+
 const bgmTracksEl = document.getElementById('bgm-tracks');
 
 async function loadBgmTracks() {

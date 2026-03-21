@@ -30,8 +30,6 @@ DEFAULT_CHARACTER = {
         "- 初見さんには「いらっしゃい」程度でOK。過剰に歓迎しない",
     ]),
     "rules": [
-        "1文で返す。最大2文。3文以上は禁止",
-        "日本語で40文字以内を目指す（厳守）",
         "「コメントありがとう」で始めない",
         "感嘆符（！）は1文に最大1個",
         "荒らしや不適切なコメントは軽くスルーする",
@@ -451,7 +449,7 @@ def generate_persona(avatar_comments, current_persona=""):
 
 
 def generate_topic_line(title, description="", last_speeches=None, timeline=None):
-    """トピックについて1件の発話を生成する（前回の発話から続く自然な流れ）
+    """トピックについて発話を生成する（前回の発話から続く自然な流れ）
 
     Args:
         title: トピックのタイトル
@@ -460,7 +458,7 @@ def generate_topic_line(title, description="", last_speeches=None, timeline=None
         timeline: 直近の会話タイムライン [{type, user_name, text, ...}, ...]
 
     Returns:
-        dict: {"content": str, "emotion": str}
+        dict: {"content": str, "emotion": str, "tts_text": str, "translation": str}
     """
     client = get_client()
     char = get_character()
@@ -473,14 +471,24 @@ def generate_topic_line(title, description="", last_speeches=None, timeline=None
         char["system_prompt"],
         "",
         "## タスク",
-        f"配信中に「{title}」について視聴者に向かって一言話してください。",
+        f"配信中に「{title}」について視聴者に向かって話してください。",
     ]
     if description:
         parts.append(f"トピックの説明: {description}")
+    from src import db as _db
+    max_chars = int(_db.get_setting("speech.max_chars", "100"))
+    if max_chars <= 50:
+        sentence_guide = "1〜2文"
+    elif max_chars <= 100:
+        sentence_guide = "1〜3文"
+    else:
+        sentence_guide = "2〜4文"
+
     parts.extend([
         "",
         "## ルール",
-        "- 1文のみ、30文字以内で短く（日本語の場合。英語は15 words以内）",
+        f"- {sentence_guide}、{max_chars}文字以内（日本語の場合）",
+        "- 短く済むなら1文でもOK。無理に長くしない",
         "- 視聴者に話しかけるような自然なトーンで",
         "- 前回の自分の発話がある場合は、その続きや展開として自然に繋げる",
         "- 同じことを繰り返さない",
@@ -540,6 +548,7 @@ def generate_topic_line(title, description="", last_speeches=None, timeline=None
         result = {"content": f"{title}...", "emotion": "neutral", "translation": ""}
 
     result.setdefault("translation", "")
+    result.setdefault("tts_text", result["content"])
     if result.get("emotion") not in emotions:
         result["emotion"] = "neutral"
 

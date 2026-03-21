@@ -128,10 +128,10 @@ class TopicTalker:
             self._generating = False
 
     async def get_next(self):
-        """次の発話をリアルタイム生成する。直前の発話と会話から自然な続きを作る。
+        """次の発話をリアルタイム生成する。長い文章は句読点で自動分割してセグメントリストで返す。
 
         Returns:
-            dict: {"content": str, "emotion": str, "translation": str} or None
+            list[dict] or None: [{"content": str, "emotion": str, "tts_text": str, "translation": str}, ...] or None
         """
         topic = db.get_active_topic()
         if not topic:
@@ -154,20 +154,35 @@ class TopicTalker:
                 timeline=timeline,
             )
 
-            # 発話履歴としてDBに保存
+            # 句読点で自動分割
+            from src.speech_pipeline import SpeechPipeline
+            content_parts = SpeechPipeline.split_sentences(result["content"])
+            tts_parts = SpeechPipeline.split_sentences(result.get("tts_text", result["content"]))
+
+            # セグメントを組み立て（感情・翻訳は全セグメント共通）
+            segments = []
+            for i, content in enumerate(content_parts):
+                tts_text = tts_parts[i] if i < len(tts_parts) else content
+                segments.append({
+                    "content": content,
+                    "emotion": result["emotion"],
+                    "tts_text": tts_text,
+                    "translation": result.get("translation", "") if i == 0 else "",
+                })
+
+            # 全文をまとめて発話履歴としてDBに保存
             db.add_topic_scripts(topic["id"], [{
                 "content": result["content"],
                 "emotion": result["emotion"],
                 "sort_order": 0,
             }])
-            # 即座に発話済みにする
             script = db.get_next_unspoken_script(topic["id"])
             if script:
                 db.mark_script_spoken(script["id"])
 
             self.mark_spoken()
-            logger.info("[topic] セリフ生成完了: %s", result["content"])
-            return result
+            logger.info("[topic] セリフ生成完了 (%dセグメント): %s", len(segments), result["content"])
+            return segments
         except Exception as e:
             logger.error("[topic] セリフ生成失敗: %s", e)
             return None

@@ -288,6 +288,21 @@ async function saveViewerNote(btn, userId) {
   }
 }
 
+// --- 発話設定 ---
+async function loadSpeechSettings() {
+  try {
+    const d = await (await fetch('/api/speech/settings')).json();
+    const slider = document.getElementById('speech-max-chars');
+    const label = document.getElementById('speech-max-chars-val');
+    if (slider) slider.value = d.max_chars;
+    if (label) label.textContent = d.max_chars + '字';
+  } catch (e) {}
+}
+
+async function setSpeechMaxChars(val) {
+  await api('POST', '/api/speech/settings', { max_chars: Number(val) });
+}
+
 // --- レイヤー編集 ---
 function startLayerEdit(type) {
   const key = type === 'self-note' ? 'self_note' : type;

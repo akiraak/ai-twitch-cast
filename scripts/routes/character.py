@@ -137,6 +137,24 @@ async def get_character_prompt_doc():
     return PlainTextResponse(doc_path.read_text(encoding="utf-8"))
 
 
+@router.get("/api/speech/settings")
+async def get_speech_settings():
+    """発話設定を取得する"""
+    max_chars = int(db.get_setting("speech.max_chars", "100"))
+    return {"max_chars": max_chars}
+
+
+@router.post("/api/speech/settings")
+async def update_speech_settings(request: Request):
+    """発話設定を更新する"""
+    body = await request.json()
+    if "max_chars" in body:
+        val = max(30, min(200, int(body["max_chars"])))
+        db.set_setting("speech.max_chars", str(val))
+        return {"ok": True, "max_chars": val}
+    return {"ok": False, "error": "max_chars is required"}
+
+
 @router.get("/api/language")
 async def get_language():
     """配信言語設定と選択肢一覧を返す"""
