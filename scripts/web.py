@@ -163,13 +163,15 @@ async def startup():
     except Exception:
         pass
 
-    # 言語モードを復元
+    # 配信言語設定を復元
     try:
-        lang = scene_config.load_config_value("language_mode")
-        if lang:
-            from src.prompt_builder import set_language_mode
-            set_language_mode(lang)
-            logger.info("言語モード復元: %s", lang)
+        from src.prompt_builder import set_stream_language
+        primary = scene_config.load_config_value("stream_lang_primary")
+        if primary:
+            sub = scene_config.load_config_value("stream_lang_sub") or "none"
+            mix = scene_config.load_config_value("stream_lang_mix") or "low"
+            set_stream_language(primary, sub, mix)
+            logger.info("配信言語復元: primary=%s, sub=%s, mix=%s", primary, sub, mix)
     except Exception:
         pass
 

@@ -32,7 +32,6 @@ class TestConvertLangTags:
     def test_no_tags_short_word_ignored(self):
         """1文字の英語はタグ付けしない"""
         result = _convert_lang_tags("AはBです")
-        # 1文字 "A" と "B" はそのまま（< 2文字なのでスキップ）
         assert "[English]" not in result
 
     def test_pure_japanese_unchanged(self):
@@ -50,15 +49,15 @@ class TestGetTtsStyle:
         assert isinstance(style, str)
         assert len(style) > 0
 
-    def test_ja_mode_returns_ja_style(self):
-        from src.prompt_builder import set_language_mode, LANGUAGE_MODES
-        set_language_mode("ja")
+    def test_contains_cheerful(self):
         style = _get_tts_style()
-        assert style == LANGUAGE_MODES["ja"]["tts_style"]
+        assert "cheerful" in style
 
-    def test_en_mode_returns_en_style(self):
-        from src.prompt_builder import set_language_mode, LANGUAGE_MODES
-        set_language_mode("en_bilingual")
-        style = _get_tts_style()
-        assert style == LANGUAGE_MODES["en_bilingual"]["tts_style"]
-        set_language_mode("ja")  # cleanup
+    def test_different_settings_different_style(self):
+        from src.prompt_builder import set_stream_language
+        set_stream_language("ja", "en", "low")
+        style_ja = _get_tts_style()
+        set_stream_language("en", "ja", "low")
+        style_en = _get_tts_style()
+        assert style_ja != style_en
+        set_stream_language("ja", "en", "low")  # cleanup

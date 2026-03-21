@@ -277,7 +277,7 @@ function showSubtitle(data) {
   subtitleEl.querySelector('.author').textContent = '';
   subtitleEl.querySelector('.trigger-text').textContent = data.trigger_text;
   subtitleEl.querySelector('.speech').textContent = data.speech;
-  subtitleEl.querySelector('.english').textContent = data.english || '';
+  subtitleEl.querySelector('.translation').textContent = data.translation || '';
   subtitleEl.classList.add('visible');
 }
 

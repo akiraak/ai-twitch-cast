@@ -1,7 +1,7 @@
-"""キャラクター・言語モード APIのテスト"""
+"""キャラクター・配信言語 APIのテスト"""
 
 from src.ai_responder import invalidate_character_cache
-from src.prompt_builder import set_language_mode
+from src.prompt_builder import set_stream_language
 
 
 class TestGetCharacter:
@@ -51,7 +51,6 @@ class TestUpdatePersona:
         resp = api_client.put("/api/character/persona", json={"text": "テスト用ペルソナ"})
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
-        # 更新が反映されていることを確認
         layers = api_client.get("/api/character/layers").json()
         assert layers["persona"] == "テスト用ペルソナ"
 
@@ -63,34 +62,47 @@ class TestUpdatePersona:
         assert layers["persona"] == ""
 
 
-
 class TestGetLanguage:
-    def test_returns_modes(self, api_client):
+    def test_returns_language_settings(self, api_client):
         resp = api_client.get("/api/language")
         assert resp.status_code == 200
         data = resp.json()
-        assert "current" in data
-        assert "modes" in data
-        assert len(data["modes"]) >= 5
-        # 1つだけactiveがTrue
-        active = [m for m in data["modes"] if m["active"]]
-        assert len(active) == 1
+        assert "primary" in data
+        assert "sub" in data
+        assert "mix" in data
+        assert "languages" in data
+        assert "mix_levels" in data
+        assert len(data["languages"]) >= 8
+        assert len(data["mix_levels"]) == 3
 
 
 class TestSetLanguage:
     def setup_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")
 
-    def test_set_valid_mode(self, api_client):
-        resp = api_client.post("/api/language", json={"mode": "en_bilingual"})
+    def test_set_valid_language(self, api_client):
+        resp = api_client.post("/api/language", json={"primary": "en", "sub": "ja", "mix": "medium"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["primary"] == "en"
+        assert data["sub"] == "ja"
+        assert data["mix"] == "medium"
+
+    def test_set_sub_none(self, api_client):
+        resp = api_client.post("/api/language", json={"primary": "ja", "sub": "none", "mix": "low"})
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
-        assert resp.json()["mode"] == "en_bilingual"
 
-    def test_set_invalid_mode(self, api_client):
-        resp = api_client.post("/api/language", json={"mode": "invalid"})
+    def test_set_invalid_primary(self, api_client):
+        resp = api_client.post("/api/language", json={"primary": "invalid", "sub": "en", "mix": "low"})
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is False
+
+    def test_set_same_primary_sub(self, api_client):
+        resp = api_client.post("/api/language", json={"primary": "ja", "sub": "ja", "mix": "low"})
         assert resp.status_code == 200
         assert resp.json()["ok"] is False
 
     def teardown_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")

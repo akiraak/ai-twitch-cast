@@ -108,7 +108,7 @@ AI応答は必ず以下のJSON形式で返されます。
   "response": "チャット・字幕に表示するテキスト",
   "tts_text": "TTS用テキスト（[lang:en]English[/lang]タグ付き）",
   "emotion": "感情名",
-  "english": "翻訳テキスト"
+  "translation": "翻訳テキスト"
 }
 ```
 
@@ -117,7 +117,7 @@ AI応答は必ず以下のJSON形式で返されます。
 | `response` | Twitchチャット投稿・字幕表示。マークアップなし |
 | `tts_text` | TTS音声合成用。`[lang:xx]...[/lang]` タグで言語切替 |
 | `emotion` | VRMアバターのBlendShape制御に使用 |
-| `english` | 言語モードに応じた翻訳（字幕の2行目に表示） |
+| `translation` | 配信言語設定に応じた翻訳（字幕の2行目に表示） |
 
 ## 文字数制限
 

@@ -113,14 +113,14 @@ class CommentReader:
             script = await self._topic_talker.get_next()
             if not script:
                 return
-            english = script.get("english", "")
+            translation = script.get("translation", "")
             logger.info("[topic] 自発的発話: [%s] %s", script["emotion"], script["content"])
             self._speech.apply_emotion(script["emotion"])
             await self._speech.speak(script["content"], subtitle={
                 "author": "ちょビ",
                 "trigger_text": script["content"],
-                "result": {"speech": script["content"], "emotion": script["emotion"], "english": english},
-            }, chat_result={"speech": script["content"], "english": english},
+                "result": {"speech": script["content"], "emotion": script["emotion"], "translation": translation},
+            }, chat_result={"speech": script["content"], "translation": translation},
                 tts_text=script.get("tts_text"), post_to_chat=self._post_to_chat)
             self._speech.apply_emotion("neutral")
             await self._speech.notify_overlay_end()
@@ -156,7 +156,7 @@ class CommentReader:
             return result
         except Exception as e:
             logger.error("WebUI応答失敗: %s", e)
-            return {"speech": "", "emotion": "neutral", "english": ""}
+            return {"speech": "", "emotion": "neutral", "translation": ""}
 
     async def _respond(self, author, message):
         """1件のコメントにAIで応答して読み上げる"""
@@ -263,9 +263,9 @@ class CommentReader:
         """AI応答をTwitchチャットに投稿する"""
         try:
             text = SpeechPipeline.strip_lang_tags(result["speech"])
-            english = result.get("english", "")
-            if english:
-                text = f"{text} ({english})"
+            translation = result.get("translation", "")
+            if translation:
+                text = f"{text} ({translation})"
             await self._chat.send_message(text)
         except Exception as e:
             logger.error("チャット投稿失敗: %s", e)

@@ -617,7 +617,7 @@ public class MainForm : Form
                             author = commentData.GetProperty("author").GetString(),
                             message = commentData.GetProperty("trigger_text").GetString(),
                             speech = commentData.GetProperty("speech").GetString(),
-                            english = commentData.TryGetProperty("english", out var eng) ? eng.GetString() : "",
+                            translation = commentData.TryGetProperty("translation", out var tr) ? tr.GetString() : "",
                             emotion = commentData.TryGetProperty("emotion", out var emo) ? emo.GetString() : "neutral",
                         });
                     }

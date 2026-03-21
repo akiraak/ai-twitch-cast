@@ -122,7 +122,7 @@ class TestGetNext:
     async def test_generates_and_saves(self, test_db, mock_gemini):
         import json
         mock_gemini.models.generate_content.return_value.text = json.dumps({
-            "content": "Pythonいいよね", "emotion": "joy", "english": "Python is great",
+            "content": "Pythonいいよね", "emotion": "joy", "translation": "Python is great",
         })
         tt = TopicTalker()
         await tt.set_topic("Python")
@@ -135,7 +135,7 @@ class TestGetNext:
     async def test_marks_spoken_time(self, test_db, mock_gemini):
         import json
         mock_gemini.models.generate_content.return_value.text = json.dumps({
-            "content": "test", "emotion": "neutral", "english": "",
+            "content": "test", "emotion": "neutral", "translation": "",
         })
         tt = TopicTalker()
         await tt.set_topic("topic")

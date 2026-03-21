@@ -31,24 +31,37 @@ async def avatar_speak(body: SpeakRequest):
 
 
 class TtsTestRequest(BaseModel):
-    primary_lang: str = "日本語"
-    secondary_lang: str = "英語"
+    pattern: str = "greeting"
+
+
+# テストパターン定義
+_TTS_PATTERNS = {
+    "greeting": "Say a short greeting to viewers (1 sentence).",
+    "topic": "Share a fun fact or interesting tidbit about something you like (1 sentence).",
+    "react": "React to a viewer saying 'I just started learning programming' (1 sentence).",
+    "question": "Ask viewers a casual question to start a conversation (1 sentence).",
+    "story": "Tell a short story or anecdote about something funny that happened recently (3-4 sentences).",
+    "explain": "Explain something interesting you know about (a technology, a hobby, or a random topic) in detail (3-4 sentences).",
+}
 
 
 @router.post("/api/tts/test")
 async def tts_test(body: TtsTestRequest):
-    """指定言語でテストテキストを生成してTTS再生する"""
-    langs = {body.primary_lang, body.secondary_lang}
-    no_use = []
-    if "日本語" not in langs:
-        no_use.append("Japanese")
-    if "英語" not in langs:
-        no_use.append("English")
-    restriction = f" Do NOT use {', '.join(no_use)}." if no_use else ""
-    detail = (
-        f"Say a short greeting (1 sentence) mixing {body.primary_lang} and {body.secondary_lang}."
-        f"{restriction}"
-    )
+    """配信言語設定でテスト発話する"""
+    import random
+    from src.prompt_builder import get_stream_language, SUPPORTED_LANGUAGES
+    lang = get_stream_language()
+    p_name = SUPPORTED_LANGUAGES.get(lang["primary"], lang["primary"])
+
+    pattern = _TTS_PATTERNS.get(body.pattern)
+    if not pattern:
+        pattern = random.choice(list(_TTS_PATTERNS.values()))
+
+    if lang["sub"] != "none":
+        s_name = SUPPORTED_LANGUAGES.get(lang["sub"], lang["sub"])
+        detail = f"{pattern} Mix {p_name} and {s_name}."
+    else:
+        detail = f"{pattern} Speak in {p_name}."
     asyncio.create_task(state.reader.speak_event("TTSテスト", detail))
     return {"ok": True}
 

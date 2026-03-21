@@ -131,7 +131,7 @@ class TopicTalker:
         """次の発話をリアルタイム生成する。直前の発話と会話から自然な続きを作る。
 
         Returns:
-            dict: {"content": str, "emotion": str, "english": str} or None
+            dict: {"content": str, "emotion": str, "translation": str} or None
         """
         topic = db.get_active_topic()
         if not topic:

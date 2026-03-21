@@ -38,7 +38,7 @@ class SpeechPipeline:
             "author": author,
             "trigger_text": trigger_text,
             "speech": self.strip_lang_tags(result["speech"]),
-            "english": result.get("english", ""),
+            "translation": result.get("translation", ""),
             "emotion": result["emotion"],
         })
 

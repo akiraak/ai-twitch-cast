@@ -18,7 +18,7 @@ from src.ai_responder import (
     load_character,
     seed_character,
 )
-from src.prompt_builder import set_language_mode
+from src.prompt_builder import set_stream_language
 
 
 class TestCharacterManagement:
@@ -55,7 +55,7 @@ class TestCharacterManagement:
 
 class TestGenerateResponse:
     def setup_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")
         invalidate_character_cache()
 
     def test_valid_json_response(self, test_db, mock_env, mock_gemini):
@@ -63,12 +63,12 @@ class TestGenerateResponse:
             "speech": "やほー！",
             "tts_text": "やほー！",
             "emotion": "joy",
-            "english": "Hey!",
+            "translation": "Hey!",
         })
         result = generate_response("viewer", "こんにちは")
         assert result["speech"] == "やほー！"
         assert result["emotion"] == "joy"
-        assert result["english"] == "Hey!"
+        assert result["translation"] == "Hey!"
 
     def test_invalid_json_fallback(self, test_db, mock_env, mock_gemini):
         mock_gemini.models.generate_content.return_value.text = "broken json"
@@ -83,12 +83,12 @@ class TestGenerateResponse:
         result = generate_response("viewer", "msg")
         assert result["emotion"] == "neutral"
 
-    def test_english_defaults_to_empty(self, test_db, mock_env, mock_gemini):
+    def test_translation_defaults_to_empty(self, test_db, mock_env, mock_gemini):
         mock_gemini.models.generate_content.return_value.text = json.dumps({
             "speech": "test", "emotion": "neutral"
         })
         result = generate_response("viewer", "msg")
-        assert result["english"] == ""
+        assert result["translation"] == ""
 
     def test_timeline_passed_to_gemini(self, test_db, mock_env, mock_gemini):
         mock_gemini.models.generate_content.return_value.text = json.dumps({
@@ -107,12 +107,12 @@ class TestGenerateResponse:
 
 class TestGenerateEventResponse:
     def setup_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")
         invalidate_character_cache()
 
     def test_valid_response(self, test_db, mock_env, mock_gemini):
         mock_gemini.models.generate_content.return_value.text = json.dumps({
-            "speech": "コミットきた！", "emotion": "joy", "english": "Commit!"
+            "speech": "コミットきた！", "emotion": "joy", "translation": "Commit!"
         })
         result = generate_event_response("commit", "fix: bug修正")
         assert result["speech"] == "コミットきた！"
@@ -126,7 +126,7 @@ class TestGenerateEventResponse:
 
 class TestGenerateUserNotes:
     def setup_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")
         invalidate_character_cache()
 
     def test_empty_input(self, test_db, mock_env, mock_gemini):
@@ -149,7 +149,7 @@ class TestGenerateUserNotes:
 
 class TestGenerateSelfNote:
     def setup_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")
         invalidate_character_cache()
 
     def test_empty_comments_returns_current(self, test_db, mock_env, mock_gemini):
@@ -201,7 +201,7 @@ class TestGenerateSelfNote:
 
 class TestGeneratePersonaFromPrompt:
     def setup_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")
         invalidate_character_cache()
 
     def test_generates_from_system_prompt(self, test_db, mock_env, mock_gemini):

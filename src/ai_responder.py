@@ -6,7 +6,7 @@ import os
 from google.genai import types
 
 from src.gemini_client import get_client
-from src.prompt_builder import LANGUAGE_MODES, build_system_prompt, get_language_mode
+from src.prompt_builder import build_language_rules, build_system_prompt, get_stream_language
 
 # DBが空のときに使うデフォルトキャラクター設定
 DEFAULT_CHARACTER = {
@@ -183,9 +183,9 @@ def generate_response(author, message, comment_count=0, timeline=None, stream_co
     try:
         result = json.loads(response.text)
     except (json.JSONDecodeError, AttributeError):
-        result = {"speech": message, "emotion": "neutral", "english": ""}
+        result = {"speech": message, "emotion": "neutral", "translation": ""}
 
-    result.setdefault("english", "")
+    result.setdefault("translation", "")
 
     # emotionが定義外の場合はneutralにフォールバック
     char = get_character()
@@ -467,7 +467,7 @@ def generate_topic_line(title, description="", last_speeches=None, timeline=None
     emotions = char.get("emotions", {})
     emotion_list = ", ".join(emotions.keys())
 
-    lang = LANGUAGE_MODES.get(get_language_mode(), LANGUAGE_MODES["ja"])
+    lang_rules = build_language_rules()
 
     parts = [
         char["system_prompt"],
@@ -500,15 +500,14 @@ def generate_topic_line(title, description="", last_speeches=None, timeline=None
                 parts.append(f"  → {c['text']}")
 
     parts.extend(["", "## 言語ルール"])
-    for rule in lang["rules"]:
+    for rule in lang_rules:
         parts.append(rule)
 
-    english_label = lang.get("english_label", "翻訳")
     parts.extend([
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返してください。それ以外のテキストは出力しないでください。",
-        f'{{"content": "セリフ", "tts_text": "読み上げ用テキスト", "emotion": "感情", "english": "{english_label}"}}',
+        '{"content": "セリフ", "tts_text": "読み上げ用テキスト", "emotion": "感情", "translation": "翻訳テキスト"}',
         f"emotionは次のいずれか: {emotion_list}",
         "",
         "## contentとtts_textの違い（重要・厳守）",
@@ -538,9 +537,9 @@ def generate_topic_line(title, description="", last_speeches=None, timeline=None
     try:
         result = json.loads(response.text)
     except (json.JSONDecodeError, AttributeError):
-        result = {"content": f"{title}...", "emotion": "neutral", "english": ""}
+        result = {"content": f"{title}...", "emotion": "neutral", "translation": ""}
 
-    result.setdefault("english", "")
+    result.setdefault("translation", "")
     if result.get("emotion") not in emotions:
         result["emotion"] = "neutral"
 
@@ -556,15 +555,14 @@ def generate_event_response(event_type, detail, last_event_responses=None):
         last_event_responses: 直前のイベント応答リスト（繰り返し防止用）
 
     Returns:
-        dict: {"speech": str, "emotion": str, "english": str}
+        dict: {"speech": str, "emotion": str, "translation": str}
     """
     client = get_client()
     char = get_character()
     emotions = char.get("emotions", {})
     emotion_list = ", ".join(emotions.keys())
 
-    lang = LANGUAGE_MODES.get(get_language_mode(), LANGUAGE_MODES["ja"])
-    english_label = lang.get("english_label", "翻訳")
+    lang_rules = build_language_rules()
 
     parts = [
         char["system_prompt"],
@@ -584,13 +582,13 @@ def generate_event_response(event_type, detail, last_event_responses=None):
         "",
         "## 言語ルール",
     ])
-    for rule in lang["rules"]:
+    for rule in lang_rules:
         parts.append(rule)
     parts.extend([
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        f'{{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "english": "{english_label}"}}',
+        '{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "translation": "翻訳テキスト"}',
         f"emotionは次のいずれか: {emotion_list}",
         "",
         "## speechとtts_textの違い（重要・厳守）",
@@ -615,9 +613,9 @@ def generate_event_response(event_type, detail, last_event_responses=None):
     try:
         result = json.loads(response.text)
     except (json.JSONDecodeError, AttributeError):
-        result = {"speech": detail, "emotion": "neutral", "english": ""}
+        result = {"speech": detail, "emotion": "neutral", "translation": ""}
 
-    result.setdefault("english", "")
+    result.setdefault("translation", "")
     if result.get("emotion") not in emotions:
         result["emotion"] = "neutral"
 

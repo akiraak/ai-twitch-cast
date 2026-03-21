@@ -299,7 +299,7 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   border-left: 2px solid var(--accent);
 }
 .chat-msg-err { margin-bottom: 4px; color: var(--red); font-size: 11px; }
-.chat-msg-english { margin-bottom: 6px; color: var(--text-dim); font-size: 11px; padding-left: 10px; font-style: italic; }
+.chat-msg-translation { margin-bottom: 6px; color: var(--text-dim); font-size: 11px; padding-left: 10px; font-style: italic; }
 .chat-input-area {
   display: flex;
   gap: 4px;
@@ -481,7 +481,7 @@ wv?.addEventListener('message', e => {
     case 'comment':
       appendChatMsg(m.author, m.message);
       appendChatAi(m.speech);
-      if (m.english) appendChatEnglish(m.english);
+      if (m.translation) appendChatTranslation(m.translation);
       break;
   }
 });
@@ -713,7 +713,7 @@ async function sendChat() {
     });
     const data = await res.json();
     if (data.speech) appendChatAi(data.speech);
-    if (data.english) appendChatEnglish(data.english);
+    if (data.translation) appendChatTranslation(data.translation);
   } catch (e) {
     appendChatErr('Error: ' + e.message);
   } finally {
@@ -739,10 +739,10 @@ function appendChatAi(text) {
   c.appendChild(d);
   c.scrollTop = c.scrollHeight;
 }
-function appendChatEnglish(text) {
+function appendChatTranslation(text) {
   const c = $('chatMessages');
   const d = document.createElement('div');
-  d.className = 'chat-msg-english';
+  d.className = 'chat-msg-translation';
   d.textContent = text;
   c.appendChild(d);
   c.scrollTop = c.scrollHeight;

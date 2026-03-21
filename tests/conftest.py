@@ -44,7 +44,7 @@ def mock_gemini(monkeypatch):
     get_clientをfrom importしているモジュールすべてにパッチする。
     """
     client = MagicMock()
-    client.models.generate_content.return_value.text = '{"response": "テスト応答", "emotion": "neutral", "english": "test"}'
+    client.models.generate_content.return_value.text = '{"response": "テスト応答", "emotion": "neutral", "translation": "test"}'
 
     getter = lambda: client
     import src.gemini_client as gc

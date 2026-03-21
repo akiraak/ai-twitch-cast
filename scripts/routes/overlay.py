@@ -206,7 +206,7 @@ async def debug_subtitle():
         "type": "comment",
         "trigger_text": "こんにちは！テスト表示です",
         "speech": "これはデバッグ用の字幕サンプルです。位置やサイズを調整してください！",
-        "english": "This is a debug subtitle sample.",
+        "translation": "This is a debug subtitle sample.",
     })
     return {"ok": True}
 

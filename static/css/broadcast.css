@@ -59,7 +59,7 @@
     text-shadow: 0 0.1vw 0.4vw rgba(0, 0, 0, 0.7), 0 0 1vw rgba(124, 77, 255, 0.2);
     letter-spacing: 0.03vw;
   }
-  #subtitle .english {
+  #subtitle .translation {
     font-size: 1.04vw;
     color: #b2dfdb;
     font-style: italic;
@@ -190,7 +190,7 @@
   /* === 共通テキスト色オーバーライド（WebUIから設定時に適用、!importantでID詳細度に勝つ） === */
   .custom-text-color,
   .custom-text-color .speech,
-  .custom-text-color .english,
+  .custom-text-color .translation,
   .custom-text-color .todo-item,
   .custom-text-color .todo-title,
   .custom-text-color .todo-section,

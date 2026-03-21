@@ -7,7 +7,7 @@ def test_chat_webui_sends_message(api_client, monkeypatch):
     """POST /api/chat/webui がreader.respond_webuiを呼ぶ"""
     import scripts.state as st
 
-    mock_result = {"speech": "テスト応答", "emotion": "neutral", "english": "test"}
+    mock_result = {"speech": "テスト応答", "emotion": "neutral", "translation": "test"}
     st.reader.respond_webui = AsyncMock(return_value=mock_result)
     st.ensure_reader = AsyncMock()
 
@@ -22,7 +22,7 @@ def test_chat_webui_empty_message(api_client, monkeypatch):
     """空メッセージでもエラーにならない"""
     import scripts.state as st
 
-    mock_result = {"speech": "", "emotion": "neutral", "english": ""}
+    mock_result = {"speech": "", "emotion": "neutral", "translation": ""}
     st.reader.respond_webui = AsyncMock(return_value=mock_result)
     st.ensure_reader = AsyncMock()
 
@@ -34,7 +34,7 @@ def test_chat_webui_ensures_reader(api_client, monkeypatch):
     """ensure_readerが呼ばれることを確認"""
     import scripts.state as st
 
-    mock_result = {"speech": "応答", "emotion": "neutral", "english": ""}
+    mock_result = {"speech": "応答", "emotion": "neutral", "translation": ""}
     st.reader.respond_webui = AsyncMock(return_value=mock_result)
     st.ensure_reader = AsyncMock()
 

@@ -93,6 +93,13 @@
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
+  .char-subtabs { display: flex; gap: 0; border-bottom: 2px solid #e0d0f0; margin-bottom: 16px; }
+  .char-subtab { padding: 8px 20px; cursor: pointer; font-size: 0.85rem; color: #9a88b5; border-bottom: 2px solid transparent; margin-bottom: -2px; user-select: none; }
+  .char-subtab:hover { color: #6a5590; }
+  .char-subtab.active { color: #7b1fa2; border-bottom-color: #7b1fa2; font-weight: 600; }
+  .char-subcontent { display: none; }
+  .char-subcontent.active { display: block; }
+
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
   .card { background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #d0c0e8; }
   .card h2 { font-size: 0.95rem; margin-bottom: 12px; color: #7b1fa2; display: flex; align-items: center; gap: 8px; font-weight: 600; }

@@ -1,111 +1,125 @@
-"""プロンプト組み立て・言語モードプリセット"""
+"""プロンプト組み立て・配信言語設定"""
 
-# 言語モードのプリセット定義
-LANGUAGE_MODES = {
-    "ja": {
-        "name": "日本語メイン",
-        "description": "日本語ベースで返答、英語訳を添える",
-        "tts_style": "Read in a cheerful, warm, always-smiling tone (にこにこ). IMPORTANT: When you encounter English words or phrases, pronounce them with native English pronunciation, NOT katakana/Japanese pronunciation. Switch naturally between Japanese and English pronunciation.",
-        "rules": [
-            "これは日本語の配信なので、日本語ベースで返答しつつ相手の言語も混ぜて親しみを出す。",
-            "- 日本語コメント → speech: 日本語、english: 英語訳",
-            "- 英語コメント → speech: 英語メインで返答、english: 日本語訳",
-            "- その他の言語（スペイン語・韓国語等） → speech: 相手の言語での挨拶や一言を混ぜつつ日本語も交えて返答、english: 英語訳",
-            "- 例: スペイン語コメントなら「¡Hola! いらっしゃい！Gracias por venir! 楽しんでいってね～」のように両方混ぜると喜ばれる",
-        ],
-        "english_label": "翻訳（上記言語ルール参照）",
-    },
-    "en_bilingual": {
-        "name": "英語メイン＋日本語字幕",
-        "description": "英語で返答、日本語訳を添える（海外視聴者向け）",
-        "tts_style": "Read in a cheerful, warm, and friendly tone with natural English pronunciation",
-        "rules": [
-            "This is an English-language stream. Always respond in English.",
-            "- English comments → speech: English, english: 日本語訳",
-            "- Japanese comments → speech: English (you may include a brief Japanese phrase for friendliness), english: 日本語訳",
-            "- Other languages → speech: English (include a greeting in their language), english: 日本語訳",
-            "- Keep a warm, friendly anime-style personality in English",
-        ],
-        "english_label": "日本語訳",
-    },
-    "en_mixed": {
-        "name": "英語＋日本語混ぜ",
-        "description": "英語ベースに日本語を自然に混ぜる（日本人キャラの英語配信）",
-        "tts_style": "Read in a cheerful, anime-style tone. Use natural English pronunciation for English words and Japanese pronunciation for Japanese words",
-        "rules": [
-            "You are a Japanese streamer who speaks primarily in English but naturally mixes in Japanese.",
-            "",
-            "## 日本語の混ぜ方（重要：バリエーションを持たせること）",
-            "日本語は文中のどこにでも置ける。毎回違う位置・違う使い方をすること。",
-            "同じパターン（特に語尾だけに日本語を付ける）を繰り返すのは絶対にNG。",
-            "",
-            "位置のバリエーション:",
-            "- 文頭: 'えー、I didn't know that!' / 'なるほど、that makes sense!'",
-            "- 文中: 'That's like めっちゃ cool though' / 'I've been すごく into that lately'",
-            "- 独立: 'Wait really? うそー! Tell me more!'",
-            "- 感嘆: 'やったー! We did it!' / 'あー、I see what you mean'",
-            "- 全日本語フレーズ: 'ちょっと待って、what do you mean?' / 'それな！I totally agree'",
-            "",
-            "やってはいけないこと:",
-            "- 毎回語尾に ne/ne~/yo を付けるだけの単調なパターン",
-            "- ローマ字の日本語（sugoi, kawaii, oishii等）の多用。ひらがな・カタカナで書く",
-            "- 同じ日本語単語を連続する返答で繰り返す",
-            "",
-            "- English comments → speech: English with Japanese mixed in, english: 日本語訳",
-            "- Japanese comments → speech: Mix of English and Japanese, english: full 日本語訳",
-            "- Other languages → speech: English with Japanese + a word in their language, english: 日本語訳",
-        ],
-        "english_label": "日本語訳",
-    },
-    "multilingual": {
-        "name": "マルチリンガル",
-        "description": "相手の言語に合わせる、デフォルト英語",
-        "tts_style": "Read in a cheerful, friendly tone. Pronounce each language naturally in its native accent",
-        "rules": [
-            "You are a multilingual streamer. Match the viewer's language when possible, default to English.",
-            "- English comments → speech: English, english: 日本語訳",
-            "- Japanese comments → speech: 日本語, english: English translation",
-            "- Spanish comments → speech: Spanish with English mix, english: 日本語訳",
-            "- Korean comments → speech: Korean with English mix, english: 日本語訳",
-            "- Other languages → speech: attempt their language + English fallback, english: 日本語訳",
-            "- Always be warm and welcoming regardless of language",
-        ],
-        "english_label": "翻訳（上記言語ルール参照）",
-    },
-    "en_global": {
-        "name": "英語＋相手の言語＋日本語",
-        "description": "英語ベースで相手の言語を混ぜつつ、日本語も自然に入れる",
-        "tts_style": "Read in a cheerful, anime-style tone. Use natural English pronunciation for English words and Japanese pronunciation for Japanese words",
-        "rules": [
-            "You are a Japanese streamer speaking primarily in English. You naturally mix in Japanese and the viewer's language.",
-            "- Always use English as the main language",
-            "- Mix in Japanese using ひらがな・カタカナ（ローマ字は使わない）",
-            "- Japanese is placed anywhere in the sentence—beginning, middle, or as standalone phrases. NEVER only at the end.",
-            "- When a viewer speaks a non-English language, include words/phrases in their language too",
-            "- English comments → speech: English + Japanese mixed in, english: 日本語訳",
-            "- Japanese comments → speech: English + Japanese mix (more Japanese than usual), english: 日本語の全文訳",
-            "- Spanish comments → speech: English + Spanish phrases + Japanese, english: 日本語訳",
-            "- Korean comments → speech: English + Korean phrases + Japanese, english: 日本語訳",
-            "- Other languages → speech: English + their language greetings + Japanese, english: 日本語訳",
-        ],
-        "english_label": "日本語訳",
-    },
+# 対応言語一覧
+SUPPORTED_LANGUAGES = {
+    "ja": "日本語",
+    "en": "English",
+    "ko": "한국어",
+    "es": "Español",
+    "zh": "中文",
+    "fr": "Français",
+    "pt": "Português",
+    "de": "Deutsch",
 }
 
-_language_mode = "ja"
+# 混ぜ具合レベル
+MIX_LEVELS = ("low", "medium", "high")
+
+# デフォルト配信言語設定
+_stream_lang = {"primary": "ja", "sub": "en", "mix": "low"}
 
 
-def get_language_mode():
-    """現在の言語モードを返す"""
-    return _language_mode
+def get_stream_language():
+    """現在の配信言語設定を返す"""
+    return dict(_stream_lang)
 
 
-def set_language_mode(mode):
-    """言語モードを設定する"""
-    global _language_mode
-    if mode not in LANGUAGE_MODES:
-        raise ValueError(f"Unknown language mode: {mode}")
-    _language_mode = mode
+def set_stream_language(primary, sub="none", mix="low"):
+    """配信言語を設定する
+
+    Args:
+        primary: 基本言語コード（例: "ja", "en"）
+        sub: サブ言語コード（例: "en", "ja", "none"）
+        mix: 混ぜ具合（"low", "medium", "high"）
+    """
+    if primary not in SUPPORTED_LANGUAGES:
+        raise ValueError(f"Unknown primary language: {primary}")
+    if sub != "none" and sub not in SUPPORTED_LANGUAGES:
+        raise ValueError(f"Unknown sub language: {sub}")
+    if mix not in MIX_LEVELS:
+        raise ValueError(f"Unknown mix level: {mix}")
+    if sub != "none" and primary == sub:
+        raise ValueError("Primary and sub language must be different")
+    global _stream_lang
+    _stream_lang = {"primary": primary, "sub": sub, "mix": mix}
+
+
+def _lang_name(code):
+    """言語コードから言語名を返す"""
+    return SUPPORTED_LANGUAGES.get(code, code)
+
+
+def build_language_rules():
+    """現在の配信言語設定から言語ルールテキストを生成する
+
+    Returns:
+        list[str]: プロンプトに注入する言語ルール行のリスト
+    """
+    primary = _stream_lang["primary"]
+    sub = _stream_lang["sub"]
+    mix = _stream_lang["mix"]
+    p_name = _lang_name(primary)
+    rules = []
+
+    if sub == "none":
+        # サブ言語なし: 基本言語のみ
+        rules.append(f"{p_name}で返答する。")
+        rules.append(f"- コメントが別の言語の場合 → その言語で返答し、{p_name}も自然に混ぜる")
+        rules.append(f"- translationには{p_name}訳を入れる（コメントが{p_name}の場合はEnglish訳）")
+        return rules
+
+    s_name = _lang_name(sub)
+
+    rules.append(f"{p_name}をメインで話し、{s_name}を混ぜる。")
+
+    # 混ぜ具合に応じた指示
+    if mix == "low":
+        rules.append(f"- {s_name}は挨拶・感嘆詞・一単語程度にとどめる")
+    elif mix == "medium":
+        rules.append(f"- {s_name}をフレーズ単位で自然に混ぜる。文のどの位置にも置ける（文頭・文中・独立）")
+        rules.append(f"- 毎回同じ位置（語尾だけ等）にならないようにする")
+    else:  # high
+        rules.append(f"- {s_name}を文単位で積極的に使う。両言語ほぼ均等に混ぜる")
+        rules.append(f"- 1つの返答の中で両方の言語で文を作る")
+
+    # サブ言語がローマ字表記可能な場合の注意
+    if sub == "ja":
+        rules.append("- 日本語はひらがな・カタカナで書く。ローマ字（sugoi, kawaii等）は使わない")
+    elif primary == "ja":
+        pass  # 基本言語が日本語ならローマ字問題なし
+
+    # 他言語コメントへの対応（固定ルール）
+    rules.append(f"- コメントが{p_name}でも{s_name}でもない言語の場合 → その言語で返答する。{p_name}と{s_name}も自然に混ぜる")
+
+    # 翻訳欄の指示
+    rules.append(f"- translationには{s_name}訳を入れる")
+
+    return rules
+
+
+def build_tts_style():
+    """現在の配信言語設定からTTSスタイル指示を生成する
+
+    Returns:
+        str: Gemini TTSに渡すスタイル指示テキスト
+    """
+    primary = _stream_lang["primary"]
+    sub = _stream_lang["sub"]
+    p_name = _lang_name(primary)
+
+    parts = ["Read in a cheerful, warm, always-smiling tone (にこにこ)."]
+
+    if sub != "none":
+        s_name = _lang_name(sub)
+        parts.append(f"IMPORTANT: When you encounter {s_name} words, pronounce them with native {s_name} pronunciation.")
+        parts.append(f"Switch naturally between {p_name} and {s_name} pronunciation.")
+    else:
+        if primary != "ja":
+            parts.append(f"Use natural {p_name} pronunciation.")
+
+    parts.append("When you encounter other languages, pronounce them as naturally as possible.")
+
+    return " ".join(parts)
 
 
 def build_system_prompt(char, stream_context=None, self_note=None, persona=None):
@@ -156,12 +170,10 @@ def build_system_prompt(char, stream_context=None, self_note=None, persona=None)
             for item in stream_context["todo_items"]:
                 parts.append(f"  - {item}")
 
-    lang = LANGUAGE_MODES.get(_language_mode, LANGUAGE_MODES["ja"])
+    lang_rules = build_language_rules()
     parts.extend(["", "## 言語ルール"])
-    for rule in lang["rules"]:
+    for rule in lang_rules:
         parts.append(rule)
-
-    english_label = lang.get("english_label", "翻訳")
 
     # 感情分布ガイド
     parts.extend([
@@ -186,7 +198,7 @@ def build_system_prompt(char, stream_context=None, self_note=None, persona=None)
         "",
         "## 出力形式",
         "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        f'{{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "english": "{english_label}"}}',
+        '{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "translation": "翻訳テキスト"}',
         f"emotionは次のいずれか: {emotion_list}",
         "",
         "## speechとtts_textの違い（重要・厳守）",

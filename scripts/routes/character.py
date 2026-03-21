@@ -16,7 +16,7 @@ from src.ai_responder import (
     get_character, get_character_id,
     invalidate_character_cache,
 )
-from src.prompt_builder import LANGUAGE_MODES, get_language_mode, set_language_mode
+from src.prompt_builder import SUPPORTED_LANGUAGES, MIX_LEVELS, build_language_rules, build_tts_style, get_stream_language, set_stream_language
 
 router = APIRouter()
 
@@ -139,28 +139,33 @@ async def get_character_prompt_doc():
 
 @router.get("/api/language")
 async def get_language():
-    """利用可能な言語モードと現在の設定を返す"""
-    current = get_language_mode()
-    modes = []
-    for key, mode in LANGUAGE_MODES.items():
-        modes.append({
-            "key": key,
-            "name": mode["name"],
-            "description": mode["description"],
-            "rules": mode["rules"],
-            "active": key == current,
-        })
-    return {"current": current, "modes": modes}
+    """配信言語設定と選択肢一覧を返す"""
+    lang = get_stream_language()
+    languages = [{"code": k, "name": v} for k, v in SUPPORTED_LANGUAGES.items()]
+    return {
+        "primary": lang["primary"],
+        "sub": lang["sub"],
+        "mix": lang["mix"],
+        "languages": languages,
+        "mix_levels": list(MIX_LEVELS),
+        "text_rules": build_language_rules(),
+        "tts_style": build_tts_style(),
+    }
 
 
 @router.post("/api/language")
 async def set_language(request: Request):
-    """言語モードを変更する"""
+    """配信言語を変更する"""
     body = await request.json()
-    mode = body.get("mode", "")
-    if mode not in LANGUAGE_MODES:
-        return {"ok": False, "error": f"不明なモード: {mode}"}
-    set_language_mode(mode)
+    primary = body.get("primary", "")
+    sub = body.get("sub", "none")
+    mix = body.get("mix", "low")
+    try:
+        set_stream_language(primary, sub, mix)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     # DBに保存して永続化
-    scene_config.save_config_value("language_mode", mode)
-    return {"ok": True, "mode": mode}
+    scene_config.save_config_value("stream_lang_primary", primary)
+    scene_config.save_config_value("stream_lang_sub", sub)
+    scene_config.save_config_value("stream_lang_mix", mix)
+    return {"ok": True, "primary": primary, "sub": sub, "mix": mix}

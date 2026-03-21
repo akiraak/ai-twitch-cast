@@ -48,7 +48,7 @@ class TestNotifyOverlay:
     async def test_sends_comment_event(self):
         callback = AsyncMock()
         sp = SpeechPipeline(on_overlay=callback)
-        result = {"speech": "[lang:en]Hello[/lang]!", "english": "こんにちは", "emotion": "joy"}
+        result = {"speech": "[lang:en]Hello[/lang]!", "translation": "こんにちは", "emotion": "joy"}
         await sp.notify_overlay("alice", "hi", result)
 
         callback.assert_called_once()
@@ -57,7 +57,7 @@ class TestNotifyOverlay:
         assert event["author"] == "alice"
         assert event["trigger_text"] == "hi"
         assert event["speech"] == "Hello!"  # lang tags stripped
-        assert event["english"] == "こんにちは"
+        assert event["translation"] == "こんにちは"
         assert event["emotion"] == "joy"
 
     @pytest.mark.asyncio
@@ -74,7 +74,7 @@ class TestNotifyOverlay:
         await sp.notify_overlay("bob", "msg", result)
 
         event = callback.call_args[0][0]
-        assert event["english"] == ""
+        assert event["translation"] == ""
 
 
 # =====================================================

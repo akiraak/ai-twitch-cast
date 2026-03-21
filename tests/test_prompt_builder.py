@@ -1,52 +1,179 @@
-"""prompt_builder のテスト（言語モード・システムプロンプト構築・モジュール分離）"""
+"""prompt_builder のテスト（配信言語設定・システムプロンプト構築・モジュール分離）"""
 
 import pytest
 
 from src.prompt_builder import (
-    LANGUAGE_MODES,
+    SUPPORTED_LANGUAGES,
+    MIX_LEVELS,
+    build_language_rules,
     build_system_prompt,
-    get_language_mode,
-    set_language_mode,
+    build_tts_style,
+    get_stream_language,
+    set_stream_language,
 )
 from src.ai_responder import DEFAULT_CHARACTER
 
 
 # =====================================================
-# 言語モード管理
+# 配信言語設定
 # =====================================================
 
 
-class TestLanguageMode:
+class TestStreamLanguage:
     def setup_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")
 
-    def test_default_mode_is_ja(self):
-        set_language_mode("ja")
-        assert get_language_mode() == "ja"
+    def test_default_settings(self):
+        lang = get_stream_language()
+        assert lang["primary"] == "ja"
+        assert lang["sub"] == "en"
+        assert lang["mix"] == "low"
 
-    def test_set_valid_mode(self):
-        for mode in LANGUAGE_MODES:
-            set_language_mode(mode)
-            assert get_language_mode() == mode
+    def test_set_valid_language(self):
+        set_stream_language("en", "ja", "medium")
+        lang = get_stream_language()
+        assert lang["primary"] == "en"
+        assert lang["sub"] == "ja"
+        assert lang["mix"] == "medium"
 
-    def test_set_invalid_mode_raises(self):
+    def test_set_sub_none(self):
+        set_stream_language("ja", "none", "low")
+        lang = get_stream_language()
+        assert lang["sub"] == "none"
+
+    def test_invalid_primary_raises(self):
         with pytest.raises(ValueError):
-            set_language_mode("nonexistent")
+            set_stream_language("invalid", "en", "low")
 
-    def test_all_modes_have_required_fields(self):
-        for name, mode in LANGUAGE_MODES.items():
-            assert "name" in mode, f"{name} missing 'name'"
-            assert "rules" in mode, f"{name} missing 'rules'"
-            assert "english_label" in mode, f"{name} missing 'english_label'"
-            assert "tts_style" in mode, f"{name} missing 'tts_style'"
+    def test_invalid_sub_raises(self):
+        with pytest.raises(ValueError):
+            set_stream_language("ja", "invalid", "low")
 
-    def test_all_modes_have_non_empty_rules(self):
-        for name, mode in LANGUAGE_MODES.items():
-            assert len(mode["rules"]) > 0, f"{name} has empty rules"
+    def test_invalid_mix_raises(self):
+        with pytest.raises(ValueError):
+            set_stream_language("ja", "en", "invalid")
 
-    def test_mode_count(self):
-        """少なくとも5つの言語モードがあること"""
-        assert len(LANGUAGE_MODES) >= 5
+    def test_same_primary_sub_raises(self):
+        with pytest.raises(ValueError):
+            set_stream_language("ja", "ja", "low")
+
+    def test_all_supported_languages_as_primary(self):
+        for code in SUPPORTED_LANGUAGES:
+            sub = "en" if code != "en" else "ja"
+            set_stream_language(code, sub, "low")
+            assert get_stream_language()["primary"] == code
+
+    def test_all_mix_levels(self):
+        for mix in MIX_LEVELS:
+            set_stream_language("ja", "en", mix)
+            assert get_stream_language()["mix"] == mix
+
+    def test_returns_copy(self):
+        """get_stream_language が内部状態のコピーを返すこと"""
+        lang = get_stream_language()
+        lang["primary"] = "xx"
+        assert get_stream_language()["primary"] != "xx"
+
+
+# =====================================================
+# build_language_rules
+# =====================================================
+
+
+class TestBuildLanguageRules:
+    def setup_method(self):
+        set_stream_language("ja", "en", "low")
+
+    def test_returns_list_of_strings(self):
+        rules = build_language_rules()
+        assert isinstance(rules, list)
+        assert all(isinstance(r, str) for r in rules)
+
+    def test_mentions_primary_language(self):
+        rules = build_language_rules()
+        text = "\n".join(rules)
+        assert "日本語" in text
+
+    def test_mentions_sub_language(self):
+        rules = build_language_rules()
+        text = "\n".join(rules)
+        assert "English" in text
+
+    def test_sub_none_no_sub_mention(self):
+        set_stream_language("ja", "none", "low")
+        rules = build_language_rules()
+        text = "\n".join(rules)
+        assert "日本語" in text
+        # "English" は他言語対応ルールに含まれない
+        assert "translation" in text
+
+    def test_different_mix_levels_produce_different_rules(self):
+        results = set()
+        for mix in MIX_LEVELS:
+            set_stream_language("en", "ja", mix)
+            results.add("\n".join(build_language_rules()))
+        assert len(results) == len(MIX_LEVELS)
+
+    def test_different_languages_produce_different_rules(self):
+        set_stream_language("ja", "en", "low")
+        rules_ja = "\n".join(build_language_rules())
+        set_stream_language("en", "ja", "low")
+        rules_en = "\n".join(build_language_rules())
+        assert rules_ja != rules_en
+
+    def test_ja_sub_warns_no_romaji(self):
+        """サブ言語が日本語のとき、ローマ字禁止ルールが含まれること"""
+        set_stream_language("en", "ja", "medium")
+        rules = build_language_rules()
+        text = "\n".join(rules)
+        assert "ローマ字" in text
+
+    def test_translation_field_instruction(self):
+        """translationフィールドの指示が含まれること"""
+        rules = build_language_rules()
+        text = "\n".join(rules)
+        assert "translation" in text
+
+    def test_other_language_response_rule(self):
+        """他言語コメントへの対応ルールが含まれること"""
+        rules = build_language_rules()
+        text = "\n".join(rules)
+        assert "言語" in text
+
+
+# =====================================================
+# build_tts_style
+# =====================================================
+
+
+class TestBuildTtsStyle:
+    def setup_method(self):
+        set_stream_language("ja", "en", "low")
+
+    def test_returns_string(self):
+        style = build_tts_style()
+        assert isinstance(style, str)
+        assert len(style) > 0
+
+    def test_contains_cheerful(self):
+        style = build_tts_style()
+        assert "cheerful" in style
+
+    def test_mentions_sub_language(self):
+        style = build_tts_style()
+        assert "English" in style
+
+    def test_sub_none_no_sub_pronunciation(self):
+        set_stream_language("ja", "none", "low")
+        style = build_tts_style()
+        assert "cheerful" in style
+
+    def test_different_languages_different_style(self):
+        set_stream_language("ja", "en", "low")
+        style_ja = build_tts_style()
+        set_stream_language("en", "ja", "low")
+        style_en = build_tts_style()
+        assert style_ja != style_en
 
 
 # =====================================================
@@ -56,7 +183,7 @@ class TestLanguageMode:
 
 class TestBuildSystemPrompt:
     def setup_method(self):
-        set_language_mode("ja")
+        set_stream_language("ja", "en", "low")
 
     def test_contains_system_prompt(self):
         prompt = build_system_prompt(DEFAULT_CHARACTER)
@@ -73,7 +200,7 @@ class TestBuildSystemPrompt:
             assert emotion in prompt
 
     def test_contains_language_rules(self):
-        set_language_mode("en_bilingual")
+        set_stream_language("en", "ja", "medium")
         prompt = build_system_prompt(DEFAULT_CHARACTER)
         assert "English" in prompt
 
@@ -85,20 +212,17 @@ class TestBuildSystemPrompt:
         assert "バグ修正" in prompt
 
     def test_stream_context_partial(self):
-        """stream_contextの一部だけ指定した場合も動くこと"""
         prompt = build_system_prompt(DEFAULT_CHARACTER, stream_context={"title": "テスト"})
         assert "テスト" in prompt
 
     def test_stream_context_empty(self):
-        """空のstream_contextでもエラーにならないこと"""
         prompt = build_system_prompt(DEFAULT_CHARACTER, stream_context={})
         assert DEFAULT_CHARACTER["system_prompt"] in prompt
 
-    def test_output_format_includes_english_label(self):
-        set_language_mode("en_mixed")
+    def test_output_format_includes_translation(self):
+        """出力形式にtranslationフィールドが含まれること"""
         prompt = build_system_prompt(DEFAULT_CHARACTER)
-        label = LANGUAGE_MODES["en_mixed"]["english_label"]
-        assert label in prompt
+        assert '"translation"' in prompt
 
     def test_self_note_included(self):
         prompt = build_system_prompt(DEFAULT_CHARACTER, self_note="今日はPythonの話で盛り上がった")
@@ -109,29 +233,26 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt(DEFAULT_CHARACTER, self_note=None)
         assert "記憶メモ" not in prompt
 
-    def test_each_language_mode_produces_different_prompt(self):
-        """各言語モードで異なるプロンプトが生成されること"""
+    def test_each_language_setting_produces_different_prompt(self):
+        """異なる言語設定で異なるプロンプトが生成されること"""
         prompts = set()
-        for mode in LANGUAGE_MODES:
-            set_language_mode(mode)
+        for primary, sub in [("ja", "en"), ("en", "ja"), ("ja", "none")]:
+            set_stream_language(primary, sub, "low")
             prompt = build_system_prompt(DEFAULT_CHARACTER)
             prompts.add(prompt)
-        assert len(prompts) == len(LANGUAGE_MODES)
+        assert len(prompts) == 3
 
     def test_output_format_section_present(self):
-        """出力形式セクションが含まれること"""
         prompt = build_system_prompt(DEFAULT_CHARACTER)
         assert "出力形式" in prompt
         assert "JSON" in prompt
 
     def test_tts_text_instructions_present(self):
-        """tts_textの説明が含まれること"""
         prompt = build_system_prompt(DEFAULT_CHARACTER)
         assert "tts_text" in prompt
         assert "lang:" in prompt
 
     def test_custom_character(self):
-        """DEFAULT_CHARACTER以外のキャラクターでも動作すること"""
         custom = {
             "system_prompt": "カスタムプロンプト",
             "rules": ["ルール1"],
@@ -143,7 +264,6 @@ class TestBuildSystemPrompt:
         assert "happy" in prompt
 
     def test_character_without_optional_fields(self):
-        """rules/emotionsが空でもエラーにならないこと"""
         minimal = {"system_prompt": "最小構成"}
         prompt = build_system_prompt(minimal)
         assert "最小構成" in prompt
@@ -158,7 +278,6 @@ class TestModuleSeparation:
     """prompt_builder が ai_responder から正しく分離されていること"""
 
     def test_prompt_builder_has_no_ai_responder_import(self):
-        """prompt_builder が ai_responder をインポートしていないこと（循環インポート防止）"""
         import inspect
         import src.prompt_builder as pb
 
@@ -167,7 +286,6 @@ class TestModuleSeparation:
         assert "import src.ai_responder" not in source
 
     def test_ai_responder_imports_from_prompt_builder(self):
-        """ai_responder が prompt_builder から正しくインポートしていること"""
         import inspect
         import src.ai_responder as ar
 
@@ -175,12 +293,10 @@ class TestModuleSeparation:
         assert "from src.prompt_builder import" in source
 
     def test_ai_responder_no_longer_defines_language_modes(self):
-        """ai_responder に LANGUAGE_MODES 定義が残っていないこと"""
         import inspect
         import src.ai_responder as ar
 
         source = inspect.getsource(ar)
-        # LANGUAGE_MODES = { のような定義がないこと（importは OK）
         lines = source.split("\n")
         for line in lines:
             stripped = line.strip()
@@ -188,7 +304,6 @@ class TestModuleSeparation:
                 assert False, f"ai_responder.py に LANGUAGE_MODES の定義が残っている: {stripped}"
 
     def test_ai_responder_no_longer_defines_build_system_prompt(self):
-        """ai_responder に _build_system_prompt / build_system_prompt 定義が残っていないこと"""
         import inspect
         import src.ai_responder as ar
 
@@ -197,26 +312,16 @@ class TestModuleSeparation:
         assert "def build_system_prompt" not in source
 
     def test_tts_imports_from_prompt_builder(self):
-        """tts.py が prompt_builder から言語モードを取得していること"""
         import inspect
         import src.tts as tts_mod
 
         source = inspect.getsource(tts_mod)
         assert "from src.prompt_builder import" in source
-        assert "from src.ai_responder import" not in source.replace(
-            "from src.ai_responder import get_language_mode", ""
-        ).replace("from src.ai_responder import LANGUAGE_MODES", "")
 
     def test_character_route_imports_split_correctly(self):
-        """character.py がキャラ管理はai_responder、言語モードはprompt_builderからインポートすること"""
         import inspect
         import scripts.routes.character as ch
 
         source = inspect.getsource(ch)
         assert "from src.prompt_builder import" in source
         assert "from src.ai_responder import" in source
-        # prompt_builder からの import に LANGUAGE_MODES があること
-        assert "LANGUAGE_MODES" not in [
-            line for line in source.split("\n")
-            if "from src.ai_responder import" in line
-        ]
