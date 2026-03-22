@@ -3,8 +3,7 @@
 ## 機能追加
 
 ### 会話モード — 教師モード → [plans/conversation-mode.md](plans/conversation-mode.md)
-- [>] Phase 3: 配信画面に授業テキストパネル表示
-- [ ] Phase 4: チャット割り込み対応 + 視聴者への問いかけ機能
+- [>] Phase 4: チャット割り込み対応 + 視聴者への問いかけ機能
 - [ ] Phase 5: ポリッシュ（ドキュメント更新）
 
 ### その他

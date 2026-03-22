@@ -15,6 +15,13 @@
 - [x] 授業制御API（start/pause/resume/stop/status）+ 管理画面に制御ボタン・進捗表示
 - [x] テスト追加（test_lesson_runner.py + test_api_teacher.py 授業制御、全450テスト通過）
 
+## 教師モード Phase 3: 配信画面に授業テキストパネル表示
+
+- [x] broadcast.htmlに授業テキストパネル（#lesson-text-panel）追加
+- [x] WebSocketイベント（lesson_text_show/lesson_text_hide）対応
+- [x] CSS: フェードイン/アウトアニメーション付きパネルスタイル
+- [x] JS: showLessonText/hideLessonText関数（panels.js）
+
 ## トピック機能・授業モード完全削除
 
 - [x] バックエンド: TopicTalker・トピックAPI・授業モード関連コード削除（state.py, comment_reader.py, ai_responder.py, db.py, prompt_builder.py, avatar.py, web.py, overlay.py, items.py）

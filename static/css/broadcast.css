@@ -480,3 +480,32 @@
   .settings-panel::-webkit-scrollbar-track { background: transparent; }
   .settings-panel::-webkit-scrollbar-thumb { background: #7c4dff55; border-radius: 3px; }
   .settings-panel::-webkit-scrollbar-thumb:hover { background: #7c4dff; }
+
+  /* === 授業テキストパネル === */
+  #lesson-text-panel {
+    position: absolute;
+    top: 8%; right: 3%;
+    z-index: 25;
+    width: 32%;
+    max-height: 80%;
+    overflow-y: auto;
+    background: linear-gradient(135deg, rgba(10, 10, 30, 0.92), rgba(20, 10, 40, 0.92));
+    border: 1px solid rgba(124, 77, 255, 0.4);
+    border-radius: 0.6vw;
+    padding: 1.2vw 1.5vw;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  #lesson-text-panel.visible {
+    opacity: 1;
+  }
+  #lesson-text-content {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 1.4vw;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }

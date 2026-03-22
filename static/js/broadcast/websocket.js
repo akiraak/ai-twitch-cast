@@ -141,6 +141,14 @@ function connectWS() {
         removeChildPanel(data.id);
         break;
 
+      // 授業テキスト
+      case 'lesson_text_show':
+        showLessonText(data.text);
+        break;
+      case 'lesson_text_hide':
+        hideLessonText();
+        break;
+
       // 素材変更
       case 'avatar_vrm_change':
         if (data.url) loadVRM(data.url);

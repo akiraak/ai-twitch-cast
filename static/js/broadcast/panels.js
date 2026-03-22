@@ -65,3 +65,31 @@ async function loadTodo() {
     console.log('TODO読み込みエラー:', e.message);
   }
 }
+
+// --- 授業テキストパネル ---
+
+function showLessonText(text) {
+  const panel = document.getElementById('lesson-text-panel');
+  const content = document.getElementById('lesson-text-content');
+  if (!panel || !content) return;
+  content.textContent = text;
+  panel.style.display = 'block';
+  // フェードイン（次フレームでclassを追加してtransitionを発火）
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      panel.classList.add('visible');
+    });
+  });
+}
+
+function hideLessonText() {
+  const panel = document.getElementById('lesson-text-panel');
+  if (!panel) return;
+  panel.classList.remove('visible');
+  // フェードアウト完了後に非表示
+  setTimeout(() => {
+    if (!panel.classList.contains('visible')) {
+      panel.style.display = 'none';
+    }
+  }, 600);
+}
