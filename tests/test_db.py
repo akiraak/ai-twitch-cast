@@ -17,6 +17,7 @@ class TestSchema:
             "users", "comments", "actions", "settings",
             "bgm_tracks", "se_tracks",
             "custom_texts", "character_memory",
+            "lessons", "lesson_sources", "lesson_sections",
         }
         assert expected.issubset(names)
 
@@ -567,3 +568,129 @@ class TestCharacterMemory:
             (char["id"],),
         ).fetchone()["c"]
         assert cnt == 1
+
+
+class TestLessons:
+    def test_create_and_get(self, test_db):
+        lesson = test_db.create_lesson("English 1-1")
+        assert lesson["name"] == "English 1-1"
+        assert lesson["id"] is not None
+        fetched = test_db.get_lesson(lesson["id"])
+        assert fetched["name"] == "English 1-1"
+
+    def test_get_all(self, test_db):
+        test_db.create_lesson("A")
+        test_db.create_lesson("B")
+        all_lessons = test_db.get_all_lessons()
+        assert len(all_lessons) == 2
+
+    def test_update(self, test_db):
+        lesson = test_db.create_lesson("Old")
+        test_db.update_lesson(lesson["id"], name="New")
+        fetched = test_db.get_lesson(lesson["id"])
+        assert fetched["name"] == "New"
+
+    def test_delete(self, test_db):
+        lesson = test_db.create_lesson("ToDelete")
+        test_db.delete_lesson(lesson["id"])
+        assert test_db.get_lesson(lesson["id"]) is None
+
+    def test_get_nonexistent(self, test_db):
+        assert test_db.get_lesson(9999) is None
+
+
+class TestLessonSources:
+    def test_add_and_get(self, test_db):
+        lesson = test_db.create_lesson("SrcTest")
+        src = test_db.add_lesson_source(
+            lesson["id"], "image", file_path="resources/images/lessons/1/test.png",
+            original_name="test.png",
+        )
+        assert src["source_type"] == "image"
+        sources = test_db.get_lesson_sources(lesson["id"])
+        assert len(sources) == 1
+
+    def test_add_url_source(self, test_db):
+        lesson = test_db.create_lesson("UrlTest")
+        src = test_db.add_lesson_source(
+            lesson["id"], "url", url="https://example.com",
+        )
+        assert src["source_type"] == "url"
+        assert src["url"] == "https://example.com"
+
+    def test_delete(self, test_db):
+        lesson = test_db.create_lesson("DelSrc")
+        src = test_db.add_lesson_source(lesson["id"], "image")
+        test_db.delete_lesson_source(src["id"])
+        assert len(test_db.get_lesson_sources(lesson["id"])) == 0
+
+    def test_cascade_delete(self, test_db):
+        lesson = test_db.create_lesson("Cascade")
+        test_db.add_lesson_source(lesson["id"], "image")
+        test_db.add_lesson_source(lesson["id"], "url")
+        test_db.delete_lesson(lesson["id"])
+        assert len(test_db.get_lesson_sources(lesson["id"])) == 0
+
+
+class TestLessonSections:
+    def test_add_and_get(self, test_db):
+        lesson = test_db.create_lesson("SecTest")
+        s = test_db.add_lesson_section(
+            lesson["id"], 0, "introduction", "はじめに",
+            tts_text="はじめにTTS", display_text="導入",
+        )
+        assert s["section_type"] == "introduction"
+        assert s["content"] == "はじめに"
+        sections = test_db.get_lesson_sections(lesson["id"])
+        assert len(sections) == 1
+
+    def test_order(self, test_db):
+        lesson = test_db.create_lesson("OrderTest")
+        test_db.add_lesson_section(lesson["id"], 1, "explanation", "説明")
+        test_db.add_lesson_section(lesson["id"], 0, "introduction", "導入")
+        sections = test_db.get_lesson_sections(lesson["id"])
+        assert sections[0]["section_type"] == "introduction"
+        assert sections[1]["section_type"] == "explanation"
+
+    def test_update(self, test_db):
+        lesson = test_db.create_lesson("UpdSec")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "元")
+        test_db.update_lesson_section(s["id"], content="更新後", emotion="excited")
+        sections = test_db.get_lesson_sections(lesson["id"])
+        assert sections[0]["content"] == "更新後"
+        assert sections[0]["emotion"] == "excited"
+
+    def test_delete(self, test_db):
+        lesson = test_db.create_lesson("DelSec")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "削除対象")
+        test_db.delete_lesson_section(s["id"])
+        assert len(test_db.get_lesson_sections(lesson["id"])) == 0
+
+    def test_delete_all(self, test_db):
+        lesson = test_db.create_lesson("DelAll")
+        test_db.add_lesson_section(lesson["id"], 0, "introduction", "A")
+        test_db.add_lesson_section(lesson["id"], 1, "explanation", "B")
+        test_db.delete_lesson_sections(lesson["id"])
+        assert len(test_db.get_lesson_sections(lesson["id"])) == 0
+
+    def test_reorder(self, test_db):
+        lesson = test_db.create_lesson("Reorder")
+        s1 = test_db.add_lesson_section(lesson["id"], 0, "introduction", "A")
+        s2 = test_db.add_lesson_section(lesson["id"], 1, "explanation", "B")
+        s3 = test_db.add_lesson_section(lesson["id"], 2, "summary", "C")
+        # 逆順
+        test_db.reorder_lesson_sections(lesson["id"], [s3["id"], s2["id"], s1["id"]])
+        sections = test_db.get_lesson_sections(lesson["id"])
+        assert sections[0]["id"] == s3["id"]
+        assert sections[1]["id"] == s2["id"]
+        assert sections[2]["id"] == s1["id"]
+
+    def test_question_fields(self, test_db):
+        lesson = test_db.create_lesson("QTest")
+        s = test_db.add_lesson_section(
+            lesson["id"], 0, "question", "問題",
+            question="What is 1+1?", answer="2", wait_seconds=10,
+        )
+        assert s["question"] == "What is 1+1?"
+        assert s["answer"] == "2"
+        assert s["wait_seconds"] == 10

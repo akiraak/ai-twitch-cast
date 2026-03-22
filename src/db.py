@@ -247,6 +247,45 @@ def _create_tables(conn):
         _migrate_comments_split(conn)
     except Exception:
         pass
+    # lessons テーブル（教師モード）
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS lessons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            extracted_text TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS lesson_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lesson_id INTEGER NOT NULL REFERENCES lessons(id),
+            source_type TEXT NOT NULL,
+            file_path TEXT NOT NULL DEFAULT '',
+            url TEXT NOT NULL DEFAULT '',
+            original_name TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS lesson_sections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lesson_id INTEGER NOT NULL REFERENCES lessons(id),
+            order_index INTEGER NOT NULL DEFAULT 0,
+            section_type TEXT NOT NULL DEFAULT 'explanation',
+            content TEXT NOT NULL DEFAULT '',
+            tts_text TEXT NOT NULL DEFAULT '',
+            display_text TEXT NOT NULL DEFAULT '',
+            emotion TEXT NOT NULL DEFAULT 'neutral',
+            question TEXT NOT NULL DEFAULT '',
+            answer TEXT NOT NULL DEFAULT '',
+            wait_seconds INTEGER NOT NULL DEFAULT 8,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+
     # Migration: dev_repos テーブル削除（機能廃止）
     conn.execute("DROP TABLE IF EXISTS dev_repos")
     conn.commit()
@@ -774,6 +813,156 @@ def delete_se_track(filename):
     """SEトラックを削除する"""
     conn = get_connection()
     conn.execute("DELETE FROM se_tracks WHERE filename = ?", (filename,))
+    conn.commit()
+
+
+# --- lessons (教師モード) ---
+
+def create_lesson(name):
+    """授業コンテンツを作成する"""
+    conn = get_connection()
+    now = _now()
+    cur = conn.execute(
+        "INSERT INTO lessons (name, extracted_text, created_at, updated_at) VALUES (?, '', ?, ?)",
+        (name, now, now),
+    )
+    conn.commit()
+    return dict(conn.execute("SELECT * FROM lessons WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def get_lesson(lesson_id):
+    """授業コンテンツを取得する"""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM lessons WHERE id = ?", (lesson_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_all_lessons():
+    """全授業コンテンツを取得する"""
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM lessons ORDER BY created_at DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_lesson(lesson_id, **fields):
+    """授業コンテンツを更新する"""
+    conn = get_connection()
+    allowed = {"name", "extracted_text"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return
+    updates["updated_at"] = _now()
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    params = list(updates.values()) + [lesson_id]
+    conn.execute(f"UPDATE lessons SET {set_clause} WHERE id = ?", params)
+    conn.commit()
+
+
+def delete_lesson(lesson_id):
+    """授業コンテンツと関連データを削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM lesson_sections WHERE lesson_id = ?", (lesson_id,))
+    conn.execute("DELETE FROM lesson_sources WHERE lesson_id = ?", (lesson_id,))
+    conn.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
+    conn.commit()
+
+
+# --- lesson_sources ---
+
+def add_lesson_source(lesson_id, source_type, file_path="", url="", original_name=""):
+    """教材ソースを追加する"""
+    conn = get_connection()
+    now = _now()
+    cur = conn.execute(
+        "INSERT INTO lesson_sources (lesson_id, source_type, file_path, url, original_name, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (lesson_id, source_type, file_path, url, original_name, now),
+    )
+    conn.commit()
+    return dict(conn.execute("SELECT * FROM lesson_sources WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def get_lesson_sources(lesson_id):
+    """教材ソース一覧を取得する"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM lesson_sources WHERE lesson_id = ? ORDER BY id",
+        (lesson_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_lesson_source(source_id):
+    """教材ソースを削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM lesson_sources WHERE id = ?", (source_id,))
+    conn.commit()
+
+
+# --- lesson_sections ---
+
+def add_lesson_section(lesson_id, order_index, section_type, content, tts_text="",
+                       display_text="", emotion="neutral", question="", answer="", wait_seconds=8):
+    """授業セクションを追加する"""
+    conn = get_connection()
+    cur = conn.execute(
+        "INSERT INTO lesson_sections "
+        "(lesson_id, order_index, section_type, content, tts_text, display_text, "
+        "emotion, question, answer, wait_seconds, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (lesson_id, order_index, section_type, content, tts_text,
+         display_text, emotion, question, answer, wait_seconds, _now()),
+    )
+    conn.commit()
+    return dict(conn.execute("SELECT * FROM lesson_sections WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def get_lesson_sections(lesson_id):
+    """授業セクション一覧を取得する（order_index順）"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM lesson_sections WHERE lesson_id = ? ORDER BY order_index",
+        (lesson_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_lesson_section(section_id, **fields):
+    """授業セクションを更新する"""
+    conn = get_connection()
+    allowed = {"order_index", "section_type", "content", "tts_text",
+               "display_text", "emotion", "question", "answer", "wait_seconds"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    params = list(updates.values()) + [section_id]
+    conn.execute(f"UPDATE lesson_sections SET {set_clause} WHERE id = ?", params)
+    conn.commit()
+
+
+def delete_lesson_section(section_id):
+    """授業セクションを削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM lesson_sections WHERE id = ?", (section_id,))
+    conn.commit()
+
+
+def delete_lesson_sections(lesson_id):
+    """授業の全セクションを削除する（再生成用）"""
+    conn = get_connection()
+    conn.execute("DELETE FROM lesson_sections WHERE lesson_id = ?", (lesson_id,))
+    conn.commit()
+
+
+def reorder_lesson_sections(lesson_id, section_ids):
+    """セクションの並び順を更新する（section_idsの順番に従う）"""
+    conn = get_connection()
+    for i, sid in enumerate(section_ids):
+        conn.execute(
+            "UPDATE lesson_sections SET order_index = ? WHERE id = ? AND lesson_id = ?",
+            (i, sid, lesson_id),
+        )
     conn.commit()
 
 

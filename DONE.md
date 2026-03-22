@@ -1,5 +1,13 @@
 # DONE
 
+## 教師モード Phase 1: DB + 画像/URL解析 + スクリプト生成 + 管理画面
+
+- [x] DBテーブル追加（lessons, lesson_sources, lesson_sections）+ CRUD関数
+- [x] 画像テキスト抽出（Gemini Vision）・URL取得・授業スクリプト生成（src/lesson_generator.py）
+- [x] 教師モードAPI（scripts/routes/teacher.py）— コンテンツCRUD・画像アップロード・URL追加・スクリプト生成・セクション編集/並び替え/削除
+- [x] 管理画面UI — 会話モードタブ追加（教師モード/雑談モードサブタブ）、コンテンツ一覧・詳細・ソース管理・スクリプト表示・インライン編集
+- [x] テスト追加（test_api_teacher.py + test_db.py Lesson関連、全435テスト通過）
+
 ## トピック機能・授業モード完全削除
 
 - [x] バックエンド: TopicTalker・トピックAPI・授業モード関連コード削除（state.py, comment_reader.py, ai_responder.py, db.py, prompt_builder.py, avatar.py, web.py, overlay.py, items.py）

@@ -54,6 +54,8 @@ def mock_gemini(monkeypatch):
     monkeypatch.setattr(ar, "get_client", getter)
     import src.tts as tts_mod
     monkeypatch.setattr(tts_mod, "get_client", getter)
+    import src.lesson_generator as lg
+    monkeypatch.setattr(lg, "get_client", getter)
     return client
 
 
