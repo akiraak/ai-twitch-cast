@@ -1,6 +1,6 @@
 # 会話モード機能 — 教師モード（第1弾）
 
-## ステータス: プラン策定中
+## ステータス: 完了
 
 ## 背景
 
@@ -106,31 +106,30 @@
 
 ## 実装フェーズ
 
-### Phase 1: DB + 画像/URL解析 + スクリプト生成 + 管理画面
-- [ ] DBテーブル追加（lessons, lesson_sections）
-- [ ] 画像解析（Gemini Vision）+ URL取得（テキスト+画像）
-- [ ] スクリプト生成（src/lesson_generator.py）
-- [ ] 教師モードAPI（scripts/routes/teacher.py）
-- [ ] 管理画面UI（会話モードタブ → サブタブ → コンテンツ管理 → 全生成物閲覧 + インライン編集）
-- [ ] テスト
+### Phase 1: DB + 画像/URL解析 + スクリプト生成 + 管理画面 ✓
+- [x] DBテーブル追加（lessons, lesson_sources, lesson_sections）
+- [x] 画像解析（Gemini Vision）+ URL取得（テキスト+画像）
+- [x] スクリプト生成（src/lesson_generator.py）
+- [x] 教師モードAPI（scripts/routes/teacher.py）
+- [x] 管理画面UI（会話モードタブ → サブタブ → コンテンツ管理 → 全生成物閲覧 + インライン編集）
+- [x] テスト
 
-### Phase 2: 授業再生エンジン
-- [ ] LessonRunner（src/lesson_runner.py）
-- [ ] CommentReaderモード分岐
-- [ ] 授業制御API（start/pause/resume/stop）
+### Phase 2: 授業再生エンジン ✓
+- [x] LessonRunner（src/lesson_runner.py）
+- [x] CommentReaderにLessonRunner統合
+- [x] 授業制御API（start/pause/resume/stop/status）
 
-### Phase 3: 配信画面に授業テキスト表示
-- [ ] broadcast.htmlに授業テキストパネル追加
-- [ ] WebSocketイベント（lesson_text_show/hide/update）
-- [ ] フェードアニメーション
+### Phase 3: 配信画面に授業テキスト表示 ✓
+- [x] broadcast.htmlに授業テキストパネル追加
+- [x] WebSocketイベント（lesson_text_show/hide）
+- [x] フェードアニメーション
 
-### Phase 4: チャット割り込み + 問いかけ
-- [ ] 授業コンテキスト付きチャット応答
-- [ ] questionセクション（問いかけ→待ち→回答）
+### Phase 4: チャット割り込み + 問いかけ ✓
+- [x] 授業コンテキスト付きチャット応答
+- [x] questionセクション（問いかけ→待ち→回答）
 
-### Phase 5: ポリッシュ
-- [ ] テキストパネル位置保存
-- [ ] ドキュメント更新
+### Phase 5: ポリッシュ ✓
+- [x] ドキュメント更新
 
 ## 将来の会話モード候補
 

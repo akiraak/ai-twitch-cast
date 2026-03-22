@@ -28,6 +28,12 @@
 - [x] prompt_builderに「現在の授業」セクション追加（授業名・現セクション・回答ガイドライン）
 - [x] questionセクション再生（LessonRunner._handle_question: 問いかけ→待ち→回答）は Phase 2 で実装済み
 
+## 教師モード Phase 5: ポリッシュ
+
+- [x] プランファイル（plans/conversation-mode.md）ステータス「完了」に更新
+- [x] CLAUDE.md ディレクトリ構成・テスト一覧更新
+- [x] TODO.md から教師モード全フェーズ削除
+
 ## トピック機能・授業モード完全削除
 
 - [x] バックエンド: TopicTalker・トピックAPI・授業モード関連コード削除（state.py, comment_reader.py, ai_responder.py, db.py, prompt_builder.py, avatar.py, web.py, overlay.py, items.py）
