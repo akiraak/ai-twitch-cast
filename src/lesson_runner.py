@@ -118,6 +118,7 @@ class LessonRunner:
         self._sections = []
         self._current_index = 0
         logger.info("授業停止")
+        await self._hide_lesson_text()
         await self._notify_status()
 
     async def _run_loop(self):
@@ -142,6 +143,7 @@ class LessonRunner:
             if self._state != LessonState.IDLE:
                 logger.info("授業完了: lesson=%d", self._lesson_id)
                 self._state = LessonState.IDLE
+                await self._hide_lesson_text()
                 await self._notify_status()
                 self._lesson_id = None
                 self._sections = []
@@ -152,6 +154,7 @@ class LessonRunner:
         except Exception as e:
             logger.error("授業再生エラー: %s", e, exc_info=True)
             self._state = LessonState.IDLE
+            await self._hide_lesson_text()
             await self._notify_status()
 
     async def _play_section(self, section: dict):

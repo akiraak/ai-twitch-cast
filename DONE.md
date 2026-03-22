@@ -34,6 +34,14 @@
 - [x] CLAUDE.md ディレクトリ構成・テスト一覧更新
 - [x] TODO.md から教師モード全フェーズ削除
 
+## 教師モード改善
+
+- [x] スクリプト生成のJSONパースにリトライ追加（最大3回）・エラーメッセージをUIに表示
+- [x] 授業停止/完了/エラー時に授業テキストパネルを自動非表示
+- [x] 授業テキストパネルを画面中央に配置・サイズ拡大（55%幅・70%高）
+- [x] 授業中にTODOパネル・字幕を非表示にするレッスンモード追加（lesson_statusイベント連動）
+- [x] 管理画面: 授業実行状態をページロード時に反映（ボタン・進捗表示）
+
 ## トピック機能・授業モード完全削除
 
 - [x] バックエンド: TopicTalker・トピックAPI・授業モード関連コード削除（state.py, comment_reader.py, ai_responder.py, db.py, prompt_builder.py, avatar.py, web.py, overlay.py, items.py）

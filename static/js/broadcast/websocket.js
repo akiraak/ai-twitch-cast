@@ -149,6 +149,15 @@ function connectWS() {
         hideLessonText();
         break;
 
+      // 授業ステータス（パネル表示切替）
+      case 'lesson_status':
+        if (data.state === 'running' || data.state === 'paused') {
+          setLessonMode(true);
+        } else {
+          setLessonMode(false);
+        }
+        break;
+
       // 素材変更
       case 'avatar_vrm_change':
         if (data.url) loadVRM(data.url);

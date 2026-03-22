@@ -21,9 +21,14 @@ function switchConvSubtab(name, el) {
 
 // --- コンテンツ一覧（各コンテンツを縦に並べる） ---
 
+let _cachedLessonStatus = null;
+
 async function loadLessons() {
   const res = await api('GET', '/api/lessons');
   if (!res || !res.ok) return;
+  // ステータスを1回だけ取得
+  const statusRes = await api('GET', '/api/lessons/status');
+  _cachedLessonStatus = statusRes;
   const list = document.getElementById('lesson-list');
   list.innerHTML = '';
   for (const l of res.lessons) {
@@ -41,6 +46,11 @@ async function buildLessonItem(lessonId) {
   const sections = res.sections;
   const hasSources = sources.length > 0;
   const hasSections = sections.length > 0;
+
+  // 授業ステータス（loadLessonsでキャッシュ済み）
+  const statusRes = _cachedLessonStatus;
+  const lState = statusRes ? statusRes.status.state : 'idle';
+  const runningThisLesson = statusRes && statusRes.status.lesson_id === lessonId && lState !== 'idle';
 
   // バッジ
   const badges = [];
@@ -150,7 +160,7 @@ async function buildLessonItem(lessonId) {
 
   // セクション一覧
   const secContainer = document.createElement('div');
-  if (hasSources) renderSectionsInto(secContainer, sections, lessonId);
+  renderSectionsInto(secContainer, sections, lessonId);
   step2Body.appendChild(secContainer);
 
   step2.innerHTML = '<div class="lesson-step-num">2</div>';
@@ -158,19 +168,23 @@ async function buildLessonItem(lessonId) {
   body.appendChild(step2);
 
   // === STEP 3: 授業開始 ===
+  const isRunning = runningThisLesson && lState === 'running';
+  const isPaused = runningThisLesson && lState === 'paused';
+  const isActive = isRunning || isPaused;
   const step3 = document.createElement('div');
-  step3.className = 'lesson-step' + (hasSections ? ' step-active' : ' step-disabled');
+  step3.className = 'lesson-step' + (isActive ? ' step-done' : hasSections ? ' step-active' : ' step-disabled');
   const step3Body = document.createElement('div');
   step3Body.className = 'lesson-step-body';
-  step3Body.innerHTML = `<div class="lesson-step-title">授業開始</div>
+  const progressInfo = isActive ? `${statusRes.status.current_index + 1} / ${statusRes.status.total_sections} セクション` : '';
+  step3Body.innerHTML = `<div class="lesson-step-title">授業${isActive ? '（実行中）' : ''}</div>
     <div style="display:flex; gap:6px; align-items:center;">
-      <button onclick="startLesson(${lessonId})" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">授業開始</button>
-      <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">一時停止</button>
-      <button onclick="resumeLesson()" class="btn-lesson-resume" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">再開</button>
-      <button onclick="stopLesson()" class="btn-lesson-stop" style="padding:5px 14px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">停止</button>
-      <span class="lesson-state" style="font-size:0.8rem; color:#8a7a9a;"></span>
+      <button onclick="startLesson(${lessonId})" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">授業開始</button>
+      <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isRunning ? '' : ' display:none;'}">一時停止</button>
+      <button onclick="resumeLesson()" class="btn-lesson-resume" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isPaused ? '' : ' display:none;'}">再開</button>
+      <button onclick="stopLesson()" class="btn-lesson-stop" style="padding:5px 14px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? '' : ' display:none;'}">終了</button>
+      <span class="lesson-state" style="font-size:0.8rem; color:#8a7a9a;">${isRunning ? '再生中' : isPaused ? '一時停止中' : ''}</span>
     </div>
-    <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:#8a7a9a;"></div>`;
+    <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:#8a7a9a;">${progressInfo}</div>`;
 
   step3.innerHTML = '<div class="lesson-step-num">3</div>';
   step3.appendChild(step3Body);
@@ -352,8 +366,12 @@ async function generateScript(lessonId) {
   if (res && res.ok) {
     showToast('スクリプト生成完了 (' + res.sections.length + 'セクション)', 'success');
   } else {
-    showToast('スクリプト生成失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
-    return;
+    const errMsg = res && res.error ? res.error : '不明なエラー';
+    showToast('スクリプト生成失敗: ' + errMsg, 'error');
+    // エラーをstep2内にも表示
+    if (statusEl) {
+      statusEl.innerHTML = '<span style="color:#c62828; font-size:0.8rem; font-weight:600;">❌ ' + esc(errMsg) + '</span>';
+    }
   }
   _openLessonIds.add(lessonId);
   await loadLessons();

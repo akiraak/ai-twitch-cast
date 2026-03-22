@@ -93,3 +93,23 @@ function hideLessonText() {
     }
   }, 600);
 }
+
+// --- 授業モード（パネル表示切替） ---
+
+let _lessonMode = false;
+
+function setLessonMode(active) {
+  if (_lessonMode === active) return;
+  _lessonMode = active;
+  const todo = document.getElementById('todo-panel');
+  const subtitle = document.getElementById('subtitle');
+  if (active) {
+    // 既存パネルを非表示
+    if (todo) todo.style.display = 'none';
+    if (subtitle) { subtitle.classList.remove('visible'); subtitle.classList.remove('fading'); }
+  } else {
+    // パネル復帰 + 授業テキスト非表示
+    if (todo) todo.style.display = '';
+    hideLessonText();
+  }
+}

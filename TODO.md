@@ -4,6 +4,7 @@
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証
+- [ ] 授業モードの英語の発音も通常時と同じようにリアルにする。TTSに投げるプロンプトを修正する必要があるかもしれない
 
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
