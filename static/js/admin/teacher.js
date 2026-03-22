@@ -69,13 +69,22 @@ async function loadLessonDetail(lessonId) {
   document.getElementById('lesson-name').value = res.lesson.name;
   document.getElementById('lesson-extracted-text').textContent = res.lesson.extracted_text || '(なし)';
 
+  const hasSources = res.sources.length > 0;
+
   // ソース一覧
   renderSources(res.sources);
-  // セクション一覧
-  renderSections(res.sections);
-  // 授業ステータス
-  loadLessonStatus();
-  startLessonStatusPolling();
+
+  // ソースがなければヒントを表示、後続セクションは非表示
+  document.getElementById('lesson-source-hint').style.display = hasSources ? 'none' : 'block';
+  document.getElementById('lesson-after-source').style.display = hasSources ? 'block' : 'none';
+
+  if (hasSources) {
+    // セクション一覧
+    renderSections(res.sections);
+    // 授業ステータス
+    loadLessonStatus();
+    startLessonStatusPolling();
+  }
 }
 
 async function saveLessonName() {
@@ -130,8 +139,13 @@ function renderSources(sources) {
 async function uploadLessonImage(input) {
   if (!_currentLessonId || !input.files || !input.files.length) return;
   const statusEl = document.getElementById('lesson-upload-status');
+  const total = input.files.length;
+  let done = 0;
   for (const file of input.files) {
-    statusEl.textContent = '\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u4E2D: ' + file.name + '...';
+    done++;
+    statusEl.textContent = total > 1
+      ? `\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u4E2D (${done}/${total}): ${file.name} \u2014 \u30C6\u30AD\u30B9\u30C8\u62BD\u51FA\u4E2D...`
+      : `\u30A2\u30C3\u30D7\u30ED\u30FC\u30C9\u4E2D: ${file.name} \u2014 \u30C6\u30AD\u30B9\u30C8\u62BD\u51FA\u4E2D...`;
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -159,7 +173,7 @@ async function addLessonUrl() {
   });
   if (!url) return;
   const statusEl = document.getElementById('lesson-upload-status');
-  statusEl.textContent = 'URL\u53D6\u5F97\u4E2D...';
+  statusEl.textContent = 'URL\u53D6\u5F97\u4E2D \u2014 \u30C6\u30AD\u30B9\u30C8\u62BD\u51FA\u4E2D...';
   const res = await api('POST', '/api/lessons/' + _currentLessonId + '/add-url', { url });
   statusEl.textContent = '';
   if (res && res.ok) {
