@@ -304,3 +304,21 @@
   .lesson-item[open] > summary .lesson-arrow { transform: rotate(0deg); }
   .lesson-item:not([open]) > summary .lesson-arrow { transform: rotate(-90deg); }
   .lesson-item > summary .lesson-arrow { display:inline-block; transition: transform 0.15s; }
+
+  /* 教師モード 処理中スピナー */
+  .lesson-spinner {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.8rem; color: #7b1fa2; font-weight: 500;
+    padding: 6px 12px; background: #f3e8ff; border: 1px solid #d0c0e8;
+    border-radius: 4px; animation: lesson-pulse 1.5s ease-in-out infinite;
+  }
+  .lesson-spinner::before {
+    content: ''; display: inline-block; width: 14px; height: 14px;
+    border: 2px solid #d0c0e8; border-top-color: #7b1fa2;
+    border-radius: 50%; animation: lesson-spin 0.8s linear infinite;
+  }
+  @keyframes lesson-spin { to { transform: rotate(360deg); } }
+  @keyframes lesson-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }

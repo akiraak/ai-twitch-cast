@@ -214,6 +214,13 @@ async function deleteLesson(lessonId) {
 
 // --- 教材ソース ---
 
+function _showSpinner(el, msg) {
+  el.innerHTML = `<span class="lesson-spinner">${esc(msg)}</span>`;
+}
+function _hideSpinner(el) {
+  el.innerHTML = '';
+}
+
 async function uploadLessonImage(lessonId, input) {
   if (!input.files || !input.files.length) return;
   const statusEl = input.closest('div').querySelector('.lesson-upload-status');
@@ -221,9 +228,10 @@ async function uploadLessonImage(lessonId, input) {
   let done = 0;
   for (const file of input.files) {
     done++;
-    statusEl.textContent = total > 1
+    const msg = total > 1
       ? `アップロード中 (${done}/${total}): ${file.name} — テキスト抽出中...`
       : `アップロード中: ${file.name} — テキスト抽出中...`;
+    _showSpinner(statusEl, msg);
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -239,7 +247,7 @@ async function uploadLessonImage(lessonId, input) {
     }
   }
   input.value = '';
-  statusEl.textContent = '';
+  _hideSpinner(statusEl);
   _openLessonIds.add(lessonId);
   await loadLessons();
 }
@@ -256,9 +264,9 @@ async function addLessonUrl(lessonId) {
     return !!b;
   });
   let statusEl = item ? item.querySelector('.lesson-upload-status') : null;
-  if (statusEl) statusEl.textContent = 'URL取得中 — テキスト抽出中...';
+  if (statusEl) _showSpinner(statusEl, 'URL取得中 — テキスト抽出中...');
   const res = await api('POST', '/api/lessons/' + lessonId + '/add-url', { url });
-  if (statusEl) statusEl.textContent = '';
+  if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
     showToast('URL追加完了', 'success');
     _openLessonIds.add(lessonId);
@@ -289,13 +297,13 @@ async function generateScript(lessonId) {
     }
   }
   if (btn) btn.disabled = true;
-  if (statusEl) statusEl.textContent = '生成中...';
+  if (statusEl) _showSpinner(statusEl, 'スクリプト生成中...');
   const res = await api('POST', '/api/lessons/' + lessonId + '/generate-script');
   if (res && res.ok) {
     showToast('スクリプト生成完了 (' + res.sections.length + 'セクション)', 'success');
   } else {
     if (btn) btn.disabled = false;
-    if (statusEl) statusEl.textContent = '';
+    if (statusEl) _hideSpinner(statusEl);
     return;
   }
   _openLessonIds.add(lessonId);
