@@ -107,20 +107,20 @@ async function buildLessonItem(lessonId) {
   const btnLabel = hasSources ? 'ソース変更' : 'ソース追加';
   let step1Html = `<div class="lesson-step-title">ソース追加${sources.length ? ' (' + sources.length + '件)' : ''}</div>`
     + srcInfo
-    + `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <button onclick="addLessonSource(${lessonId})" style="padding:5px 14px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${btnLabel}</button>`;
-
-  // 画像ソースがある＋未抽出 → テキスト抽出ボタン
-  if (hasImageSources) {
-    step1Html += `<button onclick="extractLessonText(${lessonId})" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasExtractedText ? 'テキスト再抽出' : 'テキスト抽出'}</button>`;
-  }
-
-  step1Html += `<span class="lesson-upload-status"></span></div>`;
+    + `<div style="display:flex; gap:8px; align-items:center;">
+        <button onclick="addLessonSource(${lessonId})" style="padding:5px 14px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${btnLabel}</button>
+        <span class="lesson-upload-status"></span>
+      </div>`;
 
   if (!hasSources) {
     step1Html += `<div style="margin-top:8px; color:#7b1fa2; font-size:0.78rem;">画像またはURLを追加してください</div>`;
-  } else if (hasImageSources && !hasExtractedText) {
-    step1Html += `<div style="margin-top:8px; color:#1565c0; font-size:0.78rem;">「テキスト抽出」を押してテキストを読み取ってください</div>`;
+  } else if (hasImageSources) {
+    step1Html += `<div style="margin-top:10px;">
+      <button onclick="extractLessonText(${lessonId})" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasExtractedText ? 'テキスト再抽出' : 'テキスト抽出'}</button>`;
+    if (!hasExtractedText) {
+      step1Html += `<span style="margin-left:8px; color:#1565c0; font-size:0.78rem;">画像からテキストを読み取ります</span>`;
+    }
+    step1Html += `</div>`;
   }
 
   step1Body.innerHTML = step1Html;
