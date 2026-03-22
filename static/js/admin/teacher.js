@@ -82,35 +82,27 @@ async function buildLessonItem(lessonId) {
   const step1Body = document.createElement('div');
   step1Body.className = 'lesson-step-body';
 
-  // ソースサムネイル
-  let srcHtml = '';
-  for (const s of sources) {
+  // 現在のソース表示
+  let srcInfo = '';
+  if (sources.length) {
+    const s = sources[0];
     if (s.source_type === 'image' && s.file_path) {
-      srcHtml += `<div style="position:relative; display:inline-block;">
-        <div style="width:80px; height:80px; border:1px solid #d0c0e8; border-radius:4px; overflow:hidden; position:relative;">
+      srcInfo = `<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+        <div style="width:60px; height:60px; border:1px solid #d0c0e8; border-radius:4px; overflow:hidden; flex-shrink:0;">
           <img src="/${esc(s.file_path)}" style="width:100%; height:100%; object-fit:cover;">
-          <button onclick="deleteLessonSource(${lessonId}, ${s.id})" style="position:absolute; top:2px; right:2px; width:18px; height:18px; background:rgba(198,40,40,0.9); color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.65rem; line-height:18px; padding:0;">\u00D7</button>
         </div>
-        <div style="font-size:0.6rem; color:#8a7a9a; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(s.original_name)}</div>
+        <div style="font-size:0.8rem; color:#2a1f40;">${esc(s.original_name)}</div>
       </div>`;
     } else if (s.source_type === 'url') {
-      srcHtml += `<div style="position:relative; display:inline-block;">
-        <div style="padding:6px 10px; background:#fff; border:1px solid #d0c0e8; border-radius:4px; display:flex; align-items:center; gap:6px;">
-          <span style="font-size:0.75rem; color:#1565c0; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(s.url)}">${esc(s.url)}</span>
-          <button onclick="deleteLessonSource(${lessonId}, ${s.id})" style="width:18px; height:18px; background:rgba(198,40,40,0.9); color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.65rem; line-height:18px; padding:0;">\u00D7</button>
-        </div>
-      </div>`;
+      srcInfo = `<div style="margin-bottom:8px; font-size:0.8rem; color:#1565c0;" title="${esc(s.url)}">${esc(s.url)}</div>`;
     }
   }
 
-  step1Body.innerHTML = `<div class="lesson-step-title">ソース追加${sources.length ? ' (' + sources.length + '件)' : ''}</div>`
-    + (srcHtml ? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">${srcHtml}</div>` : '')
+  const btnLabel = hasSources ? 'ソース変更' : 'ソース追加';
+  step1Body.innerHTML = `<div class="lesson-step-title">ソース追加</div>`
+    + srcInfo
     + `<div style="display:flex; gap:8px; align-items:center;">
-        <label style="padding:5px 14px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.8rem;">
-          画像追加
-          <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple onchange="uploadLessonImage(${lessonId}, this)" style="display:none;">
-        </label>
-        <button onclick="addLessonUrl(${lessonId})" style="padding:5px 14px; background:#546e7a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">URL追加</button>
+        <button onclick="addLessonSource(${lessonId})" style="padding:5px 14px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${btnLabel}</button>
         <span class="lesson-upload-status"></span>
       </div>`;
 
@@ -226,65 +218,72 @@ function _hideSpinner(el) {
   el.innerHTML = '';
 }
 
+async function addLessonSource(lessonId) {
+  const choice = await showModal('ソースの種類を選択してください', {
+    title: 'ソース追加',
+    okLabel: '画像',
+    cancelLabel: 'URL',
+  });
+  if (choice === true) {
+    // 画像: ファイル選択ダイアログ
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.png,.jpg,.jpeg,.webp,.gif';
+    input.onchange = () => uploadLessonImage(lessonId, input);
+    input.click();
+  } else if (choice === false) {
+    // URL入力
+    const url = await showModal('URLを入力してください', {
+      title: 'URL追加',
+      input: 'https://...',
+      okLabel: '追加',
+    });
+    if (url) await doAddLessonUrl(lessonId, url);
+  }
+}
+
 async function uploadLessonImage(lessonId, input) {
   if (!input.files || !input.files.length) return;
-  const statusEl = input.closest('div').querySelector('.lesson-upload-status');
-  const total = input.files.length;
-  let done = 0;
-  for (const file of input.files) {
-    done++;
-    const msg = total > 1
-      ? `アップロード中 (${done}/${total}): ${file.name} — テキスト抽出中...`
-      : `アップロード中: ${file.name} — テキスト抽出中...`;
-    _showSpinner(statusEl, msg);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const r = await fetch('/api/lessons/' + lessonId + '/upload-image', { method: 'POST', body: formData });
-      const data = await r.json();
-      if (data.ok) {
-        showToast('アップロード完了: ' + file.name, 'success');
-      } else {
-        showToast('アップロード失敗: ' + (data.error || ''), 'error');
-      }
-    } catch (e) {
-      showToast('アップロード失敗: ' + e.message, 'error');
+  const file = input.files[0];
+  const statusEl = _findStatusEl(lessonId);
+  if (statusEl) _showSpinner(statusEl, 'アップロード中: ' + file.name + ' — テキスト抽出中...');
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const r = await fetch('/api/lessons/' + lessonId + '/upload-image', { method: 'POST', body: formData });
+    const data = await r.json();
+    if (data.ok) {
+      showToast('アップロード完了: ' + file.name, 'success');
+    } else {
+      showToast('アップロード失敗: ' + (data.error || ''), 'error');
     }
+  } catch (e) {
+    showToast('アップロード失敗: ' + e.message, 'error');
   }
-  input.value = '';
-  _hideSpinner(statusEl);
+  if (statusEl) _hideSpinner(statusEl);
   _openLessonIds.add(lessonId);
   await loadLessons();
 }
 
-async function addLessonUrl(lessonId) {
-  const url = await showModal('URLを入力してください', {
-    title: 'URL追加',
-    input: 'https://...',
-    okLabel: '追加',
-  });
-  if (!url) return;
-  const item = [...document.querySelectorAll('.lesson-item')].find(el => {
-    const b = el.querySelector(`button[onclick="addLessonUrl(${lessonId})"]`);
-    return !!b;
-  });
-  let statusEl = item ? item.querySelector('.lesson-upload-status') : null;
+async function doAddLessonUrl(lessonId, url) {
+  const statusEl = _findStatusEl(lessonId);
   if (statusEl) _showSpinner(statusEl, 'URL取得中 — テキスト抽出中...');
   const res = await api('POST', '/api/lessons/' + lessonId + '/add-url', { url });
   if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
     showToast('URL追加完了', 'success');
-    _openLessonIds.add(lessonId);
-    await loadLessons();
   }
-}
-
-async function deleteLessonSource(lessonId, sourceId) {
-  const ok = await showConfirm('このソースを削除しますか？');
-  if (!ok) return;
-  await api('DELETE', '/api/lessons/' + lessonId + '/sources/' + sourceId);
   _openLessonIds.add(lessonId);
   await loadLessons();
+}
+
+function _findStatusEl(lessonId) {
+  for (const item of document.querySelectorAll('.lesson-item')) {
+    if (item.querySelector(`button[onclick="addLessonSource(${lessonId})"]`)) {
+      return item.querySelector('.lesson-upload-status');
+    }
+  }
+  return null;
 }
 
 // --- 授業スクリプト ---

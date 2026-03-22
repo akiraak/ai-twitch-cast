@@ -113,6 +113,42 @@ class TestLessonSources:
         assert len(r3.json()["sources"]) == 0
 
 
+    def test_upload_clears_previous_data(self, api_client, test_db, tmp_path):
+        """画像アップロードで既存ソース・セクション・抽出テキストがクリアされる"""
+        r1 = api_client.post("/api/lessons", json={"name": "ClearTest"})
+        lid = r1.json()["lesson"]["id"]
+
+        # 最初の画像
+        img1 = tmp_path / "first.png"
+        img1.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+        api_client.post(
+            f"/api/lessons/{lid}/upload-image",
+            files={"file": ("first.png", img1.read_bytes(), "image/png")},
+        )
+
+        # セクションも追加
+        test_db.add_lesson_section(lid, 0, "introduction", "old")
+        test_db.update_lesson(lid, extracted_text="old text")
+
+        # 2枚目の画像 → 前のデータがクリアされる
+        img2 = tmp_path / "second.png"
+        img2.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50)
+        api_client.post(
+            f"/api/lessons/{lid}/upload-image",
+            files={"file": ("second.png", img2.read_bytes(), "image/png")},
+        )
+
+        r = api_client.get(f"/api/lessons/{lid}")
+        data = r.json()
+        # ソースは1件だけ（2枚目のみ）
+        assert len(data["sources"]) == 1
+        assert data["sources"][0]["original_name"] == "second.png"
+        # セクションはクリアされている
+        assert len(data["sections"]) == 0
+        # 抽出テキストは古いものでない（上書きされている）
+        assert "old text" not in data["lesson"]["extracted_text"]
+
+
 class TestLessonSections:
     def _create_lesson_with_sections(self, api_client, test_db):
         """ヘルパー: セクション付きレッスンを作成"""
