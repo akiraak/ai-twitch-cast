@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 from src import db
 from src.ai_responder import generate_event_response, generate_persona, generate_response, generate_self_note, generate_user_notes, get_character, get_character_id
+from src.lesson_runner import LessonRunner
 from src.speech_pipeline import SpeechPipeline
 from src.twitch_chat import TwitchChat
 
@@ -19,6 +20,7 @@ class CommentReader:
         self._chat = TwitchChat()
         self._on_overlay = on_overlay
         self._speech = SpeechPipeline(on_overlay=on_overlay)
+        self._lesson_runner = LessonRunner(speech=self._speech, on_overlay=on_overlay)
         self._queue = deque()
         self._segment_queue = deque()  # 長文分割の2文目以降
         self._process_task = None
@@ -26,9 +28,14 @@ class CommentReader:
         self._running = False
         self._episode_id = None
 
+    @property
+    def lesson_runner(self) -> LessonRunner:
+        return self._lesson_runner
+
     def set_episode(self, episode_id):
         """現在のエピソードIDを設定する"""
         self._episode_id = episode_id
+        self._lesson_runner.set_episode(episode_id)
 
     async def start(self):
         """読み上げを開始する"""
@@ -43,6 +50,8 @@ class CommentReader:
     async def stop(self):
         """読み上げを停止する"""
         self._running = False
+        # 授業実行中なら停止
+        await self._lesson_runner.stop()
         await self._chat.stop()
         for task in [self._process_task, self._note_task]:
             if task:

@@ -31,7 +31,7 @@ function switchTab(name, el) {
   if (name === 'todo') loadTodoList();
   if (name === 'debug') { loadScreenshots(); }
   if (name === 'layout') loadCustomTexts();
-  if (name === 'convmode') loadLessons();
+  if (name === 'convmode') { loadLessons(); } else { if (typeof stopLessonStatusPolling === 'function') stopLessonStatusPolling(); }
 }
 
 

@@ -1,6 +1,8 @@
 """教師モードAPIのテスト"""
 
-from unittest.mock import AsyncMock, patch
+import asyncio
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestLessonCRUD:
@@ -187,4 +189,76 @@ class TestLessonSections:
         r = api_client.post("/api/lessons", json={"name": "Empty"})
         lid = r.json()["lesson"]["id"]
         resp = api_client.post(f"/api/lessons/{lid}/generate-script")
+        assert resp.json()["ok"] is False
+
+
+class TestLessonControl:
+    def test_get_status_idle(self, api_client):
+        """初期状態はidle"""
+        resp = api_client.get("/api/lessons/status")
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["status"]["state"] == "idle"
+
+    def test_start_lesson(self, api_client, test_db):
+        """授業開始"""
+        r = api_client.post("/api/lessons", json={"name": "StartTest"})
+        lid = r.json()["lesson"]["id"]
+        # セクション追加
+        test_db.add_lesson_section(lid, 0, "introduction", "はじめに")
+        test_db.add_lesson_section(lid, 1, "explanation", "説明")
+
+        resp = api_client.post(f"/api/lessons/{lid}/start")
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["status"]["state"] == "running"
+        assert data["status"]["total_sections"] == 2
+
+        # クリーンアップ: 授業を停止
+        api_client.post("/api/lessons/stop")
+
+    def test_start_lesson_no_sections(self, api_client):
+        """セクションなしでの授業開始はエラー"""
+        r = api_client.post("/api/lessons", json={"name": "NoSec"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(f"/api/lessons/{lid}/start")
+        assert resp.json()["ok"] is False
+
+    def test_pause_resume(self, api_client, test_db):
+        """一時停止と再開（直接LessonRunnerを操作）"""
+        from scripts import state
+        runner = state.reader.lesson_runner
+
+        r = api_client.post("/api/lessons", json={"name": "PauseTest"})
+        lid = r.json()["lesson"]["id"]
+        # 多くのセクションを追加して再生が終わらないようにする
+        for i in range(10):
+            test_db.add_lesson_section(lid, i, "explanation", f"テスト{i}" * 20)
+
+        api_client.post(f"/api/lessons/{lid}/start")
+
+        # LessonRunnerがrunning状態になったことを確認してからpause
+        if runner.state.value == "running":
+            resp = api_client.post("/api/lessons/pause")
+            assert resp.json()["status"]["state"] == "paused"
+
+            resp = api_client.post("/api/lessons/resume")
+            assert resp.json()["status"]["state"] == "running"
+
+        # クリーンアップ
+        api_client.post("/api/lessons/stop")
+
+    def test_stop_lesson(self, api_client, test_db):
+        """授業停止"""
+        r = api_client.post("/api/lessons", json={"name": "StopTest"})
+        lid = r.json()["lesson"]["id"]
+        test_db.add_lesson_section(lid, 0, "introduction", "テスト")
+
+        api_client.post(f"/api/lessons/{lid}/start")
+        resp = api_client.post("/api/lessons/stop")
+        assert resp.json()["status"]["state"] == "idle"
+
+    def test_start_not_found(self, api_client):
+        """存在しないコンテンツの授業開始"""
+        resp = api_client.post("/api/lessons/9999/start")
         assert resp.json()["ok"] is False

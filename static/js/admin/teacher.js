@@ -73,6 +73,9 @@ async function loadLessonDetail(lessonId) {
   renderSources(res.sources);
   // セクション一覧
   renderSections(res.sections);
+  // 授業ステータス
+  loadLessonStatus();
+  startLessonStatusPolling();
 }
 
 async function saveLessonName() {
@@ -287,4 +290,72 @@ async function _reorderSection(sectionId, direction) {
   [ids[idx], ids[newIdx]] = [ids[newIdx], ids[idx]];
   await api('PUT', '/api/lessons/' + _currentLessonId + '/sections/reorder', { section_ids: ids });
   loadLessonDetail(_currentLessonId);
+}
+
+// --- 授業制御 ---
+
+async function startLesson() {
+  if (!_currentLessonId) return;
+  const res = await api('POST', '/api/lessons/' + _currentLessonId + '/start');
+  if (res && res.ok) {
+    showToast('\u6388\u696D\u958B\u59CB', 'success');
+    updateLessonControlUI(res.status);
+  }
+}
+
+async function pauseLesson() {
+  const res = await api('POST', '/api/lessons/pause');
+  if (res && res.ok) updateLessonControlUI(res.status);
+}
+
+async function resumeLesson() {
+  const res = await api('POST', '/api/lessons/resume');
+  if (res && res.ok) updateLessonControlUI(res.status);
+}
+
+async function stopLesson() {
+  const res = await api('POST', '/api/lessons/stop');
+  if (res && res.ok) {
+    showToast('\u6388\u696D\u505C\u6B62', 'success');
+    updateLessonControlUI(res.status);
+  }
+}
+
+function updateLessonControlUI(status) {
+  if (!status) return;
+  const stateEl = document.getElementById('lesson-state');
+  const startBtn = document.getElementById('btn-lesson-start');
+  const pauseBtn = document.getElementById('btn-lesson-pause');
+  const resumeBtn = document.getElementById('btn-lesson-resume');
+  const stopBtn = document.getElementById('btn-lesson-stop');
+  const progressEl = document.getElementById('lesson-progress');
+
+  const labels = { idle: '\u505C\u6B62\u4E2D', running: '\u5B9F\u884C\u4E2D', paused: '\u4E00\u6642\u505C\u6B62' };
+  stateEl.textContent = labels[status.state] || status.state;
+
+  startBtn.style.display = status.state === 'idle' ? '' : 'none';
+  pauseBtn.style.display = status.state === 'running' ? '' : 'none';
+  resumeBtn.style.display = status.state === 'paused' ? '' : 'none';
+  stopBtn.style.display = status.state !== 'idle' ? '' : 'none';
+
+  if (status.state !== 'idle' && status.total_sections > 0) {
+    progressEl.textContent = `\u30BB\u30AF\u30B7\u30E7\u30F3 ${status.current_index + 1} / ${status.total_sections}`;
+  } else {
+    progressEl.textContent = '';
+  }
+}
+
+async function loadLessonStatus() {
+  const res = await api('GET', '/api/lessons/status');
+  if (res && res.ok) updateLessonControlUI(res.status);
+}
+
+// 定期的にステータスポーリング（授業進行表示用）
+let _lessonStatusTimer = null;
+function startLessonStatusPolling() {
+  if (_lessonStatusTimer) return;
+  _lessonStatusTimer = setInterval(loadLessonStatus, 3000);
+}
+function stopLessonStatusPolling() {
+  if (_lessonStatusTimer) { clearInterval(_lessonStatusTimer); _lessonStatusTimer = null; }
 }

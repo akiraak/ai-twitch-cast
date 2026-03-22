@@ -83,9 +83,19 @@ def api_client(test_db, mock_env, mock_gemini, monkeypatch):
     monkeypatch.setattr(st, "broadcast_to_broadcast", AsyncMock())
 
     # reader/git_watcherはモック
+    from src.lesson_runner import LessonRunner
+    from src.speech_pipeline import SpeechPipeline
+    mock_speech = MagicMock(spec=SpeechPipeline)
+    mock_speech.speak = AsyncMock()
+    mock_speech.notify_overlay_end = AsyncMock()
+    mock_speech.apply_emotion = MagicMock()
+    mock_speech.split_sentences = SpeechPipeline.split_sentences
+    mock_lesson_runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
+
     mock_reader = MagicMock()
     mock_reader.is_running = False
     mock_reader.queue_size = 0
+    mock_reader.lesson_runner = mock_lesson_runner
     monkeypatch.setattr(st, "reader", mock_reader)
 
     mock_gw = MagicMock()

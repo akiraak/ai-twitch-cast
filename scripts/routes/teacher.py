@@ -75,6 +75,45 @@ async def create_lesson(body: LessonCreate):
     return {"ok": True, "lesson": lesson}
 
 
+# --- 授業制御（{lesson_id}パスより前に定義する必要あり） ---
+
+def _get_lesson_runner():
+    """CommentReaderからLessonRunnerを取得する"""
+    from scripts import state
+    return state.reader.lesson_runner
+
+
+@router.post("/api/lessons/pause")
+async def pause_lesson():
+    """授業を一時停止する"""
+    runner = _get_lesson_runner()
+    await runner.pause()
+    return {"ok": True, "status": runner.get_status()}
+
+
+@router.post("/api/lessons/resume")
+async def resume_lesson():
+    """授業を再開する"""
+    runner = _get_lesson_runner()
+    await runner.resume()
+    return {"ok": True, "status": runner.get_status()}
+
+
+@router.post("/api/lessons/stop")
+async def stop_lesson():
+    """授業を停止する"""
+    runner = _get_lesson_runner()
+    await runner.stop()
+    return {"ok": True, "status": runner.get_status()}
+
+
+@router.get("/api/lessons/status")
+async def lesson_status():
+    """授業ステータスを取得する"""
+    runner = _get_lesson_runner()
+    return {"ok": True, "status": runner.get_status()}
+
+
 @router.get("/api/lessons/{lesson_id}")
 async def get_lesson(lesson_id: int):
     """コンテンツ詳細（ソース＋セクション付き）"""
@@ -293,3 +332,14 @@ async def delete_section(lesson_id: int, section_id: int):
     """セクション削除"""
     db.delete_lesson_section(section_id)
     return {"ok": True}
+
+
+@router.post("/api/lessons/{lesson_id}/start")
+async def start_lesson(lesson_id: int):
+    """授業を開始する"""
+    runner = _get_lesson_runner()
+    try:
+        await runner.start(lesson_id)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "status": runner.get_status()}

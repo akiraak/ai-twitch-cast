@@ -8,6 +8,13 @@
 - [x] 管理画面UI — 会話モードタブ追加（教師モード/雑談モードサブタブ）、コンテンツ一覧・詳細・ソース管理・スクリプト表示・インライン編集
 - [x] テスト追加（test_api_teacher.py + test_db.py Lesson関連、全435テスト通過）
 
+## 教師モード Phase 2: 授業再生エンジン
+
+- [x] LessonRunner実装（src/lesson_runner.py）— セクション順次再生・一時停止/再開/停止・問いかけ待ち
+- [x] CommentReaderにLessonRunner統合（lesson_runnerプロパティ、SpeechPipeline共有）
+- [x] 授業制御API（start/pause/resume/stop/status）+ 管理画面に制御ボタン・進捗表示
+- [x] テスト追加（test_lesson_runner.py + test_api_teacher.py 授業制御、全450テスト通過）
+
 ## トピック機能・授業モード完全削除
 
 - [x] バックエンド: TopicTalker・トピックAPI・授業モード関連コード削除（state.py, comment_reader.py, ai_responder.py, db.py, prompt_builder.py, avatar.py, web.py, overlay.py, items.py）
