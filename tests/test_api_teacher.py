@@ -1,8 +1,24 @@
 """教師モードAPIのテスト"""
 
 import asyncio
+import json
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
+
+def parse_sse_result(response):
+    """SSEレスポンスから最終結果（ok付き）を取得する"""
+    text = response.text
+    result = None
+    for line in text.split('\n'):
+        if line.startswith('data: '):
+            try:
+                data = json.loads(line[6:])
+                if 'ok' in data:
+                    result = data
+            except json.JSONDecodeError:
+                pass
+    return result
 
 
 class TestLessonCRUD:
@@ -206,7 +222,7 @@ class TestLessonSections:
         assert result_ids == reversed_ids
 
     def test_generate_script(self, api_client, test_db, mock_gemini):
-        """スクリプト生成（Gemini APIモック）"""
+        """スクリプト生成（Gemini APIモック、SSEレスポンス）"""
         r = api_client.post("/api/lessons", json={"name": "GenTest"})
         lid = r.json()["lesson"]["id"]
         # 抽出テキストを設定
@@ -221,7 +237,7 @@ class TestLessonSections:
         ]"""
 
         resp = api_client.post(f"/api/lessons/{lid}/generate-script")
-        data = resp.json()
+        data = parse_sse_result(resp)
         assert data["ok"] is True
         assert len(data["sections"]) == 2
         assert data["sections"][0]["section_type"] == "introduction"
@@ -257,7 +273,7 @@ class TestLessonPlan:
         ]
 
         resp = api_client.post(f"/api/lessons/{lid}/generate-plan")
-        data = resp.json()
+        data = parse_sse_result(resp)
         assert data["ok"] is True
         assert "knowledge" in data
         assert "entertainment" in data
@@ -317,7 +333,7 @@ class TestLessonPlan:
         ]"""
 
         resp = api_client.post(f"/api/lessons/{lid}/generate-script")
-        data = resp.json()
+        data = parse_sse_result(resp)
         assert data["ok"] is True
         assert len(data["sections"]) == 1
         assert data["sections"][0]["content"] == "プランベース導入"

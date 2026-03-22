@@ -1,11 +1,13 @@
 """教師モードAPI — コンテンツCRUD・画像アップロード・スクリプト生成"""
 
 import asyncio
+import json as _json
 import logging
 import re
 from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src import db
@@ -333,7 +335,7 @@ async def delete_lesson_source(lesson_id: int, source_id: int):
 
 @router.post("/api/lessons/{lesson_id}/generate-plan")
 async def generate_plan(lesson_id: int):
-    """三者視点（知識・エンタメ・校長）で授業プランを生成する"""
+    """三者視点（知識・エンタメ・校長）で授業プランを生成する（SSE進捗付き）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
@@ -350,31 +352,56 @@ async def generate_plan(lesson_id: int):
         if s["source_type"] == "image" and s["file_path"]
     ]
 
-    try:
-        plan = await asyncio.to_thread(
-            generate_lesson_plan,
-            lesson["name"], extracted_text, image_paths or None,
-        )
-    except Exception as e:
-        logger.error("プラン生成失敗: %s", e)
-        return {"ok": False, "error": str(e)}
+    async def event_stream():
+        progress_queue = asyncio.Queue()
 
-    # DB保存
-    import json as _json
-    db.update_lesson(
-        lesson_id,
-        plan_knowledge=plan["knowledge"],
-        plan_entertainment=plan["entertainment"],
-        plan_json=_json.dumps(plan["plan_sections"], ensure_ascii=False),
-    )
+        def on_progress(step, total, message):
+            progress_queue.put_nowait({"step": step, "total": total, "message": message})
 
-    logger.info("プラン生成完了: lesson=%d, sections=%d", lesson_id, len(plan["plan_sections"]))
-    return {
-        "ok": True,
-        "knowledge": plan["knowledge"],
-        "entertainment": plan["entertainment"],
-        "plan_sections": plan["plan_sections"],
-    }
+        async def run_generation():
+            return await asyncio.to_thread(
+                generate_lesson_plan,
+                lesson["name"], extracted_text, image_paths or None,
+                on_progress=on_progress,
+            )
+
+        task = asyncio.create_task(run_generation())
+
+        while not task.done():
+            try:
+                progress = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
+            except asyncio.TimeoutError:
+                pass
+
+        # drain remaining progress events
+        while not progress_queue.empty():
+            progress = progress_queue.get_nowait()
+            yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
+
+        try:
+            plan = task.result()
+            # DB保存
+            db.update_lesson(
+                lesson_id,
+                plan_knowledge=plan["knowledge"],
+                plan_entertainment=plan["entertainment"],
+                plan_json=_json.dumps(plan["plan_sections"], ensure_ascii=False),
+            )
+            logger.info("プラン生成完了: lesson=%d, sections=%d", lesson_id, len(plan["plan_sections"]))
+            result = {
+                "ok": True,
+                "knowledge": plan["knowledge"],
+                "entertainment": plan["entertainment"],
+                "plan_sections": plan["plan_sections"],
+            }
+        except Exception as e:
+            logger.error("プラン生成失敗: %s", e)
+            result = {"ok": False, "error": str(e)}
+
+        yield f"data: {_json.dumps(result, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 class PlanUpdate(BaseModel):
@@ -407,7 +434,7 @@ async def update_plan(lesson_id: int, body: PlanUpdate):
 
 @router.post("/api/lessons/{lesson_id}/generate-script")
 async def generate_script(lesson_id: int):
-    """授業スクリプトを生成する（既存セクションは上書き）"""
+    """授業スクリプトを生成する（既存セクションは上書き、SSE進捗付き）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
@@ -429,45 +456,71 @@ async def generate_script(lesson_id: int):
     plan_sections = None
     if plan_json_str:
         try:
-            import json as _json
             plan_sections = _json.loads(plan_json_str)
         except Exception:
             pass
 
-    try:
-        if plan_sections:
-            sections = await asyncio.to_thread(
-                generate_lesson_script_from_plan,
-                lesson["name"], extracted_text, plan_sections, image_paths or None,
-            )
-        else:
-            sections = await asyncio.to_thread(
-                generate_lesson_script,
-                lesson["name"], extracted_text, image_paths or None,
-            )
-    except Exception as e:
-        logger.error("スクリプト生成失敗: %s", e)
-        return {"ok": False, "error": str(e)}
+    async def event_stream():
+        progress_queue = asyncio.Queue()
 
-    # 既存セクションを削除して再生成
-    db.delete_lesson_sections(lesson_id)
-    saved = []
-    for i, s in enumerate(sections):
-        sec = db.add_lesson_section(
-            lesson_id, order_index=i,
-            section_type=s["section_type"],
-            content=s["content"],
-            tts_text=s["tts_text"],
-            display_text=s["display_text"],
-            emotion=s["emotion"],
-            question=s.get("question", ""),
-            answer=s.get("answer", ""),
-            wait_seconds=s.get("wait_seconds", 0),
-        )
-        saved.append(sec)
+        def on_progress(step, total, message):
+            progress_queue.put_nowait({"step": step, "total": total, "message": message})
 
-    logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))
-    return {"ok": True, "sections": saved}
+        async def run_generation():
+            if plan_sections:
+                return await asyncio.to_thread(
+                    generate_lesson_script_from_plan,
+                    lesson["name"], extracted_text, plan_sections, image_paths or None,
+                    on_progress=on_progress,
+                )
+            else:
+                return await asyncio.to_thread(
+                    generate_lesson_script,
+                    lesson["name"], extracted_text, image_paths or None,
+                    on_progress=on_progress,
+                )
+
+        task = asyncio.create_task(run_generation())
+
+        while not task.done():
+            try:
+                progress = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+                yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
+            except asyncio.TimeoutError:
+                pass
+
+        # drain remaining progress events
+        while not progress_queue.empty():
+            progress = progress_queue.get_nowait()
+            yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
+
+        try:
+            sections = task.result()
+            # 既存セクションを削除して再生成
+            db.delete_lesson_sections(lesson_id)
+            saved = []
+            for i, s in enumerate(sections):
+                sec = db.add_lesson_section(
+                    lesson_id, order_index=i,
+                    section_type=s["section_type"],
+                    content=s["content"],
+                    tts_text=s["tts_text"],
+                    display_text=s["display_text"],
+                    emotion=s["emotion"],
+                    question=s.get("question", ""),
+                    answer=s.get("answer", ""),
+                    wait_seconds=s.get("wait_seconds", 0),
+                )
+                saved.append(sec)
+            logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))
+            result = {"ok": True, "sections": saved}
+        except Exception as e:
+            logger.error("スクリプト生成失敗: %s", e)
+            result = {"ok": False, "error": str(e)}
+
+        yield f"data: {_json.dumps(result, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 # --- セクション編集 ---

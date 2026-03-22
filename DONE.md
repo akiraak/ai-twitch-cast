@@ -46,6 +46,8 @@
 - [x] 間（ま）のスケール制御（pace_scale API + UIスライダー、0.5〜2.0x）
 - [x] 言語タグ除去の多層防御（SSML `<lang>` タグ対応、speech_pipeline/state/panels.jsの3箇所）
 - [x] テスト追加（TestLessonPlan + TestPaceScale、全460テスト通過）
+- [x] TTS事前一括生成（セクション内パート間の間を大幅短縮、SpeechPipeline.generate_tts + wav_path渡し）
+- [x] プラン/スクリプト生成のSSE進捗表示（StreamingResponse + EventSource、ステップごとにリアルタイム更新）
 
 ## トピック機能・授業モード完全削除
 

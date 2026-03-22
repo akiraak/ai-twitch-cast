@@ -79,8 +79,26 @@ class SpeechPipeline:
         if self._on_overlay:
             await self._on_overlay({"type": "speaking_end"})
 
+    async def generate_tts(self, text, voice=None, tts_text=None):
+        """TTS音声を事前生成する（再生はしない）
+
+        Returns:
+            Path | None: 生成されたWAVファイルのパス。失敗時はNone。
+        """
+        wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
+        t_start = time.monotonic()
+        try:
+            await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice)
+            logger.info("[tts] 事前生成完了: %.0fms", (time.monotonic() - t_start) * 1000)
+            return wav_path
+        except Exception as e:
+            logger.warning("[tts] 事前生成失敗: %s", e)
+            wav_path.unlink(missing_ok=True)
+            wav_path.parent.rmdir()
+            return None
+
     async def speak(self, text, voice=None, subtitle=None, chat_result=None,
-                    tts_text=None, post_to_chat=None, se=None):
+                    tts_text=None, post_to_chat=None, se=None, wav_path=None):
         """TTS生成・ブラウザソース経由で再生する（排他制御付き）
 
         Args:
@@ -91,14 +109,16 @@ class SpeechPipeline:
             tts_text: TTS用テキスト（言語タグ付き）
             post_to_chat: チャット投稿コールバック（async関数）
             se: SE情報 {filename, volume, duration, url} or None
+            wav_path: 事前生成済みWAVパス（指定時はTTS生成をスキップ）
         """
         async with self._speak_lock:
             await self._speak_impl(text, voice=voice, subtitle=subtitle,
                                    chat_result=chat_result, tts_text=tts_text,
-                                   post_to_chat=post_to_chat, se=se)
+                                   post_to_chat=post_to_chat, se=se,
+                                   wav_path=wav_path)
 
     async def _speak_impl(self, text, voice=None, subtitle=None, chat_result=None,
-                          tts_text=None, post_to_chat=None, se=None):
+                          tts_text=None, post_to_chat=None, se=None, wav_path=None):
         """speak()の実体（ロック取得済み前提）"""
         # === SE再生（TTS前） ===
         if se:
@@ -106,16 +126,19 @@ class SpeechPipeline:
             se_duration = se.get("duration", 1.0)
             await asyncio.sleep(se_duration + 0.3)
 
-        wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
-        tts_ok = False
+        pregenerated = wav_path is not None
+        if not pregenerated:
+            wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
+        tts_ok = pregenerated and wav_path.exists()
         t_start = time.monotonic()
-        try:
-            logger.info("[tts] 生成中...")
-            await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice)
-            tts_ok = True
-            logger.info("[tts] 生成完了: %.0fms", (time.monotonic() - t_start) * 1000)
-        except Exception as e:
-            logger.warning("[tts] 音声生成失敗、テキストのみ表示: %s", e)
+        if not pregenerated:
+            try:
+                logger.info("[tts] 生成中...")
+                await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice)
+                tts_ok = True
+                logger.info("[tts] 生成完了: %.0fms", (time.monotonic() - t_start) * 1000)
+            except Exception as e:
+                logger.warning("[tts] 音声生成失敗、テキストのみ表示: %s", e)
 
         if self._on_overlay:
             if tts_ok:
@@ -169,8 +192,8 @@ class SpeechPipeline:
                         await fn(result)
                     asyncio.create_task(_delayed_chat(chat_result, post_to_chat))
 
-                # 音声の長さ分だけ待機
-                await asyncio.sleep(duration + 0.5)
+                # 音声の長さ分だけ待機（余白は最小限にして自然なテンポを保つ）
+                await asyncio.sleep(duration + 0.1)
 
                 # リップシンク停止
                 if lipsync_frames:

@@ -425,6 +425,44 @@ function _findStatusEl(lessonId) {
   return item ? item.querySelector('.lesson-upload-status') : null;
 }
 
+// --- SSEストリーミング共通 ---
+
+function _streamSSE(url, statusEl, onComplete) {
+  return new Promise((resolve) => {
+    fetch(url, { method: 'POST' }).then(response => {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      function read() {
+        reader.read().then(({ done, value }) => {
+          if (done) { resolve(null); return; }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.ok !== undefined) {
+                // 最終結果
+                resolve(data);
+              } else if (data.step !== undefined && statusEl) {
+                // 進捗更新
+                _showSpinner(statusEl, data.message + ' (' + data.step + '/' + data.total + ')');
+              }
+            } catch(e) {}
+          }
+          read();
+        });
+      }
+      read();
+    }).catch(e => {
+      resolve({ ok: false, error: e.message });
+    });
+  });
+}
+
 // --- プラン生成 ---
 
 async function generatePlan(lessonId) {
@@ -440,8 +478,8 @@ async function generatePlan(lessonId) {
     }
   }
   if (btn) btn.disabled = true;
-  if (statusEl) _showSpinner(statusEl, 'プラン生成中（三者視点で分析中）...');
-  const res = await api('POST', '/api/lessons/' + lessonId + '/generate-plan');
+  if (statusEl) _showSpinner(statusEl, 'プラン生成開始...');
+  const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-plan', statusEl);
   if (btn) btn.disabled = false;
   if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
@@ -472,8 +510,8 @@ async function generateScript(lessonId) {
     }
   }
   if (btn) btn.disabled = true;
-  if (statusEl) _showSpinner(statusEl, 'スクリプト生成中...');
-  const res = await api('POST', '/api/lessons/' + lessonId + '/generate-script');
+  if (statusEl) _showSpinner(statusEl, 'スクリプト生成開始...');
+  const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-script', statusEl);
   if (btn) btn.disabled = false;
   if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
@@ -481,7 +519,6 @@ async function generateScript(lessonId) {
   } else {
     const errMsg = res && res.error ? res.error : '不明なエラー';
     showToast('スクリプト生成失敗: ' + errMsg, 'error');
-    // エラーをstep2内にも表示
     if (statusEl) {
       statusEl.innerHTML = '<span style="color:#c62828; font-size:0.8rem; font-weight:600;">❌ ' + esc(errMsg) + '</span>';
     }

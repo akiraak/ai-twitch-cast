@@ -196,22 +196,39 @@ class LessonRunner:
         self._speech.apply_emotion(emotion)
 
         # 発話をSpeechPipelineで行う
-        # 長文は文分割して順次再生
+        # 長文は文分割して順次再生（全パートのTTSを事前生成してから再生）
         content_parts = SpeechPipeline.split_sentences(content)
         tts_parts = SpeechPipeline.split_sentences(tts_text)
 
+        # 全パートのTTSを事前生成
+        wav_paths = []
         for i, part in enumerate(content_parts):
             if self._state == LessonState.IDLE:
                 break
             part_tts = tts_parts[i] if i < len(tts_parts) else part
+            logger.info("[lesson]   generating part[%d] tts=%s", i, repr(part_tts[:100]))
+            wav = await self._speech.generate_tts(part, tts_text=part_tts)
+            wav_paths.append(wav)
+        logger.info("[lesson]   TTS事前生成完了: %d/%d パート", len(wav_paths), len(content_parts))
+
+        # 事前生成済みWAVで順次再生
+        for i, part in enumerate(content_parts):
+            if self._state == LessonState.IDLE:
+                break
             logger.info("[lesson]   part[%d] subtitle=%s", i, repr(part[:100]))
-            logger.info("[lesson]   part[%d] tts=%s", i, repr(part_tts[:100]))
             await self._speech.speak(part, subtitle={
                 "author": "ちょビ",
                 "trigger_text": f"[授業] {section_type}",
                 "result": {"speech": part, "emotion": emotion, "translation": ""},
-            }, tts_text=part_tts)
+            }, tts_text=tts_parts[i] if i < len(tts_parts) else part,
+               wav_path=wav_paths[i] if i < len(wav_paths) else None)
             await self._speech.notify_overlay_end()
+
+        # 停止時の未再生WAVクリーンアップ
+        for wav in wav_paths:
+            if wav and wav.exists():
+                wav.unlink(missing_ok=True)
+                wav.parent.rmdir()
 
         self._speech.apply_emotion("neutral")
 
