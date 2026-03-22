@@ -1,10 +1,33 @@
 """共有状態 - コントローラー・接続フラグ・ブロードキャスト"""
 
 import os
+import re
 
 from fastapi import WebSocket
 
 from src import db
+
+# テキストフィールドから言語タグを除去するキー
+_TEXT_KEYS_TO_STRIP = {"speech", "trigger_text", "translation", "text"}
+_LANG_TAG_RE = re.compile(r'\[/?lang(?::\w+)?\]|<lang\b[^>]*>|</lang>', re.IGNORECASE)
+
+
+def _strip_text_fields(event: dict) -> dict:
+    """イベント内のテキストフィールドから言語タグを除去する（非破壊）"""
+    needs_strip = False
+    for key in _TEXT_KEYS_TO_STRIP:
+        val = event.get(key)
+        if isinstance(val, str) and _LANG_TAG_RE.search(val):
+            needs_strip = True
+            break
+    if not needs_strip:
+        return event
+    cleaned = dict(event)
+    for key in _TEXT_KEYS_TO_STRIP:
+        val = cleaned.get(key)
+        if isinstance(val, str):
+            cleaned[key] = _LANG_TAG_RE.sub('', val)
+    return cleaned
 from src.ai_responder import get_character_id, seed_character
 from src.comment_reader import CommentReader
 from src.git_watcher import GitWatcher
@@ -31,12 +54,24 @@ async def _broadcast(clients: set, event: dict):
 
 
 async def broadcast_overlay(event: dict):
-    """オーバーレイ（画面表示）にイベントを送信する"""
+    """オーバーレイ（画面表示）にイベントを送信する（テキストフィールドの言語タグは自動除去）"""
     import logging
     _log = logging.getLogger(__name__)
     if event.get("type") == "blendshape":
         _log.info("[ws] blendshape broadcast to %d clients: %s", len(broadcast_clients), event)
-    await _broadcast(broadcast_clients, event)
+    # テキスト系イベントのみタグ除去（blendshape/lipsync等はスキップ）
+    cleaned = _strip_text_fields(event)
+    if cleaned is not event:
+        _log.info("[ws] _strip_text_fields がタグ除去: type=%s", event.get("type"))
+        for key in _TEXT_KEYS_TO_STRIP:
+            if event.get(key) != cleaned.get(key):
+                _log.info("[ws]   %s: %s → %s", key, repr(event.get(key, "")[:100]), repr(cleaned.get(key, "")[:100]))
+    # SSMLタグ残存チェック
+    for key in _TEXT_KEYS_TO_STRIP:
+        val = cleaned.get(key, "")
+        if isinstance(val, str) and ('<lang' in val or '</lang>' in val):
+            _log.warning("[ws] ⚠ broadcast後もSSMLタグ残存: %s=%s", key, repr(val[:200]))
+    await _broadcast(broadcast_clients, cleaned)
 
 
 async def broadcast_tts(event: dict):

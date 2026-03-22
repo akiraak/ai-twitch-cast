@@ -31,10 +31,34 @@ async function loadLessons() {
   _cachedLessonStatus = statusRes;
   const list = document.getElementById('lesson-list');
   list.innerHTML = '';
+  // 間のスケールスライダー
+  await _renderPaceScaleSlider(list);
   for (const l of res.lessons) {
     const item = await buildLessonItem(l.id);
     if (item) list.appendChild(item);
   }
+}
+
+async function _renderPaceScaleSlider(container) {
+  const paceRes = await api('GET', '/api/lessons/pace-scale');
+  const currentScale = paceRes && paceRes.ok ? paceRes.pace_scale : 1.0;
+  const div = document.createElement('div');
+  div.style.cssText = 'margin-bottom:12px; padding:10px 14px; background:#f5f0ff; border:1px solid #d0c0e8; border-radius:6px; display:flex; align-items:center; gap:12px;';
+  div.innerHTML = `
+    <span style="font-size:0.8rem; font-weight:600; color:#2a1f40; white-space:nowrap;">間のスケール:</span>
+    <span style="font-size:0.75rem; color:#8a7a9a;">速い</span>
+    <input type="range" min="0.5" max="2.0" step="0.1" value="${currentScale}"
+      style="flex:1; accent-color:#7b1fa2;"
+      oninput="this.nextElementSibling.textContent = parseFloat(this.value).toFixed(1) + 'x'"
+      onchange="updatePaceScale(parseFloat(this.value))">
+    <span style="font-size:0.85rem; font-weight:600; color:#7b1fa2; min-width:32px;">${currentScale.toFixed(1)}x</span>
+    <span style="font-size:0.75rem; color:#8a7a9a;">ゆっくり</span>
+  `;
+  container.appendChild(div);
+}
+
+async function updatePaceScale(value) {
+  await api('PUT', '/api/lessons/pace-scale', { pace_scale: value });
 }
 
 async function buildLessonItem(lessonId) {
@@ -147,25 +171,82 @@ async function buildLessonItem(lessonId) {
   step1.appendChild(step1Body);
   body.appendChild(step1);
 
-  // === STEP 2: スクリプト生成 ===
-  const step2 = document.createElement('div');
-  step2.className = 'lesson-step' + (hasSections ? ' step-done' : hasExtractedText ? ' step-active' : ' step-disabled');
-  const step2Body = document.createElement('div');
-  step2Body.className = 'lesson-step-body';
-  step2Body.innerHTML = `<div class="lesson-step-title">スクリプト生成${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>
+  // === STEP 2a: プラン生成（三者視点） ===
+  const hasPlan = !!(lesson.plan_json);
+  const step2a = document.createElement('div');
+  step2a.className = 'lesson-step' + (hasPlan ? ' step-done' : hasExtractedText ? ' step-active' : ' step-disabled');
+  const step2aBody = document.createElement('div');
+  step2aBody.className = 'lesson-step-body';
+  let planHtml = `<div class="lesson-step-title">プラン生成（三者視点）${hasPlan ? ' ✓' : ''}</div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button onclick="generateScript(${lessonId})" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? '再生成' : 'スクリプト生成'}</button>
+      <button onclick="generatePlan(${lessonId})" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasPlan ? 'プラン再生成' : 'プラン生成'}</button>
+      <span class="plan-status"></span>
+    </div>`;
+
+  // 既存プランの表示
+  if (hasPlan) {
+    if (lesson.plan_knowledge) {
+      planHtml += `<details style="margin-top:8px; font-size:0.8rem;">
+        <summary style="cursor:pointer; color:#1565c0; font-weight:500;">📚 知識先生の分析</summary>
+        <pre style="margin-top:6px; background:#f0f4ff; padding:8px; border:1px solid #bbdefb; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#1a237e;">${esc(lesson.plan_knowledge)}</pre>
+      </details>`;
+    }
+    if (lesson.plan_entertainment) {
+      planHtml += `<details style="margin-top:6px; font-size:0.8rem;">
+        <summary style="cursor:pointer; color:#e65100; font-weight:500;">🎭 エンタメ先生の構成</summary>
+        <pre style="margin-top:6px; background:#fff3e0; padding:8px; border:1px solid #ffe0b2; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#bf360c;">${esc(lesson.plan_entertainment)}</pre>
+      </details>`;
+    }
+    try {
+      const planSections = JSON.parse(lesson.plan_json);
+      if (planSections.length) {
+        planHtml += `<details style="margin-top:6px; font-size:0.8rem;" open>
+          <summary style="cursor:pointer; color:#2e7d32; font-weight:500;">🎬 監督の最終プラン（${planSections.length}セクション）</summary>
+          <div style="margin-top:6px;">`;
+        for (let i = 0; i < planSections.length; i++) {
+          const ps = planSections[i];
+          const icon = SECTION_ICONS[ps.section_type] || '📖';
+          const waitInfo = ps.wait_seconds ? `${ps.wait_seconds}秒` : '';
+          planHtml += `<div style="padding:4px 8px; margin-bottom:4px; background:#e8f5e9; border-radius:4px; font-size:0.75rem;">
+            <span>${icon}</span>
+            <strong>${i + 1}. ${esc(ps.title || ps.section_type)}</strong>
+            <span style="color:#558b2f; margin-left:6px;">[${esc(ps.emotion || 'neutral')}]</span>
+            ${waitInfo ? `<span style="color:#795548; margin-left:4px;">⏱${waitInfo}</span>` : ''}
+            ${ps.has_question ? '<span style="color:#e65100; margin-left:4px;">❓</span>' : ''}
+            <div style="color:#33691e; margin-top:2px;">${esc(ps.summary || '')}</div>
+          </div>`;
+        }
+        planHtml += `</div></details>`;
+      }
+    } catch(e) {}
+  }
+
+  step2aBody.innerHTML = planHtml;
+  step2a.innerHTML = '<div class="lesson-step-num">2a</div>';
+  step2a.appendChild(step2aBody);
+  body.appendChild(step2a);
+
+  // === STEP 2b: スクリプト生成 ===
+  const step2b = document.createElement('div');
+  step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasPlan || hasExtractedText ? ' step-active' : ' step-disabled');
+  const step2bBody = document.createElement('div');
+  step2bBody.className = 'lesson-step-body';
+  const scriptLabel = hasPlan ? 'プランからスクリプト生成' : 'スクリプト生成';
+  step2bBody.innerHTML = `<div class="lesson-step-title">スクリプト生成${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button onclick="generateScript(${lessonId})" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? '再生成' : esc(scriptLabel)}</button>
       <span class="script-status"></span>
+      ${hasPlan ? '<span style="font-size:0.7rem; color:#1565c0;">プランに基づいて生成</span>' : ''}
     </div>`;
 
   // セクション一覧
   const secContainer = document.createElement('div');
   renderSectionsInto(secContainer, sections, lessonId);
-  step2Body.appendChild(secContainer);
+  step2bBody.appendChild(secContainer);
 
-  step2.innerHTML = '<div class="lesson-step-num">2</div>';
-  step2.appendChild(step2Body);
-  body.appendChild(step2);
+  step2b.innerHTML = '<div class="lesson-step-num">2b</div>';
+  step2b.appendChild(step2bBody);
+  body.appendChild(step2b);
 
   // === STEP 3: 授業開始 ===
   const isRunning = runningThisLesson && lState === 'running';
@@ -186,7 +267,7 @@ async function buildLessonItem(lessonId) {
     </div>
     <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:#8a7a9a;">${progressInfo}</div>`;
 
-  step3.innerHTML = '<div class="lesson-step-num">3</div>';
+  step3.innerHTML = '<div class="lesson-step-num">3</div>'; // Step 3: 授業開始
   step3.appendChild(step3Body);
   body.appendChild(step3);
 
@@ -342,6 +423,38 @@ function _findLessonItem(lessonId) {
 function _findStatusEl(lessonId) {
   const item = _findLessonItem(lessonId);
   return item ? item.querySelector('.lesson-upload-status') : null;
+}
+
+// --- プラン生成 ---
+
+async function generatePlan(lessonId) {
+  const items = document.querySelectorAll('.lesson-item');
+  let statusEl = null;
+  let btn = null;
+  for (const item of items) {
+    const b = item.querySelector(`button[onclick="generatePlan(${lessonId})"]`);
+    if (b) {
+      btn = b;
+      statusEl = b.parentElement.querySelector('.plan-status');
+      break;
+    }
+  }
+  if (btn) btn.disabled = true;
+  if (statusEl) _showSpinner(statusEl, 'プラン生成中（三者視点で分析中）...');
+  const res = await api('POST', '/api/lessons/' + lessonId + '/generate-plan');
+  if (btn) btn.disabled = false;
+  if (statusEl) _hideSpinner(statusEl);
+  if (res && res.ok) {
+    showToast('プラン生成完了 (' + res.plan_sections.length + 'セクション構成)', 'success');
+  } else {
+    const errMsg = res && res.error ? res.error : '不明なエラー';
+    showToast('プラン生成失敗: ' + errMsg, 'error');
+    if (statusEl) {
+      statusEl.innerHTML = '<span style="color:#c62828; font-size:0.8rem; font-weight:600;">❌ ' + esc(errMsg) + '</span>';
+    }
+  }
+  _openLessonIds.add(lessonId);
+  await loadLessons();
 }
 
 // --- 授業スクリプト ---

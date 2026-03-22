@@ -26,8 +26,13 @@ class SpeechPipeline:
 
     @staticmethod
     def strip_lang_tags(text):
-        """テキストから [lang:xx]...[/lang] タグを除去する"""
-        return re.sub(r'\[/?lang(?::\w+)?\]', '', text)
+        """テキストから言語タグを除去する（[lang:xx] 形式 + SSML <lang> 形式の両方）"""
+        # [lang:xx]...[/lang] 形式
+        text = re.sub(r'\[/?lang(?::\w+)?\]', '', text)
+        # SSML <lang xml:lang="xx">...</lang> 形式
+        text = re.sub(r'<lang\b[^>]*>', '', text)
+        text = re.sub(r'</lang>', '', text)
+        return text
 
     @staticmethod
     def split_sentences(text):
@@ -53,11 +58,18 @@ class SpeechPipeline:
         """オーバーレイにコメント情報を送信する"""
         if not self._on_overlay:
             return
+        raw_speech = result["speech"]
+        stripped_speech = self.strip_lang_tags(raw_speech)
+        if raw_speech != stripped_speech:
+            logger.info("[overlay] strip_lang_tags が除去: %s → %s", repr(raw_speech[:100]), repr(stripped_speech[:100]))
+        # SSMLタグの残存チェック
+        if '<lang' in stripped_speech or '</lang>' in stripped_speech:
+            logger.warning("[overlay] ⚠ strip後もSSMLタグが残存: %s", repr(stripped_speech[:200]))
         await self._on_overlay({
             "type": "comment",
             "author": author,
             "trigger_text": trigger_text,
-            "speech": self.strip_lang_tags(result["speech"]),
+            "speech": stripped_speech,
             "translation": result.get("translation", ""),
             "emotion": result["emotion"],
         })

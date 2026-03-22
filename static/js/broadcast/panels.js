@@ -1,13 +1,19 @@
 // 字幕・TODO パネル表示
 
+// === 言語タグ除去（最終防御: [lang:xx] + SSML <lang> 両方） ===
+function stripLangTags(text) {
+  if (!text) return '';
+  return text.replace(/\[\/?(lang(?::\w+)?)\]/g, '').replace(/<lang\b[^>]*>/gi, '').replace(/<\/lang>/gi, '');
+}
+
 // === 字幕 ===
 function showSubtitle(data) {
   clearTimeout(fadeTimer);
   subtitleEl.classList.remove('fading');
   subtitleEl.querySelector('.author').textContent = '';
-  subtitleEl.querySelector('.trigger-text').textContent = data.trigger_text;
-  subtitleEl.querySelector('.speech').textContent = data.speech;
-  subtitleEl.querySelector('.translation').textContent = data.translation || '';
+  subtitleEl.querySelector('.trigger-text').textContent = stripLangTags(data.trigger_text);
+  subtitleEl.querySelector('.speech').textContent = stripLangTags(data.speech);
+  subtitleEl.querySelector('.translation').textContent = stripLangTags(data.translation || '');
   subtitleEl.classList.add('visible');
 }
 
@@ -72,7 +78,7 @@ function showLessonText(text) {
   const panel = document.getElementById('lesson-text-panel');
   const content = document.getElementById('lesson-text-content');
   if (!panel || !content) return;
-  content.textContent = text;
+  content.textContent = stripLangTags(text);
   panel.style.display = 'block';
   // フェードイン（次フレームでclassを追加してtransitionを発火）
   requestAnimationFrame(() => {

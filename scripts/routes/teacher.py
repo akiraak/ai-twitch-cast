@@ -12,7 +12,9 @@ from src import db
 from src.lesson_generator import (
     extract_text_from_image,
     extract_text_from_url,
+    generate_lesson_plan,
     generate_lesson_script,
+    generate_lesson_script_from_plan,
 )
 
 router = APIRouter()
@@ -112,6 +114,28 @@ async def lesson_status():
     """授業ステータスを取得する"""
     runner = _get_lesson_runner()
     return {"ok": True, "status": runner.get_status()}
+
+
+# --- 間のスケール（{lesson_id}パスより前に定義） ---
+
+
+class PaceScaleUpdate(BaseModel):
+    pace_scale: float
+
+
+@router.get("/api/lessons/pace-scale")
+async def get_pace_scale():
+    """間のスケール値を取得する"""
+    val = db.get_setting("lesson.pace_scale", "1.0")
+    return {"ok": True, "pace_scale": float(val)}
+
+
+@router.put("/api/lessons/pace-scale")
+async def set_pace_scale(body: PaceScaleUpdate):
+    """間のスケール値を設定する"""
+    scale = max(0.5, min(2.0, body.pace_scale))
+    db.set_setting("lesson.pace_scale", str(scale))
+    return {"ok": True, "pace_scale": scale}
 
 
 @router.get("/api/lessons/{lesson_id}")
@@ -304,6 +328,80 @@ async def delete_lesson_source(lesson_id: int, source_id: int):
     return {"ok": True}
 
 
+# --- プラン生成 ---
+
+
+@router.post("/api/lessons/{lesson_id}/generate-plan")
+async def generate_plan(lesson_id: int):
+    """三者視点（知識・エンタメ・校長）で授業プランを生成する"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    extracted_text = lesson.get("extracted_text", "")
+    if not extracted_text:
+        return {"ok": False, "error": "教材テキストがありません。画像またはURLを追加してください。"}
+
+    # 画像パスを収集
+    sources = db.get_lesson_sources(lesson_id)
+    image_paths = [
+        str(PROJECT_DIR / s["file_path"])
+        for s in sources
+        if s["source_type"] == "image" and s["file_path"]
+    ]
+
+    try:
+        plan = await asyncio.to_thread(
+            generate_lesson_plan,
+            lesson["name"], extracted_text, image_paths or None,
+        )
+    except Exception as e:
+        logger.error("プラン生成失敗: %s", e)
+        return {"ok": False, "error": str(e)}
+
+    # DB保存
+    import json as _json
+    db.update_lesson(
+        lesson_id,
+        plan_knowledge=plan["knowledge"],
+        plan_entertainment=plan["entertainment"],
+        plan_json=_json.dumps(plan["plan_sections"], ensure_ascii=False),
+    )
+
+    logger.info("プラン生成完了: lesson=%d, sections=%d", lesson_id, len(plan["plan_sections"]))
+    return {
+        "ok": True,
+        "knowledge": plan["knowledge"],
+        "entertainment": plan["entertainment"],
+        "plan_sections": plan["plan_sections"],
+    }
+
+
+class PlanUpdate(BaseModel):
+    plan_knowledge: str | None = None
+    plan_entertainment: str | None = None
+    plan_json: str | None = None
+
+
+@router.put("/api/lessons/{lesson_id}/plan")
+async def update_plan(lesson_id: int, body: PlanUpdate):
+    """プランを手動編集する"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    updates = {}
+    if body.plan_knowledge is not None:
+        updates["plan_knowledge"] = body.plan_knowledge
+    if body.plan_entertainment is not None:
+        updates["plan_entertainment"] = body.plan_entertainment
+    if body.plan_json is not None:
+        updates["plan_json"] = body.plan_json
+    if updates:
+        db.update_lesson(lesson_id, **updates)
+    return {"ok": True}
+
+
 # --- スクリプト生成 ---
 
 
@@ -326,11 +424,27 @@ async def generate_script(lesson_id: int):
         if s["source_type"] == "image" and s["file_path"]
     ]
 
+    # プランがあればプランベースで生成
+    plan_json_str = lesson.get("plan_json", "")
+    plan_sections = None
+    if plan_json_str:
+        try:
+            import json as _json
+            plan_sections = _json.loads(plan_json_str)
+        except Exception:
+            pass
+
     try:
-        sections = await asyncio.to_thread(
-            generate_lesson_script,
-            lesson["name"], extracted_text, image_paths or None,
-        )
+        if plan_sections:
+            sections = await asyncio.to_thread(
+                generate_lesson_script_from_plan,
+                lesson["name"], extracted_text, plan_sections, image_paths or None,
+            )
+        else:
+            sections = await asyncio.to_thread(
+                generate_lesson_script,
+                lesson["name"], extracted_text, image_paths or None,
+            )
     except Exception as e:
         logger.error("スクリプト生成失敗: %s", e)
         return {"ok": False, "error": str(e)}

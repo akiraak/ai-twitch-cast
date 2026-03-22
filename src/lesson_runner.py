@@ -135,9 +135,15 @@ class LessonRunner:
                 self._current_index += 1
                 await self._notify_status()
 
-                # セクション間の間
+                # セクション間の間（wait_seconds × pace_scale）
                 if self._current_index < len(self._sections):
-                    await asyncio.sleep(1.0)
+                    wait = section.get("wait_seconds", 2)
+                    # questionセクションの間は _handle_question で処理済みなのでスキップ
+                    if section.get("section_type") == "question" and section.get("question"):
+                        wait = 1  # question後は短い間だけ
+                    scaled_wait = wait * self._get_pace_scale()
+                    if scaled_wait > 0:
+                        await self._pause_aware_sleep(scaled_wait)
 
             # 全セクション完了
             if self._state != LessonState.IDLE:
@@ -165,9 +171,22 @@ class LessonRunner:
         display_text = section.get("display_text", "")
         emotion = section.get("emotion", "neutral")
 
-        logger.info("[lesson] セクション %d/%d [%s] %s: %s",
+        logger.info("[lesson] セクション %d/%d [%s] %s",
                      self._current_index + 1, len(self._sections),
-                     emotion, section_type, content[:50])
+                     emotion, section_type)
+        logger.info("[lesson]   content=%s", repr(content[:200]))
+        logger.info("[lesson]   tts_text=%s", repr(tts_text[:200]))
+        logger.info("[lesson]   display_text=%s", repr(display_text[:200]) if display_text else "（なし）")
+        # content==tts_textの場合は警告
+        if content == tts_text:
+            logger.warning("[lesson]   ⚠ content と tts_text が同一（分離されていない）")
+        # SSMLタグやlangタグの混入チェック
+        import re as _re
+        _ssml_pat = _re.compile(r'<lang\b|</?lang>|\[lang:', _re.IGNORECASE)
+        if _ssml_pat.search(content):
+            logger.warning("[lesson]   ⚠ content に言語タグが混入: %s", _ssml_pat.findall(content))
+        if display_text and _ssml_pat.search(display_text):
+            logger.warning("[lesson]   ⚠ display_text に言語タグが混入: %s", _ssml_pat.findall(display_text))
 
         # 画面テキスト表示
         if display_text:
@@ -185,6 +204,8 @@ class LessonRunner:
             if self._state == LessonState.IDLE:
                 break
             part_tts = tts_parts[i] if i < len(tts_parts) else part
+            logger.info("[lesson]   part[%d] subtitle=%s", i, repr(part[:100]))
+            logger.info("[lesson]   part[%d] tts=%s", i, repr(part_tts[:100]))
             await self._speech.speak(part, subtitle={
                 "author": "ちょビ",
                 "trigger_text": f"[授業] {section_type}",
@@ -213,19 +234,35 @@ class LessonRunner:
             except Exception as e:
                 logger.warning("授業コメントDB保存失敗: %s", e)
 
+    def _get_pace_scale(self) -> float:
+        """settings DBから間のスケールを取得する（デフォルト1.0）"""
+        try:
+            val = db.get_setting("lesson.pace_scale")
+            if val is not None:
+                return max(0.1, min(3.0, float(val)))
+        except Exception:
+            pass
+        return 1.0
+
+    async def _pause_aware_sleep(self, seconds: float):
+        """一時停止に対応したsleep"""
+        steps = max(1, int(seconds * 2))
+        interval = seconds / steps
+        for _ in range(steps):
+            await self._pause_event.wait()
+            if self._state == LessonState.IDLE:
+                return
+            await asyncio.sleep(interval)
+
     async def _handle_question(self, section: dict):
         """問いかけセクションの処理"""
         wait = section.get("wait_seconds", 8)
         answer = section.get("answer", "")
 
         if wait > 0:
-            logger.info("[lesson] 問いかけ: %d秒待ち", wait)
-            # 待機中も一時停止に対応
-            for _ in range(wait * 2):
-                await self._pause_event.wait()
-                if self._state == LessonState.IDLE:
-                    return
-                await asyncio.sleep(0.5)
+            scaled_wait = wait * self._get_pace_scale()
+            logger.info("[lesson] 問いかけ: %.1f秒待ち (base=%d, scale=%.1f)", scaled_wait, wait, self._get_pace_scale())
+            await self._pause_aware_sleep(scaled_wait)
 
         # 回答
         if answer and self._state != LessonState.IDLE:

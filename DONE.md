@@ -41,6 +41,11 @@
 - [x] 授業テキストパネルを画面中央に配置・サイズ拡大（55%幅・70%高）
 - [x] 授業中にTODOパネル・字幕を非表示にするレッスンモード追加（lesson_statusイベント連動）
 - [x] 管理画面: 授業実行状態をページロード時に反映（ボタン・進捗表示）
+- [x] 三者視点プラン生成（知識先生→エンタメ先生→監督の3段階LLM呼び出し）
+- [x] プランベーススクリプト生成（generate_lesson_script_from_plan）
+- [x] 間（ま）のスケール制御（pace_scale API + UIスライダー、0.5〜2.0x）
+- [x] 言語タグ除去の多層防御（SSML `<lang>` タグ対応、speech_pipeline/state/panels.jsの3箇所）
+- [x] テスト追加（TestLessonPlan + TestPaceScale、全460テスト通過）
 
 ## トピック機能・授業モード完全削除
 

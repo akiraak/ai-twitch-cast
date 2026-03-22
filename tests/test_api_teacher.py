@@ -234,6 +234,123 @@ class TestLessonSections:
         assert resp.json()["ok"] is False
 
 
+class TestLessonPlan:
+    def test_generate_plan(self, api_client, test_db, mock_gemini):
+        """三者視点プラン生成"""
+        r = api_client.post("/api/lessons", json={"name": "PlanTest"})
+        lid = r.json()["lesson"]["id"]
+        test_db.update_lesson(lid, extracted_text="Python asyncio basics")
+
+        # Geminiの応答を段階的にモック（3回呼ばれる）
+        mock_gemini.models.generate_content.side_effect = [
+            # 1回目: 知識先生
+            MagicMock(text="### 要点\n- asyncioの基本\n- イベントループ\n### 推奨構成\n導入→説明→まとめ"),
+            # 2回目: エンタメ先生
+            MagicMock(text="### 起承転結\n【起】驚きの事実\n【承】展開\n【転】実は…\n【結】オチ"),
+            # 3回目: 校長先生（JSON）
+            MagicMock(text="""[
+                {"section_type": "introduction", "title": "導入", "summary": "興味を引く", "emotion": "excited", "has_question": false},
+                {"section_type": "explanation", "title": "説明", "summary": "基本概念", "emotion": "thinking", "has_question": false},
+                {"section_type": "question", "title": "クイズ", "summary": "理解確認", "emotion": "joy", "has_question": true},
+                {"section_type": "summary", "title": "まとめ", "summary": "オチ", "emotion": "excited", "has_question": false}
+            ]"""),
+        ]
+
+        resp = api_client.post(f"/api/lessons/{lid}/generate-plan")
+        data = resp.json()
+        assert data["ok"] is True
+        assert "knowledge" in data
+        assert "entertainment" in data
+        assert len(data["plan_sections"]) == 4
+        assert data["plan_sections"][0]["section_type"] == "introduction"
+        assert data["plan_sections"][2]["has_question"] is True
+
+        # DBに保存されていることを確認
+        lesson = test_db.get_lesson(lid)
+        assert lesson["plan_knowledge"] != ""
+        assert lesson["plan_entertainment"] != ""
+        assert lesson["plan_json"] != ""
+
+    def test_generate_plan_no_text(self, api_client):
+        """テキストなしでのプラン生成はエラー"""
+        r = api_client.post("/api/lessons", json={"name": "NoText"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(f"/api/lessons/{lid}/generate-plan")
+        assert resp.json()["ok"] is False
+
+    def test_generate_plan_not_found(self, api_client):
+        """存在しないコンテンツのプラン生成"""
+        resp = api_client.post("/api/lessons/9999/generate-plan")
+        assert resp.json()["ok"] is False
+
+    def test_update_plan(self, api_client, test_db):
+        """プランの手動編集"""
+        r = api_client.post("/api/lessons", json={"name": "PlanEdit"})
+        lid = r.json()["lesson"]["id"]
+
+        resp = api_client.put(f"/api/lessons/{lid}/plan", json={
+            "plan_knowledge": "更新された知識分析",
+            "plan_entertainment": "更新されたエンタメ構成",
+        })
+        assert resp.json()["ok"] is True
+
+        lesson = test_db.get_lesson(lid)
+        assert lesson["plan_knowledge"] == "更新された知識分析"
+        assert lesson["plan_entertainment"] == "更新されたエンタメ構成"
+
+    def test_generate_script_uses_plan(self, api_client, test_db, mock_gemini):
+        """プランがある場合、スクリプト生成がプランに基づく"""
+        import json
+        r = api_client.post("/api/lessons", json={"name": "PlanScript"})
+        lid = r.json()["lesson"]["id"]
+        test_db.update_lesson(
+            lid,
+            extracted_text="Test content",
+            plan_json=json.dumps([
+                {"section_type": "introduction", "title": "導入", "summary": "テスト", "emotion": "excited", "has_question": False},
+            ]),
+        )
+
+        mock_gemini.models.generate_content.return_value.text = """[
+            {"section_type": "introduction", "content": "プランベース導入", "tts_text": "TTS",
+             "display_text": "画面", "emotion": "excited", "question": "", "answer": "", "wait_seconds": 0}
+        ]"""
+
+        resp = api_client.post(f"/api/lessons/{lid}/generate-script")
+        data = resp.json()
+        assert data["ok"] is True
+        assert len(data["sections"]) == 1
+        assert data["sections"][0]["content"] == "プランベース導入"
+
+
+class TestPaceScale:
+    def test_get_default_pace_scale(self, api_client):
+        """デフォルトのpace_scaleは1.0"""
+        resp = api_client.get("/api/lessons/pace-scale")
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["pace_scale"] == 1.0
+
+    def test_set_pace_scale(self, api_client):
+        """pace_scaleを設定・取得できる"""
+        resp = api_client.put("/api/lessons/pace-scale", json={"pace_scale": 1.5})
+        assert resp.json()["ok"] is True
+        assert resp.json()["pace_scale"] == 1.5
+
+        resp2 = api_client.get("/api/lessons/pace-scale")
+        assert resp2.json()["pace_scale"] == 1.5
+
+    def test_pace_scale_clamped(self, api_client):
+        """pace_scaleは0.5〜2.0にクランプされる"""
+        api_client.put("/api/lessons/pace-scale", json={"pace_scale": 0.1})
+        resp = api_client.get("/api/lessons/pace-scale")
+        assert resp.json()["pace_scale"] == 0.5
+
+        api_client.put("/api/lessons/pace-scale", json={"pace_scale": 5.0})
+        resp = api_client.get("/api/lessons/pace-scale")
+        assert resp.json()["pace_scale"] == 2.0
+
+
 class TestLessonControl:
     def test_get_status_idle(self, api_client):
         """初期状態はidle"""

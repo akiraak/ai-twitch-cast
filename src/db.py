@@ -297,6 +297,14 @@ def _create_tables(conn):
     """)
     conn.commit()
 
+    # Migration: lessons テーブルにプラン用カラム追加
+    for col in ["plan_knowledge", "plan_entertainment", "plan_json"]:
+        try:
+            conn.execute(f"ALTER TABLE lessons ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
     # Migration: dev_repos テーブル削除（機能廃止）
     conn.execute("DROP TABLE IF EXISTS dev_repos")
     conn.commit()
@@ -858,7 +866,7 @@ def get_all_lessons():
 def update_lesson(lesson_id, **fields):
     """授業コンテンツを更新する"""
     conn = get_connection()
-    allowed = {"name", "extracted_text"}
+    allowed = {"name", "extracted_text", "plan_knowledge", "plan_entertainment", "plan_json"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
