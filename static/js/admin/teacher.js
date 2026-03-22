@@ -65,9 +65,17 @@ async function loadLessonDetail(lessonId) {
     document.getElementById('lesson-detail').style.display = 'none';
     return;
   }
-  document.getElementById('lesson-detail').style.display = 'block';
+  const detailEl = document.getElementById('lesson-detail');
+  detailEl.style.display = 'block';
   document.getElementById('lesson-name').value = res.lesson.name;
   document.getElementById('lesson-extracted-text').textContent = res.lesson.extracted_text || '(なし)';
+
+  // summaryのタイトル・バッジ更新
+  document.getElementById('lesson-detail-title').textContent = res.lesson.name;
+  const badges = [];
+  if (res.sources.length) badges.push(res.sources.length + '\u30BD\u30FC\u30B9');
+  if (res.sections.length) badges.push(res.sections.length + '\u30BB\u30AF\u30B7\u30E7\u30F3');
+  document.getElementById('lesson-detail-badge').textContent = badges.length ? '(' + badges.join(' / ') + ')' : '';
 
   const hasSources = res.sources.length > 0;
 

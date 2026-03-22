@@ -427,73 +427,80 @@ users       1──N  comments      (user_id)</div>
         <div id="lesson-tabs" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:16px;"></div>
 
         <!-- コンテンツ詳細 -->
-        <div id="lesson-detail" style="display:none;">
-          <!-- コンテンツ名 -->
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-            <span style="font-weight:600; font-size:0.85rem;">コンテンツ名:</span>
-            <input type="text" id="lesson-name" style="flex:1; padding:4px 8px; background:#1e1e30; color:#e0e0e0; border:1px solid #444; border-radius:4px;">
-            <button onclick="saveLessonName()" style="padding:4px 12px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">保存</button>
-          </div>
-
-          <!-- 教材ソース -->
-          <div style="margin-bottom:12px;">
-            <div style="font-weight:600; font-size:0.85rem; color:#b39ddb; margin-bottom:8px;">教材ソース <span id="source-count"></span></div>
-            <div id="lesson-sources" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;"></div>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <label style="padding:6px 16px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.85rem;">
-                画像追加
-                <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple onchange="uploadLessonImage(this)" style="display:none;">
-              </label>
-              <button onclick="addLessonUrl()" style="padding:6px 16px; background:#546e7a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">URL追加</button>
-              <span id="lesson-upload-status" style="font-size:0.8rem; color:#ffb74d;"></span>
+        <details id="lesson-detail" open style="display:none; border:1px solid #444; border-radius:6px; padding:12px; margin-bottom:8px; background:#22223a;">
+          <summary style="cursor:pointer; font-weight:600; font-size:0.9rem; color:#e0e0e0; list-style:none; display:flex; align-items:center; gap:8px;">
+            <span style="color:#b39ddb; font-size:0.75rem;">&#9660;</span>
+            <span id="lesson-detail-title"></span>
+            <span id="lesson-detail-badge" style="font-size:0.7rem; color:#999;"></span>
+          </summary>
+          <div style="margin-top:12px;">
+            <!-- コンテンツ名 -->
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+              <span style="font-weight:600; font-size:0.85rem;">コンテンツ名:</span>
+              <input type="text" id="lesson-name" style="flex:1; padding:4px 8px; background:#1e1e30; color:#e0e0e0; border:1px solid #444; border-radius:4px;">
+              <button onclick="saveLessonName()" style="padding:4px 12px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">保存</button>
             </div>
-            <!-- ソース未追加時のヒント -->
-            <div id="lesson-source-hint" style="margin-top:10px; padding:10px 14px; background:rgba(124,77,255,0.08); border:1px dashed rgba(124,77,255,0.3); border-radius:6px; color:#b39ddb; font-size:0.8rem; display:none;">
-              画像またはURLを追加すると、テキスト抽出・スクリプト生成が利用できます
-            </div>
-          </div>
 
-          <!-- ソース追加後に表示される領域 -->
-          <div id="lesson-after-source" style="display:none;">
-
-            <!-- 抽出テキスト -->
-            <details style="margin-bottom:12px;">
-              <summary style="cursor:pointer; font-weight:600; font-size:0.85rem; color:#b39ddb;">抽出テキスト</summary>
-              <div style="margin-top:8px;">
-                <pre id="lesson-extracted-text" style="background:#1a1a2e; padding:8px; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;"></pre>
+            <!-- 教材ソース -->
+            <div style="margin-bottom:12px;">
+              <div style="font-weight:600; font-size:0.85rem; color:#b39ddb; margin-bottom:8px;">教材ソース <span id="source-count"></span></div>
+              <div id="lesson-sources" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;"></div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <label style="padding:6px 16px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.85rem;">
+                  画像追加
+                  <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple onchange="uploadLessonImage(this)" style="display:none;">
+                </label>
+                <button onclick="addLessonUrl()" style="padding:6px 16px; background:#546e7a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">URL追加</button>
+                <span id="lesson-upload-status" style="font-size:0.8rem; color:#ffb74d;"></span>
               </div>
-            </details>
-
-            <!-- 授業スクリプト -->
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-              <span style="font-weight:600; font-size:0.85rem;">授業スクリプト</span>
-              <button onclick="generateScript()" id="btn-generate-script" style="padding:4px 12px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">スクリプト生成</button>
-              <span id="script-status" style="font-size:0.75rem; color:#9a88b5;"></span>
-            </div>
-            <div id="lesson-sections"></div>
-
-            <!-- 授業制御 -->
-            <div id="lesson-control" style="margin-top:12px; padding:10px; background:#1a1a2e; border:1px solid #444; border-radius:6px;">
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                <span style="font-weight:600; font-size:0.85rem;">授業制御</span>
-                <span id="lesson-state" style="font-size:0.75rem; color:#9a88b5;"></span>
+              <!-- ソース未追加時のヒント -->
+              <div id="lesson-source-hint" style="margin-top:10px; padding:10px 14px; background:rgba(124,77,255,0.08); border:1px dashed rgba(124,77,255,0.3); border-radius:6px; color:#b39ddb; font-size:0.8rem; display:none;">
+                画像またはURLを追加すると、テキスト抽出・スクリプト生成が利用できます
               </div>
-              <div style="display:flex; gap:6px;">
-                <button id="btn-lesson-start" onclick="startLesson()" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">授業開始</button>
-                <button id="btn-lesson-pause" onclick="pauseLesson()" style="padding:4px 12px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">一時停止</button>
-                <button id="btn-lesson-resume" onclick="resumeLesson()" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">再開</button>
-                <button id="btn-lesson-stop" onclick="stopLesson()" style="padding:4px 12px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">停止</button>
-              </div>
-              <div id="lesson-progress" style="margin-top:6px; font-size:0.75rem; color:#999;"></div>
             </div>
 
-          </div>
+            <!-- ソース追加後に表示される領域 -->
+            <div id="lesson-after-source" style="display:none;">
 
-          <!-- 操作ボタン -->
-          <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-            <button onclick="deleteLesson()" style="padding:4px 12px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">コンテンツ削除</button>
+              <!-- 抽出テキスト -->
+              <details style="margin-bottom:12px;">
+                <summary style="cursor:pointer; font-weight:600; font-size:0.85rem; color:#b39ddb;">抽出テキスト</summary>
+                <div style="margin-top:8px;">
+                  <pre id="lesson-extracted-text" style="background:#1a1a2e; padding:8px; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;"></pre>
+                </div>
+              </details>
+
+              <!-- 授業スクリプト -->
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span style="font-weight:600; font-size:0.85rem;">授業スクリプト</span>
+                <button onclick="generateScript()" id="btn-generate-script" style="padding:4px 12px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">スクリプト生成</button>
+                <span id="script-status" style="font-size:0.75rem; color:#9a88b5;"></span>
+              </div>
+              <div id="lesson-sections"></div>
+
+              <!-- 授業制御 -->
+              <div id="lesson-control" style="margin-top:12px; padding:10px; background:#1a1a2e; border:1px solid #444; border-radius:6px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                  <span style="font-weight:600; font-size:0.85rem;">授業制御</span>
+                  <span id="lesson-state" style="font-size:0.75rem; color:#9a88b5;"></span>
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <button id="btn-lesson-start" onclick="startLesson()" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">授業開始</button>
+                  <button id="btn-lesson-pause" onclick="pauseLesson()" style="padding:4px 12px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">一時停止</button>
+                  <button id="btn-lesson-resume" onclick="resumeLesson()" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">再開</button>
+                  <button id="btn-lesson-stop" onclick="stopLesson()" style="padding:4px 12px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">停止</button>
+                </div>
+                <div id="lesson-progress" style="margin-top:6px; font-size:0.75rem; color:#999;"></div>
+              </div>
+
+            </div>
+
+            <!-- 操作ボタン -->
+            <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+              <button onclick="deleteLesson()" style="padding:4px 12px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">コンテンツ削除</button>
+            </div>
           </div>
-        </div>
+        </details>
       </div>
     </div>
 
