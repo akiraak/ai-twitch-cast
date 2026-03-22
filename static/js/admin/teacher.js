@@ -186,7 +186,7 @@ async function createLesson() {
   if (res && res.ok) {
     _openLessonIds.add(res.lesson.id);
     showToast('コンテンツ作成: ' + name, 'success');
-    loadLessons();
+    await loadLessons();
   }
 }
 
@@ -197,7 +197,7 @@ async function saveLessonName(lessonId, btn) {
   const res = await api('PUT', '/api/lessons/' + lessonId, { name });
   if (res && res.ok) {
     showToast('名前を更新しました', 'success');
-    loadLessons();
+    await loadLessons();
   }
 }
 
@@ -208,7 +208,7 @@ async function deleteLesson(lessonId) {
   if (res && res.ok) {
     _openLessonIds.delete(lessonId);
     showToast('コンテンツを削除しました', 'success');
-    loadLessons();
+    await loadLessons();
   }
 }
 
@@ -241,7 +241,7 @@ async function uploadLessonImage(lessonId, input) {
   input.value = '';
   statusEl.textContent = '';
   _openLessonIds.add(lessonId);
-  loadLessons();
+  await loadLessons();
 }
 
 async function addLessonUrl(lessonId) {
@@ -262,7 +262,7 @@ async function addLessonUrl(lessonId) {
   if (res && res.ok) {
     showToast('URL追加完了', 'success');
     _openLessonIds.add(lessonId);
-    loadLessons();
+    await loadLessons();
   }
 }
 
@@ -271,7 +271,7 @@ async function deleteLessonSource(lessonId, sourceId) {
   if (!ok) return;
   await api('DELETE', '/api/lessons/' + lessonId + '/sources/' + sourceId);
   _openLessonIds.add(lessonId);
-  loadLessons();
+  await loadLessons();
 }
 
 // --- 授業スクリプト ---
@@ -290,17 +290,16 @@ async function generateScript(lessonId) {
   }
   if (btn) btn.disabled = true;
   if (statusEl) statusEl.textContent = '生成中...';
-  try {
-    const res = await api('POST', '/api/lessons/' + lessonId + '/generate-script');
-    if (res && res.ok) {
-      showToast('スクリプト生成完了 (' + res.sections.length + 'セクション)', 'success');
-      _openLessonIds.add(lessonId);
-      loadLessons();
-    }
-  } finally {
+  const res = await api('POST', '/api/lessons/' + lessonId + '/generate-script');
+  if (res && res.ok) {
+    showToast('スクリプト生成完了 (' + res.sections.length + 'セクション)', 'success');
+  } else {
     if (btn) btn.disabled = false;
     if (statusEl) statusEl.textContent = '';
+    return;
   }
+  _openLessonIds.add(lessonId);
+  await loadLessons();
 }
 
 function renderSectionsInto(container, sections, lessonId) {
@@ -365,7 +364,7 @@ async function updateSectionField(lessonId, sectionId, field, value) {
 async function deleteSection(lessonId, sectionId) {
   await api('DELETE', '/api/lessons/' + lessonId + '/sections/' + sectionId);
   _openLessonIds.add(lessonId);
-  loadLessons();
+  await loadLessons();
 }
 
 async function moveSectionUp(lessonId, sectionId) {
@@ -387,7 +386,7 @@ async function _reorderSection(lessonId, sectionId, direction) {
   [ids[idx], ids[newIdx]] = [ids[newIdx], ids[idx]];
   await api('PUT', '/api/lessons/' + lessonId + '/sections/reorder', { section_ids: ids });
   _openLessonIds.add(lessonId);
-  loadLessons();
+  await loadLessons();
 }
 
 // --- 授業制御 ---
@@ -396,25 +395,25 @@ async function startLesson(lessonId) {
   const res = await api('POST', '/api/lessons/' + lessonId + '/start');
   if (res && res.ok) {
     showToast('授業開始', 'success');
-    loadLessons();
+    await loadLessons();
   }
 }
 
 async function pauseLesson() {
   const res = await api('POST', '/api/lessons/pause');
-  if (res && res.ok) loadLessons();
+  if (res && res.ok) await loadLessons();
 }
 
 async function resumeLesson() {
   const res = await api('POST', '/api/lessons/resume');
-  if (res && res.ok) loadLessons();
+  if (res && res.ok) await loadLessons();
 }
 
 async function stopLesson() {
   const res = await api('POST', '/api/lessons/stop');
   if (res && res.ok) {
     showToast('授業停止', 'success');
-    loadLessons();
+    await loadLessons();
   }
 }
 
