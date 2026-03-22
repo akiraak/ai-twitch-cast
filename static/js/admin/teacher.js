@@ -299,6 +299,8 @@ async function extractLessonText(lessonId) {
   if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
     showToast('テキスト抽出完了', 'success');
+  } else {
+    showToast('テキスト抽出失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
   }
   _openLessonIds.add(lessonId);
   await loadLessons();
@@ -345,11 +347,12 @@ async function generateScript(lessonId) {
   if (btn) btn.disabled = true;
   if (statusEl) _showSpinner(statusEl, 'スクリプト生成中...');
   const res = await api('POST', '/api/lessons/' + lessonId + '/generate-script');
+  if (btn) btn.disabled = false;
+  if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
     showToast('スクリプト生成完了 (' + res.sections.length + 'セクション)', 'success');
   } else {
-    if (btn) btn.disabled = false;
-    if (statusEl) _hideSpinner(statusEl);
+    showToast('スクリプト生成失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
     return;
   }
   _openLessonIds.add(lessonId);
