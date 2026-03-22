@@ -178,6 +178,19 @@ def build_system_prompt(char, stream_context=None, self_note=None, persona=None)
             parts.append("- 作業中のタスク:")
             for item in stream_context["todo_items"]:
                 parts.append(f"  - {item}")
+        if stream_context.get("lesson"):
+            lesson = stream_context["lesson"]
+            parts.extend([
+                "",
+                "## 現在の授業（教師モード実行中）",
+                f"- 授業名: {lesson.get('lesson_name', '')}",
+            ])
+            if lesson.get("current_section"):
+                parts.append(f"- 現在のセクション（{lesson.get('section_type', '')}）: {lesson['current_section']}")
+            parts.extend([
+                "- 視聴者からの質問には授業内容に関連づけて簡潔に回答し、授業を脱線させない",
+                "- 授業と無関係な質問にも答えてOKだが、手短にして授業に戻る意識を持つ",
+            ])
 
     lang_rules = build_language_rules()
     parts.extend(["", "## 言語ルール"])

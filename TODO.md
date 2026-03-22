@@ -3,8 +3,7 @@
 ## 機能追加
 
 ### 会話モード — 教師モード → [plans/conversation-mode.md](plans/conversation-mode.md)
-- [>] Phase 4: チャット割り込み対応 + 視聴者への問いかけ機能
-- [ ] Phase 5: ポリッシュ（ドキュメント更新）
+- [>] Phase 5: ポリッシュ（ドキュメント更新）
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証

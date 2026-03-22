@@ -22,6 +22,12 @@
 - [x] CSS: フェードイン/アウトアニメーション付きパネルスタイル
 - [x] JS: showLessonText/hideLessonText関数（panels.js）
 
+## 教師モード Phase 4: チャット割り込み対応 + 視聴者への問いかけ
+
+- [x] 授業コンテキスト付きチャット応答（CommentReaderがLessonRunner情報をstream_contextに追加）
+- [x] prompt_builderに「現在の授業」セクション追加（授業名・現セクション・回答ガイドライン）
+- [x] questionセクション再生（LessonRunner._handle_question: 問いかけ→待ち→回答）は Phase 2 で実装済み
+
 ## トピック機能・授業モード完全削除
 
 - [x] バックエンド: TopicTalker・トピックAPI・授業モード関連コード削除（state.py, comment_reader.py, ai_responder.py, db.py, prompt_builder.py, avatar.py, web.py, overlay.py, items.py）

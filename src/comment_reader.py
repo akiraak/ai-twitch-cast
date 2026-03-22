@@ -226,7 +226,7 @@ class CommentReader:
         return result
 
     async def _get_stream_context(self):
-        """配信コンテキストを収集する（タイトル・トピック・TODO）"""
+        """配信コンテキストを収集する（タイトル・トピック・TODO・授業情報）"""
         context = {}
         # 配信タイトル
         try:
@@ -252,6 +252,22 @@ class CommentReader:
                     context["todo_items"] = items
         except Exception as e:
             logger.debug("TODO取得失敗: %s", e)
+        # 授業情報（LessonRunnerが実行中の場合）
+        try:
+            runner = self._lesson_runner
+            if runner.state.value != "idle" and runner.lesson_id:
+                lesson = await asyncio.to_thread(db.get_lesson, runner.lesson_id)
+                if lesson:
+                    lesson_ctx = {"lesson_name": lesson["name"]}
+                    sections = runner._sections
+                    idx = runner.current_index
+                    if idx < len(sections):
+                        current = sections[idx]
+                        lesson_ctx["current_section"] = current.get("content", "")[:200]
+                        lesson_ctx["section_type"] = current.get("section_type", "")
+                    context["lesson"] = lesson_ctx
+        except Exception as e:
+            logger.debug("授業情報取得失敗: %s", e)
         return context if context else None
 
     async def _save_to_db(self, user, message, result):
