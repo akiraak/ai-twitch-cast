@@ -76,56 +76,70 @@ async function buildLessonItem(lessonId) {
     <button onclick="saveLessonName(${lessonId}, this)" style="padding:4px 12px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">保存</button>
   </div>`;
 
+  const hasExtractedText = !!(lesson.extracted_text);
+  const hasImageSources = sources.some(s => s.source_type === 'image');
+
   // === STEP 1: ソース追加 ===
   const step1 = document.createElement('div');
   step1.className = 'lesson-step' + (hasSources ? ' step-done' : ' step-active');
   const step1Body = document.createElement('div');
   step1Body.className = 'lesson-step-body';
 
-  // 現在のソース表示
+  // 現在のソース表示（複数画像対応）
   let srcInfo = '';
   if (sources.length) {
-    const s = sources[0];
-    if (s.source_type === 'image' && s.file_path) {
-      srcInfo = `<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-        <div style="width:60px; height:60px; border:1px solid #d0c0e8; border-radius:4px; overflow:hidden; flex-shrink:0;">
-          <img src="/${esc(s.file_path)}" style="width:100%; height:100%; object-fit:cover;">
-        </div>
-        <div style="font-size:0.8rem; color:#2a1f40;">${esc(s.original_name)}</div>
-      </div>`;
-    } else if (s.source_type === 'url') {
-      srcInfo = `<div style="margin-bottom:8px; font-size:0.8rem; color:#1565c0;" title="${esc(s.url)}">${esc(s.url)}</div>`;
+    const imageSrcs = sources.filter(s => s.source_type === 'image' && s.file_path);
+    const urlSrcs = sources.filter(s => s.source_type === 'url');
+    if (imageSrcs.length) {
+      srcInfo = '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">';
+      for (const s of imageSrcs) {
+        srcInfo += `<div style="width:60px; height:60px; border:1px solid #d0c0e8; border-radius:4px; overflow:hidden;">
+          <img src="/${esc(s.file_path)}" style="width:100%; height:100%; object-fit:cover;" title="${esc(s.original_name)}">
+        </div>`;
+      }
+      srcInfo += '</div>';
+    }
+    if (urlSrcs.length) {
+      srcInfo += `<div style="margin-bottom:8px; font-size:0.8rem; color:#1565c0;" title="${esc(urlSrcs[0].url)}">${esc(urlSrcs[0].url)}</div>`;
     }
   }
 
   const btnLabel = hasSources ? 'ソース変更' : 'ソース追加';
-  step1Body.innerHTML = `<div class="lesson-step-title">ソース追加</div>`
+  let step1Html = `<div class="lesson-step-title">ソース追加${sources.length ? ' (' + sources.length + '件)' : ''}</div>`
     + srcInfo
-    + `<div style="display:flex; gap:8px; align-items:center;">
-        <button onclick="addLessonSource(${lessonId})" style="padding:5px 14px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${btnLabel}</button>
-        <span class="lesson-upload-status"></span>
-      </div>`;
+    + `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button onclick="addLessonSource(${lessonId})" style="padding:5px 14px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${btnLabel}</button>`;
 
-  if (!hasSources) {
-    step1Body.innerHTML += `<div style="margin-top:8px; color:#7b1fa2; font-size:0.78rem;">画像またはURLを追加してください</div>`;
+  // 画像ソースがある＋未抽出 → テキスト抽出ボタン
+  if (hasImageSources) {
+    step1Html += `<button onclick="extractLessonText(${lessonId})" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasExtractedText ? 'テキスト再抽出' : 'テキスト抽出'}</button>`;
   }
 
+  step1Html += `<span class="lesson-upload-status"></span></div>`;
+
+  if (!hasSources) {
+    step1Html += `<div style="margin-top:8px; color:#7b1fa2; font-size:0.78rem;">画像またはURLを追加してください</div>`;
+  } else if (hasImageSources && !hasExtractedText) {
+    step1Html += `<div style="margin-top:8px; color:#1565c0; font-size:0.78rem;">「テキスト抽出」を押してテキストを読み取ってください</div>`;
+  }
+
+  step1Body.innerHTML = step1Html;
   step1.innerHTML = '<div class="lesson-step-num">1</div>';
   step1.appendChild(step1Body);
   body.appendChild(step1);
 
-  // 抽出テキスト（ソースありなら折りたたみ）
-  if (hasSources) {
+  // 抽出テキスト（テキストがあれば折りたたみ表示）
+  if (hasExtractedText) {
     const extDetails = document.createElement('details');
     extDetails.style.cssText = 'margin: -8px 0 14px 40px; font-size:0.8rem;';
     extDetails.innerHTML = `<summary style="cursor:pointer; color:#7b1fa2; font-weight:500;">抽出テキスト</summary>
-      <pre style="margin-top:6px; background:#fff; padding:8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#2a1f40;">${esc(lesson.extracted_text || '(なし)')}</pre>`;
+      <pre style="margin-top:6px; background:#fff; padding:8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#2a1f40;">${esc(lesson.extracted_text)}</pre>`;
     body.appendChild(extDetails);
   }
 
   // === STEP 2: スクリプト生成 ===
   const step2 = document.createElement('div');
-  step2.className = 'lesson-step' + (hasSections ? ' step-done' : hasSources ? ' step-active' : ' step-disabled');
+  step2.className = 'lesson-step' + (hasSections ? ' step-done' : hasExtractedText ? ' step-active' : ' step-disabled');
   const step2Body = document.createElement('div');
   step2Body.className = 'lesson-step-body';
   step2Body.innerHTML = `<div class="lesson-step-title">スクリプト生成${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>
@@ -225,11 +239,14 @@ async function addLessonSource(lessonId) {
     cancelLabel: 'URL',
   });
   if (choice === true) {
-    // 画像: ファイル選択ダイアログ
+    // 既存データをクリア
+    await api('POST', '/api/lessons/' + lessonId + '/clear-sources');
+    // 画像: 複数ファイル選択
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.png,.jpg,.jpeg,.webp,.gif';
-    input.onchange = () => uploadLessonImage(lessonId, input);
+    input.multiple = true;
+    input.onchange = () => uploadLessonImages(lessonId, input);
     input.click();
   } else if (choice === false) {
     // URL入力
@@ -242,25 +259,43 @@ async function addLessonSource(lessonId) {
   }
 }
 
-async function uploadLessonImage(lessonId, input) {
+async function uploadLessonImages(lessonId, input) {
   if (!input.files || !input.files.length) return;
-  const file = input.files[0];
   const statusEl = _findStatusEl(lessonId);
-  if (statusEl) _showSpinner(statusEl, 'アップロード中: ' + file.name + ' — テキスト抽出中...');
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const r = await fetch('/api/lessons/' + lessonId + '/upload-image', { method: 'POST', body: formData });
-    const data = await r.json();
-    if (data.ok) {
-      showToast('アップロード完了: ' + file.name, 'success');
-    } else {
-      showToast('アップロード失敗: ' + (data.error || ''), 'error');
+  const total = input.files.length;
+  let done = 0;
+  for (const file of input.files) {
+    done++;
+    const msg = total > 1
+      ? `アップロード中 (${done}/${total}): ${file.name}`
+      : `アップロード中: ${file.name}`;
+    if (statusEl) _showSpinner(statusEl, msg);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const r = await fetch('/api/lessons/' + lessonId + '/upload-image', { method: 'POST', body: formData });
+      const data = await r.json();
+      if (!data.ok) {
+        showToast('アップロード失敗: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      showToast('アップロード失敗: ' + e.message, 'error');
     }
-  } catch (e) {
-    showToast('アップロード失敗: ' + e.message, 'error');
   }
   if (statusEl) _hideSpinner(statusEl);
+  showToast(total + '件アップロード完了', 'success');
+  _openLessonIds.add(lessonId);
+  await loadLessons();
+}
+
+async function extractLessonText(lessonId) {
+  const statusEl = _findStatusEl(lessonId);
+  if (statusEl) _showSpinner(statusEl, 'テキスト抽出中...');
+  const res = await api('POST', '/api/lessons/' + lessonId + '/extract-text');
+  if (statusEl) _hideSpinner(statusEl);
+  if (res && res.ok) {
+    showToast('テキスト抽出完了', 'success');
+  }
   _openLessonIds.add(lessonId);
   await loadLessons();
 }

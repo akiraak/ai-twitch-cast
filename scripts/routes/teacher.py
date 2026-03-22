@@ -185,9 +185,19 @@ def _clear_lesson_data(lesson_id: int):
     db.update_lesson(lesson_id, extracted_text="")
 
 
+@router.post("/api/lessons/{lesson_id}/clear-sources")
+async def clear_lesson_sources(lesson_id: int):
+    """既存ソース・セクション・抽出テキストを全クリアする"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+    _clear_lesson_data(lesson_id)
+    return {"ok": True}
+
+
 @router.post("/api/lessons/{lesson_id}/upload-image")
 async def upload_lesson_image(lesson_id: int, file: UploadFile = File(...)):
-    """教材画像アップロード（既存データは全クリアして置き換え）"""
+    """教材画像アップロード（ファイル保存のみ、テキスト抽出は別）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
@@ -196,40 +206,64 @@ async def upload_lesson_image(lesson_id: int, file: UploadFile = File(...)):
     if ext not in IMAGE_EXTENSIONS:
         return {"ok": False, "error": f"非対応の形式: {ext}"}
 
-    # 既存データを全クリア
-    _clear_lesson_data(lesson_id)
-
     # ファイル保存
     lesson_dir = LESSON_IMAGES_DIR / str(lesson_id)
     lesson_dir.mkdir(parents=True, exist_ok=True)
     safe_name = _sanitize_filename(Path(file.filename).stem) + ext
     dest = lesson_dir / safe_name
+    counter = 1
+    while dest.exists():
+        dest = lesson_dir / f"{_sanitize_filename(Path(file.filename).stem)}_{counter}{ext}"
+        counter += 1
 
     content = await file.read()
     dest.write_bytes(content)
 
-    # テキスト抽出
-    try:
-        extracted = extract_text_from_image(str(dest))
-    except Exception as e:
-        logger.warning("画像テキスト抽出失敗: %s", e)
-        extracted = ""
-
-    # DB保存
     rel_path = str(dest.relative_to(PROJECT_DIR))
     source = db.add_lesson_source(
         lesson_id, source_type="image",
         file_path=rel_path, original_name=file.filename or safe_name,
     )
-    db.update_lesson(lesson_id, extracted_text=extracted)
 
     logger.info("教材画像アップロード: %s → %s", file.filename, rel_path)
-    return {"ok": True, "source": source, "extracted_text": extracted}
+    return {"ok": True, "source": source}
+
+
+@router.post("/api/lessons/{lesson_id}/extract-text")
+async def extract_lesson_text(lesson_id: int):
+    """全ソースからテキストを抽出する"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    sources = db.get_lesson_sources(lesson_id)
+    if not sources:
+        return {"ok": False, "error": "ソースがありません"}
+
+    texts = []
+    for src in sources:
+        if src["source_type"] == "image" and src["file_path"]:
+            try:
+                t = await asyncio.to_thread(
+                    extract_text_from_image, str(PROJECT_DIR / src["file_path"]),
+                )
+                if t:
+                    texts.append(t)
+            except Exception as e:
+                logger.warning("画像テキスト抽出失敗 (%s): %s", src["file_path"], e)
+
+    extracted = "\n\n---\n\n".join(texts) if texts else ""
+    db.update_lesson(lesson_id, extracted_text=extracted)
+    # テキスト変更でセクションを無効化
+    db.delete_lesson_sections(lesson_id)
+
+    logger.info("テキスト抽出完了: lesson=%d, %d件, %d文字", lesson_id, len(texts), len(extracted))
+    return {"ok": True, "extracted_text": extracted}
 
 
 @router.post("/api/lessons/{lesson_id}/add-url")
 async def add_lesson_url(lesson_id: int, body: UrlAdd):
-    """URL追加（既存データは全クリアして置き換え）"""
+    """URL追加（既存データを全クリアして置き換え、テキスト自動抽出）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
