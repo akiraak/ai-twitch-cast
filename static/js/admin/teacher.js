@@ -70,104 +70,109 @@ async function buildLessonItem(lessonId) {
   body.style.marginTop = '12px';
 
   // コンテンツ名編集
-  body.innerHTML = `<div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+  body.innerHTML = `<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
     <span style="font-weight:600; font-size:0.85rem; color:#2a1f40;">コンテンツ名:</span>
     <input type="text" class="lesson-name-input" value="${esc(lesson.name)}" style="flex:1; padding:4px 8px; background:#faf7ff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:4px;">
     <button onclick="saveLessonName(${lessonId}, this)" style="padding:4px 12px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">保存</button>
   </div>`;
 
-  // 教材ソース
-  const srcSection = document.createElement('div');
-  srcSection.style.marginBottom = '12px';
-  srcSection.innerHTML = `<div style="font-weight:600; font-size:0.85rem; color:#7b1fa2; margin-bottom:8px;">教材ソース${sources.length ? ' (' + sources.length + '件)' : ''}</div>`;
+  // === STEP 1: ソース追加 ===
+  const step1 = document.createElement('div');
+  step1.className = 'lesson-step' + (hasSources ? ' step-done' : ' step-active');
+  const step1Body = document.createElement('div');
+  step1Body.className = 'lesson-step-body';
 
   // ソースサムネイル
-  const srcList = document.createElement('div');
-  srcList.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;';
+  let srcHtml = '';
   for (const s of sources) {
-    const div = document.createElement('div');
-    div.style.cssText = 'position:relative; display:inline-block;';
     if (s.source_type === 'image' && s.file_path) {
-      div.innerHTML = `<div style="width:80px; height:80px; border:1px solid #d0c0e8; border-radius:4px; overflow:hidden; position:relative;">
-        <img src="/${esc(s.file_path)}" style="width:100%; height:100%; object-fit:cover;">
-        <button onclick="deleteLessonSource(${lessonId}, ${s.id})" style="position:absolute; top:2px; right:2px; width:18px; height:18px; background:rgba(198,40,40,0.9); color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.65rem; line-height:18px; padding:0;">\u00D7</button>
-      </div>
-      <div style="font-size:0.6rem; color:#8a7a9a; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(s.original_name)}</div>`;
+      srcHtml += `<div style="position:relative; display:inline-block;">
+        <div style="width:80px; height:80px; border:1px solid #d0c0e8; border-radius:4px; overflow:hidden; position:relative;">
+          <img src="/${esc(s.file_path)}" style="width:100%; height:100%; object-fit:cover;">
+          <button onclick="deleteLessonSource(${lessonId}, ${s.id})" style="position:absolute; top:2px; right:2px; width:18px; height:18px; background:rgba(198,40,40,0.9); color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.65rem; line-height:18px; padding:0;">\u00D7</button>
+        </div>
+        <div style="font-size:0.6rem; color:#8a7a9a; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(s.original_name)}</div>
+      </div>`;
     } else if (s.source_type === 'url') {
-      div.innerHTML = `<div style="padding:6px 10px; background:#faf7ff; border:1px solid #d0c0e8; border-radius:4px; display:flex; align-items:center; gap:6px;">
-        <span style="font-size:0.75rem; color:#1565c0; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(s.url)}">${esc(s.url)}</span>
-        <button onclick="deleteLessonSource(${lessonId}, ${s.id})" style="width:18px; height:18px; background:rgba(198,40,40,0.9); color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.65rem; line-height:18px; padding:0;">\u00D7</button>
+      srcHtml += `<div style="position:relative; display:inline-block;">
+        <div style="padding:6px 10px; background:#fff; border:1px solid #d0c0e8; border-radius:4px; display:flex; align-items:center; gap:6px;">
+          <span style="font-size:0.75rem; color:#1565c0; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(s.url)}">${esc(s.url)}</span>
+          <button onclick="deleteLessonSource(${lessonId}, ${s.id})" style="width:18px; height:18px; background:rgba(198,40,40,0.9); color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.65rem; line-height:18px; padding:0;">\u00D7</button>
+        </div>
       </div>`;
     }
-    srcList.appendChild(div);
   }
-  srcSection.appendChild(srcList);
 
-  // 追加ボタン
-  const btnRow = document.createElement('div');
-  btnRow.style.cssText = 'display:flex; gap:8px; align-items:center;';
-  btnRow.innerHTML = `<label style="padding:6px 16px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.85rem;">
-      画像追加
-      <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple onchange="uploadLessonImage(${lessonId}, this)" style="display:none;">
-    </label>
-    <button onclick="addLessonUrl(${lessonId})" style="padding:6px 16px; background:#546e7a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">URL追加</button>
-    <span class="lesson-upload-status" style="font-size:0.8rem; color:#e65100;"></span>`;
-  srcSection.appendChild(btnRow);
+  step1Body.innerHTML = `<div class="lesson-step-title">ソース追加${sources.length ? ' (' + sources.length + '件)' : ''}</div>`
+    + (srcHtml ? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">${srcHtml}</div>` : '')
+    + `<div style="display:flex; gap:8px; align-items:center;">
+        <label style="padding:5px 14px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.8rem;">
+          画像追加
+          <input type="file" accept=".png,.jpg,.jpeg,.webp,.gif" multiple onchange="uploadLessonImage(${lessonId}, this)" style="display:none;">
+        </label>
+        <button onclick="addLessonUrl(${lessonId})" style="padding:5px 14px; background:#546e7a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">URL追加</button>
+        <span class="lesson-upload-status"></span>
+      </div>`;
 
   if (!hasSources) {
-    const hint = document.createElement('div');
-    hint.style.cssText = 'margin-top:10px; padding:10px 14px; background:rgba(124,77,255,0.06); border:1px dashed rgba(124,77,255,0.3); border-radius:6px; color:#7b1fa2; font-size:0.8rem;';
-    hint.textContent = '画像またはURLを追加すると、テキスト抽出・スクリプト生成が利用できます';
-    srcSection.appendChild(hint);
+    step1Body.innerHTML += `<div style="margin-top:8px; color:#7b1fa2; font-size:0.78rem;">画像またはURLを追加してください</div>`;
   }
-  body.appendChild(srcSection);
 
-  // ソース追加後の領域
+  step1.innerHTML = '<div class="lesson-step-num">1</div>';
+  step1.appendChild(step1Body);
+  body.appendChild(step1);
+
+  // 抽出テキスト（ソースありなら折りたたみ）
   if (hasSources) {
-    // 抽出テキスト
     const extDetails = document.createElement('details');
-    extDetails.style.marginBottom = '12px';
-    extDetails.innerHTML = `<summary style="cursor:pointer; font-weight:600; font-size:0.85rem; color:#7b1fa2;">抽出テキスト</summary>
-      <div style="margin-top:8px;">
-        <pre style="background:#faf7ff; padding:8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#2a1f40;">${esc(lesson.extracted_text || '(なし)')}</pre>
-      </div>`;
+    extDetails.style.cssText = 'margin: -8px 0 14px 40px; font-size:0.8rem;';
+    extDetails.innerHTML = `<summary style="cursor:pointer; color:#7b1fa2; font-weight:500;">抽出テキスト</summary>
+      <pre style="margin-top:6px; background:#fff; padding:8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#2a1f40;">${esc(lesson.extracted_text || '(なし)')}</pre>`;
     body.appendChild(extDetails);
-
-    // スクリプト生成
-    const scriptHeader = document.createElement('div');
-    scriptHeader.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;';
-    scriptHeader.innerHTML = `<span style="font-weight:600; font-size:0.85rem; color:#2a1f40;">授業スクリプト</span>
-      <button onclick="generateScript(${lessonId})" style="padding:4px 12px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">スクリプト生成</button>
-      <span class="script-status" style="font-size:0.75rem; color:#8a7a9a;"></span>`;
-    body.appendChild(scriptHeader);
-
-    // セクション一覧
-    const secContainer = document.createElement('div');
-    renderSectionsInto(secContainer, sections, lessonId);
-    body.appendChild(secContainer);
-
-    // 授業制御（スクリプトがあるときだけ表示）
-    if (hasSections) {
-      const control = document.createElement('div');
-      control.style.cssText = 'margin-top:12px; padding:10px; background:#faf7ff; border:1px solid #d0c0e8; border-radius:6px;';
-      control.innerHTML = `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-          <span style="font-weight:600; font-size:0.85rem; color:#2a1f40;">授業制御</span>
-          <span class="lesson-state" style="font-size:0.75rem; color:#8a7a9a;"></span>
-        </div>
-        <div style="display:flex; gap:6px;">
-          <button onclick="startLesson(${lessonId})" class="btn-lesson-start" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">授業開始</button>
-          <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:4px 12px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">一時停止</button>
-          <button onclick="resumeLesson()" class="btn-lesson-resume" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">再開</button>
-          <button onclick="stopLesson()" class="btn-lesson-stop" style="padding:4px 12px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">停止</button>
-        </div>
-        <div class="lesson-progress" style="margin-top:6px; font-size:0.75rem; color:#8a7a9a;"></div>`;
-      body.appendChild(control);
-    }
   }
+
+  // === STEP 2: スクリプト生成 ===
+  const step2 = document.createElement('div');
+  step2.className = 'lesson-step' + (hasSections ? ' step-done' : hasSources ? ' step-active' : ' step-disabled');
+  const step2Body = document.createElement('div');
+  step2Body.className = 'lesson-step-body';
+  step2Body.innerHTML = `<div class="lesson-step-title">スクリプト生成${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button onclick="generateScript(${lessonId})" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? '再生成' : 'スクリプト生成'}</button>
+      <span class="script-status"></span>
+    </div>`;
+
+  // セクション一覧
+  const secContainer = document.createElement('div');
+  if (hasSources) renderSectionsInto(secContainer, sections, lessonId);
+  step2Body.appendChild(secContainer);
+
+  step2.innerHTML = '<div class="lesson-step-num">2</div>';
+  step2.appendChild(step2Body);
+  body.appendChild(step2);
+
+  // === STEP 3: 授業開始 ===
+  const step3 = document.createElement('div');
+  step3.className = 'lesson-step' + (hasSections ? ' step-active' : ' step-disabled');
+  const step3Body = document.createElement('div');
+  step3Body.className = 'lesson-step-body';
+  step3Body.innerHTML = `<div class="lesson-step-title">授業開始</div>
+    <div style="display:flex; gap:6px; align-items:center;">
+      <button onclick="startLesson(${lessonId})" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">授業開始</button>
+      <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">一時停止</button>
+      <button onclick="resumeLesson()" class="btn-lesson-resume" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">再開</button>
+      <button onclick="stopLesson()" class="btn-lesson-stop" style="padding:5px 14px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; display:none;">停止</button>
+      <span class="lesson-state" style="font-size:0.8rem; color:#8a7a9a;"></span>
+    </div>
+    <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:#8a7a9a;"></div>`;
+
+  step3.innerHTML = '<div class="lesson-step-num">3</div>';
+  step3.appendChild(step3Body);
+  body.appendChild(step3);
 
   // 削除ボタン
   const delRow = document.createElement('div');
-  delRow.style.cssText = 'display:flex; justify-content:flex-end; margin-top:16px;';
+  delRow.style.cssText = 'display:flex; justify-content:flex-end; margin-top:12px; padding-top:10px; border-top:1px solid #ece4f5;';
   delRow.innerHTML = `<button onclick="deleteLesson(${lessonId})" style="padding:4px 12px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">コンテンツ削除</button>`;
   body.appendChild(delRow);
 

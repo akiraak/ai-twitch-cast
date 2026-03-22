@@ -305,6 +305,23 @@
   .lesson-item:not([open]) > summary .lesson-arrow { transform: rotate(-90deg); }
   .lesson-item > summary .lesson-arrow { display:inline-block; transition: transform 0.15s; }
 
+  /* 教師モード ステップ */
+  .lesson-step {
+    display: flex; gap: 12px; margin-bottom: 14px;
+    padding: 12px; background: #faf7ff; border: 1px solid #d0c0e8; border-radius: 8px;
+  }
+  .lesson-step.step-done { background: #f0faf0; border-color: #b5d8b5; }
+  .lesson-step.step-disabled { opacity: 0.45; pointer-events: none; }
+  .lesson-step-num {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+    background: #d0c0e8; color: #fff; font-weight: 700; font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lesson-step.step-done .lesson-step-num { background: #4caf50; }
+  .lesson-step.step-active .lesson-step-num { background: #7b1fa2; }
+  .lesson-step-body { flex: 1; min-width: 0; }
+  .lesson-step-title { font-weight: 600; font-size: 0.85rem; color: #2a1f40; margin-bottom: 6px; }
+
   /* 教師モード 処理中スピナー */
   .lesson-spinner {
     display: inline-flex; align-items: center; gap: 8px;
