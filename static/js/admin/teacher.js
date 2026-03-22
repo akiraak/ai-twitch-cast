@@ -115,27 +115,27 @@ async function buildLessonItem(lessonId) {
   if (!hasSources) {
     step1Html += `<div style="margin-top:8px; color:#7b1fa2; font-size:0.78rem;">画像またはURLを追加してください</div>`;
   } else if (hasImageSources) {
-    step1Html += `<div style="margin-top:10px;">
-      <button onclick="extractLessonText(${lessonId})" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasExtractedText ? 'テキスト再抽出' : 'テキスト抽出'}</button>`;
+    step1Html += `<div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
+      <button onclick="extractLessonText(${lessonId})" class="btn-extract" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasExtractedText ? 'テキスト再抽出' : 'テキスト抽出'}</button>
+      <span class="extract-status"></span>`;
     if (!hasExtractedText) {
-      step1Html += `<span style="margin-left:8px; color:#1565c0; font-size:0.78rem;">画像からテキストを読み取ります</span>`;
+      step1Html += `<span style="color:#1565c0; font-size:0.78rem;">画像からテキストを読み取ります</span>`;
     }
     step1Html += `</div>`;
+  }
+
+  // 抽出テキスト（Step 1 の中に折りたたみ表示）
+  if (hasExtractedText) {
+    step1Html += `<details style="margin-top:10px; font-size:0.8rem;">
+      <summary style="cursor:pointer; color:#7b1fa2; font-weight:500;">抽出テキスト</summary>
+      <pre style="margin-top:6px; background:#fff; padding:8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#2a1f40;">${esc(lesson.extracted_text)}</pre>
+    </details>`;
   }
 
   step1Body.innerHTML = step1Html;
   step1.innerHTML = '<div class="lesson-step-num">1</div>';
   step1.appendChild(step1Body);
   body.appendChild(step1);
-
-  // 抽出テキスト（テキストがあれば折りたたみ表示）
-  if (hasExtractedText) {
-    const extDetails = document.createElement('details');
-    extDetails.style.cssText = 'margin: -8px 0 14px 40px; font-size:0.8rem;';
-    extDetails.innerHTML = `<summary style="cursor:pointer; color:#7b1fa2; font-weight:500;">抽出テキスト</summary>
-      <pre style="margin-top:6px; background:#fff; padding:8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#2a1f40;">${esc(lesson.extracted_text)}</pre>`;
-    body.appendChild(extDetails);
-  }
 
   // === STEP 2: スクリプト生成 ===
   const step2 = document.createElement('div');
@@ -289,9 +289,13 @@ async function uploadLessonImages(lessonId, input) {
 }
 
 async function extractLessonText(lessonId) {
-  const statusEl = _findStatusEl(lessonId);
-  if (statusEl) _showSpinner(statusEl, 'テキスト抽出中...');
+  const item = _findLessonItem(lessonId);
+  const statusEl = item ? item.querySelector('.extract-status') : null;
+  const btn = item ? item.querySelector('.btn-extract') : null;
+  if (btn) btn.disabled = true;
+  if (statusEl) _showSpinner(statusEl, '抽出中...');
   const res = await api('POST', '/api/lessons/' + lessonId + '/extract-text');
+  if (btn) btn.disabled = false;
   if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
     showToast('テキスト抽出完了', 'success');
@@ -312,13 +316,16 @@ async function doAddLessonUrl(lessonId, url) {
   await loadLessons();
 }
 
-function _findStatusEl(lessonId) {
+function _findLessonItem(lessonId) {
   for (const item of document.querySelectorAll('.lesson-item')) {
-    if (item.querySelector(`button[onclick="addLessonSource(${lessonId})"]`)) {
-      return item.querySelector('.lesson-upload-status');
-    }
+    if (item.querySelector(`button[onclick="addLessonSource(${lessonId})"]`)) return item;
   }
   return null;
+}
+
+function _findStatusEl(lessonId) {
+  const item = _findLessonItem(lessonId);
+  return item ? item.querySelector('.lesson-upload-status') : null;
 }
 
 // --- 授業スクリプト ---
