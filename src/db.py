@@ -247,6 +247,17 @@ def _create_tables(conn):
         _migrate_comments_split(conn)
     except Exception:
         pass
+    # Migration: 旧lessonsテーブル（title/status/image_files構造）を削除して再作成
+    try:
+        conn.execute("SELECT title FROM lessons LIMIT 1")
+        # 旧スキーマが存在する → 関連テーブルごと全削除
+        conn.execute("DROP TABLE IF EXISTS lesson_sections")
+        conn.execute("DROP TABLE IF EXISTS lesson_sources")
+        conn.execute("DROP TABLE IF EXISTS lessons")
+        conn.commit()
+    except Exception:
+        pass
+
     # lessons テーブル（教師モード）
     conn.execute("""
         CREATE TABLE IF NOT EXISTS lessons (
