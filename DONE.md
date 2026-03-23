@@ -48,6 +48,10 @@
 - [x] テスト追加（TestLessonPlan + TestPaceScale、全460テスト通過）
 - [x] TTS事前一括生成（セクション内パート間の間を大幅短縮、SpeechPipeline.generate_tts + wav_path渡し）
 - [x] プラン/スクリプト生成のSSE進捗表示（StreamingResponse + EventSource、ステップごとにリアルタイム更新）
+- [x] TTS音声の永続保存キャッシュ（resources/audio/lessons/に保存、再生時キャッシュヒット、編集・再生成・削除時に自動無効化）
+- [x] スクリプト生成時にTTS音声も事前生成（「スクリプト+音声生成」に統合、SSE進捗表示付き）
+- [x] TTSキャッシュAPI（GET/DELETE /api/lessons/{id}/tts-cache）+ WebUIにキャッシュ状態・再生リンク表示
+- [x] 前工程ボタン押下時に後工程の表示を即座にクリア（ソース→プラン→スクリプト→授業の依存関係）
 
 ## トピック機能・授業モード完全削除
 

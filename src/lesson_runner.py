@@ -2,10 +2,15 @@
 
 import asyncio
 import logging
+import shutil
 from enum import Enum
+from pathlib import Path
 
 from src import db
 from src.speech_pipeline import SpeechPipeline
+
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+LESSON_AUDIO_DIR = PROJECT_DIR / "resources" / "audio" / "lessons"
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +19,56 @@ class LessonState(str, Enum):
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
+
+
+def _cache_path(lesson_id: int, order_index: int, part_index: int) -> Path:
+    """TTSキャッシュファイルのパスを返す"""
+    return LESSON_AUDIO_DIR / str(lesson_id) / f"section_{order_index:02d}_part_{part_index:02d}.wav"
+
+
+def clear_tts_cache(lesson_id: int, order_index: int | None = None):
+    """TTSキャッシュを削除する
+
+    Args:
+        lesson_id: レッスンID
+        order_index: 指定時はそのセクションのみ、Noneなら全セクション
+    """
+    lesson_dir = LESSON_AUDIO_DIR / str(lesson_id)
+    if not lesson_dir.exists():
+        return
+    if order_index is not None:
+        # 特定セクションのキャッシュ削除
+        for f in lesson_dir.glob(f"section_{order_index:02d}_part_*.wav"):
+            f.unlink(missing_ok=True)
+    else:
+        # 全キャッシュ削除
+        shutil.rmtree(lesson_dir, ignore_errors=True)
+
+
+def get_tts_cache_info(lesson_id: int) -> list[dict]:
+    """TTSキャッシュの状況を返す"""
+    lesson_dir = LESSON_AUDIO_DIR / str(lesson_id)
+    sections_map: dict[int, list[dict]] = {}
+    if lesson_dir.exists():
+        for f in sorted(lesson_dir.glob("section_*_part_*.wav")):
+            parts = f.stem.split("_")  # section_00_part_00
+            oi = int(parts[1])
+            pi = int(parts[3])
+            sections_map.setdefault(oi, []).append({
+                "part_index": pi,
+                "path": str(f.relative_to(PROJECT_DIR)),
+                "size": f.stat().st_size,
+            })
+    # DB上のセクション数に合わせて返す
+    db_sections = db.get_lesson_sections(lesson_id)
+    result = []
+    for i, sec in enumerate(db_sections):
+        result.append({
+            "order_index": sec["order_index"],
+            "section_id": sec["id"],
+            "parts": sections_map.get(sec["order_index"], []),
+        })
+    return result
 
 
 class LessonRunner:
@@ -200,16 +255,40 @@ class LessonRunner:
         content_parts = SpeechPipeline.split_sentences(content)
         tts_parts = SpeechPipeline.split_sentences(tts_text)
 
-        # 全パートのTTSを事前生成
+        # 全パートのTTSを事前生成（キャッシュ対応）
+        order_index = section.get("order_index", self._current_index)
         wav_paths = []
+        cache_hits = 0
         for i, part in enumerate(content_parts):
             if self._state == LessonState.IDLE:
                 break
             part_tts = tts_parts[i] if i < len(tts_parts) else part
+
+            # キャッシュ確認
+            cached = _cache_path(self._lesson_id, order_index, i)
+            if cached.exists():
+                logger.info("[lesson]   part[%d] cache hit: %s", i, cached)
+                wav_paths.append(cached)
+                cache_hits += 1
+                continue
+
+            # キャッシュなし → TTS生成 → キャッシュ保存
             logger.info("[lesson]   generating part[%d] tts=%s", i, repr(part_tts[:100]))
             wav = await self._speech.generate_tts(part, tts_text=part_tts)
-            wav_paths.append(wav)
-        logger.info("[lesson]   TTS事前生成完了: %d/%d パート", len(wav_paths), len(content_parts))
+            if wav and wav.exists():
+                cached.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(wav, cached)
+                # 一時ファイルを削除してキャッシュパスを使う
+                wav.unlink(missing_ok=True)
+                try:
+                    wav.parent.rmdir()
+                except OSError:
+                    pass
+                wav_paths.append(cached)
+            else:
+                wav_paths.append(wav)
+        logger.info("[lesson]   TTS事前生成完了: %d/%d パート (cache hit: %d)",
+                     len(wav_paths), len(content_parts), cache_hits)
 
         # 事前生成済みWAVで順次再生
         for i, part in enumerate(content_parts):
@@ -224,11 +303,14 @@ class LessonRunner:
                wav_path=wav_paths[i] if i < len(wav_paths) else None)
             await self._speech.notify_overlay_end()
 
-        # 停止時の未再生WAVクリーンアップ
+        # 停止時の未再生WAVクリーンアップ（キャッシュファイルは残す）
         for wav in wav_paths:
-            if wav and wav.exists():
+            if wav and wav.exists() and not str(wav).startswith(str(LESSON_AUDIO_DIR)):
                 wav.unlink(missing_ok=True)
-                wav.parent.rmdir()
+                try:
+                    wav.parent.rmdir()
+                except OSError:
+                    pass
 
         self._speech.apply_emotion("neutral")
 

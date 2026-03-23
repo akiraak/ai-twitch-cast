@@ -3,8 +3,10 @@
 ## 機能追加
 
 ### 教師モード改善
-- [ ] 教師モード改善 — 三者視点プラン生成・URLテキスト抽出改善・マルチURL等 → [plans/teacher-mode-deep-pulse-integration.md](plans/teacher-mode-deep-pulse-integration.md)
-- [ ] 授業モードの英語の発音も通常時と同じようにリアルにする。TTSに投げるプロンプトを修正する必要があるかもしれない
+- [ ] 教師モード改善 v2 → [plans/teacher-mode-v2/](plans/teacher-mode-v2/README.md)
+  - [ ] URLテキスト抽出改善 → [01-url-text-extraction.md](plans/teacher-mode-v2/01-url-text-extraction.md)
+  - [ ] 授業テキストパネル書式対応 → [03-display-text-markdown.md](plans/teacher-mode-v2/03-display-text-markdown.md)
+  - [ ] 授業中のチャット割り込み改善 → [04-chat-interruption.md](plans/teacher-mode-v2/04-chat-interruption.md)
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証

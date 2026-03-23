@@ -205,9 +205,15 @@ class SpeechPipeline:
                 await asyncio.sleep(5.0)
 
         # クリーンアップ（参照クリア→ファイル削除の順でrace condition防止）
+        # キャッシュ済みWAV（resources/audio/lessons/配下）は削除しない
         self._current_audio = None
-        wav_path.unlink(missing_ok=True)
-        wav_path.parent.rmdir()
+        is_cached = "resources/audio/lessons/" in str(wav_path)
+        if not is_cached:
+            wav_path.unlink(missing_ok=True)
+            try:
+                wav_path.parent.rmdir()
+            except OSError:
+                pass
 
     async def send_tts_to_native_app(self, wav_path):
         """TTS WAVをC#アプリに送信する。C#側で配信中→FFmpegパイプ、非配信→ローカル再生。"""

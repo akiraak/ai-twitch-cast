@@ -18,6 +18,9 @@ from src.lesson_generator import (
     generate_lesson_script,
     generate_lesson_script_from_plan,
 )
+from src.lesson_runner import LESSON_AUDIO_DIR, _cache_path, clear_tts_cache, get_tts_cache_info
+from src.speech_pipeline import SpeechPipeline
+from src.tts import synthesize
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -180,6 +183,9 @@ async def delete_lesson(lesson_id: int):
             if p.exists():
                 p.unlink()
 
+    # TTSキャッシュ削除
+    clear_tts_cache(lesson_id)
+
     db.delete_lesson(lesson_id)
     logger.info("コンテンツ削除: %s (id=%d)", lesson["name"], lesson_id)
     return {"ok": True}
@@ -189,7 +195,9 @@ async def delete_lesson(lesson_id: int):
 
 
 def _clear_lesson_data(lesson_id: int):
-    """既存のソース・セクション・抽出テキストを全削除する"""
+    """既存のソース・セクション・抽出テキスト・TTSキャッシュを全削除する"""
+    # TTSキャッシュ削除
+    clear_tts_cache(lesson_id)
     # 画像ファイル削除
     sources = db.get_lesson_sources(lesson_id)
     for src in sources:
@@ -496,7 +504,8 @@ async def generate_script(lesson_id: int):
 
         try:
             sections = task.result()
-            # 既存セクションを削除して再生成
+            # TTSキャッシュ・既存セクションを削除して再生成
+            clear_tts_cache(lesson_id)
             db.delete_lesson_sections(lesson_id)
             saved = []
             for i, s in enumerate(sections):
@@ -513,7 +522,41 @@ async def generate_script(lesson_id: int):
                 )
                 saved.append(sec)
             logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))
-            result = {"ok": True, "sections": saved}
+
+            # --- TTS音声の事前生成 ---
+            total_parts = 0
+            section_parts_list = []
+            for s in saved:
+                content = s["content"]
+                tts_text = s.get("tts_text") or content
+                c_parts = SpeechPipeline.split_sentences(content)
+                t_parts = SpeechPipeline.split_sentences(tts_text)
+                section_parts_list.append((s, c_parts, t_parts))
+                total_parts += len(c_parts)
+
+            generated = 0
+            tts_errors = 0
+            for s, c_parts, t_parts in section_parts_list:
+                oi = s["order_index"]
+                for pi, _part in enumerate(c_parts):
+                    generated += 1
+                    part_tts = t_parts[pi] if pi < len(t_parts) else _part
+                    progress_msg = f"TTS生成中: セクション{oi + 1} パート{pi + 1} ({generated}/{total_parts})"
+                    yield f"data: {_json.dumps({'step': generated, 'total': total_parts, 'message': progress_msg, 'phase': 'tts'}, ensure_ascii=False)}\n\n"
+
+                    cached = _cache_path(lesson_id, oi, pi)
+                    cached.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        await asyncio.to_thread(synthesize, part_tts, str(cached))
+                        logger.info("[tts-cache] 生成: %s", cached)
+                    except Exception as e:
+                        logger.warning("[tts-cache] 生成失敗 (section=%d, part=%d): %s", oi, pi, e)
+                        tts_errors += 1
+
+            logger.info("TTS事前生成完了: lesson=%d, %d/%d パート (エラー: %d)",
+                        lesson_id, generated - tts_errors, total_parts, tts_errors)
+
+            result = {"ok": True, "sections": saved, "tts_generated": generated - tts_errors, "tts_errors": tts_errors}
         except Exception as e:
             logger.error("スクリプト生成失敗: %s", e)
             result = {"ok": False, "error": str(e)}
@@ -539,6 +582,16 @@ async def update_section(lesson_id: int, section_id: int, body: SectionUpdate):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         return {"ok": True}
+
+    # tts_text または content が変更された場合、該当セクションのTTSキャッシュを削除
+    if "tts_text" in updates or "content" in updates:
+        # セクションの order_index を取得
+        sections = db.get_lesson_sections(lesson_id)
+        sec = next((s for s in sections if s["id"] == section_id), None)
+        if sec:
+            clear_tts_cache(lesson_id, order_index=sec["order_index"])
+            logger.info("TTSキャッシュ削除: lesson=%d, section order=%d", lesson_id, sec["order_index"])
+
     db.update_lesson_section(section_id, **updates)
     return {"ok": True}
 
@@ -546,6 +599,12 @@ async def update_section(lesson_id: int, section_id: int, body: SectionUpdate):
 @router.delete("/api/lessons/{lesson_id}/sections/{section_id}")
 async def delete_section(lesson_id: int, section_id: int):
     """セクション削除"""
+    # TTSキャッシュ削除
+    sections = db.get_lesson_sections(lesson_id)
+    sec = next((s for s in sections if s["id"] == section_id), None)
+    if sec:
+        clear_tts_cache(lesson_id, order_index=sec["order_index"])
+
     db.delete_lesson_section(section_id)
     return {"ok": True}
 
@@ -559,3 +618,38 @@ async def start_lesson(lesson_id: int):
     except ValueError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "status": runner.get_status()}
+
+
+# --- TTSキャッシュ ---
+
+
+@router.get("/api/lessons/{lesson_id}/tts-cache")
+async def get_tts_cache(lesson_id: int):
+    """TTSキャッシュ状況を取得する"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+    sections = get_tts_cache_info(lesson_id)
+    return {"ok": True, "sections": sections}
+
+
+@router.delete("/api/lessons/{lesson_id}/tts-cache")
+async def delete_tts_cache(lesson_id: int):
+    """全TTSキャッシュを削除する"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+    clear_tts_cache(lesson_id)
+    logger.info("TTSキャッシュ全削除: lesson=%d", lesson_id)
+    return {"ok": True}
+
+
+@router.delete("/api/lessons/{lesson_id}/tts-cache/{order_index}")
+async def delete_tts_cache_section(lesson_id: int, order_index: int):
+    """特定セクションのTTSキャッシュを削除する"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+    clear_tts_cache(lesson_id, order_index=order_index)
+    logger.info("TTSキャッシュ削除: lesson=%d, section=%d", lesson_id, order_index)
+    return {"ok": True}

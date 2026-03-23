@@ -231,17 +231,28 @@ async function buildLessonItem(lessonId) {
   step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasPlan || hasExtractedText ? ' step-active' : ' step-disabled');
   const step2bBody = document.createElement('div');
   step2bBody.className = 'lesson-step-body';
-  const scriptLabel = hasPlan ? 'プランからスクリプト生成' : 'スクリプト生成';
-  step2bBody.innerHTML = `<div class="lesson-step-title">スクリプト生成${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>
+  const scriptLabel = hasPlan ? 'プランからスクリプト+音声生成' : 'スクリプト+音声生成';
+  step2bBody.innerHTML = `<div class="lesson-step-title">スクリプト+音声生成${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
       <button onclick="generateScript(${lessonId})" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? '再生成' : esc(scriptLabel)}</button>
       <span class="script-status"></span>
       ${hasPlan ? '<span style="font-size:0.7rem; color:#1565c0;">プランに基づいて生成</span>' : ''}
     </div>`;
 
+  // TTSキャッシュ情報取得
+  let ttsCacheMap = {};
+  if (hasSections) {
+    const cacheRes = await api('GET', '/api/lessons/' + lessonId + '/tts-cache');
+    if (cacheRes && cacheRes.ok) {
+      for (const c of cacheRes.sections) {
+        ttsCacheMap[c.order_index] = c.parts;
+      }
+    }
+  }
+
   // セクション一覧
   const secContainer = document.createElement('div');
-  renderSectionsInto(secContainer, sections, lessonId);
+  renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap);
   step2bBody.appendChild(secContainer);
 
   step2b.innerHTML = '<div class="lesson-step-num">2b</div>';
@@ -318,6 +329,21 @@ async function deleteLesson(lessonId) {
   }
 }
 
+// --- 後工程クリア ---
+
+function _clearDownstreamSteps(lessonId, stepNums) {
+  const item = _findLessonItem(lessonId);
+  if (!item) return;
+  for (const step of item.querySelectorAll('.lesson-step')) {
+    const numEl = step.querySelector('.lesson-step-num');
+    if (numEl && stepNums.includes(numEl.textContent.trim())) {
+      const body = step.querySelector('.lesson-step-body');
+      if (body) body.innerHTML = '<div style="color:#bbb; font-size:0.75rem; padding:4px;">前工程の処理中…</div>';
+      step.className = 'lesson-step step-disabled';
+    }
+  }
+}
+
 // --- 教材ソース ---
 
 function _showSpinner(el, msg) {
@@ -334,6 +360,7 @@ async function addLessonSource(lessonId) {
     cancelLabel: 'URL',
   });
   if (choice === true) {
+    _clearDownstreamSteps(lessonId, ['2a', '2b', '3']);
     // 既存データをクリア
     await api('POST', '/api/lessons/' + lessonId + '/clear-sources');
     // 画像: 複数ファイル選択
@@ -350,7 +377,10 @@ async function addLessonSource(lessonId) {
       input: 'https://...',
       okLabel: '追加',
     });
-    if (url) await doAddLessonUrl(lessonId, url);
+    if (url) {
+      _clearDownstreamSteps(lessonId, ['2a', '2b', '3']);
+      await doAddLessonUrl(lessonId, url);
+    }
   }
 }
 
@@ -384,6 +414,7 @@ async function uploadLessonImages(lessonId, input) {
 }
 
 async function extractLessonText(lessonId) {
+  _clearDownstreamSteps(lessonId, ['2a', '2b', '3']);
   const item = _findLessonItem(lessonId);
   const statusEl = item ? item.querySelector('.extract-status') : null;
   const btn = item ? item.querySelector('.btn-extract') : null;
@@ -466,6 +497,7 @@ function _streamSSE(url, statusEl, onComplete) {
 // --- プラン生成 ---
 
 async function generatePlan(lessonId) {
+  _clearDownstreamSteps(lessonId, ['2b', '3']);
   const items = document.querySelectorAll('.lesson-item');
   let statusEl = null;
   let btn = null;
@@ -498,6 +530,7 @@ async function generatePlan(lessonId) {
 // --- 授業スクリプト ---
 
 async function generateScript(lessonId) {
+  _clearDownstreamSteps(lessonId, ['3']);
   const items = document.querySelectorAll('.lesson-item');
   let statusEl = null;
   let btn = null;
@@ -515,7 +548,11 @@ async function generateScript(lessonId) {
   if (btn) btn.disabled = false;
   if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
-    showToast('スクリプト生成完了 (' + res.sections.length + 'セクション)', 'success');
+    let msg = 'スクリプト+音声生成完了 (' + res.sections.length + 'セクション';
+    if (res.tts_generated !== undefined) msg += ', TTS ' + res.tts_generated + '件';
+    if (res.tts_errors) msg += ', エラー ' + res.tts_errors + '件';
+    msg += ')';
+    showToast(msg, 'success');
   } else {
     const errMsg = res && res.error ? res.error : '不明なエラー';
     showToast('スクリプト生成失敗: ' + errMsg, 'error');
@@ -527,15 +564,18 @@ async function generateScript(lessonId) {
   await loadLessons();
 }
 
-function renderSectionsInto(container, sections, lessonId) {
+function renderSectionsInto(container, sections, lessonId, ttsCacheMap) {
   container.innerHTML = '';
   if (!sections || !sections.length) {
     container.innerHTML = '<div style="color:#8a7a9a; font-size:0.8rem; padding:8px;">スクリプトがありません。「スクリプト生成」を押してください。</div>';
     return;
   }
+  ttsCacheMap = ttsCacheMap || {};
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
     const icon = SECTION_ICONS[s.section_type] || '\u{1F4D6}';
+    const cacheParts = ttsCacheMap[s.order_index] || [];
+    const hasCacheFlag = cacheParts.length > 0;
     const div = document.createElement('div');
     div.style.cssText = 'border:1px solid #d0c0e8; border-radius:6px; padding:10px; margin-bottom:8px; background:#faf7ff;';
 
@@ -544,8 +584,10 @@ function renderSectionsInto(container, sections, lessonId) {
         <span style="font-size:0.9rem;">${icon}</span>
         <span style="font-weight:600; font-size:0.8rem; margin-left:4px; color:#2a1f40;">${i + 1}. ${esc(s.section_type)}</span>
         <span style="font-size:0.7rem; color:#7b1fa2; margin-left:8px;">[${esc(s.emotion)}]</span>
+        ${hasCacheFlag ? '<span style="font-size:0.65rem; color:#2e7d32; margin-left:6px; background:#e8f5e9; padding:1px 5px; border-radius:3px;">TTS cached</span>' : ''}
       </div>
       <div style="display:flex; gap:4px;">
+        ${hasCacheFlag ? `<button onclick="clearSectionCache(${lessonId}, ${s.order_index})" style="width:24px; height:24px; background:#fff3e0; color:#e65100; border:1px solid #ffe0b2; border-radius:3px; cursor:pointer; font-size:0.65rem;" title="TTSキャッシュ削除">C</button>` : ''}
         <button onclick="moveSectionUp(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#f0ecf5; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.7rem;" ${i === 0 ? 'disabled' : ''}>\u25B2</button>
         <button onclick="moveSectionDown(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#f0ecf5; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.7rem;" ${i === sections.length - 1 ? 'disabled' : ''}>\u25BC</button>
         <button onclick="deleteSection(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#c62828; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.7rem;">\u00D7</button>
@@ -565,6 +607,17 @@ function renderSectionsInto(container, sections, lessonId) {
           onchange="updateSectionField(${lessonId}, ${s.id}, 'wait_seconds', parseInt(this.value))">
         <span style="font-size:0.7rem; color:#6a5590;">秒</span>
       </div>`;
+    }
+
+    // TTSキャッシュ — 再生リンク
+    if (cacheParts.length) {
+      html += `<div style="margin-top:6px; padding:4px 8px; background:#e8f5e9; border-radius:4px; font-size:0.65rem; color:#2e7d32; display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center;">`;
+      for (const cp of cacheParts) {
+        const sizeKB = (cp.size / 1024).toFixed(0);
+        const url = '/' + cp.path;
+        html += `<a href="${esc(url)}" target="_blank" style="color:#1565c0; text-decoration:underline; cursor:pointer;">part${cp.part_index}</a><span style="color:#558b2f;">(${sizeKB}KB)</span>`;
+      }
+      html += `</div>`;
     }
 
     div.innerHTML = html;
@@ -588,6 +641,13 @@ async function updateSectionField(lessonId, sectionId, field, value) {
 
 async function deleteSection(lessonId, sectionId) {
   await api('DELETE', '/api/lessons/' + lessonId + '/sections/' + sectionId);
+  _openLessonIds.add(lessonId);
+  await loadLessons();
+}
+
+async function clearSectionCache(lessonId, orderIndex) {
+  await api('DELETE', '/api/lessons/' + lessonId + '/tts-cache/' + orderIndex);
+  showToast('TTSキャッシュ削除', 'success');
   _openLessonIds.add(lessonId);
   await loadLessons();
 }

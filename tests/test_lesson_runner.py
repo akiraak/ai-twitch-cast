@@ -1,11 +1,19 @@
 """LessonRunner のテスト"""
 
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.lesson_runner import LessonRunner, LessonState
+from src.lesson_runner import (
+    LESSON_AUDIO_DIR,
+    LessonRunner,
+    LessonState,
+    _cache_path,
+    clear_tts_cache,
+    get_tts_cache_info,
+)
 
 
 @pytest.fixture
@@ -98,3 +106,66 @@ class TestLessonLifecycle:
     async def test_resume_when_not_paused(self, runner):
         await runner.resume()
         assert runner.state == LessonState.IDLE
+
+
+class TestTtsCache:
+    """TTSキャッシュ関連のテスト"""
+
+    def test_cache_path(self):
+        """キャッシュパスの生成"""
+        p = _cache_path(1, 0, 2)
+        assert p.name == "section_00_part_02.wav"
+        assert "lessons/1/" in str(p)
+
+    def test_clear_tts_cache_all(self, tmp_path, monkeypatch):
+        """全キャッシュ削除"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        lesson_dir = tmp_path / "42"
+        lesson_dir.mkdir()
+        (lesson_dir / "section_00_part_00.wav").write_bytes(b"x")
+        (lesson_dir / "section_01_part_00.wav").write_bytes(b"x")
+
+        clear_tts_cache(42)
+        assert not lesson_dir.exists()
+
+    def test_clear_tts_cache_section(self, tmp_path, monkeypatch):
+        """特定セクションのキャッシュ削除"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        lesson_dir = tmp_path / "1"
+        lesson_dir.mkdir()
+        (lesson_dir / "section_00_part_00.wav").write_bytes(b"x")
+        (lesson_dir / "section_01_part_00.wav").write_bytes(b"x")
+
+        clear_tts_cache(1, order_index=0)
+        assert not (lesson_dir / "section_00_part_00.wav").exists()
+        assert (lesson_dir / "section_01_part_00.wav").exists()
+
+    def test_clear_tts_cache_nonexistent(self, tmp_path, monkeypatch):
+        """存在しないキャッシュディレクトリの削除はエラーにならない"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        clear_tts_cache(999)  # no error
+
+    def test_get_tts_cache_info(self, tmp_path, monkeypatch, test_db):
+        """キャッシュ情報取得"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        monkeypatch.setattr("src.lesson_runner.PROJECT_DIR", tmp_path.parent)
+
+        # レッスン・セクション作成
+        lesson = test_db.create_lesson("CacheInfoTest")
+        lid = lesson["id"]
+        test_db.add_lesson_section(lid, 0, "intro", "Hello")
+        test_db.add_lesson_section(lid, 1, "explain", "World")
+
+        # セクション0のキャッシュを作成
+        cache_dir = tmp_path / str(lid)
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "section_00_part_00.wav").write_bytes(b"wavdata")
+
+        info = get_tts_cache_info(lid)
+        assert len(info) == 2
+        assert info[0]["order_index"] == 0
+        assert len(info[0]["parts"]) == 1
+        assert info[0]["parts"][0]["part_index"] == 0
+        assert info[0]["parts"][0]["size"] == 7
+        assert info[1]["order_index"] == 1
+        assert info[1]["parts"] == []

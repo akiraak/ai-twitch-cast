@@ -437,3 +437,64 @@ class TestLessonControl:
         """存在しないコンテンツの授業開始"""
         resp = api_client.post("/api/lessons/9999/start")
         assert resp.json()["ok"] is False
+
+
+class TestTtsCacheAPI:
+    """TTSキャッシュAPIのテスト"""
+
+    def test_get_tts_cache_empty(self, api_client, test_db, tmp_path, monkeypatch):
+        """キャッシュなし状態の取得"""
+        import src.lesson_runner as lr
+        monkeypatch.setattr(lr, "LESSON_AUDIO_DIR", tmp_path / "audio")
+
+        r = api_client.post("/api/lessons", json={"name": "CacheTest"})
+        lid = r.json()["lesson"]["id"]
+        test_db.add_lesson_section(lid, 0, "intro", "Hello")
+
+        resp = api_client.get(f"/api/lessons/{lid}/tts-cache")
+        data = resp.json()
+        assert data["ok"] is True
+        assert len(data["sections"]) == 1
+        assert data["sections"][0]["parts"] == []
+
+    def test_get_tts_cache_not_found(self, api_client):
+        """存在しないレッスンのキャッシュ取得"""
+        resp = api_client.get("/api/lessons/9999/tts-cache")
+        assert resp.json()["ok"] is False
+
+    def test_delete_tts_cache(self, api_client):
+        """TTSキャッシュ全削除"""
+        r = api_client.post("/api/lessons", json={"name": "DelCacheTest"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.delete(f"/api/lessons/{lid}/tts-cache")
+        assert resp.json()["ok"] is True
+
+    def test_delete_tts_cache_section(self, api_client):
+        """特定セクションのTTSキャッシュ削除"""
+        r = api_client.post("/api/lessons", json={"name": "DelSecCache"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.delete(f"/api/lessons/{lid}/tts-cache/0")
+        assert resp.json()["ok"] is True
+
+    def test_section_edit_clears_cache(self, api_client, test_db, tmp_path, monkeypatch):
+        """セクション編集時にTTSキャッシュが削除される"""
+        import src.lesson_runner as lr
+        monkeypatch.setattr(lr, "LESSON_AUDIO_DIR", tmp_path)
+
+        r = api_client.post("/api/lessons", json={"name": "EditCache"})
+        lid = r.json()["lesson"]["id"]
+        sec = test_db.add_lesson_section(lid, 0, "intro", "Hello")
+
+        # キャッシュファイルを作成
+        cache_dir = tmp_path / str(lid)
+        cache_dir.mkdir(parents=True)
+        cache_file = cache_dir / "section_00_part_00.wav"
+        cache_file.write_bytes(b"fake_wav")
+
+        # tts_text を編集
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}",
+            json={"tts_text": "ハロー"}
+        )
+        assert resp.json()["ok"] is True
+        assert not cache_file.exists()
