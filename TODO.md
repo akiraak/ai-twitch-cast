@@ -8,7 +8,6 @@
   - [ ] 授業テキストパネル書式対応 → [03-display-text-markdown.md](plans/teacher-mode-v2/03-display-text-markdown.md)
   - [ ] 授業中のチャット割り込み改善 → [04-chat-interruption.md](plans/teacher-mode-v2/04-chat-interruption.md)
   - [ ] 画面の左に授業中の全体の流れと現在どこをやってるかの表示を出してほしい
-  - [ ] 説明文章の背景が真っ黒なので半透明に。でも文字は見やすいように
   - [ ] 全体の構成が悪いところがある。どうしたら改善できるか検討する
 
 ### その他

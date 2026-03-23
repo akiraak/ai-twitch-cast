@@ -174,13 +174,43 @@ async function loadLayout() {
   } catch (e) {}
 }
 
+// スキーマからフィールドのデフォルト値を取得する
+function _getSchemaDefault(prop) {
+  if (!_commonSchema) return undefined;
+  for (const g of _commonSchema.groups || []) {
+    for (const f of g.fields || []) {
+      if (f.key === prop && f.default !== undefined) return f.default;
+    }
+  }
+  return undefined;
+}
+
+// アイテム固有スキーマからデフォルト値を取得する
+let _specificSchemaCache = {};
+async function _getSpecificDefault(section, prop) {
+  if (!_specificSchemaCache[section]) {
+    try {
+      const res = await fetch(`/api/items/schema?item_id=${encodeURIComponent(section)}`);
+      _specificSchemaCache[section] = await res.json();
+    } catch (e) { _specificSchemaCache[section] = {}; }
+  }
+  const schema = _specificSchemaCache[section];
+  for (const g of schema.groups || []) {
+    for (const f of g.fields || []) {
+      if (f.key === prop && f.default !== undefined) return f.default;
+    }
+  }
+  return undefined;
+}
+
 function _applyLayoutToUI(data) {
   document.querySelectorAll('.layout-num[data-key]').forEach(numEl => {
     const key = numEl.dataset.key;
     const dotIdx = key.indexOf('.');
     const section = key.substring(0, dotIdx);
     const prop = key.substring(dotIdx + 1);
-    const val = data[section]?.[prop];
+    let val = data[section]?.[prop];
+    if (val == null) val = _getSchemaDefault(prop);
     if (val != null) {
       numEl.value = val;
       const slider = numEl.closest('.layout-row')?.querySelector('.layout-slider');
@@ -193,7 +223,8 @@ function _applyLayoutToUI(data) {
     const dotIdx = key.indexOf('.');
     const section = key.substring(0, dotIdx);
     const prop = key.substring(dotIdx + 1);
-    const val = data[section]?.[prop];
+    let val = data[section]?.[prop];
+    if (!val) val = _getSchemaDefault(prop);
     if (val) el.value = cssColorToHex(String(val));
   });
   document.querySelectorAll('.layout-toggle[data-key]').forEach(el => {
@@ -201,7 +232,8 @@ function _applyLayoutToUI(data) {
     const dotIdx = key.indexOf('.');
     const section = key.substring(0, dotIdx);
     const prop = key.substring(dotIdx + 1);
-    const val = data[section]?.[prop];
+    let val = data[section]?.[prop];
+    if (val == null) val = _getSchemaDefault(prop);
     if (val != null) {
       el.checked = !!Number(val);
       const track = el.nextElementSibling;
@@ -216,7 +248,34 @@ function _applyLayoutToUI(data) {
     const dotIdx = key.indexOf('.');
     const section = key.substring(0, dotIdx);
     const prop = key.substring(dotIdx + 1);
-    const val = data[section]?.[prop];
+    let val = data[section]?.[prop];
+    if (val == null) val = _getSchemaDefault(prop);
     if (val != null) el.value = val;
   });
+
+  // 固有スキーマのデフォルト値も適用（非同期）
+  _applySpecificDefaults(data);
+}
+
+async function _applySpecificDefaults(data) {
+  const sections = new Set();
+  document.querySelectorAll('.layout-num[data-key], .layout-slider[data-key]').forEach(el => {
+    const key = el.dataset.key;
+    const section = key.substring(0, key.indexOf('.'));
+    sections.add(section);
+  });
+  for (const section of sections) {
+    for (const numEl of document.querySelectorAll(`.layout-num[data-key^="${section}."]`)) {
+      const key = numEl.dataset.key;
+      const prop = key.substring(key.indexOf('.') + 1);
+      if (data[section]?.[prop] != null) continue;
+      if (_getSchemaDefault(prop) != null) continue;
+      const def = await _getSpecificDefault(section, prop);
+      if (def != null) {
+        numEl.value = def;
+        const slider = numEl.closest('.layout-row')?.querySelector('.layout-slider');
+        if (slider) slider.value = def;
+      }
+    }
+  }
 }

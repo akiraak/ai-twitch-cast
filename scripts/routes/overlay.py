@@ -218,6 +218,23 @@ async def debug_subtitle_hide():
     return {"ok": True}
 
 
+@router.post("/api/debug/lesson-text")
+async def debug_lesson_text():
+    """デバッグ用：授業テキストを仮表示する"""
+    await state.broadcast_overlay({
+        "type": "lesson_text_show",
+        "text": "授業テキストのプレビュー\n\nここに教材の内容が表示されます。\n背景・文字・位置を調整してください。",
+    })
+    return {"ok": True}
+
+
+@router.post("/api/debug/lesson-text/hide")
+async def debug_lesson_text_hide():
+    """デバッグ用：授業テキストを非表示にする"""
+    await state.broadcast_overlay({"type": "lesson_text_hide"})
+    return {"ok": True}
+
+
 @router.post("/api/debug/expression/{name}")
 async def debug_expression(name: str, value: float = 1.0):
     """デバッグ用：表情テスト（blendshapeイベント直送）"""

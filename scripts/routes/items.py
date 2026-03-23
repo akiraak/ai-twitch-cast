@@ -15,53 +15,53 @@ _COMMON_SCHEMA_GROUPS = [
     {
         "title": "表示",
         "fields": [
-            {"key": "visible", "label": "表示", "type": "toggle"},
+            {"key": "visible", "label": "表示", "type": "toggle", "default": 1},
         ],
     },
     {
         "title": "配置",
         "fields": [
-            {"key": "positionX", "label": "X位置 (%)", "type": "slider", "min": 0, "max": 100, "step": 0.5},
-            {"key": "positionY", "label": "Y位置 (%)", "type": "slider", "min": 0, "max": 100, "step": 0.5},
-            {"key": "width", "label": "幅 (%)", "type": "slider", "min": 5, "max": 100, "step": 0.5},
-            {"key": "height", "label": "高さ (%)", "type": "slider", "min": 5, "max": 100, "step": 0.5},
-            {"key": "zIndex", "label": "Z順序", "type": "slider", "min": 0, "max": 100, "step": 1},
+            {"key": "positionX", "label": "X位置 (%)", "type": "slider", "min": 0, "max": 100, "step": 0.5, "default": 0},
+            {"key": "positionY", "label": "Y位置 (%)", "type": "slider", "min": 0, "max": 100, "step": 0.5, "default": 0},
+            {"key": "width", "label": "幅 (%)", "type": "slider", "min": 5, "max": 100, "step": 0.5, "default": 30},
+            {"key": "height", "label": "高さ (%)", "type": "slider", "min": 5, "max": 100, "step": 0.5, "default": 30},
+            {"key": "zIndex", "label": "Z順序", "type": "slider", "min": 0, "max": 100, "step": 1, "default": 10},
         ],
     },
     {
         "title": "背景",
         "fields": [
-            {"key": "bgColor", "label": "色", "type": "color"},
-            {"key": "bgOpacity", "label": "透明度", "type": "slider", "min": 0, "max": 1, "step": 0.05},
-            {"key": "backdropBlur", "label": "ぼかし (px)", "type": "slider", "min": 0, "max": 30, "step": 1},
-            {"key": "borderRadius", "label": "角丸 (px)", "type": "slider", "min": 0, "max": 30, "step": 1},
-            {"key": "borderSize", "label": "枠サイズ", "type": "slider", "min": 0, "max": 10, "step": 0.5},
-            {"key": "borderColor", "label": "枠色", "type": "color"},
-            {"key": "borderOpacity", "label": "枠透明度", "type": "slider", "min": 0, "max": 1, "step": 0.05},
+            {"key": "bgColor", "label": "色", "type": "color", "default": "#141428"},
+            {"key": "bgOpacity", "label": "透明度", "type": "slider", "min": 0, "max": 1, "step": 0.05, "default": 0.85},
+            {"key": "backdropBlur", "label": "ぼかし (px)", "type": "slider", "min": 0, "max": 30, "step": 1, "default": 6},
+            {"key": "borderRadius", "label": "角丸 (px)", "type": "slider", "min": 0, "max": 30, "step": 1, "default": 8},
+            {"key": "borderSize", "label": "枠サイズ", "type": "slider", "min": 0, "max": 10, "step": 0.5, "default": 1},
+            {"key": "borderColor", "label": "枠色", "type": "color", "default": "#7c4dff"},
+            {"key": "borderOpacity", "label": "枠透明度", "type": "slider", "min": 0, "max": 1, "step": 0.05, "default": 0.3},
         ],
     },
     {
         "title": "文字",
         "fields": [
-            {"key": "fontFamily", "label": "フォント", "type": "select", "options": [
+            {"key": "fontFamily", "label": "フォント", "type": "select", "default": "", "options": [
                 ["", "デフォルト"], ["Noto Sans JP", "Noto Sans JP"],
                 ["Yu Gothic UI", "Yu Gothic UI"], ["Meiryo", "メイリオ"],
                 ["Yu Mincho", "游明朝"], ["BIZ UDPGothic", "BIZ UDPゴシック"],
                 ["M PLUS Rounded 1c", "M PLUS Rounded 1c"],
                 ["Kosugi Maru", "小杉丸ゴシック"], ["monospace", "等幅"],
             ]},
-            {"key": "fontSize", "label": "サイズ (vw)", "type": "slider", "min": 0.3, "max": 5, "step": 0.05},
-            {"key": "textColor", "label": "色", "type": "color"},
-            {"key": "textAlign", "label": "水平揃え", "type": "select", "options": [
+            {"key": "fontSize", "label": "サイズ (vw)", "type": "slider", "min": 0.3, "max": 5, "step": 0.05, "default": 1.2},
+            {"key": "textColor", "label": "色", "type": "color", "default": "#ffffff"},
+            {"key": "textAlign", "label": "水平揃え", "type": "select", "default": "left", "options": [
                 ["left", "左"], ["center", "中央"], ["right", "右"],
             ]},
-            {"key": "verticalAlign", "label": "垂直揃え", "type": "select", "options": [
+            {"key": "verticalAlign", "label": "垂直揃え", "type": "select", "default": "top", "options": [
                 ["top", "上"], ["center", "中央"], ["bottom", "下"],
             ]},
-            {"key": "textStrokeSize", "label": "縁取りサイズ", "type": "slider", "min": 0, "max": 10, "step": 0.5},
-            {"key": "textStrokeColor", "label": "縁取り色", "type": "color"},
-            {"key": "textStrokeOpacity", "label": "縁取り透明度", "type": "slider", "min": 0, "max": 1, "step": 0.05},
-            {"key": "padding", "label": "内余白 (px)", "type": "slider", "min": 0, "max": 30, "step": 1},
+            {"key": "textStrokeSize", "label": "縁取りサイズ", "type": "slider", "min": 0, "max": 10, "step": 0.5, "default": 0},
+            {"key": "textStrokeColor", "label": "縁取り色", "type": "color", "default": "#000000"},
+            {"key": "textStrokeOpacity", "label": "縁取り透明度", "type": "slider", "min": 0, "max": 1, "step": 0.05, "default": 0.8},
+            {"key": "padding", "label": "内余白 (px)", "type": "slider", "min": 0, "max": 30, "step": 1, "default": 10},
         ],
     },
 ]
@@ -69,19 +69,19 @@ _COMMON_SCHEMA_GROUPS = [
 _ITEM_SPECIFIC_SCHEMA = {
     "avatar": [
         {"title": "固有設定", "fields": [
-            {"key": "scale", "label": "スケール", "type": "slider", "min": 0.1, "max": 3, "step": 0.05},
+            {"key": "scale", "label": "スケール", "type": "slider", "min": 0.1, "max": 3, "step": 0.05, "default": 1.0},
         ]},
     ],
     "subtitle": [
         {"title": "固有設定", "fields": [
-            {"key": "bottom", "label": "下からの距離 (%)", "type": "slider", "min": 0, "max": 30, "step": 0.1},
-            {"key": "maxWidth", "label": "最大幅 (%)", "type": "slider", "min": 20, "max": 90, "step": 1},
-            {"key": "fadeDuration", "label": "フェード (秒)", "type": "slider", "min": 1, "max": 10, "step": 0.5},
+            {"key": "bottom", "label": "下からの距離 (%)", "type": "slider", "min": 0, "max": 30, "step": 0.1, "default": 7.4},
+            {"key": "maxWidth", "label": "最大幅 (%)", "type": "slider", "min": 20, "max": 90, "step": 1, "default": 60},
+            {"key": "fadeDuration", "label": "フェード (秒)", "type": "slider", "min": 1, "max": 10, "step": 0.5, "default": 3},
         ]},
     ],
     "todo": [
         {"title": "固有設定", "fields": [
-            {"key": "titleFontSize", "label": "タイトルサイズ (vw)", "type": "slider", "min": 0.5, "max": 3, "step": 0.05},
+            {"key": "titleFontSize", "label": "タイトルサイズ (vw)", "type": "slider", "min": 0.5, "max": 3, "step": 0.05, "default": 1.0},
         ]},
     ],
     "custom_text": [
@@ -90,12 +90,19 @@ _ITEM_SPECIFIC_SCHEMA = {
             {"key": "content", "label": "テキスト", "type": "text"},
         ]},
     ],
+    "lesson_text": [
+        {"title": "固有設定", "fields": [
+            {"key": "maxHeight", "label": "最大高さ (%)", "type": "slider", "min": 20, "max": 90, "step": 1, "default": 70},
+            {"key": "lineHeight", "label": "行間", "type": "slider", "min": 1.0, "max": 3.0, "step": 0.1, "default": 1.7},
+        ]},
+    ],
 }
 
 _SCHEMA_ITEM_LABELS = {
     "avatar": "アバター",
     "subtitle": "字幕",
     "todo": "TODO",
+    "lesson_text": "授業テキスト",
     "custom_text": "カスタムテキスト",
     "capture": "キャプチャ",
     "child_text": "子テキスト",

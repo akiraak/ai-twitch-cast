@@ -79,6 +79,29 @@ function applySettings(s) {
     if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'vw';
     loadTodo();
   }
+  // === lesson_text ===
+  if (s.lesson_text) {
+    const ltp = document.getElementById('lesson-text-panel');
+    if (ltp) {
+      applyCommonStyle(ltp, s.lesson_text);
+      // lesson_text固有: 中央配置を維持（commonのtop/leftをオーバーライド）
+      if (s.lesson_text.positionX != null || s.lesson_text.positionY != null) {
+        ltp.style.transform = 'none';
+      } else {
+        ltp.style.top = '50%';
+        ltp.style.left = '50%';
+        ltp.style.transform = 'translate(-50%, -50%)';
+      }
+      if (s.lesson_text.width != null) ltp.style.width = s.lesson_text.width + '%';
+      if (s.lesson_text.maxHeight != null) ltp.style.maxHeight = s.lesson_text.maxHeight + '%';
+      const ltc = document.getElementById('lesson-text-content');
+      if (ltc) {
+        if (s.lesson_text.fontSize != null) ltc.style.fontSize = s.lesson_text.fontSize + 'vw';
+        if (s.lesson_text.lineHeight != null) ltc.style.lineHeight = s.lesson_text.lineHeight;
+        if (s.lesson_text.textColor != null) ltc.style.color = s.lesson_text.textColor;
+      }
+    }
+  }
   // === sync ===
   if (s.sync) {
     if (s.sync.lipsyncDelay != null) {

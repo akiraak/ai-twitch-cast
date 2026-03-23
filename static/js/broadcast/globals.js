@@ -48,6 +48,7 @@ const ITEM_REGISTRY = [
   { id: 'avatar-area', prefix: 'avatar', hasSize: true, defaultZ: 5 },
   { id: 'subtitle', prefix: 'subtitle', hasSize: false, defaultZ: 20 },
   { id: 'todo-panel', prefix: 'todo', hasSize: true, defaultZ: 20 },
+  { id: 'lesson-text-panel', prefix: 'lesson_text', hasSize: true, defaultZ: 12, skipVisible: true },
 ];
 
 // === アバターストリーム ===

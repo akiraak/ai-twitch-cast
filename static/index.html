@@ -85,6 +85,18 @@
         <details data-section="todo" class="panel-item"><summary>TODO</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">タイトル文字 (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="todo.titleFontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-todo-titleFontSize" min="0.5" max="3" step="0.05" data-key="todo.titleFontSize" oninput="onLayoutNum(this)"></div>
         </div></details>
+        <details data-section="lesson_text" class="panel-item"><summary>授業テキスト</summary><div class="panel-body">
+          <div class="layout-row"><span class="layout-label">背景透明度</span><input type="range" class="vol-slider layout-slider" min="0" max="1" step="0.05" data-key="lesson_text.bgOpacity" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lesson_text-bgOpacity" min="0" max="1" step="0.05" data-key="lesson_text.bgOpacity" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">ぼかし (px)</span><input type="range" class="vol-slider layout-slider" min="0" max="30" step="1" data-key="lesson_text.backdropBlur" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lesson_text-backdropBlur" min="0" max="30" step="1" data-key="lesson_text.backdropBlur" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">幅 (%)</span><input type="range" class="vol-slider layout-slider" min="10" max="90" step="1" data-key="lesson_text.width" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lesson_text-width" min="10" max="90" step="1" data-key="lesson_text.width" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">最大高さ (%)</span><input type="range" class="vol-slider layout-slider" min="20" max="90" step="1" data-key="lesson_text.maxHeight" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lesson_text-maxHeight" min="20" max="90" step="1" data-key="lesson_text.maxHeight" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">文字サイズ (vw)</span><input type="range" class="vol-slider layout-slider" min="0.5" max="3" step="0.05" data-key="lesson_text.fontSize" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lesson_text-fontSize" min="0.5" max="3" step="0.05" data-key="lesson_text.fontSize" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">行間</span><input type="range" class="vol-slider layout-slider" min="1.0" max="3.0" step="0.1" data-key="lesson_text.lineHeight" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lesson_text-lineHeight" min="1.0" max="3.0" step="0.1" data-key="lesson_text.lineHeight" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row" style="margin-top:6px;">
+            <button onclick="fetch('/api/debug/lesson-text',{method:'POST'})" style="flex:1; padding:4px 8px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">テスト表示</button>
+            <button onclick="fetch('/api/debug/lesson-text/hide',{method:'POST'})" style="flex:1; padding:4px 8px; background:#666; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; margin-left:4px;">非表示</button>
+          </div>
+        </div></details>
       </div>
       <!-- 子パネル管理UIは panel-ui.js の injectChildPanelSection() で注入 -->
       <div id="capture-panels"></div>
