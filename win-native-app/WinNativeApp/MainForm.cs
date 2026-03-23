@@ -58,6 +58,7 @@ public class MainForm : Form
     private string _serverBaseUrl = "http://localhost:8080";
 
     // TTS再生中のサンプルレベル音量制御 + メータリング
+    private WaveOutEvent? _ttsWaveOut;
     private WaveChannel32? _ttsChannel;
     private MeteringWaveProvider? _ttsMeter;
 
@@ -1259,34 +1260,49 @@ public class MainForm : Form
     /// </summary>
     private void PlayTtsLocally(byte[] wavData, float volume)
     {
-        Task.Run(() =>
+        // 前回の再生を停止・破棄
+        var oldWaveOut = _ttsWaveOut;
+        _ttsWaveOut = null;
+        _ttsChannel = null;
+        _ttsMeter = null;
+        oldWaveOut?.Stop();
+        oldWaveOut?.Dispose();
+
+        try
         {
-            try
+            var ms = new MemoryStream(wavData);
+            var reader = new WaveFileReader(ms);
+            var channel = new WaveChannel32(reader) { Volume = Math.Clamp(volume, 0f, 1f) };
+            var meter = new MeteringWaveProvider(channel);
+            var waveOut = new WaveOutEvent();
+            waveOut.Init(meter);
+            waveOut.Volume = 1.0f; // デバイスレベルは常にmax（音量制御はWaveChannel32で行う）
+
+            // フィールドに保持してGC回収を防止
+            _ttsWaveOut = waveOut;
+            _ttsChannel = channel;
+            _ttsMeter = meter;
+
+            waveOut.PlaybackStopped += (_, _) =>
             {
-                var ms = new MemoryStream(wavData);
-                var reader = new WaveFileReader(ms);
-                var channel = new WaveChannel32(reader) { Volume = Math.Clamp(volume, 0f, 1f) };
-                var meter = new MeteringWaveProvider(channel);
-                _ttsChannel = channel; // 再生中の音量変更用に参照保持
-                _ttsMeter = meter;
-                var waveOut = new WaveOutEvent();
-                waveOut.Init(meter);
-                waveOut.Volume = 1.0f; // デバイスレベルは常にmax（音量制御はWaveChannel32で行う）
-                waveOut.Play();
-                Log.Debug("[TTS] Local playback started ({Size} bytes, vol={Vol:F2})", wavData.Length, volume);
-                waveOut.PlaybackStopped += (_, _) =>
+                if (_ttsWaveOut == waveOut)
                 {
-                    if (_ttsChannel == channel) { _ttsChannel = null; _ttsMeter = null; }
-                    waveOut.Dispose();
-                    reader.Dispose();
-                    ms.Dispose();
-                };
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "[TTS] Local playback failed");
-            }
-        });
+                    _ttsWaveOut = null;
+                    _ttsChannel = null;
+                    _ttsMeter = null;
+                }
+                waveOut.Dispose();
+                reader.Dispose();
+                ms.Dispose();
+            };
+
+            waveOut.Play();
+            Log.Debug("[TTS] Local playback started ({Size} bytes, vol={Vol:F2})", wavData.Length, volume);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[TTS] Local playback failed");
+        }
     }
 
     /// <summary>BGMをローカル再生する。ダウンロード→再生開始。</summary>

@@ -232,14 +232,14 @@ class SpeechPipeline:
             tts_vol = _get_volume("tts")
             volume = min(1.0, tts_vol * tts_vol) * (master * master)
 
-            await ws_request("tts_audio", timeout=10.0, data=wav_b64, volume=volume)
+            result = await ws_request("tts_audio", timeout=10.0, data=wav_b64, volume=volume)
             t3 = time.monotonic()
             logger.info(
                 "[tts] C#アプリにTTS直接送信完了: %d bytes, vol=%.2f, "
-                "status=%.0fms b64=%.0fms send=%.0fms total=%.0fms",
+                "status=%.0fms b64=%.0fms send=%.0fms total=%.0fms, response=%s",
                 len(wav_data), volume,
                 (t1 - t0) * 1000, (t2 - t1) * 1000,
-                (t3 - t2) * 1000, (t3 - t0) * 1000,
+                (t3 - t2) * 1000, (t3 - t0) * 1000, result,
             )
         except Exception as e:
             elapsed = (time.monotonic() - t0) * 1000
