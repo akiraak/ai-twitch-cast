@@ -7,8 +7,9 @@
   - [ ] URLテキスト抽出改善 → [01-url-text-extraction.md](plans/teacher-mode-v2/01-url-text-extraction.md)
   - [ ] 授業テキストパネル書式対応 → [03-display-text-markdown.md](plans/teacher-mode-v2/03-display-text-markdown.md)
   - [ ] 授業中のチャット割り込み改善 → [04-chat-interruption.md](plans/teacher-mode-v2/04-chat-interruption.md)
-  - [ ] 画面の左に授業中の全体の流れと現在どこをやってるかの表示を出してほしい
   - [ ] 全体の構成が悪いところがある。どうしたら改善できるか検討する
+  - [ ] 授業パネルはできるだけ長く表示する。次のセクションに行くまでずっと表示でいい
+  - [ ] 授業パネルの内容が大きすぎて表示がおかしいときがある。内容を適切な量に。多ければ文字を小さくなどちゃんと見えるような対策をする
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証

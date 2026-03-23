@@ -508,8 +508,68 @@
   }
   #lesson-text-content {
     color: rgba(255, 255, 255, 0.95);
-    font-size: 1.4vw;
+    font-size: max(0.8vw, 1.4vw);
     line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  /* === 授業進捗パネル（左サイドバー） === */
+  #lesson-progress-panel {
+    position: absolute;
+    top: 50%; left: 1%;
+    transform: translateY(-50%);
+    z-index: 12;
+    width: 18%;
+    max-height: 80%;
+    overflow-y: auto;
+    --bg-opacity: 0.6;
+    --item-bg-color: #0a0a1e;
+    --item-backdrop-blur: 10;
+    background: rgba(10, 10, 30, var(--bg-opacity));
+    border: 1px solid rgba(124, 77, 255, 0.3);
+    border-radius: var(--item-border-radius, 0.5vw);
+    padding: 0.6vw 0.8vw;
+    backdrop-filter: blur(calc(var(--item-backdrop-blur, 10) * 1px));
+    -webkit-backdrop-filter: blur(calc(var(--item-backdrop-blur, 10) * 1px));
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  #lesson-progress-panel.visible {
+    opacity: 1;
+  }
+  #lesson-progress-title {
+    font-size: max(0.8vw, var(--lp-title-font-size, 1.1vw));
+    font-weight: 600;
+    color: rgba(124, 77, 255, 0.8);
+    margin-bottom: 0.4vw;
+    padding-bottom: 0.3vw;
+    border-bottom: 1px solid rgba(124, 77, 255, 0.2);
+  }
+  .lesson-progress-item {
+    font-size: max(0.8vw, var(--lp-item-font-size, 0.95vw));
+    padding: 0.25vw 0.4vw;
+    margin-bottom: 0.15vw;
+    border-radius: 0.2vw;
+    color: rgba(255, 255, 255, 0.5);
+    border-left: 2px solid transparent;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lesson-progress-item.done {
+    color: rgba(255, 255, 255, 0.35);
+  }
+  .lesson-progress-item.current {
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(124, 77, 255, 0.2);
+    border-left-color: #7c4dff;
+    font-weight: 600;
+  }
+  .lesson-progress-item .lp-icon {
+    display: inline-block;
+    width: 1.2em;
+    text-align: center;
   }

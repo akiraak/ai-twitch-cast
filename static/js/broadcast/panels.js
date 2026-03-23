@@ -80,6 +80,10 @@ function showLessonText(text) {
   if (!panel || !content) return;
   content.textContent = stripLangTags(text);
   panel.style.display = 'block';
+  // 保存済み設定を再適用（位置・サイズ・背景等）
+  if (_savedOverlaySettings.lesson_text) {
+    applySettings({ lesson_text: _savedOverlaySettings.lesson_text });
+  }
   // フェードイン（次フレームでclassを追加してtransitionを発火）
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -100,6 +104,65 @@ function hideLessonText() {
   }, 600);
 }
 
+// --- 授業進捗パネル ---
+
+const PROGRESS_ICONS = {
+  introduction: '\u{1F3AC}',
+  explanation: '\u{1F4D6}',
+  example: '\u{1F4DD}',
+  question: '\u{2753}',
+  summary: '\u{1F3C1}',
+};
+
+function showLessonProgress(sections, currentIndex) {
+  const panel = document.getElementById('lesson-progress-panel');
+  const list = document.getElementById('lesson-progress-list');
+  if (!panel || !list) return;
+  list.innerHTML = '';
+  for (let i = 0; i < sections.length; i++) {
+    const s = sections[i];
+    const icon = PROGRESS_ICONS[s.type] || '\u{1F4D6}';
+    const cls = i < currentIndex ? 'done' : i === currentIndex ? 'current' : '';
+    const div = document.createElement('div');
+    div.className = 'lesson-progress-item ' + cls;
+    div.innerHTML = `<span class="lp-icon">${icon}</span> ${_escHtml(s.summary)}`;
+    list.appendChild(div);
+  }
+  panel.style.display = 'block';
+  // 保存済み設定を再適用（位置・サイズ・背景・文字サイズ等）
+  if (_savedOverlaySettings.lesson_progress) {
+    applySettings({ lesson_progress: _savedOverlaySettings.lesson_progress });
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { panel.classList.add('visible'); });
+  });
+}
+
+function updateLessonProgress(currentIndex) {
+  const items = document.querySelectorAll('.lesson-progress-item');
+  items.forEach((el, i) => {
+    el.classList.remove('done', 'current');
+    if (i < currentIndex) el.classList.add('done');
+    else if (i === currentIndex) el.classList.add('current');
+  });
+  // 現在のセクションが見えるようにスクロール
+  const current = document.querySelector('.lesson-progress-item.current');
+  if (current) current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function hideLessonProgress() {
+  const panel = document.getElementById('lesson-progress-panel');
+  if (!panel) return;
+  panel.classList.remove('visible');
+  setTimeout(() => {
+    if (!panel.classList.contains('visible')) panel.style.display = 'none';
+  }, 600);
+}
+
+function _escHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // --- 授業モード（パネル表示切替） ---
 
 let _lessonMode = false;
@@ -112,8 +175,9 @@ function setLessonMode(active) {
     // TODOパネルのみ非表示（字幕は通常通り表示）
     if (todo) todo.style.display = 'none';
   } else {
-    // パネル復帰 + 授業テキスト非表示
+    // パネル復帰 + 授業テキスト・進捗非表示
     if (todo) todo.style.display = '';
     hideLessonText();
+    hideLessonProgress();
   }
 }

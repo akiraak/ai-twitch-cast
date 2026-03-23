@@ -165,6 +165,11 @@
   .summary-delete-btn:hover { background: #b71c1c; }
   .panel-body { padding: 4px 12px 12px; }
 
+  .lesson-card { border: 1px solid #c0b0d8 !important; border-left: 3px solid #9575cd !important; background: #faf7ff !important; }
+  .lesson-card h2 { color: #5e35b1 !important; font-size: 0.95rem !important; }
+  .lesson-subgroup { border: 1px solid #e0d6f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; background: rgba(255,255,255,0.5); }
+  .lesson-subgroup legend { font-size: 0.8rem; font-weight: 600; color: #7e57c2; padding: 0 8px; }
+
   .text-input { width: 100%; padding: 6px 10px; background: #ece5fa; border: 1px solid #d0c0e8; border-radius: 6px; color: #2a1f40; font-size: 0.85rem; transition: border-color 0.15s; }
   .text-input:focus { border-color: #7b1fa2; outline: none; }
   textarea.text-input { resize: vertical; }

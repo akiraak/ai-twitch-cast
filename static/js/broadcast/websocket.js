@@ -149,10 +149,15 @@ function connectWS() {
         hideLessonText();
         break;
 
-      // 授業ステータス（パネル表示切替）
+      // 授業ステータス（パネル表示切替 + 進捗パネル更新）
       case 'lesson_status':
         if (data.state === 'running' || data.state === 'paused') {
           setLessonMode(true);
+          if (data.sections) {
+            showLessonProgress(data.sections, data.current_index);
+          } else {
+            updateLessonProgress(data.current_index);
+          }
         } else {
           setLessonMode(false);
         }

@@ -417,11 +417,12 @@ async function editSave() {
   for (const item of ITEM_REGISTRY) {
     const el = document.getElementById(item.id);
     if (!el) continue;
-    const data = {
-      positionX: parseFloat(el.style.left) || 0,
-      positionY: parseFloat(el.style.top) || 0,
-      zIndex: getRealZIndex(el, item.defaultZ),
-    };
+    const data = {};
+    if (!item.skipPosition) {
+      data.positionX = parseFloat(el.style.left) || 0;
+      data.positionY = parseFloat(el.style.top) || 0;
+      data.zIndex = getRealZIndex(el, item.defaultZ);
+    }
     if (!item.skipVisible) {
       data.visible = el.style.display !== 'none' ? 1 : 0;
     }
@@ -432,22 +433,6 @@ async function editSave() {
       if (!isNaN(h) && el.style.height !== 'auto') data.height = h;
     }
     overlaySettings[item.prefix] = data;
-  }
-
-  // lesson_text固有プロパティの保存
-  if (overlaySettings.lesson_text) {
-    const ltp = document.getElementById('lesson-text-panel');
-    if (ltp) {
-      const maxH = parseFloat(ltp.style.maxHeight);
-      if (!isNaN(maxH)) overlaySettings.lesson_text.maxHeight = maxH;
-      const ltc = document.getElementById('lesson-text-content');
-      if (ltc) {
-        const fs = parseFloat(ltc.style.fontSize);
-        if (!isNaN(fs)) overlaySettings.lesson_text.fontSize = fs;
-        const lh = parseFloat(ltc.style.lineHeight);
-        if (!isNaN(lh)) overlaySettings.lesson_text.lineHeight = lh;
-      }
-    }
   }
 
   // アイテム固有プロパティの保存（保存漏れ修正）
@@ -530,15 +515,6 @@ async function editSave() {
 
 // === 編集モード初期化 ===
 function initEditMode() {
-  // 授業テキストパネルを編集用に表示（プレビュー用テキスト付き）
-  const ltp = document.getElementById('lesson-text-panel');
-  if (ltp) {
-    ltp.style.display = 'block';
-    ltp.style.opacity = '1';
-    const ltc = document.getElementById('lesson-text-content');
-    if (ltc && !ltc.textContent.trim()) ltc.textContent = '授業テキストのプレビュー\n\nここに教材の内容が表示されます。\n背景・文字・位置を右クリックで編集できます。';
-  }
-
   document.querySelectorAll('[data-editable]').forEach(setupEditable);
 
   // 非editableエリアでもブラウザデフォルトの右クリックメニューを抑制

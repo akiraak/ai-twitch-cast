@@ -393,13 +393,23 @@ class LessonRunner:
     async def _notify_status(self):
         """授業ステータスを配信画面に通知する"""
         if self._on_overlay:
-            await self._on_overlay({
+            event = {
                 "type": "lesson_status",
                 "state": self._state.value,
                 "lesson_id": self._lesson_id,
                 "current_index": self._current_index,
                 "total_sections": len(self._sections),
-            })
+            }
+            # running/paused時はセクション概要を含める
+            if self._state != LessonState.IDLE and self._sections:
+                event["sections"] = [
+                    {
+                        "type": s["section_type"],
+                        "summary": (s.get("content") or "")[:40],
+                    }
+                    for s in self._sections
+                ]
+            await self._on_overlay(event)
 
     def get_status(self) -> dict:
         """現在のステータスを取得する"""

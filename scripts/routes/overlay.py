@@ -329,6 +329,20 @@ _OVERLAY_DEFAULTS = {
         "positionX": 36, "positionY": 2, "width": 28, "height": 70,
         "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20,
     }),
+    "lesson_text": {
+        "bgOpacity": 0.65, "backdropBlur": 12,
+        "fontSize": 1.4, "lineHeight": 1.7, "maxHeight": 70,
+        "bgColor": "#0a0a1e", "borderRadius": 8, "borderSize": 1,
+        "borderColor": "#7c4dff", "borderOpacity": 0.3,
+        "textColor": "#ffffff", "padding": 10,
+    },
+    "lesson_progress": {
+        "bgOpacity": 0.6, "backdropBlur": 10,
+        "titleFontSize": 1.1, "itemFontSize": 0.95,
+        "bgColor": "#0a0a1e", "borderRadius": 8, "borderSize": 1,
+        "borderColor": "#7c4dff", "borderOpacity": 0.3,
+        "textColor": "#ffffff", "padding": 8,
+    },
     "sync": {"lipsyncDelay": 100},
 }
 
@@ -546,7 +560,7 @@ async def preview_overlay_settings(request: Request):
 async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
-    fixed_items = {"avatar", "subtitle", "todo"}
+    fixed_items = {"avatar", "subtitle", "todo", "lesson_text", "lesson_progress"}
     for section, props in body.items():
         if not isinstance(props, dict):
             continue

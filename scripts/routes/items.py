@@ -96,6 +96,13 @@ _ITEM_SPECIFIC_SCHEMA = {
             {"key": "lineHeight", "label": "行間", "type": "slider", "min": 1.0, "max": 3.0, "step": 0.1, "default": 1.7},
         ]},
     ],
+    "lesson_progress": [
+        {"title": "固有設定", "fields": [
+            {"key": "maxHeight", "label": "最大高さ (%)", "type": "slider", "min": 20, "max": 90, "step": 1, "default": 80},
+            {"key": "titleFontSize", "label": "タイトル文字 (vw)", "type": "slider", "min": 0.8, "max": 2, "step": 0.05, "default": 1.1},
+            {"key": "itemFontSize", "label": "項目文字 (vw)", "type": "slider", "min": 0.8, "max": 2, "step": 0.05, "default": 0.95},
+        ]},
+    ],
 }
 
 _SCHEMA_ITEM_LABELS = {
@@ -103,6 +110,7 @@ _SCHEMA_ITEM_LABELS = {
     "subtitle": "字幕",
     "todo": "TODO",
     "lesson_text": "授業テキスト",
+    "lesson_progress": "授業進捗",
     "custom_text": "カスタムテキスト",
     "capture": "キャプチャ",
     "child_text": "子テキスト",

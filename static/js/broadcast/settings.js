@@ -30,8 +30,12 @@ function _applyLighting(lighting) {
   document.getElementById('avatar-canvas').style.filter = sat !== 1.0 ? `saturate(${sat})` : '';
 }
 
+// === 保存済み設定（表示時の再適用用） ===
+let _savedOverlaySettings = {};
+
 // === 設定適用（%/vw単位） ===
 function applySettings(s) {
+  _savedOverlaySettings = s;
   // === avatar ===
   const avatarArea = document.getElementById('avatar-area');
   if (s.avatar) {
@@ -79,26 +83,35 @@ function applySettings(s) {
     if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'vw';
     loadTodo();
   }
-  // === lesson_text ===
+  // === lesson_text（位置・サイズ・z-indexはCSS固定、デザインのみ適用） ===
   if (s.lesson_text) {
     const ltp = document.getElementById('lesson-text-panel');
     if (ltp) {
-      applyCommonStyle(ltp, s.lesson_text);
-      // lesson_text固有: 中央配置を維持（commonのtop/leftをオーバーライド）
-      if (s.lesson_text.positionX != null || s.lesson_text.positionY != null) {
-        ltp.style.transform = 'none';
-      } else {
-        ltp.style.top = '50%';
-        ltp.style.left = '50%';
-        ltp.style.transform = 'translate(-50%, -50%)';
-      }
-      if (s.lesson_text.width != null) ltp.style.width = s.lesson_text.width + '%';
+      // レイアウト系を全て除外してデザインのみ適用
+      const { positionX, positionY, width, height, zIndex, visible, fontSize, ...designOnly } = s.lesson_text;
+      applyCommonStyle(ltp, designOnly);
       if (s.lesson_text.maxHeight != null) ltp.style.maxHeight = s.lesson_text.maxHeight + '%';
+      // fontSizeは子要素（#lesson-text-content）にのみ適用
       const ltc = document.getElementById('lesson-text-content');
       if (ltc) {
         if (s.lesson_text.fontSize != null) ltc.style.fontSize = s.lesson_text.fontSize + 'vw';
         if (s.lesson_text.lineHeight != null) ltc.style.lineHeight = s.lesson_text.lineHeight;
         if (s.lesson_text.textColor != null) ltc.style.color = s.lesson_text.textColor;
+      }
+    }
+  }
+  // === lesson_progress（位置・サイズ・z-indexはCSS固定、デザインのみ適用） ===
+  if (s.lesson_progress) {
+    const lpp = document.getElementById('lesson-progress-panel');
+    if (lpp) {
+      // レイアウト系+共通fontSizeを除外（文字サイズはCSS変数で制御）
+      const { positionX, positionY, width, height, zIndex, visible, fontSize, ...designOnly } = s.lesson_progress;
+      applyCommonStyle(lpp, designOnly);
+      if (s.lesson_progress.titleFontSize != null) {
+        lpp.style.setProperty('--lp-title-font-size', s.lesson_progress.titleFontSize + 'vw');
+      }
+      if (s.lesson_progress.itemFontSize != null) {
+        lpp.style.setProperty('--lp-item-font-size', s.lesson_progress.itemFontSize + 'vw');
       }
     }
   }

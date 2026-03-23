@@ -47,10 +47,21 @@ function applyCommonStyle(el, props) {
   // 背景透明度
   if (props.bgOpacity != null) {
     setBgOpacity(el, props.bgOpacity);
-    // bgColorが直接適用されている場合、backgroundも更新
-    const bgColor = el.style.getPropertyValue('--item-bg-color');
-    if (bgColor && bgColor.startsWith('#')) {
-      el.style.background = _hexToRgba(bgColor, props.bgOpacity);
+    // backgroundを再計算（インラインスタイルがvar()を上書きしている場合があるため）
+    let bgColor = el.style.getPropertyValue('--item-bg-color');
+    if (bgColor) {
+      if (bgColor.startsWith('#')) {
+        el.style.background = _hexToRgba(bgColor, props.bgOpacity);
+      } else {
+        // rgba形式 → alpha値を差し替え
+        const m = bgColor.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/);
+        if (m) el.style.background = `rgba(${m[1]},${m[2]},${m[3]},${props.bgOpacity})`;
+      }
+    } else {
+      // bgColorが未設定 → computedStyleからRGB値を取得してalphaを適用
+      const cs = getComputedStyle(el);
+      const m = cs.backgroundColor?.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/);
+      if (m) el.style.background = `rgba(${m[1]},${m[2]},${m[3]},${props.bgOpacity})`;
     }
   }
   // 背景ぼかし（backdrop-filter: blur）
