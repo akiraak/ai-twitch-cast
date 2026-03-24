@@ -555,9 +555,7 @@
     color: rgba(255, 255, 255, 0.5);
     border-left: 2px solid transparent;
     transition: all 0.3s ease;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    word-break: break-word;
   }
   .lesson-progress-item.done {
     color: rgba(255, 255, 255, 0.35);
