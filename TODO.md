@@ -3,7 +3,7 @@
 ## 機能追加
 
 ### 教師モード改善
-- [ ] 生徒役のキャラを入れる
+- [ ] 生徒役のキャラを入れる → [plans/student-character/](plans/student-character/README.md)
 - [ ] 全体の構成が悪いところがある。どうしたら改善できるか検討する
 - [ ] 授業パネルの内容が大きすぎて表示がおかしいときがある。内容を適切な量に。多ければ文字を小さくなどちゃんと見えるような対策をする
 - [ ] 英語授業の発音改善 Step 3: synthesize()にstyle引数追加 → [06-english-pronunciation.md](plans/teacher-mode-v2/06-english-pronunciation.md)
