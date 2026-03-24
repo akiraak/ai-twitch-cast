@@ -99,6 +99,56 @@ class TestCharacters:
         char = test_db.get_or_create_character(ch["id"], "char")
         test_db.update_character(char["id"])  # no-op
 
+    def test_get_characters_by_channel(self, test_db):
+        ch = test_db.get_or_create_channel("ch")
+        test_db.get_or_create_character(ch["id"], "char1", '{"role":"teacher"}')
+        test_db.get_or_create_character(ch["id"], "char2", '{"role":"student"}')
+        chars = test_db.get_characters_by_channel(ch["id"])
+        assert len(chars) == 2
+        names = [c["name"] for c in chars]
+        assert "char1" in names
+        assert "char2" in names
+
+    def test_get_character_by_id(self, test_db):
+        ch = test_db.get_or_create_channel("ch")
+        char = test_db.get_or_create_character(ch["id"], "test_char")
+        result = test_db.get_character_by_id(char["id"])
+        assert result is not None
+        assert result["name"] == "test_char"
+
+    def test_get_character_by_id_not_found(self, test_db):
+        assert test_db.get_character_by_id(99999) is None
+
+    def test_get_character_by_role(self, test_db):
+        ch = test_db.get_or_create_channel("ch")
+        test_db.get_or_create_character(ch["id"], "teacher", '{"role":"teacher"}')
+        test_db.get_or_create_character(ch["id"], "student", '{"role":"student"}')
+        teacher = test_db.get_character_by_role(ch["id"], "teacher")
+        assert teacher is not None
+        assert teacher["name"] == "teacher"
+        student = test_db.get_character_by_role(ch["id"], "student")
+        assert student is not None
+        assert student["name"] == "student"
+
+    def test_get_character_by_role_not_found(self, test_db):
+        ch = test_db.get_or_create_channel("ch")
+        assert test_db.get_character_by_role(ch["id"], "unknown") is None
+
+    def test_update_character_config_field(self, test_db):
+        ch = test_db.get_or_create_channel("ch")
+        char = test_db.get_or_create_character(ch["id"], "char", '{"name":"char"}')
+        test_db.update_character_config_field(char["id"], "vrm", "test.vrm")
+        result = test_db.get_character_config_field(char["id"], "vrm")
+        assert result == "test.vrm"
+        # 既存フィールドは保持される
+        assert test_db.get_character_config_field(char["id"], "name") == "char"
+
+    def test_get_character_config_field_default(self, test_db):
+        ch = test_db.get_or_create_channel("ch")
+        char = test_db.get_or_create_character(ch["id"], "char", '{"name":"char"}')
+        assert test_db.get_character_config_field(char["id"], "missing") is None
+        assert test_db.get_character_config_field(char["id"], "missing", "default") == "default"
+
 
 class TestShows:
     def test_create_and_get(self, test_db):

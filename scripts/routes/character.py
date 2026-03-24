@@ -13,19 +13,13 @@ from src import scene_config
 from src.ai_responder import (
     generate_persona_from_prompt,
     generate_self_note,
+    get_all_characters,
     get_character, get_character_id,
     invalidate_character_cache,
 )
 from src.prompt_builder import SUPPORTED_LANGUAGES, MIX_LEVELS, build_language_rules, build_tts_style, get_stream_language, set_stream_language
 
 router = APIRouter()
-
-
-@router.get("/api/character")
-async def get_character_api():
-    char = get_character()
-    char_id = get_character_id()
-    return {"id": char_id, **char}
 
 
 class CharacterUpdate(BaseModel):
@@ -36,14 +30,46 @@ class CharacterUpdate(BaseModel):
     emotion_blendshapes: dict[str, dict[str, float]]
 
 
+class MemoryUpdate(BaseModel):
+    text: str
+
+
+class ViewerNoteUpdate(BaseModel):
+    user_id: int
+    note: str
+
+
+# --- 全キャラクター一覧 ---
+
+@router.get("/api/characters")
+async def list_characters():
+    """全キャラクター一覧を返す"""
+    return get_all_characters()
+
+
+# --- 先生キャラ（後方互換） ---
+
+@router.get("/api/character")
+async def get_character_api():
+    char = get_character()
+    char_id = get_character_id()
+    return {"id": char_id, **char}
+
+
 @router.put("/api/character")
 async def update_character_api(body: CharacterUpdate):
     char_id = get_character_id()
-    config = json.dumps(body.model_dump(), ensure_ascii=False)
+    # 既存のconfigを読み込んで role 等の既存フィールドを保持
+    existing = db.get_character_by_id(char_id)
+    existing_config = json.loads(existing["config"]) if existing else {}
+    new_config = {**existing_config, **body.model_dump()}
+    config = json.dumps(new_config, ensure_ascii=False)
     db.update_character(char_id, name=body.name, config=config)
     invalidate_character_cache()
     return {"ok": True}
 
+
+# --- リテラルパス（{character_id} より先に定義する） ---
 
 @router.get("/api/character/layers")
 async def get_character_layers():
@@ -78,22 +104,12 @@ async def get_character_layers():
     }
 
 
-class MemoryUpdate(BaseModel):
-    text: str
-
-
 @router.put("/api/character/persona")
 async def update_persona(body: MemoryUpdate):
     """ペルソナ（第2層）を手動更新する"""
     char_id = get_character_id()
     db.update_character_persona(char_id, body.text)
     return {"ok": True}
-
-
-
-class ViewerNoteUpdate(BaseModel):
-    user_id: int
-    note: str
 
 
 @router.put("/api/character/viewer-note")
@@ -127,6 +143,36 @@ async def generate_self_note_api():
         db.update_character_self_note(char_id, new_note)
     return {"ok": True, "self_note": new_note}
 
+
+# --- IDでキャラ個別読み書き ---
+
+@router.get("/api/character/{character_id}")
+async def get_character_by_id_api(character_id: int):
+    """IDでキャラクターを取得する"""
+    row = db.get_character_by_id(character_id)
+    if not row:
+        return {"ok": False, "error": "キャラクターが見つかりません"}
+    config = json.loads(row["config"])
+    return {"id": row["id"], **config}
+
+
+@router.put("/api/character/{character_id}")
+async def update_character_by_id_api(character_id: int, body: CharacterUpdate):
+    """IDでキャラクターを更新する"""
+    existing = db.get_character_by_id(character_id)
+    if not existing:
+        return {"ok": False, "error": "キャラクターが見つかりません"}
+    # 既存の config を読み込んで role 等の追加フィールドを保持
+    existing_config = json.loads(existing["config"])
+    new_config = {**existing_config, **body.model_dump()}
+    config = json.dumps(new_config, ensure_ascii=False)
+    db.update_character(character_id, name=body.name, config=config)
+    if character_id == get_character_id():
+        invalidate_character_cache()
+    return {"ok": True}
+
+
+# --- その他 ---
 
 @router.get("/api/docs/character-prompt")
 async def get_character_prompt_doc():

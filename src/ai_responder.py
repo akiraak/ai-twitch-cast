@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 # DBが空のときに使うデフォルトキャラクター設定
 DEFAULT_CHARACTER = {
     "name": "ちょビ",
+    "role": "teacher",
+    "tts_voice": "Despina",
+    "tts_style": "終始にこにこしているような、柔らかく楽しげなトーンで読み上げてください",
     "system_prompt": "\n".join([
         "あなたはTwitch配信者「ちょビ」です。AIアバターとして配信しています。",
         "",
@@ -58,8 +61,49 @@ DEFAULT_CHARACTER = {
     },
 }
 
+DEFAULT_STUDENT_CHARACTER = {
+    "name": "まなび",
+    "role": "student",
+    "tts_voice": "Kore",
+    "tts_style": "元気で明るい声で、好奇心いっぱいに読み上げてください",
+    "system_prompt": "\n".join([
+        "あなたは配信に参加している生徒キャラ「まなび」です。",
+        "先生（ちょビ）の授業を受けている元気な生徒です。",
+        "",
+        "## 性格",
+        "- 明るくて元気。好奇心が強い",
+        "- 素直で、わからないことは素直に聞く",
+        "- 先生の話に「へぇー！」「なるほど！」とリアクションする",
+        "- たまにちょっとズレた質問をする",
+    ]),
+    "rules": [
+        "先生より短めに話す",
+        "質問や相槌が中心",
+    ],
+    "emotions": {
+        "joy": "嬉しいとき",
+        "surprise": "驚いたとき",
+        "thinking": "考えているとき",
+        "neutral": "通常",
+    },
+    "emotion_blendshapes": {
+        "joy": {"happy": 1.0},
+        "surprise": {"happy": 0.5},
+        "thinking": {"sad": 0.3},
+        "neutral": {},
+    },
+}
+
 _character = None
 _character_id = None
+
+
+def _get_channel_id():
+    """現在のチャンネルIDを取得する"""
+    from src import db
+    channel_name = os.environ.get("TWITCH_CHANNEL", "default")
+    channel = db.get_or_create_channel(channel_name)
+    return channel["id"]
 
 
 def seed_character(channel_id):
@@ -74,23 +118,58 @@ def seed_character(channel_id):
     return db.get_or_create_character(channel_id, DEFAULT_CHARACTER["name"], config)
 
 
+def seed_all_characters(channel_id):
+    """先生＋生徒キャラクターをDBに作成する（未登録時のみ）"""
+    from src import db
+
+    # 先生
+    teacher = seed_character(channel_id)
+    # 先生の config に role がなければ追加
+    teacher_config = json.loads(teacher["config"])
+    if "role" not in teacher_config:
+        teacher_config["role"] = "teacher"
+        config_str = json.dumps(teacher_config, ensure_ascii=False)
+        db.update_character(teacher["id"], config=config_str)
+
+    # 生徒（role="student" のキャラが存在しなければ作成）
+    chars = db.get_characters_by_channel(channel_id)
+    student_exists = any(
+        json.loads(c["config"]).get("role") == "student" for c in chars
+    )
+    if not student_exists:
+        config = json.dumps(DEFAULT_STUDENT_CHARACTER, ensure_ascii=False)
+        db.get_or_create_character(channel_id, DEFAULT_STUDENT_CHARACTER["name"], config)
+
+
 def load_character(channel_id=None):
-    """DBからキャラクター設定を読み込む"""
+    """DBからキャラクター設定を読み込む（先生キャラ）"""
     global _character, _character_id
     from src import db
 
     if channel_id is None:
-        channel_name = os.environ.get("TWITCH_CHANNEL", "default")
-        channel = db.get_or_create_channel(channel_name)
-        channel_id = channel["id"]
+        channel_id = _get_channel_id()
+
+    # 全キャラクターをシード
+    seed_all_characters(channel_id)
 
     db_char = db.get_character_by_channel(channel_id)
-    if db_char is None:
-        db_char = seed_character(channel_id)
-
     _character_id = db_char["id"]
     _character = json.loads(db_char["config"])
     return _character
+
+
+def get_all_characters():
+    """チャンネルの全キャラクター一覧を返す [{id, ...config}]"""
+    from src import db
+
+    channel_id = _get_channel_id()
+    seed_all_characters(channel_id)
+    chars = db.get_characters_by_channel(channel_id)
+    result = []
+    for c in chars:
+        config = json.loads(c["config"])
+        result.append({"id": c["id"], **config})
+    return result
 
 
 def get_character():
@@ -105,6 +184,22 @@ def get_character_id():
     if _character_id is None:
         load_character()
     return _character_id
+
+
+def get_tts_config(character_id=None):
+    """キャラクターのTTS設定を返す {voice, style}"""
+    from src import db
+    config = None
+    if character_id:
+        row = db.get_character_by_id(character_id)
+        if row:
+            config = json.loads(row["config"])
+    if not config:
+        config = get_character()
+    return {
+        "voice": config.get("tts_voice"),
+        "style": config.get("tts_style"),
+    }
 
 
 def invalidate_character_cache():

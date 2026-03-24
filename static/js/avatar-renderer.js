@@ -562,38 +562,38 @@ animateAll();
 
 // === 初期化: アバター読み込み ===
 async function initAvatar() {
-  let vrmUrl = null;
+  // characters API からVRM情報を取得
+  let teacherVrm = null;
+  let studentVrm = null;
   try {
-    const filesRes = await fetch('/api/files/avatar/list');
-    const filesData = await filesRes.json();
-    if (filesData.ok && filesData.active) {
-      vrmUrl = '/resources/vrm/' + filesData.active;
+    const chars = await (await fetch('/api/characters')).json();
+    for (const c of chars) {
+      if (c.role === 'teacher' && c.vrm) teacherVrm = c.vrm;
+      if (c.role === 'student' && c.vrm) studentVrm = c.vrm;
     }
   } catch (e) {}
-  if (!vrmUrl) {
+
+  // フォールバック: files API
+  if (!teacherVrm) {
     try {
-      const res = await fetch('/api/broadcast/avatar');
-      const data = await res.json();
-      vrmUrl = data.vrm_url || '/resources/vrm/Shinano.vrm';
-    } catch (e) {
-      vrmUrl = '/resources/vrm/Shinano.vrm';
-    }
+      const filesRes = await fetch('/api/files/avatar/list');
+      const filesData = await filesRes.json();
+      if (filesData.ok && filesData.active) teacherVrm = filesData.active;
+    } catch (e) {}
   }
+  const vrmUrl = teacherVrm
+    ? '/resources/vrm/' + teacherVrm
+    : '/resources/vrm/Shinano.vrm';
 
   // 先生アバター読み込み
   await teacherAvatar.loadVRM(vrmUrl);
 
-  // 生徒アバター読み込み（avatar2のactive VRMを使用、なければ先生と同じ）
+  // 生徒アバター読み込み
   const student = window.avatarInstances['student'];
   if (student && !student._disabled) {
-    let studentVrmUrl = vrmUrl;
-    try {
-      const res = await fetch('/api/files/avatar2/list');
-      const data = await res.json();
-      if (data.ok && data.active) {
-        studentVrmUrl = '/resources/vrm/' + data.active;
-      }
-    } catch (e) {}
+    const studentVrmUrl = studentVrm
+      ? '/resources/vrm/' + studentVrm
+      : vrmUrl;
     await student.loadVRM(studentVrmUrl);
   }
 }

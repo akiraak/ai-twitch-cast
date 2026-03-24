@@ -1,6 +1,8 @@
 """素材ファイル管理ルート（アバター・背景画像のアップロード・選択・削除）"""
 
+import json
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -8,6 +10,7 @@ from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel
 
 from scripts import state
+from src import db
 from src.scene_config import load_config_value, save_config_value
 
 router = APIRouter()
@@ -16,17 +19,18 @@ logger = logging.getLogger(__name__)
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 RESOURCES_DIR = PROJECT_DIR / "resources"
 
+# アバターカテゴリ → キャラクター role のマッピング
+_AVATAR_ROLE_MAP = {"avatar": "teacher", "avatar2": "student"}
+
 # 素材カテゴリごとのディレクトリとファイル拡張子
 CATEGORIES = {
     "avatar": {
         "dir": RESOURCES_DIR / "vrm",
         "extensions": {".vrm"},
-        "config_key": "files.active_avatar",
     },
     "avatar2": {
         "dir": RESOURCES_DIR / "vrm",
         "extensions": {".vrm"},
-        "config_key": "files.active_avatar2",
     },
     "background": {
         "dir": RESOURCES_DIR / "images" / "backgrounds",
@@ -39,6 +43,61 @@ CATEGORIES = {
         "config_key": "files.active_teaching",
     },
 }
+
+
+def _get_active_vrm(category):
+    """アバターカテゴリのアクティブVRMを取得する（characters.config.vrm優先）"""
+    role = _AVATAR_ROLE_MAP.get(category)
+    if role:
+        channel_name = os.environ.get("TWITCH_CHANNEL", "default")
+        channel = db.get_or_create_channel(channel_name)
+        char = db.get_character_by_role(channel["id"], role)
+        if char:
+            config = json.loads(char["config"])
+            vrm = config.get("vrm")
+            if vrm:
+                return vrm
+    # フォールバック: 旧 settings キー
+    fallback_keys = {"avatar": "files.active_avatar", "avatar2": "files.active_avatar2"}
+    if category in fallback_keys:
+        return load_config_value(fallback_keys[category], "")
+    return ""
+
+
+def _set_active_vrm(category, filename):
+    """アバターカテゴリのアクティブVRMを characters.config.vrm に保存する"""
+    role = _AVATAR_ROLE_MAP.get(category)
+    if role:
+        channel_name = os.environ.get("TWITCH_CHANNEL", "default")
+        channel = db.get_or_create_channel(channel_name)
+        char = db.get_character_by_role(channel["id"], role)
+        if char:
+            db.update_character_config_field(char["id"], "vrm", filename)
+            return
+    # フォールバック
+    fallback_keys = {"avatar": "files.active_avatar", "avatar2": "files.active_avatar2"}
+    if category in fallback_keys:
+        save_config_value(fallback_keys[category], filename)
+
+
+def _get_active(category):
+    """カテゴリのアクティブファイルを取得する"""
+    if category in _AVATAR_ROLE_MAP:
+        return _get_active_vrm(category)
+    cat = CATEGORIES.get(category)
+    if cat and "config_key" in cat:
+        return load_config_value(cat["config_key"], "")
+    return ""
+
+
+def _set_active(category, filename):
+    """カテゴリのアクティブファイルを設定する"""
+    if category in _AVATAR_ROLE_MAP:
+        _set_active_vrm(category, filename)
+        return
+    cat = CATEGORIES.get(category)
+    if cat and "config_key" in cat:
+        save_config_value(cat["config_key"], filename)
 
 
 def _sanitize_filename(name: str) -> str:
@@ -58,7 +117,7 @@ async def files_list(category: str):
         return {"ok": False, "error": f"不明なカテゴリ: {category}"}
 
     cat["dir"].mkdir(parents=True, exist_ok=True)
-    active = load_config_value(cat["config_key"], "")
+    active = _get_active(category)
 
     files = []
     for f in sorted(cat["dir"].iterdir()):
@@ -121,7 +180,7 @@ async def files_select(category: str, body: FileSelect):
     if not file_path.exists():
         return {"ok": False, "error": "ファイルが見つかりません"}
 
-    save_config_value(cat["config_key"], body.file)
+    _set_active(category, body.file)
     logger.info("素材選択: %s → %s", category, body.file)
 
     # broadcast.htmlに通知
@@ -156,9 +215,9 @@ async def files_delete(category: str, file: str):
         return {"ok": False, "error": "ファイルが見つかりません"}
 
     # アクティブなファイルを削除する場合は解除
-    active = load_config_value(cat["config_key"], "")
+    active = _get_active(category)
     if active == file:
-        save_config_value(cat["config_key"], "")
+        _set_active(category, "")
 
     file_path.unlink()
     logger.info("ファイル削除: %s/%s", category, file)

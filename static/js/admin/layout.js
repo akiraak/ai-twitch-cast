@@ -32,6 +32,7 @@ function _updateLayout(key, val) {
   _layoutTimer = setTimeout(() => {
     const changes = _pendingLayoutChanges;
     _pendingLayoutChanges = {};
+    console.log('[layout] save:', JSON.stringify(changes));
     api('POST', '/api/overlay/settings', changes);
   }, 200);
 }
@@ -39,11 +40,13 @@ function _updateLayout(key, val) {
 function onLayoutSlider(slider) {
   const val = parseFloat(slider.value);
   if (isNaN(val)) return;
+  const key = slider.dataset.key;
+  console.log('[layout] slider:', key, val);
   // 同じ .layout-row 内の数値入力を探す（data-key変動に対応）
   const numEl = slider.closest('.layout-row')?.querySelector('.layout-num')
-    || document.getElementById('lv-' + slider.dataset.key.replace('.', '-'));
+    || document.getElementById('lv-' + key.replace('.', '-'));
   if (numEl) numEl.value = val;
-  _updateLayout(slider.dataset.key, val);
+  _updateLayout(key, val);
 }
 
 function onLayoutNum(input) {

@@ -1,27 +1,65 @@
 // キャラクター設定・プロンプトレイヤー・視聴者メモ
 
 // --- キャラクター切替 ---
-let _currentChar = 'teacher';  // 'teacher' or 'student'
-const _charVrmCategories = { teacher: 'avatar', student: 'avatar2' };
+let _currentChar = 'teacher';  // role: 'teacher' or 'student'
+let _currentCharId = null;     // DB上のキャラクターID
+let _allCharacters = [];       // 全キャラクター一覧
+const _roleVrmCategories = { teacher: 'avatar', student: 'avatar2' };
 
 function _currentCharVrmCategory() {
-  return _charVrmCategories[_currentChar] || 'avatar';
+  return _roleVrmCategories[_currentChar] || 'avatar';
 }
 
-function switchCharacter(charId, btn) {
-  _currentChar = charId;
+async function loadCharacterList() {
+  try {
+    const chars = await (await fetch('/api/characters')).json();
+    _allCharacters = chars;
+    const container = document.getElementById('char-selector');
+    if (!container) return;
+    container.innerHTML = '';
+    for (const c of chars) {
+      const btn = document.createElement('button');
+      btn.className = 'char-sel-btn' + (c.role === _currentChar ? ' active' : '');
+      btn.dataset.char = c.role || 'teacher';
+      btn.dataset.charId = c.id;
+      btn.textContent = c.name;
+      btn.addEventListener('click', () => switchCharacter(c.role || 'teacher', c.id, btn));
+      container.appendChild(btn);
+    }
+    // 初期選択
+    if (chars.length > 0 && !_currentCharId) {
+      const teacher = chars.find(c => c.role === 'teacher') || chars[0];
+      _currentCharId = teacher.id;
+    }
+    // 配信画面タブのアバターラベルをキャラ名で更新
+    const roleLabel = { teacher: 'avatar1-label', student: 'avatar2-label' };
+    for (const c of chars) {
+      const el = document.getElementById(roleLabel[c.role]);
+      if (el) el.textContent = `アバター（${c.name}）`;
+    }
+  } catch (e) {
+    console.error('キャラクター一覧取得失敗:', e);
+  }
+}
+
+function switchCharacter(role, charId, btn) {
+  _currentChar = role;
+  _currentCharId = charId;
   // ボタンのactive切替
   document.querySelectorAll('.char-sel-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   // VRMファイルリスト更新
   _loadCharVrmFiles();
-  // ライティングスライダー切替
+  // ライティングスライダー切替 + プリセット再読み込み
   if (typeof _loadCharLighting === 'function') _loadCharLighting();
+  if (typeof loadLightingPresets === 'function') loadLightingPresets();
   // セリフセクションの表示切替（生徒は第1層のみ）
-  const isTeacher = charId === 'teacher';
+  const isTeacher = role === 'teacher';
   document.querySelectorAll('.teacher-only').forEach(el => {
     el.style.display = isTeacher ? '' : 'none';
   });
+  // キャラクター設定をIDで読み込み
+  loadCharacterById(charId);
 }
 
 function _loadCharVrmFiles() {
@@ -102,8 +140,28 @@ let _charEmotions = {};
 let _charBlendshapes = {};
 
 async function loadCharacter() {
+  // 初回はキャラクターリストをロードしてからデフォルト（先生）を読み込む
+  await loadCharacterList();
+  if (_currentCharId) {
+    await loadCharacterById(_currentCharId);
+  } else {
+    // フォールバック: 旧API
+    await _loadCharacterFromApi('/api/character');
+  }
+}
+
+async function loadCharacterById(charId) {
+  await _loadCharacterFromApi('/api/character/' + charId);
+}
+
+async function _loadCharacterFromApi(url) {
   try {
-    const data = await (await fetch('/api/character')).json();
+    const data = await (await fetch(url)).json();
+    if (data.ok === false) {
+      document.getElementById('char-status').textContent = 'エラー: ' + (data.error || '');
+      return;
+    }
+    _currentCharId = data.id;
     document.getElementById('char-name').value = data.name || '';
     document.getElementById('char-prompt').value = data.system_prompt || '';
     renderRules(data.rules || []);
@@ -112,12 +170,14 @@ async function loadCharacter() {
     renderEmotions();
     renderBlendshapes();
     document.getElementById('char-status').textContent = '読み込みました';
-    // バナー更新
-    try {
-      const langData = await (await fetch('/api/language')).json();
-      updateCharacterBanner(data, langData);
-    } catch (e2) {
-      updateCharacterBanner(data, null);
+    // バナー更新（先生のみ）
+    if (_currentChar === 'teacher') {
+      try {
+        const langData = await (await fetch('/api/language')).json();
+        updateCharacterBanner(data, langData);
+      } catch (e2) {
+        updateCharacterBanner(data, null);
+      }
     }
   } catch (e) {
     document.getElementById('char-status').textContent = 'エラー: ' + e.message;
@@ -288,10 +348,14 @@ async function saveCharacter() {
     emotions: collectEmotions(),
     emotion_blendshapes: collectBlendshapes(),
   };
-  const res = await api('PUT', '/api/character', body);
+  // キャラクターIDがあればID指定APIを使う
+  const url = _currentCharId ? '/api/character/' + _currentCharId : '/api/character';
+  const res = await api('PUT', url, body);
   if (res?.ok) {
     document.getElementById('char-status').textContent = '保存しました';
-    await loadCharacter();
+    // キャラクターリストも更新（名前が変わった可能性）
+    await loadCharacterList();
+    await loadCharacterById(_currentCharId);
   }
 }
 

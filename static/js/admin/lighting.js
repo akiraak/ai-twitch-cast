@@ -80,20 +80,25 @@ async function saveCurrentAsPreset() {
   const name = document.getElementById('preset-name-input').value.trim();
   if (!name) return;
   const values = getCurrentLightingValues();
-  await api('POST', '/api/lighting/presets', { name, values });
+  const payload = { name, values };
+  if (_currentCharId) payload.character_id = _currentCharId;
+  await api('POST', '/api/lighting/presets', payload);
   hidePresetSaveUI();
   loadLightingPresets();
 }
 
 async function deleteLightingPreset(name) {
   if (!await showConfirm(`プリセット「${name}」を削除しますか？`, { title: '削除', okLabel: '削除', danger: true })) return;
-  await fetch('/api/lighting/presets', { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name }) });
+  const payload = { name };
+  if (_currentCharId) payload.character_id = _currentCharId;
+  await fetch('/api/lighting/presets', { method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
   loadLightingPresets();
 }
 
 async function loadLightingPresets() {
   try {
-    const data = await (await fetch('/api/lighting/presets')).json();
+    const qs = _currentCharId ? '?character_id=' + _currentCharId : '';
+    const data = await (await fetch('/api/lighting/presets' + qs)).json();
     const container = document.getElementById('lighting-presets-list');
     if (!data.presets || data.presets.length === 0) {
       container.innerHTML = '<span style="font-size:0.75rem; color:#9a88b5;">保存済みプリセットなし</span>';

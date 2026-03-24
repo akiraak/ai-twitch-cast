@@ -36,7 +36,11 @@ function applyCommonStyle(el, props) {
     }
     if (props.positionX != null) el.style.left = props.positionX + '%';
     if (props.positionY != null) el.style.top = props.positionY + '%';
-    if (props.zIndex != null) el.style.zIndex = props.zIndex;
+  }
+  // zIndexは位置固定でも常に適用
+  if (props.zIndex != null) {
+    console.log('[applyCommonStyle] zIndex:', el.id, props.zIndex);
+    el.style.zIndex = props.zIndex;
   }
   // 背景色（hex色 → rgbaに変換してbackground直接適用）
   if (props.bgColor != null) {

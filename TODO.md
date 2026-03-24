@@ -4,8 +4,6 @@
 
 ### 教師モード改善
 - [ ] 生徒役のキャラを入れる → [plans/student-character/](plans/student-character/README.md)
-  - [>] Step 1: マルチアバター表示（実装済み、WebUI整理残） → [01-multi-avatar.md](plans/student-character/01-multi-avatar.md)
-    - [ ] 会話モードに登場キャラクター設定追加
   - [ ] Step 2: WebSocketアバター制御 — avatar_idでリップシンク・感情を振り分け → [02-websocket-routing.md](plans/student-character/02-websocket-routing.md)
   - [ ] Step 3: TTS styleパラメータ — 話者ごとに異なる声・スタイルで発話 → [03-tts-style.md](plans/student-character/03-tts-style.md)
   - [ ] Step 4: DBスキーマ + 設定 — dialoguesカラム・生徒キャラ設定 → [04-db-schema.md](plans/student-character/04-db-schema.md)
@@ -15,7 +13,6 @@
   - [ ] Step 8: テスト — ユニットテスト + 手動動作確認 → [08-testing.md](plans/student-character/08-testing.md)
 - [ ] 全体の構成が悪いところがある。どうしたら改善できるか検討する
 - [ ] 授業パネルの内容が大きすぎて表示がおかしいときがある。内容を適切な量に。多ければ文字を小さくなどちゃんと見えるような対策をする
-- [ ] 英語授業の発音改善 Step 3: synthesize()にstyle引数追加 → [06-english-pronunciation.md](plans/teacher-mode-v2/06-english-pronunciation.md)
 - [ ] 英語授業なのに英語の発音が悪すぎる。改善したい
 - [ ] 授業パネルの英文を読み上げた方が自然
 - [ ] 授業モードで最初の挨拶と終わりの挨拶を定型的なものにしたい。TV番組でよくあるように最初と終わりが分かりやすいようにしたい

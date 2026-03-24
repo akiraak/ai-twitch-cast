@@ -91,15 +91,17 @@ def _convert_lang_tags(text):
         return re.sub(r'[\u3000-\u9fff\uf900-\ufaff\U00020000-\U0002fa1f]+', replace_cjk, text)
 
 
-def synthesize(text, output_path, voice=None):
+def synthesize(text, output_path, voice=None, style=None):
     """テキストから音声ファイルを生成する
 
     Args:
         text: 読み上げるテキスト
         output_path: 出力ファイルパス (.wav)
         voice: 音声名 (デフォルト: Despina)
+        style: TTSスタイル指示（デフォルト: 環境変数 or 言語設定から自動生成）
     """
-    style = os.environ.get("TTS_STYLE") or _get_tts_style()
+    if style is None:
+        style = os.environ.get("TTS_STYLE") or _get_tts_style()
     processed_text = _convert_lang_tags(text)
     prompt = f"{style}: {processed_text}"
     logger.info("[tts] prompt: %s", prompt)

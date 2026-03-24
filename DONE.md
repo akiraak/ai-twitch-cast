@@ -15,6 +15,16 @@
 - [x] ライティングをアバター個別化（lighting_teacher / lighting_student）
 - [x] 生徒選択時はセリフの第2〜5層・発話設定・テスト再生を非表示
 
+## 生徒役キャラクター追加（Step 1: characters テーブル集約）
+
+- [x] Phase 1: 生徒を characters テーブルに追加（role フィールド、`/api/characters` 一覧、`/api/character/{id}` 個別読み書き）
+- [x] Phase 2: VRM選択を characters.config.vrm に移行（settings → characters.config、files.py 更新）
+- [x] Phase 3: ライティングを characters.config.lighting に移行（overlay.py の読み書き先変更）
+- [x] Phase 4: ライティングプリセットをキャラ別に（characters.config.lighting_presets、character_id パラメータ対応）
+- [x] Phase 5: TTS設定を characters.config に追加（tts_voice / tts_style フィールド、synthesize() に style 引数追加）
+- [x] Phase 6: 旧設定キーの掃除 + テスト（旧 settings キー自動削除、DB テスト 8件 + API テスト 5件追加）
+- [x] WebUI キャラクターセレクタを API から動的生成（ハードコード廃止）
+
 ## 教師モード改善 v2
 
 - [x] 英語のみモード対応（`plans/english-only-mode.md`）— prompt_builder/tts/ai_responder/lesson_generator の全プロンプトを primary≠ja で英語切替、TTSベース言語動的化

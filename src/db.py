@@ -368,6 +368,148 @@ def _create_tables(conn):
     except Exception:
         pass
 
+    # Migration: VRM設定を settings → characters.config.vrm に移行
+    try:
+        _migrate_vrm_to_character_config(conn)
+    except Exception:
+        pass
+
+    # Migration: ライティング設定を settings → characters.config.lighting に移行
+    try:
+        _migrate_lighting_to_character_config(conn)
+    except Exception:
+        pass
+
+    # Migration: ライティングプリセットを settings → characters.config.lighting_presets に移行
+    try:
+        _migrate_lighting_presets_to_character_config(conn)
+    except Exception:
+        pass
+
+    # Migration: characters.config に集約済みの旧 settings キーを削除
+    try:
+        _cleanup_old_character_settings(conn)
+    except Exception:
+        pass
+
+
+def _migrate_vrm_to_character_config(conn):
+    """settings の files.active_avatar* を characters.config.vrm に移行（冪等）"""
+    key_role_map = {
+        "files.active_avatar": "teacher",
+        "files.active_avatar2": "student",
+    }
+    for settings_key, role in key_role_map.items():
+        val_row = conn.execute("SELECT value FROM settings WHERE key = ?", (settings_key,)).fetchone()
+        if not val_row or not val_row["value"]:
+            continue
+        vrm_file = val_row["value"]
+        # config に vrm が既にあるキャラは移行済み → スキップ
+        rows = conn.execute("SELECT id, config FROM characters ORDER BY id").fetchall()
+        for row in rows:
+            config = _json.loads(row["config"])
+            if config.get("role") == role:
+                if not config.get("vrm"):
+                    config["vrm"] = vrm_file
+                    conn.execute(
+                        "UPDATE characters SET config = ? WHERE id = ?",
+                        (_json.dumps(config, ensure_ascii=False), row["id"]),
+                    )
+                break
+    conn.commit()
+
+
+def _migrate_lighting_to_character_config(conn):
+    """settings の overlay.lighting_* を characters.config.lighting に移行（冪等）"""
+    role_section_map = {
+        "teacher": "overlay.lighting_teacher.",
+        "student": "overlay.lighting_student.",
+    }
+    rows = conn.execute("SELECT id, config FROM characters ORDER BY id").fetchall()
+    for row in rows:
+        config = _json.loads(row["config"])
+        role = config.get("role")
+        if not role or role not in role_section_map:
+            continue
+        if config.get("lighting"):
+            continue  # 既に移行済み
+        prefix = role_section_map[role]
+        settings_rows = conn.execute(
+            "SELECT key, value FROM settings WHERE key LIKE ?", (prefix + "%",)
+        ).fetchall()
+        if not settings_rows:
+            continue
+        lighting = {}
+        for sr in settings_rows:
+            prop = sr["key"][len(prefix):]
+            try:
+                lighting[prop] = float(sr["value"])
+            except (ValueError, TypeError):
+                lighting[prop] = sr["value"]
+        config["lighting"] = lighting
+        conn.execute(
+            "UPDATE characters SET config = ? WHERE id = ?",
+            (_json.dumps(config, ensure_ascii=False), row["id"]),
+        )
+    conn.commit()
+
+
+def _migrate_lighting_presets_to_character_config(conn):
+    """settings の lighting.presets を先生の characters.config.lighting_presets に移行（冪等）"""
+    val_row = conn.execute("SELECT value FROM settings WHERE key = 'lighting.presets'").fetchone()
+    if not val_row or not val_row["value"]:
+        return
+    try:
+        presets = _json.loads(val_row["value"])
+    except (ValueError, TypeError):
+        return
+    if not presets:
+        return
+    # 先生キャラの config.lighting_presets が空なら移行
+    rows = conn.execute("SELECT id, config FROM characters ORDER BY id").fetchall()
+    for row in rows:
+        config = _json.loads(row["config"])
+        if config.get("role") == "teacher":
+            if not config.get("lighting_presets"):
+                config["lighting_presets"] = presets
+                conn.execute(
+                    "UPDATE characters SET config = ? WHERE id = ?",
+                    (_json.dumps(config, ensure_ascii=False), row["id"]),
+                )
+                conn.commit()
+            break
+
+
+def _cleanup_old_character_settings(conn):
+    """characters.config に移行済みの旧 settings キーを削除（冪等）
+
+    削除対象:
+    - files.active_avatar / files.active_avatar2 → characters.config.vrm
+    - overlay.lighting_teacher.* / overlay.lighting_student.* → characters.config.lighting
+    - lighting.presets → characters.config.lighting_presets
+    """
+    # 移行が完了しているか確認（teacher の vrm が設定されていれば移行済みとみなす）
+    rows = conn.execute("SELECT config FROM characters ORDER BY id").fetchall()
+    teacher_has_vrm = False
+    for row in rows:
+        config = _json.loads(row["config"])
+        if config.get("role") == "teacher" and config.get("vrm"):
+            teacher_has_vrm = True
+            break
+    if not teacher_has_vrm:
+        return  # 未移行の場合は削除しない
+
+    old_keys = [
+        "files.active_avatar",
+        "files.active_avatar2",
+    ]
+    for key in old_keys:
+        conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+    conn.execute("DELETE FROM settings WHERE key LIKE 'overlay.lighting_teacher.%'")
+    conn.execute("DELETE FROM settings WHERE key LIKE 'overlay.lighting_student.%'")
+    conn.execute("DELETE FROM settings WHERE key = 'lighting.presets'")
+    conn.commit()
+
 
 def _migrate_comments_split(conn):
     """commentsテーブルからavatar_commentsを分離するマイグレーション（冪等）"""
@@ -498,13 +640,47 @@ def get_or_create_character(channel_id, name, config="{}"):
 
 
 def get_character_by_channel(channel_id):
-    """チャンネルのキャラクター設定を取得する"""
+    """チャンネルのキャラクター設定を取得する（先頭1件）"""
     conn = get_connection()
     row = conn.execute(
         "SELECT * FROM characters WHERE channel_id = ? ORDER BY id LIMIT 1",
         (channel_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def get_characters_by_channel(channel_id):
+    """チャンネルの全キャラクター一覧を返す"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM characters WHERE channel_id = ? ORDER BY id",
+        (channel_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_character_by_id(character_id):
+    """IDでキャラクターを取得する"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM characters WHERE id = ?",
+        (character_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_character_by_role(channel_id, role):
+    """チャンネル内の指定roleのキャラクターを取得する"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM characters WHERE channel_id = ? ORDER BY id",
+        (channel_id,),
+    ).fetchall()
+    for row in rows:
+        config = _json.loads(row["config"])
+        if config.get("role") == role:
+            return dict(row)
+    return None
 
 
 def update_character(character_id, name=None, config=None):
@@ -527,6 +703,31 @@ def update_character(character_id, name=None, config=None):
         params,
     )
     conn.commit()
+
+
+def update_character_config_field(character_id, field, value):
+    """キャラクターの config JSON 内の特定フィールドを更新する"""
+    conn = get_connection()
+    row = conn.execute("SELECT config FROM characters WHERE id = ?", (character_id,)).fetchone()
+    if not row:
+        return
+    config = _json.loads(row["config"])
+    config[field] = value
+    conn.execute(
+        "UPDATE characters SET config = ?, updated_at = ? WHERE id = ?",
+        (_json.dumps(config, ensure_ascii=False), _now(), character_id),
+    )
+    conn.commit()
+
+
+def get_character_config_field(character_id, field, default=None):
+    """キャラクターの config JSON 内の特定フィールドを取得する"""
+    conn = get_connection()
+    row = conn.execute("SELECT config FROM characters WHERE id = ?", (character_id,)).fetchone()
+    if not row:
+        return default
+    config = _json.loads(row["config"])
+    return config.get(field, default)
 
 
 # --- shows ---

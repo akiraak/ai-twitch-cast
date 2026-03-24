@@ -358,9 +358,29 @@ _OVERLAY_DEFAULTS = {
 }
 
 
+def _get_character_lighting():
+    """characters.config.lighting からライティング設定を取得する"""
+    import json as _json
+    import os
+    result = {}
+    try:
+        channel_name = os.environ.get("TWITCH_CHANNEL", "default")
+        channel = db.get_or_create_channel(channel_name)
+        chars = db.get_characters_by_channel(channel["id"])
+        role_section = {"teacher": "lighting_teacher", "student": "lighting_student"}
+        for char in chars:
+            config = _json.loads(char["config"])
+            role = config.get("role")
+            if role in role_section and config.get("lighting"):
+                result[role_section[role]] = config["lighting"]
+    except Exception:
+        pass
+    return result
+
+
 @router.get("/api/overlay/settings")
 async def get_overlay_settings():
-    """レイアウト設定を返す（broadcast_items優先→overlay.* settings→デフォルト）"""
+    """レイアウト設定を返す（characters.config→broadcast_items→overlay.* settings→デフォルト）"""
     file_defaults = _get_overlay_defaults()
     result = {}
 
@@ -373,12 +393,20 @@ async def get_overlay_settings():
     except Exception:
         pass
 
+    # characters.config.lighting から取得
+    char_lighting = _get_character_lighting()
+
     for section, props in _OVERLAY_DEFAULTS.items():
         result[section] = {}
         file_section = file_defaults.get(section, {})
         bi = items_map.get(section)
+        cl = char_lighting.get(section)
 
         for prop, fallback in props.items():
+            # 0. characters.config.lighting（lighting_teacher/lighting_student のみ）
+            if cl and prop in cl:
+                result[section][prop] = cl[prop]
+                continue
             # 1. broadcast_itemsテーブルから取得
             if bi and prop in bi:
                 result[section][prop] = bi[prop]
@@ -567,18 +595,52 @@ async def preview_overlay_settings(request: Request):
     return {"ok": True}
 
 
+def _save_character_lighting(section, props):
+    """lighting_teacher / lighting_student → characters.config.lighting に保存"""
+    import json as _json
+    import os
+    section_role = {"lighting_teacher": "teacher", "lighting_student": "student"}
+    role = section_role.get(section)
+    if not role:
+        return False
+    try:
+        channel_name = os.environ.get("TWITCH_CHANNEL", "default")
+        channel = db.get_or_create_channel(channel_name)
+        char = db.get_character_by_role(channel["id"], role)
+        if char:
+            config = _json.loads(char["config"])
+            lighting = config.get("lighting", {})
+            lighting.update(props)
+            config["lighting"] = lighting
+            db.update_character(
+                char["id"],
+                config=_json.dumps(config, ensure_ascii=False),
+            )
+            return True
+    except Exception:
+        pass
+    return False
+
+
 @router.post("/api/overlay/settings")
 async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
     logger.info("[overlay] save_settings: %s", {k: v for k, v in body.items() if k != "type"})
     fixed_items = {"avatar", "avatar1", "avatar2", "subtitle", "todo", "lesson_text", "lesson_progress"}
+    lighting_sections = {"lighting_teacher", "lighting_student"}
     for section, props in body.items():
         if not isinstance(props, dict):
             continue
         if section in fixed_items:
             # broadcast_itemsテーブルに保存
             db.upsert_broadcast_item(section, section, props)
+        elif section in lighting_sections:
+            # characters.config.lighting に保存
+            if not _save_character_lighting(section, props):
+                # フォールバック: settings テーブル
+                for prop, val in props.items():
+                    db.set_setting(f"overlay.{section}.{prop}", val)
         else:
             # lighting/sync等はsettingsテーブルに保存（従来通り）
             for prop, val in props.items():
@@ -588,54 +650,65 @@ async def save_overlay_settings(request: Request):
     return {"ok": True}
 
 
-@router.get("/api/lighting/presets")
-async def get_lighting_presets():
-    """保存済みライティングプリセット一覧を返す"""
+def _get_presets_for_character(character_id):
+    """キャラクターのライティングプリセット一覧を取得する"""
     import json as _json
+    if character_id:
+        presets = db.get_character_config_field(int(character_id), "lighting_presets")
+        if presets is not None:
+            return presets
+    # フォールバック: settings テーブル
     raw = db.get_setting("lighting.presets", "[]")
     try:
-        presets = _json.loads(raw)
+        return _json.loads(raw)
     except Exception:
-        presets = []
+        return []
+
+
+def _save_presets_for_character(character_id, presets):
+    """キャラクターのライティングプリセットを保存する"""
+    import json as _json
+    if character_id:
+        db.update_character_config_field(int(character_id), "lighting_presets", presets)
+    else:
+        db.set_setting("lighting.presets", _json.dumps(presets, ensure_ascii=False))
+
+
+@router.get("/api/lighting/presets")
+async def get_lighting_presets(character_id: int | None = None):
+    """保存済みライティングプリセット一覧を返す（character_id指定でキャラ別）"""
+    presets = _get_presets_for_character(character_id)
     return {"presets": presets}
 
 
 @router.post("/api/lighting/presets")
 async def save_lighting_preset(request: Request):
     """ライティングプリセットを保存する"""
-    import json as _json
     body = await request.json()
     name = body.get("name", "").strip()
     values = body.get("values", {})
+    character_id = body.get("character_id")
     if not name:
         return {"ok": False, "error": "name is required"}
-    raw = db.get_setting("lighting.presets", "[]")
-    try:
-        presets = _json.loads(raw)
-    except Exception:
-        presets = []
+    presets = _get_presets_for_character(character_id)
     # 同名があれば上書き
     presets = [p for p in presets if p.get("name") != name]
     presets.append({"name": name, "values": values})
-    db.set_setting("lighting.presets", _json.dumps(presets, ensure_ascii=False))
+    _save_presets_for_character(character_id, presets)
     return {"ok": True}
 
 
 @router.delete("/api/lighting/presets")
 async def delete_lighting_preset(request: Request):
     """ライティングプリセットを削除する"""
-    import json as _json
     body = await request.json()
     name = body.get("name", "").strip()
+    character_id = body.get("character_id")
     if not name:
         return {"ok": False, "error": "name is required"}
-    raw = db.get_setting("lighting.presets", "[]")
-    try:
-        presets = _json.loads(raw)
-    except Exception:
-        presets = []
+    presets = _get_presets_for_character(character_id)
     presets = [p for p in presets if p.get("name") != name]
-    db.set_setting("lighting.presets", _json.dumps(presets, ensure_ascii=False))
+    _save_presets_for_character(character_id, presets)
     return {"ok": True}
 
 
