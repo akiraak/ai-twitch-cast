@@ -3,16 +3,36 @@ const LIGHTING_PRESETS = {
   default: { brightness: 1.0, contrast: 1.0, temperature: 0.1, saturation: 1.0, ambient: 0.75, directional: 1.0, lightX: 0.5, lightY: 1.5, lightZ: 2.0 },
 };
 
+// 現在のキャラクターに応じたlightingセクション名を返す
+function _lightingSection() {
+  return _currentChar === 'student' ? 'lighting_student' : 'lighting_teacher';
+}
+
+// キャラクター切替時にライティングスライダーのdata-keyを更新
+function _updateLightingDataKeys() {
+  const section = _lightingSection();
+  document.querySelectorAll('#char-sub-appearance .layout-slider[data-key^="lighting"]').forEach(el => {
+    const prop = el.dataset.key.split('.').pop();
+    el.dataset.key = section + '.' + prop;
+  });
+  document.querySelectorAll('#char-sub-appearance .layout-num[id^="lv-lighting-"]').forEach(el => {
+    const prop = el.id.replace('lv-lighting-', '');
+    el.dataset.key = section + '.' + prop;
+  });
+}
+
 function applyLightingValues(p) {
+  const section = _lightingSection();
   for (const [key, val] of Object.entries(p)) {
-    const dataKey = 'lighting.' + key;
     const numEl = document.getElementById('lv-lighting-' + key);
     if (numEl) numEl.value = val;
+    const dataKey = section + '.' + key;
     const slider = document.querySelector(`input[type="range"][data-key="${dataKey}"]`);
     if (slider) slider.value = val;
   }
-  api('POST', '/api/overlay/preview', { lighting: p });
-  api('POST', '/api/overlay/settings', { lighting: p });
+  const payload = { [section]: p };
+  api('POST', '/api/overlay/preview', payload);
+  api('POST', '/api/overlay/settings', payload);
 }
 
 function applyLightingPreset(name) {
@@ -28,6 +48,23 @@ function getCurrentLightingValues() {
     if (el) values[key] = parseFloat(el.value);
   }
   return values;
+}
+
+// キャラクター切替時にスライダー値をDBから読み込み
+function _loadCharLighting() {
+  _updateLightingDataKeys();
+  const section = _lightingSection();
+  if (layoutSettings[section]) {
+    const keys = ['brightness', 'contrast', 'temperature', 'saturation', 'ambient', 'directional', 'lightX', 'lightY', 'lightZ'];
+    for (const key of keys) {
+      const val = layoutSettings[section][key];
+      if (val == null) continue;
+      const numEl = document.getElementById('lv-lighting-' + key);
+      if (numEl) numEl.value = val;
+      const slider = document.querySelector(`input[type="range"][data-key="${section}.${key}"]`);
+      if (slider) slider.value = val;
+    }
+  }
 }
 
 function showPresetSaveUI() {

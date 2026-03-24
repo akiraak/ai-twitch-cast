@@ -4,12 +4,16 @@
 
 - [x] avatar-renderer.js を AvatarInstance クラスにリファクタ（グローバル状態→クラス化、2体独立レンダリング）
 - [x] broadcast.html に先生（avatar-area-1）+ 生徒（avatar-area-2）の2体表示
-- [x] WebUI「配信画面」タブに「アバター（先生）」「アバター（生徒）」2パネル追加
 - [x] 生徒用VRMファイル管理（avatar2カテゴリ、独立したactive選択）
 - [x] DB マイグレーション（avatar→avatar1リネーム、avatar2デフォルト追加）
 - [x] overlay settings / broadcast_items のavatar1・avatar2対応
 - [x] server_restart イベントで broadcast.html 自動リロード
 - [x] window.avatarVRM / window.avatarLighting 後方互換維持
+- [x] WebUIタブ順変更（会話モード→キャラクター→配信画面）
+- [x] キャラクタータブにキャラクター切替セレクタ（先生/生徒）追加
+- [x] VRM選択を配信画面タブ→キャラクタータブに移動
+- [x] ライティングをアバター個別化（lighting_teacher / lighting_student）
+- [x] 生徒選択時はセリフの第2〜5層・発話設定・テスト再生を非表示
 
 ## 教師モード改善 v2
 

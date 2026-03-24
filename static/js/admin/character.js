@@ -1,5 +1,102 @@
 // キャラクター設定・プロンプトレイヤー・視聴者メモ
 
+// --- キャラクター切替 ---
+let _currentChar = 'teacher';  // 'teacher' or 'student'
+const _charVrmCategories = { teacher: 'avatar', student: 'avatar2' };
+
+function _currentCharVrmCategory() {
+  return _charVrmCategories[_currentChar] || 'avatar';
+}
+
+function switchCharacter(charId, btn) {
+  _currentChar = charId;
+  // ボタンのactive切替
+  document.querySelectorAll('.char-sel-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  // VRMファイルリスト更新
+  _loadCharVrmFiles();
+  // ライティングスライダー切替
+  if (typeof _loadCharLighting === 'function') _loadCharLighting();
+  // セリフセクションの表示切替（生徒は第1層のみ）
+  const isTeacher = charId === 'teacher';
+  document.querySelectorAll('.teacher-only').forEach(el => {
+    el.style.display = isTeacher ? '' : 'none';
+  });
+}
+
+function _loadCharVrmFiles() {
+  const category = _currentCharVrmCategory();
+  const listEl = document.getElementById('char-vrm-files-list');
+  const statusEl = document.getElementById('char-vrm-upload-status');
+  if (statusEl) statusEl.textContent = '';
+  // loadCategoryFiles相当だが、対象要素を差し替える
+  // files.jsのloadCategoryFilesはIDベースなので、手動でフェッチ
+  if (!listEl) return;
+  fetch('/api/files/' + category + '/list')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { listEl.innerHTML = '<div style="color:#c62828; font-size:0.85rem;">' + esc(data.error) + '</div>'; return; }
+      if (data.files.length === 0) {
+        listEl.innerHTML = '<div style="color:#9a88b5; font-size:0.85rem;">ファイルがありません</div>';
+        return;
+      }
+      listEl.innerHTML = '';
+      for (const f of data.files) {
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:8px 6px; border-bottom:1px solid #d0c0e8;'
+          + (f.active ? ' background:#ece5fa; border-radius:6px;' : '');
+        row.innerHTML = `
+          <div style="display:flex; gap:8px; align-items:center;">
+            ${f.active ? '<span style="font-size:0.8rem; color:#2e7d32; margin-right:2px;">●</span>' : ''}
+            <span style="flex:1; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${f.active ? ' font-weight:600; color:#7b1fa2;' : ''}">${esc(f.name)}</span>
+            <span style="font-size:0.75rem; color:#9a88b5;">${_formatSize(f.size)}</span>
+            ${f.active
+              ? '<span style="font-size:0.75rem; color:#2e7d32; font-weight:600;">使用中</span>'
+              : `<button data-select-file="${escHtml(f.file)}" data-category="${category}" style="font-size:0.75rem;">使用</button>`}
+            <button class="danger" data-delete-file="${escHtml(f.file)}" data-category="${category}" style="font-size:0.7rem; padding:2px 6px;" title="削除">×</button>
+          </div>
+        `;
+        listEl.appendChild(row);
+      }
+      listEl.querySelectorAll('[data-select-file]').forEach(btn =>
+        btn.addEventListener('click', async () => {
+          await selectFile(btn.dataset.category, btn.dataset.selectFile);
+          _loadCharVrmFiles();
+        }));
+      listEl.querySelectorAll('[data-delete-file]').forEach(btn =>
+        btn.addEventListener('click', async () => {
+          await deleteFile(btn.dataset.category, btn.dataset.deleteFile);
+          _loadCharVrmFiles();
+        }));
+    })
+    .catch(e => {
+      listEl.innerHTML = '<div style="color:#c62828; font-size:0.85rem;">読み込み失敗: ' + esc(e.message) + '</div>';
+    });
+}
+
+async function _uploadCharVrm(input) {
+  const files = input.files;
+  if (!files || files.length === 0) return;
+  const category = _currentCharVrmCategory();
+  const statusEl = document.getElementById('char-vrm-upload-status');
+  for (const file of files) {
+    if (statusEl) { statusEl.textContent = 'アップロード中: ' + file.name + '...'; statusEl.style.color = '#6a5590'; }
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/files/' + category + '/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.ok) showToast('アップロード完了: ' + (data.file || file.name), 'success');
+      else showToast('アップロード失敗: ' + (data.error || ''), 'error');
+    } catch (e) {
+      showToast('アップロード失敗: ' + e.message, 'error');
+    }
+  }
+  input.value = '';
+  if (statusEl) statusEl.textContent = '';
+  _loadCharVrmFiles();
+}
+
 // --- キャラクター設定 ---
 let _charEmotions = {};
 let _charBlendshapes = {};

@@ -326,6 +326,14 @@ _OVERLAY_DEFAULTS = {
         "brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0,
         "ambient": 0.75, "directional": 1.0, "lightX": 0.5, "lightY": 1.5, "lightZ": 2.0,
     },
+    "lighting_teacher": {
+        "brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0,
+        "ambient": 0.75, "directional": 1.0, "lightX": 0.5, "lightY": 1.5, "lightZ": 2.0,
+    },
+    "lighting_student": {
+        "brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0,
+        "ambient": 0.75, "directional": 1.0, "lightX": 0.5, "lightY": 1.5, "lightZ": 2.0,
+    },
     "subtitle": _make_item_defaults({
         "bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3,
         "bgOpacity": 0.85, "zIndex": 20, "borderRadius": 12, "padding": 16,

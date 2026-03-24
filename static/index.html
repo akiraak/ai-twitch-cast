@@ -62,28 +62,8 @@
           <div id="background-files-list"></div>
         </div></details>
         <details data-section="avatar1" class="panel-item"><summary>アバター（先生）</summary><div class="panel-body">
-          <div class="layout-row"><span class="layout-label">スケール</span><input type="range" class="vol-slider layout-slider" min="0.1" max="3" step="0.05" data-key="avatar1.scale" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-avatar1-scale" min="0.1" max="3" step="0.05" data-key="avatar1.scale" oninput="onLayoutNum(this)"></div>
-          <div style="font-size:0.7rem; color:#7b1fa2; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(124,77,255,0.06); border-radius:3px; border-left:2px solid #7b1fa2;">VRMファイル</div>
-          <div style="margin-bottom:8px;">
-            <label style="display:inline-block; padding:4px 12px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.8rem;">
-              ファイルを追加
-              <input type="file" accept=".vrm" style="display:none;" onchange="uploadFile('avatar', this)">
-            </label>
-            <span class="status" id="avatar-upload-status" style="display:inline; margin-left:8px;"></span>
-          </div>
-          <div id="avatar-files-list"></div>
         </div></details>
         <details data-section="avatar2" class="panel-item"><summary>アバター（生徒）</summary><div class="panel-body">
-          <div class="layout-row"><span class="layout-label">スケール</span><input type="range" class="vol-slider layout-slider" min="0.1" max="3" step="0.05" data-key="avatar2.scale" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-avatar2-scale" min="0.1" max="3" step="0.05" data-key="avatar2.scale" oninput="onLayoutNum(this)"></div>
-          <div style="font-size:0.7rem; color:#7b1fa2; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(124,77,255,0.06); border-radius:3px; border-left:2px solid #7b1fa2;">VRMファイル</div>
-          <div style="margin-bottom:8px;">
-            <label style="display:inline-block; padding:4px 12px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.8rem;">
-              ファイルを追加
-              <input type="file" accept=".vrm" style="display:none;" onchange="uploadFile('avatar2', this)">
-            </label>
-            <span class="status" id="avatar2-upload-status" style="display:inline; margin-left:8px;"></span>
-          </div>
-          <div id="avatar2-files-list"></div>
         </div></details>
         <details data-section="subtitle" class="panel-item"><summary>字幕</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">下端 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-bottom" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutNum(this)"></div>
@@ -129,6 +109,11 @@
 
   <!-- ===== キャラクター ===== -->
   <div class="tab-content active" id="tab-character">
+    <!-- キャラクター切替セレクタ -->
+    <div class="char-selector" id="char-selector">
+      <button class="char-sel-btn active" data-char="teacher" onclick="switchCharacter('teacher', this)">先生（ちょビ）</button>
+      <button class="char-sel-btn" data-char="student" onclick="switchCharacter('student', this)">生徒（まなび）</button>
+    </div>
     <!-- サブタブ -->
     <div class="char-subtabs">
       <div class="char-subtab active" onclick="switchCharSubtab('appearance', this)">ビジュアル</div>
@@ -141,7 +126,7 @@
         <div id="language-modes"></div>
         <div id="lang-description" style="margin-top:10px; padding:10px 14px; background:#f3e5f5; border-radius:8px; font-size:0.85rem; color:#4a148c; display:none;"></div>
       </div>
-      <div class="layer-header">
+      <div class="layer-header teacher-only">
         <span>5層プロンプト合成</span>
         <a href="#" onclick="event.preventDefault(); showCharacterPromptDoc()" style="font-size:0.75rem; font-weight:normal; color:#7c4dff; text-decoration:none;">会話生成の仕組み →</a>
       </div>
@@ -178,7 +163,7 @@
         </div>
         <div class="status" id="char-status"></div>
       </div>
-      <div class="card">
+      <div class="card teacher-only">
         <h2><span class="layer-badge">第2層</span> ペルソナ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分ごとAI抽出（応答10件以上で生成）</span></h2>
         <div id="layer-persona" class="layer-content"><span style="color:#9a88b5;">読み込み中...</span></div>
         <div id="layer-persona-edit" style="display:none;">
@@ -193,14 +178,14 @@
           <button class="secondary" style="font-size:0.7rem; padding:3px 8px;" onclick="generatePersonaFromPrompt()">AI初期生成</button>
         </div>
       </div>
-      <div class="card">
+      <div class="card teacher-only">
         <h2><span class="layer-badge">第3層</span> セルフメモ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分ごと更新・配信中の記憶</span></h2>
         <div id="layer-self-note" class="layer-content"><span style="color:#9a88b5;">読み込み中...</span></div>
         <div class="btn-row" style="margin-top:6px;">
           <button class="secondary" style="font-size:0.7rem; padding:3px 8px;" onclick="regenerateSelfNote()">AI再生成</button>
         </div>
       </div>
-      <div class="card">
+      <div class="card teacher-only">
         <details>
           <summary style="cursor:pointer; user-select:none;">
             <h2 style="display:inline;"><span class="layer-badge">第4層</span> 視聴者メモ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分バッチ更新・初回挨拶時に注入</span></h2>
@@ -209,11 +194,11 @@
           <div id="layer-viewer-notes" class="layer-content" style="margin-top:8px;"><span style="color:#9a88b5;">読み込み中...</span></div>
         </details>
       </div>
-      <div class="card" style="background:linear-gradient(135deg, #f8f6ff, #f3e5f5); border:1px dashed #d0c0e8;">
+      <div class="card teacher-only" style="background:linear-gradient(135deg, #f8f6ff, #f3e5f5); border:1px dashed #d0c0e8;">
         <h2><span class="layer-badge" style="background:#e0d8f0; color:#6a5590;">第5層</span> リアルタイム状態 <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">配信タイトル・トピック・TODO</span></h2>
         <div style="font-size:0.82rem; color:#6a5590;">配信中に自動注入されます（Twitchタイトル・現在のトピック・作業中タスク）</div>
       </div>
-      <div class="card">
+      <div class="card teacher-only">
         <h2>発話設定</h2>
         <div class="vol-row">
           <span class="vol-label">文字数上限</span>
@@ -226,7 +211,7 @@
           30字=短文1文 / 100字=2〜3文 / 200字=長文。長いほど句読点で分割して順次再生
         </div>
       </div>
-      <div class="card">
+      <div class="card teacher-only">
         <h2>テスト再生</h2>
         <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           <button onclick="ttsTest('greeting')" style="font-size:0.75rem;">挨拶</button>
@@ -248,22 +233,33 @@
     <!-- 見た目 -->
     <div class="char-subcontent active" id="char-sub-appearance">
       <div class="card">
+        <h2>VRMモデル</h2>
+        <div style="margin-bottom:8px;">
+          <label style="display:inline-block; padding:4px 12px; background:#7b1fa2; color:#fff; border-radius:4px; cursor:pointer; font-size:0.8rem;">
+            ファイルを追加
+            <input type="file" accept=".vrm" style="display:none;" id="char-vrm-upload" onchange="_uploadCharVrm(this)">
+          </label>
+          <span class="status" id="char-vrm-upload-status" style="display:inline; margin-left:8px;"></span>
+        </div>
+        <div id="char-vrm-files-list"></div>
+      </div>
+      <div class="card">
         <h2>ライティング</h2>
         <div style="margin-bottom:12px;">
           <button style="font-size:0.7rem; padding:3px 8px; background:#e0e0e0; color:#333; border:none; border-radius:4px; cursor:pointer;" onclick="applyLightingPreset('default')">デフォルトに戻す</button>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-          <div class="layout-row"><span class="layout-label">明るさ</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-brightness" min="0.2" max="2.0" step="0.05" data-key="lighting.brightness" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">コントラスト</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-contrast" min="0.2" max="2.0" step="0.05" data-key="lighting.contrast" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">色温度</span><input type="range" class="vol-slider layout-slider" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-temperature" min="-1" max="1" step="0.05" data-key="lighting.temperature" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">彩度</span><input type="range" class="vol-slider layout-slider" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-saturation" min="0" max="2.0" step="0.05" data-key="lighting.saturation" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">明るさ</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting_teacher.brightness" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-brightness" min="0.2" max="2.0" step="0.05" data-key="lighting_teacher.brightness" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">コントラスト</span><input type="range" class="vol-slider layout-slider" min="0.2" max="2.0" step="0.05" data-key="lighting_teacher.contrast" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-contrast" min="0.2" max="2.0" step="0.05" data-key="lighting_teacher.contrast" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">色温度</span><input type="range" class="vol-slider layout-slider" min="-1" max="1" step="0.05" data-key="lighting_teacher.temperature" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-temperature" min="-1" max="1" step="0.05" data-key="lighting_teacher.temperature" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">彩度</span><input type="range" class="vol-slider layout-slider" min="0" max="2.0" step="0.05" data-key="lighting_teacher.saturation" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-saturation" min="0" max="2.0" step="0.05" data-key="lighting_teacher.saturation" oninput="onLayoutNum(this)"></div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px;">
-          <div class="layout-row"><span class="layout-label">環境光</span><input type="range" class="vol-slider layout-slider" min="0" max="3.0" step="0.05" data-key="lighting.ambient" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-ambient" min="0" max="3.0" step="0.05" data-key="lighting.ambient" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">指向性光</span><input type="range" class="vol-slider layout-slider" min="0" max="3.0" step="0.05" data-key="lighting.directional" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-directional" min="0" max="3.0" step="0.05" data-key="lighting.directional" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">ライトX</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting.lightX" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightX" min="-5" max="5" step="0.1" data-key="lighting.lightX" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">ライトY</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting.lightY" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightY" min="-5" max="5" step="0.1" data-key="lighting.lightY" oninput="onLayoutNum(this)"></div>
-          <div class="layout-row"><span class="layout-label">ライトZ</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting.lightZ" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightZ" min="-5" max="5" step="0.1" data-key="lighting.lightZ" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">環境光</span><input type="range" class="vol-slider layout-slider" min="0" max="3.0" step="0.05" data-key="lighting_teacher.ambient" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-ambient" min="0" max="3.0" step="0.05" data-key="lighting_teacher.ambient" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">指向性光</span><input type="range" class="vol-slider layout-slider" min="0" max="3.0" step="0.05" data-key="lighting_teacher.directional" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-directional" min="0" max="3.0" step="0.05" data-key="lighting_teacher.directional" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">ライトX</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting_teacher.lightX" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightX" min="-5" max="5" step="0.1" data-key="lighting_teacher.lightX" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">ライトY</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting_teacher.lightY" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightY" min="-5" max="5" step="0.1" data-key="lighting_teacher.lightY" oninput="onLayoutNum(this)"></div>
+          <div class="layout-row"><span class="layout-label">ライトZ</span><input type="range" class="vol-slider layout-slider" min="-5" max="5" step="0.1" data-key="lighting_teacher.lightZ" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lighting-lightZ" min="-5" max="5" step="0.1" data-key="lighting_teacher.lightZ" oninput="onLayoutNum(this)"></div>
         </div>
         <div style="margin-top:14px; border-top:1px solid #e0d0f0; padding-top:12px;">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">

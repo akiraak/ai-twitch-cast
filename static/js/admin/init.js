@@ -21,11 +21,14 @@ _loadCommonSchema().then(() => {
   captureRefreshSources();
   loadCustomTexts();
   loadCategoryFiles('background');
-  loadCategoryFiles('avatar');
-  loadCategoryFiles('avatar2');
+  // VRMファイルはキャラクタータブで管理（_loadCharVrmFiles）
+  _loadCharVrmFiles();
   // 全パネルの値を読み込み
   loadVolumes();
-  loadLayout();
+  loadLayout().then(() => {
+    // ライティングdata-keyをteacher用に初期化し値をロード
+    if (typeof _loadCharLighting === 'function') _loadCharLighting();
+  });
   loadCharacter();
   loadLightingPresets();
   loadBgmTracks();

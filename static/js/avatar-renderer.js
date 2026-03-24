@@ -512,29 +512,33 @@ window.avatarVRM = {
 };
 
 // === 後方互換: window.avatarLighting ===
+// デフォルトはteacherに適用（後方互換）。avatarId指定で個別適用可能。
+function _getAvatarForLighting(avatarId) {
+  if (avatarId && window.avatarInstances[avatarId]) return window.avatarInstances[avatarId];
+  return teacherAvatar;
+}
 window.avatarLighting = {
   BASE_AMBIENT: 0.75,
   BASE_DIRECTIONAL: 1.0,
-  setAmbient(i)     { teacherAvatar.ambientLight.intensity = i; },
-  setDirectional(i) { teacherAvatar.dirLight.intensity = i; },
-  setExposure(val) {
-    for (const a of Object.values(window.avatarInstances)) {
-      if (a._disabled) continue;
-      a.ambientLight.intensity = a.BASE_AMBIENT * val;
-      a.dirLight.intensity = a.BASE_DIRECTIONAL * val;
-    }
+  setAmbient(i, avatarId)     { _getAvatarForLighting(avatarId).ambientLight.intensity = i; },
+  setDirectional(i, avatarId) { _getAvatarForLighting(avatarId).dirLight.intensity = i; },
+  setExposure(val, avatarId) {
+    const a = _getAvatarForLighting(avatarId);
+    if (a._disabled) return;
+    a.ambientLight.intensity = a.BASE_AMBIENT * val;
+    a.dirLight.intensity = a.BASE_DIRECTIONAL * val;
   },
-  setColor(r, g, b) {
-    for (const a of Object.values(window.avatarInstances)) {
-      if (a._disabled) continue;
-      a.ambientLight.color.setRGB(r, g, b);
-      a.dirLight.color.setRGB(r, g, b);
-    }
+  setColor(r, g, b, avatarId) {
+    const a = _getAvatarForLighting(avatarId);
+    if (a._disabled) return;
+    a.ambientLight.color.setRGB(r, g, b);
+    a.dirLight.color.setRGB(r, g, b);
   },
-  setPosition(x, y, z) {
-    if (x != null) teacherAvatar.dirLight.position.x = x;
-    if (y != null) teacherAvatar.dirLight.position.y = y;
-    if (z != null) teacherAvatar.dirLight.position.z = z;
+  setPosition(x, y, z, avatarId) {
+    const a = _getAvatarForLighting(avatarId);
+    if (x != null) a.dirLight.position.x = x;
+    if (y != null) a.dirLight.position.y = y;
+    if (z != null) a.dirLight.position.z = z;
   },
 };
 

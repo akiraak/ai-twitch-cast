@@ -39,7 +39,9 @@ function _updateLayout(key, val) {
 function onLayoutSlider(slider) {
   const val = parseFloat(slider.value);
   if (isNaN(val)) return;
-  const numEl = document.getElementById('lv-' + slider.dataset.key.replace('.', '-'));
+  // 同じ .layout-row 内の数値入力を探す（data-key変動に対応）
+  const numEl = slider.closest('.layout-row')?.querySelector('.layout-num')
+    || document.getElementById('lv-' + slider.dataset.key.replace('.', '-'));
   if (numEl) numEl.value = val;
   _updateLayout(slider.dataset.key, val);
 }

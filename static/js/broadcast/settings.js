@@ -1,7 +1,7 @@
 // 設定適用（applySettings, _applyLighting）
 
 // === ライティング適用（applySettings・pending両方から呼ばれる） ===
-function _applyLighting(lighting) {
+function _applyLighting(lighting, avatarId) {
   const L = window.avatarLighting;
   if (!L) return;
   const b = lighting.brightness ?? 1.0;
@@ -9,25 +9,27 @@ function _applyLighting(lighting) {
   const temp = lighting.temperature ?? 0;  // -1(寒色)〜+1(暖色)
   const sat = lighting.saturation ?? 1.0;
   // 詳細ライト設定（直接指定がある場合はそちらを優先）
-  if (lighting.ambient != null) L.setAmbient(lighting.ambient);
-  if (lighting.directional != null) L.setDirectional(lighting.directional);
+  if (lighting.ambient != null) L.setAmbient(lighting.ambient, avatarId);
+  if (lighting.directional != null) L.setDirectional(lighting.directional, avatarId);
   if (lighting.ambient == null && lighting.directional == null) {
-    // 明るさ・コントラストからの自動計算（詳細設定がない場合のみ）
-    L.setExposure(b);
-    L.setAmbient(Math.max(0.1, Math.min(2.0, L.BASE_AMBIENT * b / c)));
-    L.setDirectional(Math.max(0.2, Math.min(3.0, L.BASE_DIRECTIONAL * b * c)));
+    L.setExposure(b, avatarId);
+    L.setAmbient(Math.max(0.1, Math.min(2.0, L.BASE_AMBIENT * b / c)), avatarId);
+    L.setDirectional(Math.max(0.2, Math.min(3.0, L.BASE_DIRECTIONAL * b * c)), avatarId);
   }
   // ライト方向
   if (lighting.lightX != null || lighting.lightY != null || lighting.lightZ != null) {
-    L.setPosition(lighting.lightX, lighting.lightY, lighting.lightZ);
+    L.setPosition(lighting.lightX, lighting.lightY, lighting.lightZ, avatarId);
   }
   // 色温度 → ライトの色（暖色=黄、寒色=青）
   const r = 1.0 + temp * 0.15;
   const g = 1.0;
   const bl = 1.0 - temp * 0.15;
-  L.setColor(r, g, bl);
-  // 彩度 → CSSフィルター
-  document.querySelectorAll('#avatar-area-1 canvas, #avatar-area-2 canvas').forEach(c => {
+  L.setColor(r, g, bl, avatarId);
+  // 彩度 → CSSフィルター（アバター個別）
+  const canvasSelector = avatarId === 'student' ? '#avatar-area-2 canvas'
+    : avatarId === 'teacher' ? '#avatar-area-1 canvas'
+    : '#avatar-area-1 canvas, #avatar-area-2 canvas';
+  document.querySelectorAll(canvasSelector).forEach(c => {
     c.style.filter = sat !== 1.0 ? `saturate(${sat})` : '';
   });
 }
@@ -53,10 +55,17 @@ function applySettings(s) {
     if (s.avatar2.width != null) avatarArea2.style.width = s.avatar2.width + '%';
     if (s.avatar2.height != null) avatarArea2.style.height = s.avatar2.height + '%';
   }
-  // === lighting ===
+  // === lighting（アバター個別 or 共通） ===
+  if (s.lighting_teacher) {
+    if (window.avatarLighting) _applyLighting(s.lighting_teacher, 'teacher');
+  }
+  if (s.lighting_student) {
+    if (window.avatarLighting) _applyLighting(s.lighting_student, 'student');
+  }
   if (s.lighting) {
     if (window.avatarLighting) {
-      _applyLighting(s.lighting);
+      _applyLighting(s.lighting, 'teacher');
+      _applyLighting(s.lighting, 'student');
     } else {
       window._pendingLighting = s.lighting;
     }

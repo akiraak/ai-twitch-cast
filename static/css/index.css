@@ -93,6 +93,11 @@
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
+  .char-selector { display: flex; gap: 8px; margin-bottom: 12px; }
+  .char-sel-btn { padding: 8px 20px; border: 2px solid #d0c0e8; border-radius: 8px; background: #fff; color: #9a88b5; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; }
+  .char-sel-btn:hover { border-color: #7b1fa2; color: #7b1fa2; }
+  .char-sel-btn.active { background: #7b1fa2; color: #fff; border-color: #7b1fa2; font-weight: 600; }
+
   .char-subtabs { display: flex; gap: 0; border-bottom: 2px solid #e0d0f0; margin-bottom: 16px; }
   .char-subtab { padding: 8px 20px; cursor: pointer; font-size: 0.85rem; color: #9a88b5; border-bottom: 2px solid transparent; margin-bottom: -2px; user-select: none; }
   .char-subtab:hover { color: #6a5590; }
