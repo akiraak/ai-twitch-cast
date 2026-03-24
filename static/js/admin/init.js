@@ -29,8 +29,7 @@ _loadCommonSchema().then(() => {
     // ライティングdata-keyをteacher用に初期化し値をロード
     if (typeof _loadCharLighting === 'function') _loadCharLighting();
   });
-  loadCharacter();
-  loadLightingPresets();
+  loadCharacter().then(() => loadLightingPresets());
   loadBgmTracks();
   refreshStatus();
 });

@@ -113,6 +113,12 @@
     <div class="char-selector" id="char-selector">
       <span style="color:#9a88b5; font-size:0.8rem;">読み込み中...</span>
     </div>
+    <div class="card" style="margin-bottom:8px;">
+      <div style="display:flex; gap:12px; align-items:center;">
+        <label class="field-label" style="margin:0; white-space:nowrap;">名前</label>
+        <input type="text" id="char-name" class="text-input" style="flex:1;">
+      </div>
+    </div>
     <!-- サブタブ -->
     <div class="char-subtabs">
       <div class="char-subtab active" onclick="switchCharSubtab('appearance', this)">ビジュアル</div>
@@ -132,11 +138,6 @@
       <div class="card">
         <h2><span class="layer-badge">第1層</span> ベース設定 <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">DB保存・WebUIで編集</span></h2>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-          <div>
-            <label class="field-label">名前</label>
-            <input type="text" id="char-name" class="text-input">
-          </div>
-          <div></div>
           <div style="grid-column: 1 / -1;">
             <label class="field-label">システムプロンプト</label>
             <textarea id="char-prompt" rows="16" class="text-input"></textarea>
@@ -150,6 +151,46 @@
             <label class="field-label">感情</label>
             <div id="char-emotions"></div>
             <button class="secondary" style="margin-top:6px; font-size:0.75rem;" onclick="addEmotion()">+ 感情追加</button>
+          </div>
+          <div>
+            <label class="field-label">声の種類（TTS Voice）</label>
+            <select id="char-tts-voice" class="text-input">
+              <option value="">デフォルト (Despina)</option>
+              <option value="Zephyr">Zephyr</option>
+              <option value="Puck">Puck</option>
+              <option value="Charon">Charon</option>
+              <option value="Kore">Kore</option>
+              <option value="Fenrir">Fenrir</option>
+              <option value="Leda">Leda</option>
+              <option value="Orus">Orus</option>
+              <option value="Aoede">Aoede</option>
+              <option value="Callirrhoe">Callirrhoe</option>
+              <option value="Autonoe">Autonoe</option>
+              <option value="Enceladus">Enceladus</option>
+              <option value="Iapetus">Iapetus</option>
+              <option value="Umbriel">Umbriel</option>
+              <option value="Algieba">Algieba</option>
+              <option value="Despina">Despina</option>
+              <option value="Erinome">Erinome</option>
+              <option value="Algenib">Algenib</option>
+              <option value="Rasalgethi">Rasalgethi</option>
+              <option value="Laomedeia">Laomedeia</option>
+              <option value="Achernar">Achernar</option>
+              <option value="Alnilam">Alnilam</option>
+              <option value="Schedar">Schedar</option>
+              <option value="Gacrux">Gacrux</option>
+              <option value="Pulcherrima">Pulcherrima</option>
+              <option value="Achird">Achird</option>
+              <option value="Zubenelgenubi">Zubenelgenubi</option>
+              <option value="Vindemiatrix">Vindemiatrix</option>
+              <option value="Sadachbia">Sadachbia</option>
+              <option value="Sadaltager">Sadaltager</option>
+              <option value="Sulafat">Sulafat</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">話し方スタイル（TTS Style）</label>
+            <textarea id="char-tts-style" rows="2" class="text-input" placeholder="例: 元気で明るい声で、好奇心いっぱいに読み上げてください"></textarea>
           </div>
           <div style="grid-column: 1 / -1;">
             <label class="field-label">感情BlendShape</label>
@@ -208,24 +249,6 @@
         </div>
         <div style="font-size:0.75rem; color:#9a88b5; margin-top:4px;">
           30字=短文1文 / 100字=2〜3文 / 200字=長文。長いほど句読点で分割して順次再生
-        </div>
-      </div>
-      <div class="card teacher-only">
-        <h2>テスト再生</h2>
-        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          <button onclick="ttsTest('greeting')" style="font-size:0.75rem;">挨拶</button>
-          <button onclick="ttsTest('topic')" style="font-size:0.75rem;">雑談</button>
-          <button onclick="ttsTest('react')" style="font-size:0.75rem;">リアクション</button>
-          <button onclick="ttsTest('question')" style="font-size:0.75rem;">質問</button>
-          <button onclick="ttsTest('story')" style="font-size:0.75rem;">エピソード</button>
-          <button onclick="ttsTest('explain')" style="font-size:0.75rem;">解説</button>
-        </div>
-        <div style="margin-top:10px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          <span style="font-size:0.8rem; color:#666;">感情:</span>
-          <button onclick="emotionTest('joy')" style="font-size:0.75rem;" title="嬉しい・楽しいとき">joy</button>
-          <button onclick="emotionTest('surprise')" style="font-size:0.75rem;" title="驚いたとき">surprise</button>
-          <button onclick="emotionTest('thinking')" style="font-size:0.75rem;" title="考えているとき">thinking</button>
-          <button onclick="emotionTest('neutral')" style="font-size:0.75rem;" title="通常時">neutral</button>
         </div>
       </div>
     </div>
@@ -302,13 +325,6 @@
         <input type="range" id="sync-delay" min="0" max="3000" step="50" value="500" class="vol-slider"
           oninput="onSyncDelay(this)">
         <span class="vol-pct" id="sync-delay-pct">500ms</span>
-      </div>
-      <div style="margin-top:12px; padding-top:10px; border-top:1px solid #e0d8f0;">
-        <div style="font-size:0.85rem; color:#6a5590; margin-bottom:6px;">連続発話テスト</div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button onclick="ttsTestMulti()" style="font-size:0.8rem; background:#7b1fa2;">連続発話</button>
-          <span id="tts-multi-status" style="font-size:0.8rem; color:#9a88b5;"></span>
-        </div>
       </div>
     </div>
     <div class="card">
@@ -434,6 +450,32 @@ users       1──N  comments      (user_id)</div>
           <button onclick="avatarTest('student','subtitle')" style="padding:6px 8px; background:#c2185b; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">Student: 字幕</button>
         </div>
         <div class="status" id="avatar-test-status" style="margin-top:6px; font-size:0.75rem;"></div>
+      </div>
+      <div class="card">
+        <h2>サウンドテスト</h2>
+        <div style="font-size:0.85rem; color:#6a5590; margin-bottom:6px;">単発テスト</div>
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <button onclick="ttsTest('greeting')" style="font-size:0.75rem;">挨拶</button>
+          <button onclick="ttsTest('topic')" style="font-size:0.75rem;">雑談</button>
+          <button onclick="ttsTest('react')" style="font-size:0.75rem;">リアクション</button>
+          <button onclick="ttsTest('question')" style="font-size:0.75rem;">質問</button>
+          <button onclick="ttsTest('story')" style="font-size:0.75rem;">エピソード</button>
+          <button onclick="ttsTest('explain')" style="font-size:0.75rem;">解説</button>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <span style="font-size:0.8rem; color:#666;">感情:</span>
+          <button onclick="emotionTest('joy')" style="font-size:0.75rem;" title="嬉しい・楽しいとき">joy</button>
+          <button onclick="emotionTest('surprise')" style="font-size:0.75rem;" title="驚いたとき">surprise</button>
+          <button onclick="emotionTest('thinking')" style="font-size:0.75rem;" title="考えているとき">thinking</button>
+          <button onclick="emotionTest('neutral')" style="font-size:0.75rem;" title="通常時">neutral</button>
+        </div>
+        <div style="margin-top:12px; padding-top:10px; border-top:1px solid #e0d8f0;">
+          <div style="font-size:0.85rem; color:#6a5590; margin-bottom:6px;">連続発話テスト</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button onclick="ttsTestMulti()" style="font-size:0.8rem; background:#7b1fa2;">連続発話</button>
+            <span id="tts-multi-status" style="font-size:0.8rem; color:#9a88b5;"></span>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h2>スクリーンショット</h2>

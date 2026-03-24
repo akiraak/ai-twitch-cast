@@ -167,6 +167,8 @@ async function _loadCharacterFromApi(url) {
     renderRules(data.rules || []);
     _charEmotions = data.emotions || {};
     _charBlendshapes = data.emotion_blendshapes || {};
+    document.getElementById('char-tts-voice').value = data.tts_voice || '';
+    document.getElementById('char-tts-style').value = data.tts_style || '';
     renderEmotions();
     renderBlendshapes();
     document.getElementById('char-status').textContent = '読み込みました';
@@ -347,6 +349,8 @@ async function saveCharacter() {
     rules: collectRules(),
     emotions: collectEmotions(),
     emotion_blendshapes: collectBlendshapes(),
+    tts_voice: document.getElementById('char-tts-voice').value || null,
+    tts_style: document.getElementById('char-tts-style').value || null,
   };
   // キャラクターIDがあればID指定APIを使う
   const url = _currentCharId ? '/api/character/' + _currentCharId : '/api/character';

@@ -28,6 +28,8 @@ class CharacterUpdate(BaseModel):
     rules: list[str]
     emotions: dict[str, str]
     emotion_blendshapes: dict[str, dict[str, float]]
+    tts_voice: str | None = None
+    tts_style: str | None = None
 
 
 class MemoryUpdate(BaseModel):

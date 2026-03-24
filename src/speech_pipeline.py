@@ -80,7 +80,7 @@ class SpeechPipeline:
         if self._on_overlay:
             await self._on_overlay({"type": "speaking_end"})
 
-    async def generate_tts(self, text, voice=None, tts_text=None):
+    async def generate_tts(self, text, voice=None, style=None, tts_text=None):
         """TTS音声を事前生成する（再生はしない）
 
         Returns:
@@ -89,7 +89,7 @@ class SpeechPipeline:
         wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
         t_start = time.monotonic()
         try:
-            await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice)
+            await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice, style=style)
             logger.info("[tts] 事前生成完了: %.0fms", (time.monotonic() - t_start) * 1000)
             return wav_path
         except Exception as e:
@@ -98,7 +98,7 @@ class SpeechPipeline:
             wav_path.parent.rmdir()
             return None
 
-    async def speak(self, text, voice=None, subtitle=None, chat_result=None,
+    async def speak(self, text, voice=None, style=None, subtitle=None, chat_result=None,
                     tts_text=None, post_to_chat=None, se=None, wav_path=None,
                     avatar_id="teacher"):
         """TTS生成・ブラウザソース経由で再生する（排他制御付き）
@@ -106,6 +106,7 @@ class SpeechPipeline:
         Args:
             text: 読み上げるテキスト
             voice: TTS音声名
+            style: TTSスタイル指示
             subtitle: 字幕データ {author, trigger_text, result}
             chat_result: チャット投稿データ
             tts_text: TTS用テキスト（言語タグ付き）
@@ -115,12 +116,12 @@ class SpeechPipeline:
             avatar_id: アバター識別子（"teacher" or "student"）
         """
         async with self._speak_lock:
-            await self._speak_impl(text, voice=voice, subtitle=subtitle,
+            await self._speak_impl(text, voice=voice, style=style, subtitle=subtitle,
                                    chat_result=chat_result, tts_text=tts_text,
                                    post_to_chat=post_to_chat, se=se,
                                    wav_path=wav_path, avatar_id=avatar_id)
 
-    async def _speak_impl(self, text, voice=None, subtitle=None, chat_result=None,
+    async def _speak_impl(self, text, voice=None, style=None, subtitle=None, chat_result=None,
                           tts_text=None, post_to_chat=None, se=None, wav_path=None,
                           avatar_id="teacher"):
         """speak()の実体（ロック取得済み前提）"""
@@ -138,7 +139,7 @@ class SpeechPipeline:
         if not pregenerated:
             try:
                 logger.info("[tts] 生成中...")
-                await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice)
+                await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice, style=style)
                 tts_ok = True
                 logger.info("[tts] 生成完了: %.0fms", (time.monotonic() - t_start) * 1000)
             except Exception as e:

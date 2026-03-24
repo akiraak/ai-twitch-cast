@@ -1,5 +1,15 @@
 # DONE
 
+## Step 2: TTS style パラメータ + WebUI設定
+
+- [x] speech_pipeline.py に style 引数を伝搬（generate_tts / speak / _speak_impl → synthesize）
+- [x] CharacterUpdate に tts_voice / tts_style を追加（Optional）
+- [x] WebUIキャラ設定の第1層に voice ドロップダウン（Gemini TTS 30音声）+ style テキストエリア追加
+- [x] character.js で voice/style の読み込み・保存に対応
+- [x] サウンドテスト（ttsTest/emotionTest/ttsTestMulti）をキャラタブ・サウンドタブからDebugタブに集約移動
+- [x] ライティングプリセットが初回表示されないバグ修正（loadCharacter完了後にloadLightingPresets呼び出し）
+- [x] キャラクター名前フィールドをセリフサブタブ外のトップに移動
+
 ## 生徒役キャラクター追加（Step 1: マルチアバター表示）
 
 - [x] avatar-renderer.js を AvatarInstance クラスにリファクタ（グローバル状態→クラス化、2体独立レンダリング）

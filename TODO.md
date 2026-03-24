@@ -5,7 +5,7 @@
 ### 教師モード改善
 - [ ] 生徒役のキャラを入れる → [plans/student-character/](plans/student-character/README.md)
   - [x] Step 1: WebSocketアバター制御 — avatar_idでリップシンク・感情を振り分け → [01-websocket-routing.md](plans/student-character/01-websocket-routing.md)
-  - [ ] Step 2: TTS styleパラメータ — 話者ごとに異なる声・スタイルで発話 → [02-tts-style.md](plans/student-character/02-tts-style.md)
+  - [x] Step 2: TTS styleパラメータ + WebUI設定 + サウンドテストDebug移動 → [02-tts-style.md](plans/student-character/02-tts-style.md)
   - [ ] Step 3: スクリプト生成の対話化 — dialoguesカラム + LLMで掛け合い生成 → [03-script-generation.md](plans/student-character/03-script-generation.md)
   - [ ] Step 4: レッスンランナーの対話再生 — dialoguesを話者別に順次再生 → [04-lesson-runner.md](plans/student-character/04-lesson-runner.md)
 - [ ] 全体の構成が悪いところがある。どうしたら改善できるか検討する
