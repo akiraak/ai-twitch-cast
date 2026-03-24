@@ -28,14 +28,16 @@ function _loadGoogleFont(name) {
 // === 共通スタイル適用（直接適用 + CSS変数並行設定） ===
 function applyCommonStyle(el, props) {
   if (!el || !props) return;
-  // 表示（CSS display:none を持つアイテムにも対応するため、block を明示指定）
-  if (props.visible != null) {
-    el.style.display = Number(props.visible) ? 'block' : 'none';
+  const fixedLayout = el.hasAttribute('data-fixed-layout');
+  // レイアウト系（data-fixed-layout要素はスキップ — CSSで位置固定）
+  if (!fixedLayout) {
+    if (props.visible != null) {
+      el.style.display = Number(props.visible) ? 'block' : 'none';
+    }
+    if (props.positionX != null) el.style.left = props.positionX + '%';
+    if (props.positionY != null) el.style.top = props.positionY + '%';
+    if (props.zIndex != null) el.style.zIndex = props.zIndex;
   }
-  // 配置
-  if (props.positionX != null) el.style.left = props.positionX + '%';
-  if (props.positionY != null) el.style.top = props.positionY + '%';
-  if (props.zIndex != null) el.style.zIndex = props.zIndex;
   // 背景色（hex色 → rgbaに変換してbackground直接適用）
   if (props.bgColor != null) {
     el.style.setProperty('--item-bg-color', props.bgColor);

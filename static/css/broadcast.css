@@ -540,7 +540,7 @@
     opacity: 1;
   }
   #lesson-progress-title {
-    font-size: max(0.8vw, var(--lp-title-font-size, 1.1vw));
+    font-size: 1.1vw;
     font-weight: 600;
     color: rgba(124, 77, 255, 0.8);
     margin-bottom: 0.4vw;
@@ -548,7 +548,7 @@
     border-bottom: 1px solid rgba(124, 77, 255, 0.2);
   }
   .lesson-progress-item {
-    font-size: max(0.8vw, var(--lp-item-font-size, 0.95vw));
+    font-size: 0.95vw;
     padding: 0.25vw 0.4vw;
     margin-bottom: 0.15vw;
     border-radius: 0.2vw;

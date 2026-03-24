@@ -176,6 +176,20 @@ function _scheduleSpSave(key, value) {
   // DOM要素に即座に適用（WebSocket応答を待たない）
   if (_selectedEditable) {
     applyCommonStyle(_selectedEditable, {[key]: value});
+    // lesson_progress: fontSize系は子要素にも直接適用
+    if (_spItemId === 'lesson_progress') {
+      if (key === 'fontSize' || key === 'titleFontSize') {
+        const title = document.getElementById('lesson-progress-title');
+        if (title) title.style.fontSize = value + 'vw';
+        if (key === 'titleFontSize') _selectedEditable.dataset.titleFontSize = value;
+      }
+      if (key === 'fontSize' || key === 'itemFontSize') {
+        _selectedEditable.querySelectorAll('.lesson-progress-item').forEach(el =>
+          el.style.fontSize = value + 'vw'
+        );
+        if (key === 'itemFontSize') _selectedEditable.dataset.itemFontSize = value;
+      }
+    }
   }
   clearTimeout(_spSaveTimer);
   _spSaveTimer = setTimeout(async () => {

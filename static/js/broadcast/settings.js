@@ -35,7 +35,7 @@ let _savedOverlaySettings = {};
 
 // === 設定適用（%/vw単位） ===
 function applySettings(s) {
-  _savedOverlaySettings = s;
+  _savedOverlaySettings = { ..._savedOverlaySettings, ...s };
   // === avatar ===
   const avatarArea = document.getElementById('avatar-area');
   if (s.avatar) {
@@ -83,35 +83,39 @@ function applySettings(s) {
     if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'vw';
     loadTodo();
   }
-  // === lesson_text（位置・サイズ・z-indexはCSS固定、デザインのみ適用） ===
+  // === lesson_text（data-fixed-layoutでレイアウトはCSS固定） ===
   if (s.lesson_text) {
     const ltp = document.getElementById('lesson-text-panel');
     if (ltp) {
-      // レイアウト系を全て除外してデザインのみ適用
-      const { positionX, positionY, width, height, zIndex, visible, fontSize, ...designOnly } = s.lesson_text;
-      applyCommonStyle(ltp, designOnly);
+      applyCommonStyle(ltp, s.lesson_text);
+      // 固有プロパティ
       if (s.lesson_text.maxHeight != null) ltp.style.maxHeight = s.lesson_text.maxHeight + '%';
-      // fontSizeは子要素（#lesson-text-content）にのみ適用
       const ltc = document.getElementById('lesson-text-content');
       if (ltc) {
         if (s.lesson_text.fontSize != null) ltc.style.fontSize = s.lesson_text.fontSize + 'vw';
         if (s.lesson_text.lineHeight != null) ltc.style.lineHeight = s.lesson_text.lineHeight;
-        if (s.lesson_text.textColor != null) ltc.style.color = s.lesson_text.textColor;
       }
     }
   }
-  // === lesson_progress（位置・サイズ・z-indexはCSS固定、デザインのみ適用） ===
+  // === lesson_progress（data-fixed-layoutでレイアウトはCSS固定） ===
   if (s.lesson_progress) {
     const lpp = document.getElementById('lesson-progress-panel');
     if (lpp) {
-      // レイアウト系+共通fontSizeを除外（文字サイズはCSS変数で制御）
-      const { positionX, positionY, width, height, zIndex, visible, fontSize, ...designOnly } = s.lesson_progress;
-      applyCommonStyle(lpp, designOnly);
-      if (s.lesson_progress.titleFontSize != null) {
-        lpp.style.setProperty('--lp-title-font-size', s.lesson_progress.titleFontSize + 'vw');
+      applyCommonStyle(lpp, s.lesson_progress);
+      // 文字サイズ: fontSize（共通）→ 全子要素に適用、titleFontSize/itemFontSize（固有）→ 個別に上書き
+      const fs = s.lesson_progress.fontSize;
+      const titleFs = s.lesson_progress.titleFontSize ?? (fs != null ? fs : null);
+      const itemFs = s.lesson_progress.itemFontSize ?? (fs != null ? fs : null);
+      if (titleFs != null) {
+        const title = document.getElementById('lesson-progress-title');
+        if (title) title.style.fontSize = titleFs + 'vw';
+        lpp.dataset.titleFontSize = titleFs;
       }
-      if (s.lesson_progress.itemFontSize != null) {
-        lpp.style.setProperty('--lp-item-font-size', s.lesson_progress.itemFontSize + 'vw');
+      if (itemFs != null) {
+        lpp.querySelectorAll('.lesson-progress-item').forEach(el =>
+          el.style.fontSize = itemFs + 'vw'
+        );
+        lpp.dataset.itemFontSize = itemFs;
       }
     }
   }

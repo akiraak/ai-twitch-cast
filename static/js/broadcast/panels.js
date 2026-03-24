@@ -80,11 +80,7 @@ function showLessonText(text) {
   if (!panel || !content) return;
   content.textContent = stripLangTags(text);
   panel.style.display = 'block';
-  // 保存済み設定を再適用（位置・サイズ・背景等）
-  if (_savedOverlaySettings.lesson_text) {
-    applySettings({ lesson_text: _savedOverlaySettings.lesson_text });
-  }
-  // フェードイン（次フレームでclassを追加してtransitionを発火）
+  // デザイン設定はinit時・WebSocket経由で既に適用済み（再適用不要）
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       panel.classList.add('visible');
@@ -118,6 +114,7 @@ function showLessonProgress(sections, currentIndex) {
   const panel = document.getElementById('lesson-progress-panel');
   const list = document.getElementById('lesson-progress-list');
   if (!panel || !list) return;
+  const itemFs = panel.dataset.itemFontSize;
   list.innerHTML = '';
   for (let i = 0; i < sections.length; i++) {
     const s = sections[i];
@@ -126,13 +123,10 @@ function showLessonProgress(sections, currentIndex) {
     const div = document.createElement('div');
     div.className = 'lesson-progress-item ' + cls;
     div.innerHTML = `<span class="lp-icon">${icon}</span> ${_escHtml(s.summary)}`;
+    if (itemFs) div.style.fontSize = itemFs + 'vw';
     list.appendChild(div);
   }
   panel.style.display = 'block';
-  // 保存済み設定を再適用（位置・サイズ・背景・文字サイズ等）
-  if (_savedOverlaySettings.lesson_progress) {
-    applySettings({ lesson_progress: _savedOverlaySettings.lesson_progress });
-  }
   requestAnimationFrame(() => {
     requestAnimationFrame(() => { panel.classList.add('visible'); });
   });

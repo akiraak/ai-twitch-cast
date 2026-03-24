@@ -1260,13 +1260,18 @@ public class MainForm : Form
     /// </summary>
     private void PlayTtsLocally(byte[] wavData, float volume)
     {
-        // 前回の再生を停止・破棄
+        // 前回の再生を停止（PlaybackStoppedで自動クリーンアップ）
         var oldWaveOut = _ttsWaveOut;
-        _ttsWaveOut = null;
-        _ttsChannel = null;
-        _ttsMeter = null;
-        oldWaveOut?.Stop();
-        oldWaveOut?.Dispose();
+        if (oldWaveOut != null)
+        {
+            _ttsWaveOut = null;
+            _ttsChannel = null;
+            _ttsMeter = null;
+            try { oldWaveOut.Stop(); } catch { }
+            // Stop()でPlaybackStoppedが発火し、そこでDispose()される
+            // Stop()しても発火しない場合に備えて明示Dispose
+            try { oldWaveOut.Dispose(); } catch { }
+        }
 
         try
         {
@@ -1276,24 +1281,26 @@ public class MainForm : Form
             var meter = new MeteringWaveProvider(channel);
             var waveOut = new WaveOutEvent();
             waveOut.Init(meter);
-            waveOut.Volume = 1.0f; // デバイスレベルは常にmax（音量制御はWaveChannel32で行う）
+            waveOut.Volume = 1.0f;
 
-            // フィールドに保持してGC回収を防止
             _ttsWaveOut = waveOut;
             _ttsChannel = channel;
             _ttsMeter = meter;
 
+            var disposed = false;
             waveOut.PlaybackStopped += (_, _) =>
             {
+                if (disposed) return;
+                disposed = true;
                 if (_ttsWaveOut == waveOut)
                 {
                     _ttsWaveOut = null;
                     _ttsChannel = null;
                     _ttsMeter = null;
                 }
-                waveOut.Dispose();
-                reader.Dispose();
-                ms.Dispose();
+                try { waveOut.Dispose(); } catch { }
+                try { reader.Dispose(); } catch { }
+                try { ms.Dispose(); } catch { }
             };
 
             waveOut.Play();

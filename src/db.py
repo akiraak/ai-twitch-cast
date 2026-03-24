@@ -1274,6 +1274,8 @@ _ITEM_COL_TO_KEY = {v: k for k, v in _ITEM_COMMON_COLS.items()}
 _ITEM_SPECIFIC_KEYS = {
     "subtitle": {"bottom", "maxWidth", "fadeDuration"},
     "todo": {"titleFontSize"},
+    "lesson_text": {"maxHeight", "lineHeight"},
+    "lesson_progress": {"titleFontSize", "itemFontSize"},
 }
 
 _ITEM_LABELS = {

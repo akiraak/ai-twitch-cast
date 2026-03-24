@@ -87,12 +87,13 @@ async function _loadCommonSchema() {
   } catch (e) { _commonSchema = null; }
 }
 
-function _commonPropsHTML(s) {
+function _commonPropsHTML(s, skipGroups) {
   if (!_commonSchema || !_commonSchema.groups) return '';
+  const skip = skipGroups || [];
   const row = (label, body) => `<div class="layout-row common-row"><span class="layout-label">${label}</span>${body}</div>`;
   const group = (title) => `<div style="font-size:0.7rem; color:#7b1fa2; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(124,77,255,0.06); border-radius:3px; border-left:2px solid #7b1fa2;">${title}</div>`;
 
-  return _commonSchema.groups.map(g => {
+  return _commonSchema.groups.filter(g => !skip.includes(g.title)).map(g => {
     const header = group(g.title);
     const rows = g.fields.map(f => row(f.label, _renderFieldControl(s, f))).join('');
     return header + rows;
@@ -126,7 +127,9 @@ function _renderFieldControl(section, field) {
 function _injectCommonProps(el, section) {
   const body = el.querySelector('.panel-body');
   if (!body) return;
-  body.insertAdjacentHTML('afterbegin', _commonPropsHTML(section));
+  const skipAttr = el.dataset.skipGroups;
+  const skipGroups = skipAttr ? skipAttr.split(',').map(s => s.trim()) : [];
+  body.insertAdjacentHTML('afterbegin', _commonPropsHTML(section, skipGroups));
   // 固有パラメータがあればグループヘッダーを追加
   const specificRows = body.querySelectorAll('.layout-row:not(.common-row)');
   if (specificRows.length > 0) {
