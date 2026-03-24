@@ -236,7 +236,6 @@ async function buildLessonItem(lessonId) {
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
       <button onclick="generateScript(${lessonId})" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? '再生成' : esc(scriptLabel)}</button>
       <span class="script-status"></span>
-      ${hasPlan ? '<span style="font-size:0.7rem; color:#1565c0;">プランに基づいて生成</span>' : ''}
     </div>`;
 
   // TTSキャッシュ情報取得
@@ -480,7 +479,7 @@ function _streamSSE(url, statusEl, onComplete) {
                 resolve(data);
               } else if (data.step !== undefined && statusEl) {
                 // 進捗更新
-                _showSpinner(statusEl, data.message + ' (' + data.step + '/' + data.total + ')');
+                _showSpinner(statusEl, data.message);
               }
             } catch(e) {}
           }
@@ -543,6 +542,9 @@ async function generateScript(lessonId) {
     }
   }
   if (btn) btn.disabled = true;
+  // 既存セクション一覧を即座にクリア
+  const secContainer = btn ? btn.closest('.lesson-step-body').querySelector('div:last-child') : null;
+  if (secContainer) renderSectionsInto(secContainer, [], lessonId, {});
   if (statusEl) _showSpinner(statusEl, 'スクリプト生成開始...');
   const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-script', statusEl);
   if (btn) btn.disabled = false;

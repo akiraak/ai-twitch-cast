@@ -378,13 +378,28 @@ def generate_lesson_script(lesson_name: str, extracted_text: str, source_images:
 - questionセクションには問いかけ(question)と回答(answer)を含める
 - 導入と締めくくりを必ず含める
 
+## contentとtts_textの違い（重要・厳守）
+- content: 字幕に表示するテキスト。タグやマークアップは絶対に含めない
+- tts_text: TTS音声合成に送信するテキスト。contentと同じ内容だが、**日本語以外の言語部分に [lang:xx]...[/lang] タグを付ける**
+  - xx = en, es, ko, fr, zh 等の言語コード
+  - 例: content="Helloは挨拶だよ" → tts_text="[lang:en]Hello[/lang]は挨拶だよ"
+  - 例: content="How are you?って聞かれたら..." → tts_text="[lang:en]How are you?[/lang]って聞かれたら..."
+  - 例: content="appleはりんごのことだね" → tts_text="[lang:en]apple[/lang]はりんごのことだね"
+  - 日本語のみの場合はタグ不要（contentと同じ内容にする）
+  - **英語の単語1つでも必ずタグを付ける**。タグがないと日本語アクセントで読まれてしまう
+
+## 英語発音のルール
+- 英語の単語・フレーズ・例文はネイティブ英語の発音で読み上げさせる
+- tts_textで英語部分を必ず [lang:en]...[/lang] で囲むことが最重要
+- 英語の例文を紹介するときは、contentでも自然な導入をする（「画面に出しますね」等）
+
 ## 出力形式（JSON配列）
 ```json
 [
   {
     "section_type": "introduction",
-    "content": "発話テキスト（ちょビが話す内容）",
-    "tts_text": "TTS用テキスト（発音指示・言語タグ付き）",
+    "content": "発話テキスト（ちょビが話す内容。タグなし）",
+    "tts_text": "TTS用テキスト（英語部分に[lang:en]タグ付き）",
     "display_text": "画面に表示するテキスト（要点・例文など自由形式）",
     "emotion": "excited",
     "question": "",
@@ -535,13 +550,28 @@ def generate_lesson_script_from_plan(
 - 教材テキストの内容に忠実に
 - wait_secondsはプランの値をそのまま使う（セクション終了後の間）
 
+## contentとtts_textの違い（重要・厳守）
+- content: 字幕に表示するテキスト。タグやマークアップは絶対に含めない
+- tts_text: TTS音声合成に送信するテキスト。contentと同じ内容だが、**日本語以外の言語部分に [lang:xx]...[/lang] タグを付ける**
+  - xx = en, es, ko, fr, zh 等の言語コード
+  - 例: content="Helloは挨拶だよ" → tts_text="[lang:en]Hello[/lang]は挨拶だよ"
+  - 例: content="How are you?って聞かれたら..." → tts_text="[lang:en]How are you?[/lang]って聞かれたら..."
+  - 例: content="appleはりんごのことだね" → tts_text="[lang:en]apple[/lang]はりんごのことだね"
+  - 日本語のみの場合はタグ不要（contentと同じ内容にする）
+  - **英語の単語1つでも必ずタグを付ける**。タグがないと日本語アクセントで読まれてしまう
+
+## 英語発音のルール
+- 英語の単語・フレーズ・例文はネイティブ英語の発音で読み上げさせる
+- tts_textで英語部分を必ず [lang:en]...[/lang] で囲むことが最重要
+- 英語の例文を紹介するときは、contentでも自然な導入をする（「画面に出しますね」等）
+
 ## 出力形式（JSON配列）
 ```json
 [
   {{
     "section_type": "introduction",
-    "content": "発話テキスト（ちょビが話す内容）",
-    "tts_text": "TTS用テキスト（発音指示・言語タグ付き）",
+    "content": "発話テキスト（ちょビが話す内容。タグなし）",
+    "tts_text": "TTS用テキスト（英語部分に[lang:en]タグ付き）",
     "display_text": "画面に表示するテキスト（要点・例文など自由形式）",
     "emotion": "excited",
     "question": "",

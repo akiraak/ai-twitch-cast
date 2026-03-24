@@ -469,6 +469,10 @@ async def generate_script(lesson_id: int):
             pass
 
     async def event_stream():
+        # 既存のスクリプトとTTSキャッシュを先に削除
+        clear_tts_cache(lesson_id)
+        db.delete_lesson_sections(lesson_id)
+
         progress_queue = asyncio.Queue()
 
         def on_progress(step, total, message):
@@ -504,9 +508,6 @@ async def generate_script(lesson_id: int):
 
         try:
             sections = task.result()
-            # TTSキャッシュ・既存セクションを削除して再生成
-            clear_tts_cache(lesson_id)
-            db.delete_lesson_sections(lesson_id)
             saved = []
             for i, s in enumerate(sections):
                 sec = db.add_lesson_section(

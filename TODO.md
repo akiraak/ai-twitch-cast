@@ -9,7 +9,7 @@
   - [ ] 授業中のチャット割り込み改善 → [04-chat-interruption.md](plans/teacher-mode-v2/04-chat-interruption.md)
   - [ ] 全体の構成が悪いところがある。どうしたら改善できるか検討する
   - [ ] 授業パネルの内容が大きすぎて表示がおかしいときがある。内容を適切な量に。多ければ文字を小さくなどちゃんと見えるような対策をする
-  - [ ] 英語授業なのに英語の発音が悪すぎる。改善したい
+  - [ ] 英語授業の発音改善 Step 3: synthesize()にstyle引数追加 → [06-english-pronunciation.md](plans/teacher-mode-v2/06-english-pronunciation.md)
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証
