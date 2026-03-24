@@ -57,10 +57,20 @@ function applySettings(s) {
   }
   // === lighting（アバター個別 or 共通） ===
   if (s.lighting_teacher) {
-    if (window.avatarLighting) _applyLighting(s.lighting_teacher, 'teacher');
+    if (window.avatarLighting) {
+      _applyLighting(s.lighting_teacher, 'teacher');
+    } else {
+      if (!window._pendingLightingPerChar) window._pendingLightingPerChar = {};
+      window._pendingLightingPerChar.teacher = s.lighting_teacher;
+    }
   }
   if (s.lighting_student) {
-    if (window.avatarLighting) _applyLighting(s.lighting_student, 'student');
+    if (window.avatarLighting) {
+      _applyLighting(s.lighting_student, 'student');
+    } else {
+      if (!window._pendingLightingPerChar) window._pendingLightingPerChar = {};
+      window._pendingLightingPerChar.student = s.lighting_student;
+    }
   }
   if (s.lighting) {
     if (window.avatarLighting) {

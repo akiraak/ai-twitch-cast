@@ -550,6 +550,15 @@ if (window._pendingLighting) {
     _applyLighting(pending);
   }
 }
+// キャラ別pendingライティング適用
+if (window._pendingLightingPerChar) {
+  const pending = window._pendingLightingPerChar;
+  delete window._pendingLightingPerChar;
+  if (typeof _applyLighting === 'function') {
+    if (pending.teacher) _applyLighting(pending.teacher, 'teacher');
+    if (pending.student) _applyLighting(pending.student, 'student');
+  }
+}
 
 // === 統合アニメーションループ ===
 function animateAll() {
