@@ -165,12 +165,15 @@ function setLessonMode(active) {
   if (_lessonMode === active) return;
   _lessonMode = active;
   const todo = document.getElementById('todo-panel');
+  const customTexts = document.getElementById('custom-text-container');
   if (active) {
-    // TODOパネルのみ非表示（字幕は通常通り表示）
+    // 授業に関係ないパネルを非表示（字幕は通常通り表示）
     if (todo) todo.style.display = 'none';
+    if (customTexts) customTexts.style.display = 'none';
   } else {
     // パネル復帰 + 授業テキスト・進捗非表示
     if (todo) todo.style.display = '';
+    if (customTexts) customTexts.style.display = '';
     hideLessonText();
     hideLessonProgress();
   }
