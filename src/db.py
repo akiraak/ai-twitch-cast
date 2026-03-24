@@ -285,6 +285,7 @@ def _create_tables(conn):
             lesson_id INTEGER NOT NULL REFERENCES lessons(id),
             order_index INTEGER NOT NULL DEFAULT 0,
             section_type TEXT NOT NULL DEFAULT 'explanation',
+            title TEXT NOT NULL DEFAULT '',
             content TEXT NOT NULL DEFAULT '',
             tts_text TEXT NOT NULL DEFAULT '',
             display_text TEXT NOT NULL DEFAULT '',
@@ -314,6 +315,12 @@ def _create_tables(conn):
     conn.execute("DELETE FROM broadcast_items WHERE id = 'topic'")
     conn.execute("DELETE FROM settings WHERE key LIKE 'overlay.topic.%'")
     conn.commit()
+    # Migration: add title to lesson_sections（監督プランのタイトル保存用）
+    try:
+        conn.execute("ALTER TABLE lesson_sections ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 
 def _migrate_comments_split(conn):
@@ -921,15 +928,16 @@ def delete_lesson_source(source_id):
 # --- lesson_sections ---
 
 def add_lesson_section(lesson_id, order_index, section_type, content, tts_text="",
-                       display_text="", emotion="neutral", question="", answer="", wait_seconds=8):
+                       display_text="", emotion="neutral", question="", answer="",
+                       wait_seconds=8, title=""):
     """授業セクションを追加する"""
     conn = get_connection()
     cur = conn.execute(
         "INSERT INTO lesson_sections "
-        "(lesson_id, order_index, section_type, content, tts_text, display_text, "
+        "(lesson_id, order_index, section_type, title, content, tts_text, display_text, "
         "emotion, question, answer, wait_seconds, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (lesson_id, order_index, section_type, content, tts_text,
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (lesson_id, order_index, section_type, title, content, tts_text,
          display_text, emotion, question, answer, wait_seconds, _now()),
     )
     conn.commit()
@@ -949,7 +957,7 @@ def get_lesson_sections(lesson_id):
 def update_lesson_section(section_id, **fields):
     """授業セクションを更新する"""
     conn = get_connection()
-    allowed = {"order_index", "section_type", "content", "tts_text",
+    allowed = {"order_index", "section_type", "title", "content", "tts_text",
                "display_text", "emotion", "question", "answer", "wait_seconds"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:

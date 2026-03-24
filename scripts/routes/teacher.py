@@ -512,6 +512,7 @@ async def generate_script(lesson_id: int):
                 sec = db.add_lesson_section(
                     lesson_id, order_index=i,
                     section_type=s["section_type"],
+                    title=s.get("title", ""),
                     content=s["content"],
                     tts_text=s["tts_text"],
                     display_text=s["display_text"],
