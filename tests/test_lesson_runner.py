@@ -156,8 +156,8 @@ class TestTtsCache:
         test_db.add_lesson_section(lid, 0, "intro", "Hello")
         test_db.add_lesson_section(lid, 1, "explain", "World")
 
-        # セクション0のキャッシュを作成
-        cache_dir = tmp_path / str(lid)
+        # セクション0のキャッシュを作成（lang="ja" サブディレクトリ）
+        cache_dir = tmp_path / str(lid) / "ja"
         cache_dir.mkdir(parents=True)
         (cache_dir / "section_00_part_00.wav").write_bytes(b"wavdata")
 

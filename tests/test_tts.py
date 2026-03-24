@@ -4,7 +4,11 @@ from src.tts import _convert_lang_tags, _get_tts_style, DEFAULT_STYLE
 
 
 class TestConvertLangTags:
-    """言語タグ変換のテスト"""
+    """言語タグ変換のテスト（日本語モード）"""
+
+    def setup_method(self):
+        from src.prompt_builder import set_stream_language
+        set_stream_language("ja", "en", "low")
 
     def test_explicit_english_tag(self):
         result = _convert_lang_tags("今日は[lang:en]YouTube[/lang]の動画")
@@ -41,6 +45,44 @@ class TestConvertLangTags:
     def test_fallback_multi_word_english(self):
         result = _convert_lang_tags("Claude Codeすごい")
         assert "[English]Claude Code[Japanese]" in result
+
+
+class TestConvertLangTagsEnglishMode:
+    """英語モードでの言語タグ変換テスト"""
+
+    def setup_method(self):
+        from src.prompt_builder import set_stream_language
+        set_stream_language("en", "none", "low")
+
+    def teardown_method(self):
+        from src.prompt_builder import set_stream_language
+        set_stream_language("ja", "en", "low")
+
+    def test_explicit_japanese_tag(self):
+        """英語モードで[lang:ja]タグが正しく変換されること"""
+        result = _convert_lang_tags("Let's learn [lang:ja]こんにちは[/lang] today")
+        assert "[Japanese]こんにちは[English]" in result
+
+    def test_explicit_spanish_tag(self):
+        """英語モードで他言語タグも正しく変換されること"""
+        result = _convert_lang_tags("How to say [lang:es]¡Hola![/lang]")
+        assert "[Spanish]¡Hola![English]" in result
+
+    def test_no_tags_cjk_fallback(self):
+        """英語モードでタグなし時にCJK文字が検出されること"""
+        result = _convert_lang_tags("The word こんにちは means hello")
+        assert "[Japanese]こんにちは[English]" in result
+
+    def test_no_tags_pure_english_unchanged(self):
+        """英語モードで純粋な英語テキストが変更されないこと"""
+        result = _convert_lang_tags("Hello everyone, welcome to the stream")
+        assert result == "Hello everyone, welcome to the stream"
+
+    def test_multiple_cjk_segments(self):
+        """複数のCJKセグメントが正しくタグ付けされること"""
+        result = _convert_lang_tags("Learn 日本語 and 中国語 today")
+        assert "[Japanese]日本語[English]" in result
+        assert "[Japanese]中国語[English]" in result
 
 
 class TestGetTtsStyle:

@@ -19,8 +19,23 @@ from src.lesson_generator import (
     generate_lesson_script_from_plan,
 )
 from src.lesson_runner import LESSON_AUDIO_DIR, _cache_path, clear_tts_cache, get_tts_cache_info
+from src.prompt_builder import get_stream_language, set_stream_language
 from src.speech_pipeline import SpeechPipeline
 from src.tts import synthesize
+
+
+def _with_lang(lang: str):
+    """一時的に配信言語を切り替えるコンテキストマネージャ的ヘルパー。
+    戻り値は元の言語設定を復元する関数。"""
+    prev = get_stream_language()
+    if lang == "en":
+        set_stream_language("en", "none", "low")
+    else:
+        set_stream_language(prev["primary"], prev["sub"], prev["mix"])
+
+    def restore():
+        set_stream_language(prev["primary"], prev["sub"], prev["mix"])
+    return restore
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -145,13 +160,22 @@ async def set_pace_scale(body: PaceScaleUpdate):
 
 @router.get("/api/lessons/{lesson_id}")
 async def get_lesson(lesson_id: int):
-    """コンテンツ詳細（ソース＋セクション付き）"""
+    """コンテンツ詳細（ソース＋セクション＋言語別プラン付き）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
     sources = db.get_lesson_sources(lesson_id)
     sections = db.get_lesson_sections(lesson_id)
-    return {"ok": True, "lesson": lesson, "sources": sources, "sections": sections}
+    # 言語別プラン
+    plans_list = db.get_lesson_plans(lesson_id)
+    plans = {}
+    for p in plans_list:
+        plans[p["lang"]] = {
+            "knowledge": p["knowledge"],
+            "entertainment": p["entertainment"],
+            "plan_json": p["plan_json"],
+        }
+    return {"ok": True, "lesson": lesson, "sources": sources, "sections": sections, "plans": plans}
 
 
 @router.put("/api/lessons/{lesson_id}")
@@ -342,7 +366,7 @@ async def delete_lesson_source(lesson_id: int, source_id: int):
 
 
 @router.post("/api/lessons/{lesson_id}/generate-plan")
-async def generate_plan(lesson_id: int):
+async def generate_plan(lesson_id: int, lang: str = "ja"):
     """三者視点（知識・エンタメ・校長）で授業プランを生成する（SSE進捗付き）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
@@ -366,12 +390,17 @@ async def generate_plan(lesson_id: int):
         def on_progress(step, total, message):
             progress_queue.put_nowait({"step": step, "total": total, "message": message})
 
+        restore_lang = _with_lang(lang)
+
         async def run_generation():
-            return await asyncio.to_thread(
-                generate_lesson_plan,
-                lesson["name"], extracted_text, image_paths or None,
-                on_progress=on_progress,
-            )
+            try:
+                return await asyncio.to_thread(
+                    generate_lesson_plan,
+                    lesson["name"], extracted_text, image_paths or None,
+                    on_progress=on_progress,
+                )
+            finally:
+                restore_lang()
 
         task = asyncio.create_task(run_generation())
 
@@ -389,12 +418,20 @@ async def generate_plan(lesson_id: int):
 
         try:
             plan = task.result()
-            # DB保存
+            # DB保存（言語別テーブル）
+            plan_json_str = _json.dumps(plan["plan_sections"], ensure_ascii=False)
+            db.upsert_lesson_plan(
+                lesson_id, lang,
+                knowledge=plan["knowledge"],
+                entertainment=plan["entertainment"],
+                plan_json=plan_json_str,
+            )
+            # 後方互換: lessons テーブルにも保存
             db.update_lesson(
                 lesson_id,
                 plan_knowledge=plan["knowledge"],
                 plan_entertainment=plan["entertainment"],
-                plan_json=_json.dumps(plan["plan_sections"], ensure_ascii=False),
+                plan_json=plan_json_str,
             )
             logger.info("プラン生成完了: lesson=%d, sections=%d", lesson_id, len(plan["plan_sections"]))
             result = {
@@ -416,6 +453,7 @@ class PlanUpdate(BaseModel):
     plan_knowledge: str | None = None
     plan_entertainment: str | None = None
     plan_json: str | None = None
+    lang: str = "ja"
 
 
 @router.put("/api/lessons/{lesson_id}/plan")
@@ -425,15 +463,16 @@ async def update_plan(lesson_id: int, body: PlanUpdate):
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
 
-    updates = {}
-    if body.plan_knowledge is not None:
-        updates["plan_knowledge"] = body.plan_knowledge
-    if body.plan_entertainment is not None:
-        updates["plan_entertainment"] = body.plan_entertainment
-    if body.plan_json is not None:
-        updates["plan_json"] = body.plan_json
-    if updates:
-        db.update_lesson(lesson_id, **updates)
+    knowledge = body.plan_knowledge or ""
+    entertainment = body.plan_entertainment or ""
+    plan_json = body.plan_json or ""
+
+    if knowledge or entertainment or plan_json:
+        db.upsert_lesson_plan(lesson_id, body.lang,
+                              knowledge=knowledge, entertainment=entertainment, plan_json=plan_json)
+        # 後方互換
+        db.update_lesson(lesson_id, plan_knowledge=knowledge,
+                         plan_entertainment=entertainment, plan_json=plan_json)
     return {"ok": True}
 
 
@@ -441,7 +480,7 @@ async def update_plan(lesson_id: int, body: PlanUpdate):
 
 
 @router.post("/api/lessons/{lesson_id}/generate-script")
-async def generate_script(lesson_id: int):
+async def generate_script(lesson_id: int, lang: str = "ja"):
     """授業スクリプトを生成する（既存セクションは上書き、SSE進捗付き）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
@@ -459,38 +498,51 @@ async def generate_script(lesson_id: int):
         if s["source_type"] == "image" and s["file_path"]
     ]
 
-    # プランがあればプランベースで生成
-    plan_json_str = lesson.get("plan_json", "")
+    # 指定言語のプランがあればプランベースで生成
     plan_sections = None
-    if plan_json_str:
+    lang_plan = db.get_lesson_plan(lesson_id, lang)
+    if lang_plan and lang_plan.get("plan_json"):
         try:
-            plan_sections = _json.loads(plan_json_str)
+            plan_sections = _json.loads(lang_plan["plan_json"])
         except Exception:
             pass
+    # フォールバック: lessons テーブルのプラン
+    if not plan_sections:
+        plan_json_str = lesson.get("plan_json", "")
+        if plan_json_str:
+            try:
+                plan_sections = _json.loads(plan_json_str)
+            except Exception:
+                pass
 
     async def event_stream():
-        # 既存のスクリプトとTTSキャッシュを先に削除
-        clear_tts_cache(lesson_id)
-        db.delete_lesson_sections(lesson_id)
+        # 指定言語のスクリプトとTTSキャッシュを削除
+        clear_tts_cache(lesson_id, lang=lang)
+        db.delete_lesson_sections(lesson_id, lang=lang)
 
         progress_queue = asyncio.Queue()
 
         def on_progress(step, total, message):
             progress_queue.put_nowait({"step": step, "total": total, "message": message})
 
+        restore_lang = _with_lang(lang)
+
         async def run_generation():
-            if plan_sections:
-                return await asyncio.to_thread(
-                    generate_lesson_script_from_plan,
-                    lesson["name"], extracted_text, plan_sections, image_paths or None,
-                    on_progress=on_progress,
-                )
-            else:
-                return await asyncio.to_thread(
-                    generate_lesson_script,
-                    lesson["name"], extracted_text, image_paths or None,
-                    on_progress=on_progress,
-                )
+            try:
+                if plan_sections:
+                    return await asyncio.to_thread(
+                        generate_lesson_script_from_plan,
+                        lesson["name"], extracted_text, plan_sections, image_paths or None,
+                        on_progress=on_progress,
+                    )
+                else:
+                    return await asyncio.to_thread(
+                        generate_lesson_script,
+                        lesson["name"], extracted_text, image_paths or None,
+                        on_progress=on_progress,
+                    )
+            finally:
+                restore_lang()
 
         task = asyncio.create_task(run_generation())
 
@@ -521,6 +573,7 @@ async def generate_script(lesson_id: int):
                     question=s.get("question", ""),
                     answer=s.get("answer", ""),
                     wait_seconds=s.get("wait_seconds", 0),
+                    lang=lang,
                 )
                 saved.append(sec)
             logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))
@@ -546,7 +599,7 @@ async def generate_script(lesson_id: int):
                     progress_msg = f"TTS生成中: セクション{oi + 1} パート{pi + 1} ({generated}/{total_parts})"
                     yield f"data: {_json.dumps({'step': generated, 'total': total_parts, 'message': progress_msg, 'phase': 'tts'}, ensure_ascii=False)}\n\n"
 
-                    cached = _cache_path(lesson_id, oi, pi)
+                    cached = _cache_path(lesson_id, oi, pi, lang=lang)
                     cached.parent.mkdir(parents=True, exist_ok=True)
                     try:
                         await asyncio.to_thread(synthesize, part_tts, str(cached))
@@ -612,11 +665,13 @@ async def delete_section(lesson_id: int, section_id: int):
 
 
 @router.post("/api/lessons/{lesson_id}/start")
-async def start_lesson(lesson_id: int):
+async def start_lesson(lesson_id: int, lang: str = "ja"):
     """授業を開始する"""
     runner = _get_lesson_runner()
+    # 授業再生中は配信言語も一時的に合わせる
+    _with_lang(lang)
     try:
-        await runner.start(lesson_id)
+        await runner.start(lesson_id, lang=lang)
     except ValueError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "status": runner.get_status()}
@@ -626,32 +681,32 @@ async def start_lesson(lesson_id: int):
 
 
 @router.get("/api/lessons/{lesson_id}/tts-cache")
-async def get_tts_cache(lesson_id: int):
+async def get_tts_cache(lesson_id: int, lang: str = "ja"):
     """TTSキャッシュ状況を取得する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    sections = get_tts_cache_info(lesson_id)
+    sections = get_tts_cache_info(lesson_id, lang=lang)
     return {"ok": True, "sections": sections}
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache")
-async def delete_tts_cache(lesson_id: int):
+async def delete_tts_cache(lesson_id: int, lang: str | None = None):
     """全TTSキャッシュを削除する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    clear_tts_cache(lesson_id)
-    logger.info("TTSキャッシュ全削除: lesson=%d", lesson_id)
+    clear_tts_cache(lesson_id, lang=lang)
+    logger.info("TTSキャッシュ全削除: lesson=%d, lang=%s", lesson_id, lang or "all")
     return {"ok": True}
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache/{order_index}")
-async def delete_tts_cache_section(lesson_id: int, order_index: int):
+async def delete_tts_cache_section(lesson_id: int, order_index: int, lang: str = "ja"):
     """特定セクションのTTSキャッシュを削除する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    clear_tts_cache(lesson_id, order_index=order_index)
-    logger.info("TTSキャッシュ削除: lesson=%d, section=%d", lesson_id, order_index)
+    clear_tts_cache(lesson_id, order_index=order_index, lang=lang)
+    logger.info("TTSキャッシュ削除: lesson=%d, section=%d, lang=%s", lesson_id, order_index, lang)
     return {"ok": True}

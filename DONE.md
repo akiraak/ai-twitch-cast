@@ -2,6 +2,9 @@
 
 ## 教師モード改善 v2
 
+- [x] 英語のみモード対応（`plans/english-only-mode.md`）— prompt_builder/tts/ai_responder/lesson_generator の全プロンプトを primary≠ja で英語切替、TTSベース言語動的化
+- [x] 授業の言語切替対応（`plans/teacher-mode-v2/05-lesson-language-switch.md`）— lesson_plans テーブル新設、lesson_sections に lang カラム追加、TTS キャッシュ言語別保存、WebUI に日英タブ追加、授業開始時に言語選択
+
 - [x] 授業テキストパネルを次のセクションまで表示し続ける（発話完了直後のhideを削除、display_textがないセクションでのみ非表示）
 - [x] 授業中に授業関連以外のパネル（カスタムテキスト等）を非表示にする
 - [x] 授業テキストパネルを上に移動（top 50%→35%、max-height 70%→60%）字幕との重なり回避

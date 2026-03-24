@@ -21,33 +21,35 @@ class LessonState(str, Enum):
     PAUSED = "paused"
 
 
-def _cache_path(lesson_id: int, order_index: int, part_index: int) -> Path:
+def _cache_path(lesson_id: int, order_index: int, part_index: int, lang: str = "ja") -> Path:
     """TTSキャッシュファイルのパスを返す"""
-    return LESSON_AUDIO_DIR / str(lesson_id) / f"section_{order_index:02d}_part_{part_index:02d}.wav"
+    return LESSON_AUDIO_DIR / str(lesson_id) / lang / f"section_{order_index:02d}_part_{part_index:02d}.wav"
 
 
-def clear_tts_cache(lesson_id: int, order_index: int | None = None):
+def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | None = None):
     """TTSキャッシュを削除する
 
     Args:
         lesson_id: レッスンID
         order_index: 指定時はそのセクションのみ、Noneなら全セクション
+        lang: 指定時はその言語のみ、Noneなら全言語
     """
-    lesson_dir = LESSON_AUDIO_DIR / str(lesson_id)
+    if lang:
+        lesson_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
+    else:
+        lesson_dir = LESSON_AUDIO_DIR / str(lesson_id)
     if not lesson_dir.exists():
         return
     if order_index is not None:
-        # 特定セクションのキャッシュ削除
         for f in lesson_dir.glob(f"section_{order_index:02d}_part_*.wav"):
             f.unlink(missing_ok=True)
     else:
-        # 全キャッシュ削除
         shutil.rmtree(lesson_dir, ignore_errors=True)
 
 
-def get_tts_cache_info(lesson_id: int) -> list[dict]:
+def get_tts_cache_info(lesson_id: int, lang: str = "ja") -> list[dict]:
     """TTSキャッシュの状況を返す"""
-    lesson_dir = LESSON_AUDIO_DIR / str(lesson_id)
+    lesson_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
     sections_map: dict[int, list[dict]] = {}
     if lesson_dir.exists():
         for f in sorted(lesson_dir.glob("section_*_part_*.wav")):
@@ -60,7 +62,7 @@ def get_tts_cache_info(lesson_id: int) -> list[dict]:
                 "size": f.stat().st_size,
             })
     # DB上のセクション数に合わせて返す
-    db_sections = db.get_lesson_sections(lesson_id)
+    db_sections = db.get_lesson_sections(lesson_id, lang=lang)
     result = []
     for i, sec in enumerate(db_sections):
         result.append({
@@ -83,6 +85,7 @@ class LessonRunner:
         self._on_overlay = on_overlay
         self._state = LessonState.IDLE
         self._lesson_id: int | None = None
+        self._lang: str = "ja"
         self._sections: list[dict] = []
         self._current_index: int = 0
         self._task: asyncio.Task | None = None
@@ -109,7 +112,7 @@ class LessonRunner:
     def set_episode(self, episode_id: int | None):
         self._episode_id = episode_id
 
-    async def start(self, lesson_id: int):
+    async def start(self, lesson_id: int, lang: str = "ja"):
         """授業を開始する"""
         if self._state == LessonState.RUNNING:
             await self.stop()
@@ -118,11 +121,12 @@ class LessonRunner:
         if not lesson:
             raise ValueError("コンテンツが見つかりません")
 
-        sections = db.get_lesson_sections(lesson_id)
+        sections = db.get_lesson_sections(lesson_id, lang=lang)
         if not sections:
             raise ValueError("スクリプトがありません。先にスクリプトを生成してください。")
 
         self._lesson_id = lesson_id
+        self._lang = lang
         self._sections = sections
         self._current_index = 0
         self._state = LessonState.RUNNING
@@ -267,7 +271,7 @@ class LessonRunner:
             part_tts = tts_parts[i] if i < len(tts_parts) else part
 
             # キャッシュ確認
-            cached = _cache_path(self._lesson_id, order_index, i)
+            cached = _cache_path(self._lesson_id, order_index, i, lang=self._lang)
             if cached.exists():
                 logger.info("[lesson]   part[%d] cache hit: %s", i, cached)
                 wav_paths.append(cached)
@@ -413,6 +417,7 @@ class LessonRunner:
         return {
             "state": self._state.value,
             "lesson_id": self._lesson_id,
+            "lang": self._lang,
             "current_index": self._current_index,
             "total_sections": len(self._sections),
         }

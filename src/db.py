@@ -322,6 +322,52 @@ def _create_tables(conn):
     except sqlite3.OperationalError:
         pass
 
+    # Migration: lesson_plans テーブル（言語別プラン保存）
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS lesson_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+            lang TEXT NOT NULL DEFAULT 'ja',
+            knowledge TEXT NOT NULL DEFAULT '',
+            entertainment TEXT NOT NULL DEFAULT '',
+            plan_json TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(lesson_id, lang)
+        )
+    """)
+    conn.commit()
+
+    # Migration: lesson_sections に lang カラム追加
+    try:
+        conn.execute("ALTER TABLE lesson_sections ADD COLUMN lang TEXT NOT NULL DEFAULT 'ja'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    # Migration: 既存の lessons.plan_* データを lesson_plans に移行
+    try:
+        rows = conn.execute(
+            "SELECT id, plan_knowledge, plan_entertainment, plan_json FROM lessons "
+            "WHERE plan_knowledge != '' OR plan_entertainment != '' OR plan_json != ''"
+        ).fetchall()
+        now = _now()
+        for row in rows:
+            # 既にmigrated済みか確認
+            existing = conn.execute(
+                "SELECT id FROM lesson_plans WHERE lesson_id = ? AND lang = 'ja'",
+                (row["id"],)
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    "INSERT INTO lesson_plans (lesson_id, lang, knowledge, entertainment, plan_json, created_at, updated_at) "
+                    "VALUES (?, 'ja', ?, ?, ?, ?, ?)",
+                    (row["id"], row["plan_knowledge"], row["plan_entertainment"], row["plan_json"], now, now),
+                )
+        conn.commit()
+    except Exception:
+        pass
+
 
 def _migrate_comments_split(conn):
     """commentsテーブルからavatar_commentsを分離するマイグレーション（冪等）"""
@@ -889,6 +935,7 @@ def delete_lesson(lesson_id):
     conn = get_connection()
     conn.execute("DELETE FROM lesson_sections WHERE lesson_id = ?", (lesson_id,))
     conn.execute("DELETE FROM lesson_sources WHERE lesson_id = ?", (lesson_id,))
+    conn.execute("DELETE FROM lesson_plans WHERE lesson_id = ?", (lesson_id,))
     conn.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
     conn.commit()
 
@@ -929,28 +976,34 @@ def delete_lesson_source(source_id):
 
 def add_lesson_section(lesson_id, order_index, section_type, content, tts_text="",
                        display_text="", emotion="neutral", question="", answer="",
-                       wait_seconds=8, title=""):
+                       wait_seconds=8, title="", lang="ja"):
     """授業セクションを追加する"""
     conn = get_connection()
     cur = conn.execute(
         "INSERT INTO lesson_sections "
         "(lesson_id, order_index, section_type, title, content, tts_text, display_text, "
-        "emotion, question, answer, wait_seconds, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "emotion, question, answer, wait_seconds, lang, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (lesson_id, order_index, section_type, title, content, tts_text,
-         display_text, emotion, question, answer, wait_seconds, _now()),
+         display_text, emotion, question, answer, wait_seconds, lang, _now()),
     )
     conn.commit()
     return dict(conn.execute("SELECT * FROM lesson_sections WHERE id = ?", (cur.lastrowid,)).fetchone())
 
 
-def get_lesson_sections(lesson_id):
+def get_lesson_sections(lesson_id, lang=None):
     """授業セクション一覧を取得する（order_index順）"""
     conn = get_connection()
-    rows = conn.execute(
-        "SELECT * FROM lesson_sections WHERE lesson_id = ? ORDER BY order_index",
-        (lesson_id,),
-    ).fetchall()
+    if lang:
+        rows = conn.execute(
+            "SELECT * FROM lesson_sections WHERE lesson_id = ? AND lang = ? ORDER BY order_index",
+            (lesson_id, lang),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM lesson_sections WHERE lesson_id = ? ORDER BY order_index",
+            (lesson_id,),
+        ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -975,10 +1028,13 @@ def delete_lesson_section(section_id):
     conn.commit()
 
 
-def delete_lesson_sections(lesson_id):
+def delete_lesson_sections(lesson_id, lang=None):
     """授業の全セクションを削除する（再生成用）"""
     conn = get_connection()
-    conn.execute("DELETE FROM lesson_sections WHERE lesson_id = ?", (lesson_id,))
+    if lang:
+        conn.execute("DELETE FROM lesson_sections WHERE lesson_id = ? AND lang = ?", (lesson_id, lang))
+    else:
+        conn.execute("DELETE FROM lesson_sections WHERE lesson_id = ?", (lesson_id,))
     conn.commit()
 
 
@@ -990,6 +1046,61 @@ def reorder_lesson_sections(lesson_id, section_ids):
             "UPDATE lesson_sections SET order_index = ? WHERE id = ? AND lesson_id = ?",
             (i, sid, lesson_id),
         )
+    conn.commit()
+
+
+# --- lesson_plans (言語別) ---
+
+def get_lesson_plan(lesson_id, lang):
+    """指定言語のプランを取得する"""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM lesson_plans WHERE lesson_id = ? AND lang = ?",
+        (lesson_id, lang),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_lesson_plans(lesson_id):
+    """全言語のプランを取得する"""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM lesson_plans WHERE lesson_id = ? ORDER BY lang",
+        (lesson_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_lesson_plan(lesson_id, lang, knowledge="", entertainment="", plan_json=""):
+    """プランを保存する（INSERT or UPDATE）"""
+    conn = get_connection()
+    now = _now()
+    existing = conn.execute(
+        "SELECT id FROM lesson_plans WHERE lesson_id = ? AND lang = ?",
+        (lesson_id, lang),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE lesson_plans SET knowledge = ?, entertainment = ?, plan_json = ?, updated_at = ? "
+            "WHERE lesson_id = ? AND lang = ?",
+            (knowledge, entertainment, plan_json, now, lesson_id, lang),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO lesson_plans (lesson_id, lang, knowledge, entertainment, plan_json, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (lesson_id, lang, knowledge, entertainment, plan_json, now, now),
+        )
+    conn.commit()
+
+
+def delete_lesson_plans(lesson_id, lang=None):
+    """プランを削除する"""
+    conn = get_connection()
+    if lang:
+        conn.execute("DELETE FROM lesson_plans WHERE lesson_id = ? AND lang = ?", (lesson_id, lang))
+    else:
+        conn.execute("DELETE FROM lesson_plans WHERE lesson_id = ?", (lesson_id,))
     conn.commit()
 
 

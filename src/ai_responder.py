@@ -132,45 +132,75 @@ def generate_response(author, message, comment_count=0, timeline=None, stream_co
         dict: {"speech": str, "emotion": str}
     """
     client = get_client()
+    lang = get_stream_language()
+    en = lang["primary"] != "ja"
     system_prompt = build_system_prompt(get_character(), stream_context=stream_context, self_note=self_note, persona=persona)
 
     context_parts = []
-    if comment_count == 0 and not already_greeted:
-        context_parts.append("初見のユーザーです")
-    elif not already_greeted:
-        context_parts.append(f"過去{comment_count}回コメントしている常連です、今日はまだ挨拶していません")
+    if en:
+        if comment_count == 0 and not already_greeted:
+            context_parts.append("First-time viewer")
+        elif not already_greeted:
+            context_parts.append(f"Regular viewer with {comment_count} past comments, hasn't been greeted today yet")
+        else:
+            context_parts.append("Already greeted this stream, no need to greet again")
+        if author == "GM":
+            context_parts.append("GM is the developer of this stream system. Close relationship, casual tone OK")
+        if user_note:
+            context_parts.append(f"Note: {user_note} (*Don't mention the note directly. Use it subtly to shape the conversation)")
+        if timeline:
+            recent_speeches = [h["text"][:30] for h in timeline[-3:] if h.get("type") == "avatar_comment"]
+            if recent_speeches:
+                context_parts.append(f"Forbidden patterns (avoid same openings): {', '.join(recent_speeches)}")
+        context = f" ({', '.join(context_parts)})"
     else:
-        context_parts.append("この配信で挨拶済み、再度の挨拶は不要")
-    if author == "GM":
-        context_parts.append("GMはこの配信システムの開発者。親しい関係、敬語不要、タメ口でOK")
-    if user_note:
-        context_parts.append(f"メモ: {user_note}（※メモの内容を直接言及しないこと。会話の雰囲気づくりに自然に活かす程度に）")
-    # 禁止パターン（直前3件の自分の応答の書き出しを繰り返さない）
-    if timeline:
-        recent_speeches = [h["text"][:30] for h in timeline[-3:] if h.get("type") == "avatar_comment"]
-        if recent_speeches:
-            context_parts.append(f"禁止パターン（同じ書き出しを避けろ）: {', '.join(recent_speeches)}")
-    context = f"（{'、'.join(context_parts)}）"
+        if comment_count == 0 and not already_greeted:
+            context_parts.append("初見のユーザーです")
+        elif not already_greeted:
+            context_parts.append(f"過去{comment_count}回コメントしている常連です、今日はまだ挨拶していません")
+        else:
+            context_parts.append("この配信で挨拶済み、再度の挨拶は不要")
+        if author == "GM":
+            context_parts.append("GMはこの配信システムの開発者。親しい関係、敬語不要、タメ口でOK")
+        if user_note:
+            context_parts.append(f"メモ: {user_note}（※メモの内容を直接言及しないこと。会話の雰囲気づくりに自然に活かす程度に）")
+        if timeline:
+            recent_speeches = [h["text"][:30] for h in timeline[-3:] if h.get("type") == "avatar_comment"]
+            if recent_speeches:
+                context_parts.append(f"禁止パターン（同じ書き出しを避けろ）: {', '.join(recent_speeches)}")
+        context = f"（{'、'.join(context_parts)}）"
 
     # 会話履歴をcontentsに組み立て（Geminiのマルチターン形式）
     contents = []
     if timeline:
         for h in timeline:
             if h["type"] == "comment":
-                contents.append(types.Content(
-                    role="user",
-                    parts=[types.Part(text=f"{h['user_name']}さんのコメント: {h['text']}")]
-                ))
+                if en:
+                    contents.append(types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"{h['user_name']}'s comment: {h['text']}")]
+                    ))
+                else:
+                    contents.append(types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"{h['user_name']}さんのコメント: {h['text']}")]
+                    ))
             elif h["type"] == "avatar_comment":
                 contents.append(types.Content(
                     role="model",
                     parts=[types.Part(text=h["text"])]
                 ))
 
-    contents.append(types.Content(
-        role="user",
-        parts=[types.Part(text=f"{author}さんのコメント{context}: {message}")]
-    ))
+    if en:
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=f"{author}'s comment{context}: {message}")]
+        ))
+    else:
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=f"{author}さんのコメント{context}: {message}")]
+        ))
 
     response = client.models.generate_content(
         model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
@@ -469,44 +499,76 @@ def generate_event_response(event_type, detail, last_event_responses=None):
     emotions = char.get("emotions", {})
     emotion_list = ", ".join(emotions.keys())
 
+    lang = get_stream_language()
+    is_en = lang["primary"] != "ja"
     lang_rules = build_language_rules()
 
-    parts = [
-        char["system_prompt"],
-        "",
-        "## ルール",
-        "- 配信中のイベント（コミット、作業開始など）について短くコメントしてください",
-        "- 視聴者に向かって話すように、自然で楽しいコメントをしてください",
-        "- 1文で簡潔に。40文字以内",
-        "- 毎回同じリアクション（やったー！おっ！等）をしない。バリエーションを出す",
-    ]
-    if last_event_responses:
-        parts.append("")
-        parts.append("## 直前のイベント応答（同じ表現を避けろ）")
-        for r in last_event_responses[-3:]:
-            parts.append(f"- {r}")
-    parts.extend([
-        "",
-        "## 言語ルール",
-    ])
-    for rule in lang_rules:
-        parts.append(rule)
-    parts.extend([
-        "",
-        "## 出力形式",
-        "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
-        '{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "translation": "翻訳テキスト"}',
-        f"emotionは次のいずれか: {emotion_list}",
-        "",
-        "## speechとtts_textの違い（重要・厳守）",
-        "- speech: チャットや字幕に表示。タグやマークアップは絶対に含めない。",
-        "- tts_text: TTS音声合成用。speechと同じ内容だが、日本語以外の部分に [lang:xx]...[/lang] タグを付ける。",
-        '  - 例: speech="Claude Codeすごい！" → tts_text="[lang:en]Claude Code[/lang]すごい！"',
-        "  - 日本語のみの場合はspeechと同じ内容にする。",
-    ])
+    if is_en:
+        parts = [
+            char["system_prompt"],
+            "",
+            "## Rules",
+            "- Comment briefly on stream events (commits, work updates, etc.)",
+            "- Speak naturally and cheerfully to viewers",
+            "- Keep it to 1 sentence, about 10 words",
+            "- Vary your reactions — don't repeat the same expressions",
+        ]
+        if last_event_responses:
+            parts.append("")
+            parts.append("## Recent event responses (avoid repeating)")
+            for r in last_event_responses[-3:]:
+                parts.append(f"- {r}")
+        parts.extend(["", "## Language rules"])
+        for rule in lang_rules:
+            parts.append(rule)
+        parts.extend([
+            "",
+            "## Output format",
+            "Reply ONLY in the following JSON format. No other text.",
+            '{"speech": "response text", "tts_text": "TTS text", "emotion": "emotion", "translation": "translation text"}',
+            f"emotion must be one of: {emotion_list}",
+            "",
+            "## speech vs tts_text (important)",
+            "- speech: Displayed in chat/subtitles. No tags or markup.",
+            "- tts_text: Sent to TTS. Same as speech, but add [lang:xx]...[/lang] tags for non-English parts.",
+            '  - Example: speech="Great commit! すごい!" → tts_text="Great commit! [lang:ja]すごい[/lang]!"',
+            "  - If English only, same as speech.",
+        ])
+        user_prompt = f"[{event_type} event] {detail}"
+    else:
+        parts = [
+            char["system_prompt"],
+            "",
+            "## ルール",
+            "- 配信中のイベント（コミット、作業開始など）について短くコメントしてください",
+            "- 視聴者に向かって話すように、自然で楽しいコメントをしてください",
+            "- 1文で簡潔に。40文字以内",
+            "- 毎回同じリアクション（やったー！おっ！等）をしない。バリエーションを出す",
+        ]
+        if last_event_responses:
+            parts.append("")
+            parts.append("## 直前のイベント応答（同じ表現を避けろ）")
+            for r in last_event_responses[-3:]:
+                parts.append(f"- {r}")
+        parts.extend(["", "## 言語ルール"])
+        for rule in lang_rules:
+            parts.append(rule)
+        parts.extend([
+            "",
+            "## 出力形式",
+            "必ず以下のJSON形式で返答してください。それ以外のテキストは出力しないでください。",
+            '{"speech": "返答テキスト", "tts_text": "読み上げ用テキスト", "emotion": "感情", "translation": "翻訳テキスト"}',
+            f"emotionは次のいずれか: {emotion_list}",
+            "",
+            "## speechとtts_textの違い（重要・厳守）",
+            "- speech: チャットや字幕に表示。タグやマークアップは絶対に含めない。",
+            "- tts_text: TTS音声合成用。speechと同じ内容だが、日本語以外の部分に [lang:xx]...[/lang] タグを付ける。",
+            '  - 例: speech="Claude Codeすごい！" → tts_text="[lang:en]Claude Code[/lang]すごい！"',
+            "  - 日本語のみの場合はspeechと同じ内容にする。",
+        ])
+        user_prompt = f"【{event_type}イベント】{detail}"
 
     system_prompt = "\n".join(parts)
-    user_prompt = f"【{event_type}イベント】{detail}"
 
     response = client.models.generate_content(
         model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),

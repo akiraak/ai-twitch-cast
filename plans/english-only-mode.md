@@ -1,6 +1,6 @@
 # 英語のみモード対応プラン
 
-ステータス: 未着手
+ステータス: 完了
 
 ## コンテキスト
 
@@ -98,6 +98,26 @@ def _convert_lang_tags(text):
 - `tests/test_tts.py`: 英語モードでのlangタグ変換テスト（CJK検出）
 - `tests/test_prompt_builder.py`: 英語モードでのルール・プロンプト生成テスト
 - `tests/test_lesson_generator.py`（既存テストがあれば追加、なければ省略）: プロンプト内容の確認は困難なため、テストは prompt_builder/tts 側で担保
+
+## 追加修正（完了）
+
+### 6. `src/prompt_builder.py` — `build_system_prompt()` 内の全セクション英語対応
+
+- 6a. 感情ガイド → 英語版追加
+- 6b. SE（効果音）セクション → 英語版追加
+- 6c. 多様性セクション → 英語版追加
+- 6d. 出力形式セクション → 英語版追加
+- 6e. 配信コンテキスト見出し → 英語版追加
+- 6f. ルール・記憶メモ・ペルソナの見出し → 英語版追加
+
+### 7. `src/ai_responder.py` — `generate_response()` 内の全テキスト英語対応
+
+- 7a. コンテキスト文（初見/常連/挨拶済み/GM/メモ/禁止パターン） → 英語版追加
+- 7b. タイムライン表記（`さんのコメント` → `'s comment`） → 英語版追加
+
+### 8. `src/prompt_builder.py` — `build_language_rules()` バイリンガルモード英語対応
+
+- primary≠ja, sub≠none のとき英語でルール生成するよう分岐追加
 
 ## 対象外（意図的にスキップ）
 

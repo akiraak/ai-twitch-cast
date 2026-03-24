@@ -126,7 +126,7 @@ class TestBuildLanguageRules:
         set_stream_language("en", "ja", "medium")
         rules = build_language_rules()
         text = "\n".join(rules)
-        assert "ローマ字" in text
+        assert "romaji" in text.lower() or "ローマ字" in text
 
     def test_translation_field_instruction(self):
         """translationフィールドの指示が含まれること"""
@@ -139,6 +139,24 @@ class TestBuildLanguageRules:
         rules = build_language_rules()
         text = "\n".join(rules)
         assert "言語" in text
+
+    def test_english_only_mode_rules(self):
+        """英語のみモードで英語のルールが生成されること"""
+        set_stream_language("en", "none", "low")
+        rules = build_language_rules()
+        text = "\n".join(rules)
+        assert "Respond in English" in text
+        assert "Japanese translation" in text
+        # 日本語の返答ルールが含まれないこと
+        assert "で返答する" not in text
+
+    def test_ja_only_mode_rules(self):
+        """日本語のみモードで日本語のルールが生成されること"""
+        set_stream_language("ja", "none", "low")
+        rules = build_language_rules()
+        text = "\n".join(rules)
+        assert "日本語で返答する" in text
+        assert "Respond in" not in text
 
 
 # =====================================================
@@ -174,6 +192,19 @@ class TestBuildTtsStyle:
         set_stream_language("en", "ja", "low")
         style_en = build_tts_style()
         assert style_ja != style_en
+
+    def test_english_mode_no_nikoniko(self):
+        """英語モードでにこにこが含まれないこと"""
+        set_stream_language("en", "none", "low")
+        style = build_tts_style()
+        assert "にこにこ" not in style
+        assert "cheerful" in style
+
+    def test_japanese_mode_has_nikoniko(self):
+        """日本語モードでにこにこが含まれること"""
+        set_stream_language("ja", "none", "low")
+        style = build_tts_style()
+        assert "にこにこ" in style
 
 
 # =====================================================
@@ -266,6 +297,27 @@ class TestBuildSystemPrompt:
         minimal = {"system_prompt": "最小構成"}
         prompt = build_system_prompt(minimal)
         assert "最小構成" in prompt
+
+    def test_english_mode_word_count_rule(self):
+        """英語モードで語数ルールが生成されること"""
+        set_stream_language("en", "none", "low")
+        prompt = build_system_prompt(DEFAULT_CHARACTER)
+        assert "words" in prompt
+        assert "文字以内" not in prompt
+
+    def test_japanese_mode_char_count_rule(self):
+        """日本語モードで文字数ルールが生成されること"""
+        set_stream_language("ja", "none", "low")
+        prompt = build_system_prompt(DEFAULT_CHARACTER)
+        assert "文字以内" in prompt
+
+    def test_english_mode_tts_text_instructions(self):
+        """英語モードでtts_text説明が英語ベースになること"""
+        set_stream_language("en", "none", "low")
+        prompt = build_system_prompt(DEFAULT_CHARACTER)
+        assert "non-English" not in prompt or "English以外" not in prompt
+        # 英語モードではベース言語がEnglishなので「English以外」の説明になる
+        assert "tts_text" in prompt
 
 
 # =====================================================

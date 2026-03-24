@@ -12,6 +12,35 @@ const SECTION_ICONS = {
 // 開閉状態を保持（リロード時に復元）
 let _openLessonIds = new Set();
 
+// 言語タブ状態（lesson_id → 'ja' or 'en'）
+let _lessonLangTab = {};
+
+function _getLessonLang(lessonId) {
+  return _lessonLangTab[lessonId] || 'ja';
+}
+
+function _buildLangTabs(lessonId, plans, sections) {
+  const currentLang = _getLessonLang(lessonId);
+  const jaHasPlan = !!(plans && plans.ja && plans.ja.plan_json);
+  const enHasPlan = !!(plans && plans.en && plans.en.plan_json);
+  const jaSections = (sections || []).filter(s => (s.lang || 'ja') === 'ja');
+  const enSections = (sections || []).filter(s => (s.lang || 'ja') === 'en');
+  const jaBadge = jaHasPlan || jaSections.length ? ' ✅' : '';
+  const enBadge = enHasPlan || enSections.length ? ' ✅' : '';
+  return `<div style="display:flex; gap:4px; margin-bottom:10px;">
+    <button onclick="_switchLessonLang(${lessonId}, 'ja')" style="padding:4px 14px; border:1px solid #d0c0e8; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:600;
+      ${currentLang === 'ja' ? 'background:#7b1fa2; color:#fff;' : 'background:#faf7ff; color:#7b1fa2;'}">🇯🇵 日本語${jaBadge}</button>
+    <button onclick="_switchLessonLang(${lessonId}, 'en')" style="padding:4px 14px; border:1px solid #d0c0e8; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:600;
+      ${currentLang === 'en' ? 'background:#7b1fa2; color:#fff;' : 'background:#faf7ff; color:#7b1fa2;'}">🇺🇸 English${enBadge}</button>
+  </div>`;
+}
+
+async function _switchLessonLang(lessonId, lang) {
+  _lessonLangTab[lessonId] = lang;
+  _openLessonIds.add(lessonId);
+  await loadLessons();
+}
+
 function switchConvSubtab(name, el) {
   document.querySelectorAll('#tab-convmode .char-subtab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('#tab-convmode .char-subcontent').forEach(t => t.classList.remove('active'));
@@ -67,7 +96,10 @@ async function buildLessonItem(lessonId) {
 
   const lesson = res.lesson;
   const sources = res.sources;
-  const sections = res.sections;
+  const allSections = res.sections;
+  const plans = res.plans || {};
+  const lang = _getLessonLang(lessonId);
+  const sections = allSections.filter(s => (s.lang || 'ja') === lang);
   const hasSources = sources.length > 0;
   const hasSections = sections.length > 0;
 
@@ -79,7 +111,14 @@ async function buildLessonItem(lessonId) {
   // バッジ
   const badges = [];
   if (sources.length) badges.push(sources.length + '\u30BD\u30FC\u30B9');
-  if (sections.length) badges.push(sections.length + '\u30BB\u30AF\u30B7\u30E7\u30F3');
+  const jaSec = allSections.filter(s => (s.lang || 'ja') === 'ja');
+  const enSec = allSections.filter(s => (s.lang || 'ja') === 'en');
+  if (jaSec.length || enSec.length) {
+    const langBadges = [];
+    if (jaSec.length) langBadges.push('JA:' + jaSec.length);
+    if (enSec.length) langBadges.push('EN:' + enSec.length);
+    badges.push(langBadges.join('/'));
+  }
   const badgeText = badges.length ? ' (' + badges.join(' / ') + ')' : '';
 
   const details = document.createElement('details');
@@ -171,34 +210,41 @@ async function buildLessonItem(lessonId) {
   step1.appendChild(step1Body);
   body.appendChild(step1);
 
+  // === 言語タブ ===
+  const langTabsDiv = document.createElement('div');
+  langTabsDiv.innerHTML = _buildLangTabs(lessonId, plans, allSections);
+  body.appendChild(langTabsDiv);
+
   // === STEP 2a: プラン生成（三者視点） ===
-  const hasPlan = !!(lesson.plan_json);
+  const langPlan = plans[lang] || {};
+  const hasPlan = !!(langPlan.plan_json);
   const step2a = document.createElement('div');
   step2a.className = 'lesson-step' + (hasPlan ? ' step-done' : hasExtractedText ? ' step-active' : ' step-disabled');
   const step2aBody = document.createElement('div');
   step2aBody.className = 'lesson-step-body';
-  let planHtml = `<div class="lesson-step-title">プラン生成（三者視点）${hasPlan ? ' ✓' : ''}</div>
+  const planLabel = lang === 'en' ? 'Plan Generation (3 experts)' : 'プラン生成（三者視点）';
+  let planHtml = `<div class="lesson-step-title">${planLabel}${hasPlan ? ' ✓' : ''}</div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button onclick="generatePlan(${lessonId})" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasPlan ? 'プラン再生成' : 'プラン生成'}</button>
+      <button onclick="generatePlan(${lessonId}, '${lang}')" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasPlan ? (lang === 'en' ? 'Regenerate' : 'プラン再生成') : (lang === 'en' ? 'Generate Plan' : 'プラン生成')}</button>
       <span class="plan-status"></span>
     </div>`;
 
   // 既存プランの表示
   if (hasPlan) {
-    if (lesson.plan_knowledge) {
+    if (langPlan.knowledge) {
       planHtml += `<details style="margin-top:8px; font-size:0.8rem;">
-        <summary style="cursor:pointer; color:#1565c0; font-weight:500;">📚 知識先生の分析</summary>
-        <pre style="margin-top:6px; background:#f0f4ff; padding:8px; border:1px solid #bbdefb; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#1a237e;">${esc(lesson.plan_knowledge)}</pre>
+        <summary style="cursor:pointer; color:#1565c0; font-weight:500;">📚 ${lang === 'en' ? 'Knowledge Expert' : '知識先生の分析'}</summary>
+        <pre style="margin-top:6px; background:#f0f4ff; padding:8px; border:1px solid #bbdefb; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#1a237e;">${esc(langPlan.knowledge)}</pre>
       </details>`;
     }
-    if (lesson.plan_entertainment) {
+    if (langPlan.entertainment) {
       planHtml += `<details style="margin-top:6px; font-size:0.8rem;">
-        <summary style="cursor:pointer; color:#e65100; font-weight:500;">🎭 エンタメ先生の構成</summary>
-        <pre style="margin-top:6px; background:#fff3e0; padding:8px; border:1px solid #ffe0b2; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#bf360c;">${esc(lesson.plan_entertainment)}</pre>
+        <summary style="cursor:pointer; color:#e65100; font-weight:500;">🎭 ${lang === 'en' ? 'Entertainment Expert' : 'エンタメ先生の構成'}</summary>
+        <pre style="margin-top:6px; background:#fff3e0; padding:8px; border:1px solid #ffe0b2; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#bf360c;">${esc(langPlan.entertainment)}</pre>
       </details>`;
     }
     try {
-      const planSections = JSON.parse(lesson.plan_json);
+      const planSections = JSON.parse(langPlan.plan_json);
       if (planSections.length) {
         planHtml += `<details style="margin-top:6px; font-size:0.8rem;" open>
           <summary style="cursor:pointer; color:#2e7d32; font-weight:500;">🎬 監督の最終プラン（${planSections.length}セクション）</summary>
@@ -231,17 +277,19 @@ async function buildLessonItem(lessonId) {
   step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasPlan || hasExtractedText ? ' step-active' : ' step-disabled');
   const step2bBody = document.createElement('div');
   step2bBody.className = 'lesson-step-body';
-  const scriptLabel = hasPlan ? 'プランからスクリプト+音声生成' : 'スクリプト+音声生成';
-  step2bBody.innerHTML = `<div class="lesson-step-title">スクリプト+音声生成${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>
+  const scriptLabel = hasPlan
+    ? (lang === 'en' ? 'Generate Script+Audio from Plan' : 'プランからスクリプト+音声生成')
+    : (lang === 'en' ? 'Generate Script+Audio' : 'スクリプト+音声生成');
+  step2bBody.innerHTML = `<div class="lesson-step-title">${lang === 'en' ? 'Script+Audio' : 'スクリプト+音声生成'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ')' : ''}</div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button onclick="generateScript(${lessonId})" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? '再生成' : esc(scriptLabel)}</button>
+      <button onclick="generateScript(${lessonId}, '${lang}')" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? (lang === 'en' ? 'Regenerate' : '再生成') : esc(scriptLabel)}</button>
       <span class="script-status"></span>
     </div>`;
 
   // TTSキャッシュ情報取得
   let ttsCacheMap = {};
   if (hasSections) {
-    const cacheRes = await api('GET', '/api/lessons/' + lessonId + '/tts-cache');
+    const cacheRes = await api('GET', '/api/lessons/' + lessonId + '/tts-cache?lang=' + lang);
     if (cacheRes && cacheRes.ok) {
       for (const c of cacheRes.sections) {
         ttsCacheMap[c.order_index] = c.parts;
@@ -269,7 +317,7 @@ async function buildLessonItem(lessonId) {
   const progressInfo = isActive ? `${statusRes.status.current_index + 1} / ${statusRes.status.total_sections} セクション` : '';
   step3Body.innerHTML = `<div class="lesson-step-title">授業${isActive ? '（実行中）' : ''}</div>
     <div style="display:flex; gap:6px; align-items:center;">
-      <button onclick="startLesson(${lessonId})" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">授業開始</button>
+      <button onclick="startLesson(${lessonId}, '${lang}')" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">${lang === 'en' ? 'Start Lesson' : '授業開始'}</button>
       <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isRunning ? '' : ' display:none;'}">一時停止</button>
       <button onclick="resumeLesson()" class="btn-lesson-resume" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isPaused ? '' : ' display:none;'}">再開</button>
       <button onclick="stopLesson()" class="btn-lesson-stop" style="padding:5px 14px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? '' : ' display:none;'}">終了</button>
@@ -495,13 +543,14 @@ function _streamSSE(url, statusEl, onComplete) {
 
 // --- プラン生成 ---
 
-async function generatePlan(lessonId) {
+async function generatePlan(lessonId, lang) {
+  lang = lang || _getLessonLang(lessonId);
   _clearDownstreamSteps(lessonId, ['2b', '3']);
   const items = document.querySelectorAll('.lesson-item');
   let statusEl = null;
   let btn = null;
   for (const item of items) {
-    const b = item.querySelector(`button[onclick="generatePlan(${lessonId})"]`);
+    const b = item.querySelector(`button[onclick*="generatePlan(${lessonId}"]`);
     if (b) {
       btn = b;
       statusEl = b.parentElement.querySelector('.plan-status');
@@ -509,8 +558,8 @@ async function generatePlan(lessonId) {
     }
   }
   if (btn) btn.disabled = true;
-  if (statusEl) _showSpinner(statusEl, 'プラン生成開始...');
-  const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-plan', statusEl);
+  if (statusEl) _showSpinner(statusEl, lang === 'en' ? 'Generating plan...' : 'プラン生成開始...');
+  const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-plan?lang=' + lang, statusEl);
   if (btn) btn.disabled = false;
   if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
@@ -528,13 +577,14 @@ async function generatePlan(lessonId) {
 
 // --- 授業スクリプト ---
 
-async function generateScript(lessonId) {
+async function generateScript(lessonId, lang) {
+  lang = lang || _getLessonLang(lessonId);
   _clearDownstreamSteps(lessonId, ['3']);
   const items = document.querySelectorAll('.lesson-item');
   let statusEl = null;
   let btn = null;
   for (const item of items) {
-    const b = item.querySelector(`button[onclick="generateScript(${lessonId})"]`);
+    const b = item.querySelector(`button[onclick*="generateScript(${lessonId}"]`);
     if (b) {
       btn = b;
       statusEl = b.parentElement.querySelector('.script-status');
@@ -545,8 +595,8 @@ async function generateScript(lessonId) {
   // 既存セクション一覧を即座にクリア
   const secContainer = btn ? btn.closest('.lesson-step-body').querySelector('div:last-child') : null;
   if (secContainer) renderSectionsInto(secContainer, [], lessonId, {});
-  if (statusEl) _showSpinner(statusEl, 'スクリプト生成開始...');
-  const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-script', statusEl);
+  if (statusEl) _showSpinner(statusEl, lang === 'en' ? 'Generating script...' : 'スクリプト生成開始...');
+  const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-script?lang=' + lang, statusEl);
   if (btn) btn.disabled = false;
   if (statusEl) _hideSpinner(statusEl);
   if (res && res.ok) {
@@ -677,10 +727,11 @@ async function _reorderSection(lessonId, sectionId, direction) {
 
 // --- 授業制御 ---
 
-async function startLesson(lessonId) {
-  const res = await api('POST', '/api/lessons/' + lessonId + '/start');
+async function startLesson(lessonId, lang) {
+  lang = lang || _getLessonLang(lessonId);
+  const res = await api('POST', '/api/lessons/' + lessonId + '/start?lang=' + lang);
   if (res && res.ok) {
-    showToast('授業開始', 'success');
+    showToast(lang === 'en' ? 'Lesson started' : '授業開始', 'success');
     await loadLessons();
   }
 }
