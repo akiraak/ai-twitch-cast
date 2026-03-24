@@ -1,4 +1,4 @@
-# Step 3: TTS style パラメータ
+# Step 2: TTS style パラメータ
 
 ## ステータス: 未着手
 
