@@ -42,7 +42,7 @@ def read_js_text_variables() -> str:
 
 # === ITEM_REGISTRY ===
 
-EXPECTED_ITEMS = ["avatar", "subtitle", "todo"]
+EXPECTED_ITEMS = ["avatar1", "avatar2", "subtitle", "todo"]
 
 
 class TestItemRegistry:
@@ -322,7 +322,8 @@ class TestDataEditableAttributes:
     def test_all_items_have_data_editable(self):
         html = read_html()
         expected = {
-            "avatar": "avatar-area",
+            "avatar1": "avatar-area-1",
+            "avatar2": "avatar-area-2",
             "subtitle": "subtitle",
             "todo": "todo-panel",
         }

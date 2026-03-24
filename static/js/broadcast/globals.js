@@ -45,7 +45,8 @@ function applyVolume() {
 
 // === アイテムレジストリ（editSaveで共通ループに使用） ===
 const ITEM_REGISTRY = [
-  { id: 'avatar-area', prefix: 'avatar', hasSize: true, defaultZ: 5 },
+  { id: 'avatar-area-1', prefix: 'avatar1', hasSize: true, defaultZ: 5 },
+  { id: 'avatar-area-2', prefix: 'avatar2', hasSize: true, defaultZ: 4 },
   { id: 'subtitle', prefix: 'subtitle', hasSize: false, defaultZ: 20 },
   { id: 'todo-panel', prefix: 'todo', hasSize: true, defaultZ: 20 },
 ];

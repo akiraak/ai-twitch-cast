@@ -4,6 +4,14 @@
 
 ### 教師モード改善
 - [ ] 生徒役のキャラを入れる → [plans/student-character/](plans/student-character/README.md)
+  - [>] Step 1: マルチアバター表示 — 画面に2体のVRMアバターを並べて表示 → [01-multi-avatar.md](plans/student-character/01-multi-avatar.md)
+  - [ ] Step 2: WebSocketアバター制御 — avatar_idでリップシンク・感情を振り分け → [02-websocket-routing.md](plans/student-character/02-websocket-routing.md)
+  - [ ] Step 3: TTS styleパラメータ — 話者ごとに異なる声・スタイルで発話 → [03-tts-style.md](plans/student-character/03-tts-style.md)
+  - [ ] Step 4: DBスキーマ + 設定 — dialoguesカラム・生徒キャラ設定 → [04-db-schema.md](plans/student-character/04-db-schema.md)
+  - [ ] Step 5: スクリプト生成の対話化 — LLMで先生と生徒の掛け合い生成 → [05-script-generation.md](plans/student-character/05-script-generation.md)
+  - [ ] Step 6: レッスンランナーの対話再生 — dialoguesを話者別に順次再生 → [06-lesson-runner.md](plans/student-character/06-lesson-runner.md)
+  - [ ] Step 7: 管理画面UI — 生徒設定・VRM選択・プレビュー色分け → [07-admin-ui.md](plans/student-character/07-admin-ui.md)
+  - [ ] Step 8: テスト — ユニットテスト + 手動動作確認 → [08-testing.md](plans/student-character/08-testing.md)
 - [ ] 全体の構成が悪いところがある。どうしたら改善できるか検討する
 - [ ] 授業パネルの内容が大きすぎて表示がおかしいときがある。内容を適切な量に。多ければ文字を小さくなどちゃんと見えるような対策をする
 - [ ] 英語授業の発音改善 Step 3: synthesize()にstyle引数追加 → [06-english-pronunciation.md](plans/teacher-mode-v2/06-english-pronunciation.md)

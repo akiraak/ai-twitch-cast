@@ -28,9 +28,14 @@
 
 <!-- メインシーン -->
 <div>
-  <!-- アバター（Three.js VRMレンダリング） -->
-  <div id="avatar-area" data-editable="avatar">
-    <canvas id="avatar-canvas"></canvas>
+  <!-- 生徒アバター（左側、授業モード時のみ表示） -->
+  <div id="avatar-area-2" data-editable="avatar2" style="display:none;">
+    <canvas id="avatar-canvas-2"></canvas>
+  </div>
+
+  <!-- 先生アバター（右側、従来位置） -->
+  <div id="avatar-area-1" data-editable="avatar1">
+    <canvas id="avatar-canvas-1"></canvas>
     <img id="avatar-stream" style="display:none;" alt="">
   </div>
 
@@ -92,6 +97,6 @@
 <script src="/static/js/broadcast/init.js"></script>
 
 <!-- VRMアバター（ES Module） -->
-<script type="module" src="/static/js/avatar-renderer.js?v=expr1"></script>
+<script type="module" src="/static/js/avatar-renderer.js?v=multi1"></script>
 </body>
 </html>

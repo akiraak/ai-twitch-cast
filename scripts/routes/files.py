@@ -23,6 +23,11 @@ CATEGORIES = {
         "extensions": {".vrm"},
         "config_key": "files.active_avatar",
     },
+    "avatar2": {
+        "dir": RESOURCES_DIR / "vrm",
+        "extensions": {".vrm"},
+        "config_key": "files.active_avatar2",
+    },
     "background": {
         "dir": RESOURCES_DIR / "images" / "backgrounds",
         "extensions": {".png", ".jpg", ".jpeg", ".webp", ".gif"},
@@ -123,6 +128,11 @@ async def files_select(category: str, body: FileSelect):
     if category == "avatar":
         await state.broadcast_to_broadcast({
             "type": "avatar_vrm_change",
+            "url": f"/resources/vrm/{body.file}",
+        })
+    elif category == "avatar2":
+        await state.broadcast_to_broadcast({
+            "type": "avatar2_vrm_change",
             "url": f"/resources/vrm/{body.file}",
         })
     elif category == "background":

@@ -2,109 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as VRM from '@pixiv/three-vrm';
 
-// === VRMアバターレンダラー ===
-const canvas = document.getElementById('avatar-canvas');
-const avatarArea = document.getElementById('avatar-area');
-const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-renderer.setPixelRatio(Math.max(window.devicePixelRatio || 1, 2));
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.NoToneMapping;
-
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(20, 1, 0.1, 100);
-camera.position.set(0, 1.2, 3.0);
-camera.lookAt(0, 1.1, 0);
-
-// レンダラーサイズをアバター領域に合わせる
-function resizeRenderer() {
-  const w = avatarArea.clientWidth;
-  const h = avatarArea.clientHeight;
-  renderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-}
-resizeRenderer();
-window.addEventListener('resize', resizeRenderer);
-new ResizeObserver(resizeRenderer).observe(avatarArea);
-
-// ライティング
-const BASE_AMBIENT = 0.75;
-const BASE_DIRECTIONAL = 1.0;
-const ambientLight = new THREE.AmbientLight(0xffffff, BASE_AMBIENT);
-scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, BASE_DIRECTIONAL);
-dirLight.position.set(0.5, 1.5, 2.0);  // 前方やや右上から照らす
-scene.add(dirLight);
-
-// ライティング設定を外部から制御
-window.avatarLighting = {
-  BASE_AMBIENT,
-  BASE_DIRECTIONAL,
-  setAmbient(intensity) { ambientLight.intensity = intensity; },
-  setDirectional(intensity) { dirLight.intensity = intensity; },
-  setExposure(val) {
-    // NoToneMapping: ライト強度の倍率で代替
-    ambientLight.intensity = BASE_AMBIENT * val;
-    dirLight.intensity = BASE_DIRECTIONAL * val;
-  },
-  setColor(r, g, b) {
-    ambientLight.color.setRGB(r, g, b);
-    dirLight.color.setRGB(r, g, b);
-  },
-  setPosition(x, y, z) {
-    if (x != null) dirLight.position.x = x;
-    if (y != null) dirLight.position.y = y;
-    if (z != null) dirLight.position.z = z;
-  },
-};
-
-// init()がmodule scriptより先に実行された場合のpending適用
-if (window._pendingLighting) {
-  const pending = window._pendingLighting;
-  delete window._pendingLighting;
-  if (typeof _applyLighting === 'function') {
-    _applyLighting(pending);
-  }
-}
-
-let currentVRM = null;
-let idleScale = 1.0;
-let t0 = performance.now() / 1000;
-const clock = new THREE.Clock();
-
-// まばたき状態
-let nextBlink = t0 + 2 + Math.random() * 3;
-let blinkEnd = 0;
-
-// 耳ぴくぴく状態
-let nextEarTwitch = t0 + 3 + Math.random() * 5;
-let earTwitchEnd = 0;
-let earTwitchStart = 0;
-let earTwitchDuration = 0.2;
-let earTwitchShake = false;  // プルプル振りモード
-let earTwitchShakeHz = 0;    // 振動周波数
-
-// リップシンク状態
-let lipsyncFrames = null;
-let lipsyncStart = 0;
-let pendingLipsyncFrames = null;  // 音声再生開始まで保持
-// リップシンクはlipsyncイベント受信時に即座開始（遅延補正不要）。
-// TTS音声はC#アプリが直接FFmpegパイプに書き込む。ブラウザでは再生しない。
-
-// === Step 1: 表情イージング遷移 ===
-const EXPR_TRANSITION_MS = 300;
-let exprTarget = {};
-let exprCurrent = {};
-let exprPrev = {};
-let exprTransitionStart = 0;
-
-// === Step 2: ジェスチャーシステム ===
-let mixer = null;
-let currentGestureAction = null;
-let gestureExprState = null; // { times, values, startTime, speed }
-
-// ジェスチャー中の表情
-let gestureShapes = {};
+// === 共有ユーティリティ（クラスの外に置く） ===
 
 // クォータニオン生成（軸+角度）
 function quatFromAxisAngle(ax, ay, az, deg) {
@@ -254,291 +152,448 @@ function buildGestureClip(gesture, vrm) {
   return new THREE.AnimationClip(gesture.name, gesture.duration, tracks);
 }
 
-// ジェスチャー再生
-function playGesture(name) {
-  if (!currentVRM) return;
-  const gesture = GESTURES[name];
-  if (!gesture) return;
 
-  if (!mixer) {
-    mixer = new THREE.AnimationMixer(currentVRM.scene);
+// === AvatarInstance クラス ===
+class AvatarInstance {
+  constructor(canvasId, areaId) {
+    this.canvas = document.getElementById(canvasId);
+    this.area = document.getElementById(areaId);
+    if (!this.canvas || !this.area) { this._disabled = true; return; }
+    this._disabled = false;
+
+    // --- Three.js基盤 ---
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: this.canvas, alpha: true, antialias: true
+    });
+    this.renderer.setPixelRatio(Math.max(window.devicePixelRatio || 1, 2));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.NoToneMapping;
+
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(20, 1, 0.1, 100);
+    this.camera.position.set(0, 1.2, 3.0);
+    this.camera.lookAt(0, 1.1, 0);
+
+    // ライティング
+    this.BASE_AMBIENT = 0.75;
+    this.BASE_DIRECTIONAL = 1.0;
+    this.ambientLight = new THREE.AmbientLight(0xffffff, this.BASE_AMBIENT);
+    this.scene.add(this.ambientLight);
+    this.dirLight = new THREE.DirectionalLight(0xffffff, this.BASE_DIRECTIONAL);
+    this.dirLight.position.set(0.5, 1.5, 2.0);
+    this.scene.add(this.dirLight);
+
+    // レンダラーサイズ
+    this._resizeRenderer();
+    window.addEventListener('resize', () => this._resizeRenderer());
+    new ResizeObserver(() => this._resizeRenderer()).observe(this.area);
+
+    // --- VRM状態 ---
+    this.currentVRM = null;
+    this.mixer = null;
+    this.currentGestureAction = null;
+    this.idleScale = 1.0;
+    this.t0 = performance.now() / 1000;
+    this.clock = new THREE.Clock();
+
+    // --- まばたき ---
+    this.nextBlink = this.t0 + 2 + Math.random() * 3;
+    this.blinkEnd = 0;
+
+    // --- 耳ぴくぴく ---
+    this.nextEarTwitch = this.t0 + 3 + Math.random() * 5;
+    this.earTwitchEnd = 0;
+    this.earTwitchStart = 0;
+    this.earTwitchDuration = 0.2;
+    this.earTwitchShake = false;
+    this.earTwitchShakeHz = 0;
+
+    // --- 表情イージング ---
+    this.exprTarget = {};
+    this.exprCurrent = {};
+    this.exprPrev = {};
+    this.exprTransitionStart = 0;
+    this.EXPR_TRANSITION_MS = 300;
+
+    // --- リップシンク ---
+    this.lipsyncFrames = null;
+    this.lipsyncStart = 0;
+    this.pendingLipsyncFrames = null;
+
+    // --- ジェスチャー表情 ---
+    this.gestureExprState = null;
+    this.gestureShapes = {};
   }
 
-  const clip = buildGestureClip(gesture, currentVRM);
-  const action = mixer.clipAction(clip);
-  action.clampWhenFinished = true;
-  action.setLoop(THREE.LoopOnce);
-
-  const crossfade = 0.3;
-  if (currentGestureAction) {
-    action.reset().play();
-    currentGestureAction.crossFadeTo(action, crossfade, true);
-  } else {
-    action.reset().play();
+  _resizeRenderer() {
+    const w = this.area.clientWidth;
+    const h = this.area.clientHeight;
+    if (w === 0 || h === 0) return;
+    this.renderer.setSize(w, h);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
   }
-  currentGestureAction = action;
-}
 
-// グローバル公開
-window.avatarVRM = {
+  async loadVRM(url) {
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRM.VRMLoaderPlugin(parser));
+
+    try {
+      const gltf = await loader.loadAsync(url);
+      const vrm = gltf.userData.vrm;
+      if (!vrm) { console.error('VRMデータがありません'); return; }
+
+      // 既存モデル削除
+      if (this.currentVRM) {
+        this.scene.remove(this.currentVRM.scene);
+        VRM.VRMUtils.deepDispose(this.currentVRM.scene);
+      }
+
+      // VRM追加
+      VRM.VRMUtils.rotateVRM0(vrm);
+      this.scene.add(vrm.scene);
+      this.currentVRM = vrm;
+
+      // ジェスチャー用AnimationMixer作成
+      this.mixer = new THREE.AnimationMixer(vrm.scene);
+      this.currentGestureAction = null;
+
+      // DEBUG: 利用可能な表情名を列挙
+      const em = vrm.expressionManager;
+      if (em) {
+        const names = [];
+        const map = em._expressionMap || em._expressions;
+        if (map) {
+          if (map instanceof Map) {
+            for (const k of map.keys()) names.push(k);
+          } else {
+            names.push(...Object.keys(map));
+          }
+        }
+        console.log('VRM expressions available:', names);
+      }
+
+      console.log('VRM読み込み完了:', url);
+      this.t0 = performance.now() / 1000;
+    } catch (e) {
+      console.error('VRM読み込み失敗:', e);
+    }
+  }
+
+  // --- 外部API ---
   setBlendShapes(shapes) {
     console.log('[avatar] setBlendShapes called:', JSON.stringify(shapes));
-    // Step 1: イージング遷移を開始
-    exprPrev = { ...exprCurrent };
-    exprTarget = { ...shapes };
-    exprTransitionStart = performance.now();
-  },
+    this.exprPrev = { ...this.exprCurrent };
+    this.exprTarget = { ...shapes };
+    this.exprTransitionStart = performance.now();
+  }
+
   setLipsync(frames) {
-    pendingLipsyncFrames = frames;
-  },
+    this.pendingLipsyncFrames = frames;
+  }
+
   startLipsync() {
-    if (pendingLipsyncFrames) {
-      lipsyncFrames = pendingLipsyncFrames;
-      lipsyncStart = performance.now() / 1000;
-      pendingLipsyncFrames = null;
+    if (this.pendingLipsyncFrames) {
+      this.lipsyncFrames = this.pendingLipsyncFrames;
+      this.lipsyncStart = performance.now() / 1000;
+      this.pendingLipsyncFrames = null;
     }
-  },
-  stopLipsync() { lipsyncFrames = null; pendingLipsyncFrames = null; },
-  setIdleScale(s) { idleScale = s; },
-  playGesture(name) { playGesture(name); },
-  // 表情システム診断（デバッグAPI用）
+  }
+
+  stopLipsync() { this.lipsyncFrames = null; this.pendingLipsyncFrames = null; }
+
+  setIdleScale(s) { this.idleScale = s; }
+
+  playGesture(name) {
+    if (!this.currentVRM) return;
+    const gesture = GESTURES[name];
+    if (!gesture) return;
+
+    if (!this.mixer) {
+      this.mixer = new THREE.AnimationMixer(this.currentVRM.scene);
+    }
+
+    const clip = buildGestureClip(gesture, this.currentVRM);
+    const action = this.mixer.clipAction(clip);
+    action.clampWhenFinished = true;
+    action.setLoop(THREE.LoopOnce);
+
+    const crossfade = 0.3;
+    if (this.currentGestureAction) {
+      action.reset().play();
+      this.currentGestureAction.crossFadeTo(action, crossfade, true);
+    } else {
+      action.reset().play();
+    }
+    this.currentGestureAction = action;
+  }
+
   debugExpressions() {
-    if (!currentVRM?.expressionManager) return;
-    const em = currentVRM.expressionManager;
+    if (!this.currentVRM?.expressionManager) return;
+    const em = this.currentVRM.expressionManager;
     const map = em._expressionMap || em._expressions;
     const names = map instanceof Map ? [...map.keys()] : (map ? Object.keys(map) : []);
     console.log('[avatar] expressions:', names);
+  }
+
+  // --- 内部: 表情イージング ---
+  _updateExpressionEasing() {
+    if (!this.exprTransitionStart) return;
+    const elapsed = performance.now() - this.exprTransitionStart;
+    const progress = Math.min(elapsed / this.EXPR_TRANSITION_MS, 1);
+    const t = progress < 0.5
+      ? 2 * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+    const allNames = new Set([...Object.keys(this.exprPrev), ...Object.keys(this.exprTarget)]);
+    for (const name of allNames) {
+      const from = this.exprPrev[name] || 0;
+      const to = this.exprTarget[name] || 0;
+      this.exprCurrent[name] = from + (to - from) * t;
+    }
+    if (progress >= 1) this.exprTransitionStart = 0;
+  }
+
+  // --- 内部: 毎フレーム更新 ---
+  animate() {
+    const delta = this.clock.getDelta();
+
+    // ジェスチャーAnimationMixer更新
+    if (this.mixer) this.mixer.update(delta);
+
+    if (!this.currentVRM) { this.renderer.render(this.scene, this.camera); return; }
+
+    const now = performance.now() / 1000;
+    const t = now - this.t0;
+    const s = this.idleScale;
+
+    // ジェスチャー再生中はidleボーンをスキップ（mixerに任せる）
+    const gestureActive = this.currentGestureAction && this.currentGestureAction.isRunning();
+
+    if (!gestureActive) {
+      // ジェスチャー終了後にactionをクリア
+      if (this.currentGestureAction && !this.currentGestureAction.isRunning()) {
+        this.currentGestureAction = null;
+      }
+
+      // --- 呼吸 (~4秒周期) ---
+      const breath = Math.sin(t * 1.6) * 0.8 * s;
+      setBoneRotation(this.currentVRM, 'chest', quatFromAxisAngle(1, 0, 0, breath));
+
+      // --- 体の揺れ (~7秒周期) ---
+      const sway = (Math.sin(t * 0.9) * 1.0 + Math.sin(t * 0.37) * 0.4) * s;
+      setBoneRotation(this.currentVRM, 'spine', quatFromAxisAngle(0, 0, 1, sway));
+
+      // --- 頭の動き ---
+      const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s;
+      const headZ = (Math.sin(t * 0.5) * 1.6 + Math.sin(t * 1.1) * 0.6) * s;
+      const headY = Math.sin(t * 0.4) * 1.2 * s;
+      const qHead = quatFromAxisAngle(1, 0, 0, headX)
+        .multiply(quatFromAxisAngle(0, 1, 0, headY))
+        .multiply(quatFromAxisAngle(0, 0, 1, headZ));
+      setBoneRotation(this.currentVRM, 'head', qHead);
+
+      // --- 腕の揺れ ---
+      const rArmSway = Math.sin(t * 0.6 + 1.0) * 0.8 * s;
+      const lArmSway = Math.sin(t * 0.6 + 2.5) * 0.8 * s;
+      setBoneRotation(this.currentVRM, 'rightUpperArm', quatFromAxisAngle(0, 0, 1, -70 + rArmSway));
+      setBoneRotation(this.currentVRM, 'leftUpperArm', quatFromAxisAngle(0, 0, 1, 70 + lArmSway));
+
+      // --- 前腕 ---
+      const rFore = 20 + Math.sin(t * 0.8 + 0.5) * 0.6 * s;
+      const lFore = -20 + Math.sin(t * 0.8 + 2.0) * 0.6 * s;
+      setBoneRotation(this.currentVRM, 'rightLowerArm', quatFromAxisAngle(0, 1, 0, rFore));
+      setBoneRotation(this.currentVRM, 'leftLowerArm', quatFromAxisAngle(0, 1, 0, lFore));
+    }
+
+    // --- BlendShape ---
+    const em = this.currentVRM.expressionManager;
+    if (em) {
+      // まばたき
+      if (now >= this.nextBlink && this.blinkEnd === 0) {
+        this.blinkEnd = now + 0.08;
+      }
+      if (this.blinkEnd > 0) {
+        if (now < this.blinkEnd) {
+          em.setValue('blink', 1.0);
+        } else {
+          em.setValue('blink', 0.0);
+          this.blinkEnd = 0;
+          this.nextBlink = now + 2 + Math.random() * 4;
+        }
+      }
+
+      // 耳ぴくぴく（カスタムBlendShape）
+      if (now >= this.nextEarTwitch && now >= this.earTwitchEnd) {
+        this.earTwitchShake = Math.random() < 0.15;
+        if (this.earTwitchShake) {
+          this.earTwitchDuration = 0.3 + Math.random() * 0.3;
+          this.earTwitchShakeHz = 30 + Math.random() * 20;
+          em.setValue('happy', 0.6);
+        } else {
+          this.earTwitchDuration = 0.15 + Math.random() * 0.15;
+        }
+        this.earTwitchEnd = now + this.earTwitchDuration;
+        this.earTwitchStart = now;
+        this.nextEarTwitch = now + 3 + Math.random() * 7;
+      }
+      try {
+        if (now < this.earTwitchEnd) {
+          const progress = (now - this.earTwitchStart) / this.earTwitchDuration;
+          if (this.earTwitchShake) {
+            const fade = 1 - progress;
+            const wave = Math.sin(progress * this.earTwitchShakeHz * Math.PI) * fade;
+            em.setValue('ear_stand', Math.max(0, wave));
+            em.setValue('ear_droop', Math.max(0, -wave));
+          } else {
+            em.setValue('ear_stand', Math.sin(progress * Math.PI));
+            em.setValue('ear_droop', 0.0);
+          }
+        } else {
+          em.setValue('ear_stand', 0.0);
+          em.setValue('ear_droop', 0.0);
+          if (this.earTwitchShake) {
+            em.setValue('happy', 0.0);
+            this.earTwitchShake = false;
+          }
+        }
+      } catch (e) { /* ear BlendShapeがない場合は無視 */ }
+
+      // リップシンク
+      if (this.lipsyncFrames) {
+        const frameIdx = Math.floor((now - this.lipsyncStart) * 30);
+        if (frameIdx >= 0 && frameIdx < this.lipsyncFrames.length) {
+          em.setValue('aa', this.lipsyncFrames[frameIdx]);
+        } else {
+          this.lipsyncFrames = null;
+          em.setValue('aa', 0.0);
+        }
+      }
+
+      // 感情BlendShape（イージング遷移）
+      this._updateExpressionEasing();
+      for (const [name, value] of Object.entries(this.exprCurrent)) {
+        const lname = name.toLowerCase();
+        if (lname === 'aa' || lname === 'blink' || lname === 'ear_stand') continue;
+        try { em.setValue(lname, value); } catch (e) {}
+      }
+
+      em.update();
+    }
+
+    this.currentVRM.update(delta);
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+
+
+// === インスタンス管理 ===
+window.avatarInstances = {};
+
+// 先生アバター（常に存在）
+const teacherAvatar = new AvatarInstance('avatar-canvas-1', 'avatar-area-1');
+window.avatarInstances['teacher'] = teacherAvatar;
+
+// 生徒アバター（canvas存在時のみ）
+if (document.getElementById('avatar-canvas-2')) {
+  const studentAvatar = new AvatarInstance('avatar-canvas-2', 'avatar-area-2');
+  window.avatarInstances['student'] = studentAvatar;
+}
+
+// === 後方互換: window.avatarVRM ===
+window.avatarVRM = {
+  setBlendShapes(shapes) { teacherAvatar.setBlendShapes(shapes); },
+  setLipsync(frames)     { teacherAvatar.setLipsync(frames); },
+  startLipsync()         { teacherAvatar.startLipsync(); },
+  stopLipsync()          { teacherAvatar.stopLipsync(); },
+  setIdleScale(s)        { teacherAvatar.idleScale = s; },
+  playGesture(name)      { teacherAvatar.playGesture(name); },
+  debugExpressions()     { teacherAvatar.debugExpressions(); },
+};
+
+// === 後方互換: window.avatarLighting ===
+window.avatarLighting = {
+  BASE_AMBIENT: 0.75,
+  BASE_DIRECTIONAL: 1.0,
+  setAmbient(i)     { teacherAvatar.ambientLight.intensity = i; },
+  setDirectional(i) { teacherAvatar.dirLight.intensity = i; },
+  setExposure(val) {
+    for (const a of Object.values(window.avatarInstances)) {
+      if (a._disabled) continue;
+      a.ambientLight.intensity = a.BASE_AMBIENT * val;
+      a.dirLight.intensity = a.BASE_DIRECTIONAL * val;
+    }
+  },
+  setColor(r, g, b) {
+    for (const a of Object.values(window.avatarInstances)) {
+      if (a._disabled) continue;
+      a.ambientLight.color.setRGB(r, g, b);
+      a.dirLight.color.setRGB(r, g, b);
+    }
+  },
+  setPosition(x, y, z) {
+    if (x != null) teacherAvatar.dirLight.position.x = x;
+    if (y != null) teacherAvatar.dirLight.position.y = y;
+    if (z != null) teacherAvatar.dirLight.position.z = z;
   },
 };
 
-// VRMモデル読み込み
-async function loadVRM(url) {
-  const loader = new GLTFLoader();
-  loader.register((parser) => new VRM.VRMLoaderPlugin(parser));
-
-  try {
-    const gltf = await loader.loadAsync(url);
-    const vrm = gltf.userData.vrm;
-    if (!vrm) { console.error('VRMデータがありません'); return; }
-
-    // 既存モデル削除
-    if (currentVRM) {
-      scene.remove(currentVRM.scene);
-      VRM.VRMUtils.deepDispose(currentVRM.scene);
-    }
-
-    // VRM追加
-    VRM.VRMUtils.rotateVRM0(vrm);
-    scene.add(vrm.scene);
-    currentVRM = vrm;
-
-    // ジェスチャー用AnimationMixer作成
-    mixer = new THREE.AnimationMixer(vrm.scene);
-    currentGestureAction = null;
-
-    // DEBUG: 利用可能な表情名を列挙
-    const em = vrm.expressionManager;
-    if (em) {
-      const names = [];
-      // three-vrm v3: _expressionMap or _expressions
-      const map = em._expressionMap || em._expressions;
-      if (map) {
-        if (map instanceof Map) {
-          for (const k of map.keys()) names.push(k);
-        } else {
-          names.push(...Object.keys(map));
-        }
-      }
-      console.log('VRM expressions available:', names);
-    }
-
-    console.log('VRM読み込み完了:', url);
-    t0 = performance.now() / 1000;
-  } catch (e) {
-    console.error('VRM読み込み失敗:', e);
+// init()がmodule scriptより先に実行された場合のpending適用
+if (window._pendingLighting) {
+  const pending = window._pendingLighting;
+  delete window._pendingLighting;
+  if (typeof _applyLighting === 'function') {
+    _applyLighting(pending);
   }
 }
 
-// === 表情イージング補間（毎フレーム） ===
-function updateExpressionEasing() {
-  if (!exprTransitionStart) return;
-  const elapsed = performance.now() - exprTransitionStart;
-  const progress = Math.min(elapsed / EXPR_TRANSITION_MS, 1);
-  // イーズインアウト
-  const t = progress < 0.5
-    ? 2 * progress * progress
-    : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
-  const allNames = new Set([...Object.keys(exprPrev), ...Object.keys(exprTarget)]);
-  for (const name of allNames) {
-    const from = exprPrev[name] || 0;
-    const to = exprTarget[name] || 0;
-    exprCurrent[name] = from + (to - from) * t;
+// === 統合アニメーションループ ===
+function animateAll() {
+  requestAnimationFrame(animateAll);
+  for (const avatar of Object.values(window.avatarInstances)) {
+    if (!avatar._disabled) avatar.animate();
   }
-  if (progress >= 1) exprTransitionStart = 0;
 }
+animateAll();
 
-// アイドルアニメーション + レンダリングループ
-function animate() {
-  requestAnimationFrame(animate);
-  const delta = clock.getDelta();
-
-  // ジェスチャーAnimationMixer更新
-  if (mixer) mixer.update(delta);
-
-  if (!currentVRM) { renderer.render(scene, camera); return; }
-
-  const now = performance.now() / 1000;
-  const t = now - t0;
-  const s = idleScale;
-
-  // ジェスチャー再生中はidleボーンをスキップ（mixerに任せる）
-  const gestureActive = currentGestureAction && currentGestureAction.isRunning();
-
-  if (!gestureActive) {
-    // ジェスチャー終了後にactionをクリア
-    if (currentGestureAction && !currentGestureAction.isRunning()) {
-      currentGestureAction = null;
-    }
-
-    // --- 呼吸 (~4秒周期) ---
-    const breath = Math.sin(t * 1.6) * 0.8 * s;
-    setBoneRotation(currentVRM, 'chest', quatFromAxisAngle(1, 0, 0, breath));
-
-    // --- 体の揺れ (~7秒周期) ---
-    const sway = (Math.sin(t * 0.9) * 1.0 + Math.sin(t * 0.37) * 0.4) * s;
-    setBoneRotation(currentVRM, 'spine', quatFromAxisAngle(0, 0, 1, sway));
-
-    // --- 頭の動き ---
-    const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s;
-    const headZ = (Math.sin(t * 0.5) * 1.6 + Math.sin(t * 1.1) * 0.6) * s;
-    const headY = Math.sin(t * 0.4) * 1.2 * s;
-    const qHead = quatFromAxisAngle(1, 0, 0, headX)
-      .multiply(quatFromAxisAngle(0, 1, 0, headY))
-      .multiply(quatFromAxisAngle(0, 0, 1, headZ));
-    setBoneRotation(currentVRM, 'head', qHead);
-
-    // --- 腕の揺れ ---
-    const rArmSway = Math.sin(t * 0.6 + 1.0) * 0.8 * s;
-    const lArmSway = Math.sin(t * 0.6 + 2.5) * 0.8 * s;
-    setBoneRotation(currentVRM, 'rightUpperArm', quatFromAxisAngle(0, 0, 1, -70 + rArmSway));
-    setBoneRotation(currentVRM, 'leftUpperArm', quatFromAxisAngle(0, 0, 1, 70 + lArmSway));
-
-    // --- 前腕 ---
-    const rFore = 20 + Math.sin(t * 0.8 + 0.5) * 0.6 * s;
-    const lFore = -20 + Math.sin(t * 0.8 + 2.0) * 0.6 * s;
-    setBoneRotation(currentVRM, 'rightLowerArm', quatFromAxisAngle(0, 1, 0, rFore));
-    setBoneRotation(currentVRM, 'leftLowerArm', quatFromAxisAngle(0, 1, 0, lFore));
-  }
-
-  // --- BlendShape ---
-  const em = currentVRM.expressionManager;
-  if (em) {
-    // まばたき
-    if (now >= nextBlink && blinkEnd === 0) {
-      blinkEnd = now + 0.08;
-    }
-    if (blinkEnd > 0) {
-      if (now < blinkEnd) {
-        em.setValue('blink', 1.0);
-      } else {
-        em.setValue('blink', 0.0);
-        blinkEnd = 0;
-        nextBlink = now + 2 + Math.random() * 4;
-      }
-    }
-
-    // 耳ぴくぴく（カスタムBlendShape）
-    if (now >= nextEarTwitch && now >= earTwitchEnd) {
-      // 15%の確率でプルプル振りモード
-      earTwitchShake = Math.random() < 0.15;
-      if (earTwitchShake) {
-        earTwitchDuration = 0.3 + Math.random() * 0.3;  // 0.3-0.6秒
-        earTwitchShakeHz = 30 + Math.random() * 20;  // 30-50Hz（超高速）
-        // プルプル中は驚き顔
-        em.setValue('happy', 0.6);
-      } else {
-        earTwitchDuration = 0.15 + Math.random() * 0.15;
-      }
-      earTwitchEnd = now + earTwitchDuration;
-      earTwitchStart = now;
-      nextEarTwitch = now + 3 + Math.random() * 7;
-    }
-    try {
-      if (now < earTwitchEnd) {
-        const progress = (now - earTwitchStart) / earTwitchDuration;
-        if (earTwitchShake) {
-          // プルプル: ear_stand↔ear_droop を交互に振って大きく揺らす
-          const fade = 1 - progress;
-          const wave = Math.sin(progress * earTwitchShakeHz * Math.PI) * fade;
-          em.setValue('ear_stand', Math.max(0, wave));
-          em.setValue('ear_droop', Math.max(0, -wave));
-        } else {
-          em.setValue('ear_stand', Math.sin(progress * Math.PI));
-          em.setValue('ear_droop', 0.0);
-        }
-      } else {
-        em.setValue('ear_stand', 0.0);
-        em.setValue('ear_droop', 0.0);
-        if (earTwitchShake) {
-          em.setValue('happy', 0.0);
-          earTwitchShake = false;
-        }
-      }
-    } catch (e) { /* ear BlendShapeがない場合は無視 */ }
-
-    // リップシンク
-    if (lipsyncFrames) {
-      const frameIdx = Math.floor((now - lipsyncStart) * 30);
-      if (frameIdx >= 0 && frameIdx < lipsyncFrames.length) {
-        em.setValue('aa', lipsyncFrames[frameIdx]);
-      } else {
-        lipsyncFrames = null;
-        em.setValue('aa', 0.0);
-      }
-    }
-
-    // 感情BlendShape（イージング遷移）
-    // aa/blink/ear_standは他システム（リップシンク・まばたき・耳）が制御するためスキップ
-    updateExpressionEasing();
-    for (const [name, value] of Object.entries(exprCurrent)) {
-      const lname = name.toLowerCase();
-      if (lname === 'aa' || lname === 'blink' || lname === 'ear_stand') continue;
-      try { em.setValue(lname, value); } catch (e) {}
-    }
-
-    em.update();
-
-  }
-
-  currentVRM.update(delta);
-  renderer.render(scene, camera);
-}
-
-animate();
-
-// デフォルトでVRMモデルを読み込み（素材管理で選択されたVRMを優先）
+// === 初期化: アバター読み込み ===
 async function initAvatar() {
+  let vrmUrl = null;
   try {
-    // 素材管理で選択されたアバターを確認
     const filesRes = await fetch('/api/files/avatar/list');
     const filesData = await filesRes.json();
     if (filesData.ok && filesData.active) {
-      await loadVRM('/resources/vrm/' + filesData.active);
-      return;
+      vrmUrl = '/resources/vrm/' + filesData.active;
     }
   } catch (e) {}
-  try {
-    const res = await fetch('/api/broadcast/avatar');
-    const data = await res.json();
-    const vrmUrl = data.vrm_url || '/resources/vrm/Shinano.vrm';
-    await loadVRM(vrmUrl);
-  } catch (e) {
-    await loadVRM('/resources/vrm/Shinano.vrm');
+  if (!vrmUrl) {
+    try {
+      const res = await fetch('/api/broadcast/avatar');
+      const data = await res.json();
+      vrmUrl = data.vrm_url || '/resources/vrm/Shinano.vrm';
+    } catch (e) {
+      vrmUrl = '/resources/vrm/Shinano.vrm';
+    }
+  }
+
+  // 先生アバター読み込み
+  await teacherAvatar.loadVRM(vrmUrl);
+
+  // 生徒アバター読み込み（avatar2のactive VRMを使用、なければ先生と同じ）
+  const student = window.avatarInstances['student'];
+  if (student && !student._disabled) {
+    let studentVrmUrl = vrmUrl;
+    try {
+      const res = await fetch('/api/files/avatar2/list');
+      const data = await res.json();
+      if (data.ok && data.active) {
+        studentVrmUrl = '/resources/vrm/' + data.active;
+      }
+    } catch (e) {}
+    await student.loadVRM(studentVrmUrl);
   }
 }
-
 initAvatar();
 
 // グローバル公開（非module scriptからアクセス用）
-window.loadVRM = loadVRM;
+window.loadVRM = (url) => teacherAvatar.loadVRM(url);

@@ -266,7 +266,7 @@ class TestCommonDefaults:
 
     def test_all_visual_items_have_common_properties(self):
         from scripts.routes.overlay import _OVERLAY_DEFAULTS, _COMMON_DEFAULTS
-        visual_items = ["avatar", "subtitle", "todo"]
+        visual_items = ["avatar1", "avatar2", "subtitle", "todo"]
         for item in visual_items:
             assert item in _OVERLAY_DEFAULTS, f"{item} が _OVERLAY_DEFAULTS にない"
             for key in _COMMON_DEFAULTS:
@@ -292,7 +292,7 @@ class TestOverlaySettingsAPI:
         assert resp.status_code == 200
         data = resp.json()
         # 全ビジュアルアイテムの共通プロパティが返る
-        for item in ["avatar", "subtitle", "todo"]:
+        for item in ["avatar1", "avatar2", "subtitle", "todo"]:
             assert item in data, f"{item} がレスポンスにない"
             assert "bgColor" in data[item], f"{item} に bgColor がない"
             assert "borderRadius" in data[item], f"{item} に borderRadius がない"
@@ -322,5 +322,5 @@ class TestOverlaySettingsAPI:
         resp = api_client.get("/api/overlay/settings")
         data = resp.json()
         # 共通プロパティが型としてちゃんと返る
-        assert isinstance(data["avatar"]["positionX"], (int, float))
-        assert isinstance(data["avatar"]["bgOpacity"], (int, float))
+        assert isinstance(data["avatar1"]["positionX"], (int, float))
+        assert isinstance(data["avatar1"]["bgOpacity"], (int, float))

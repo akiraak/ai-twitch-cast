@@ -27,7 +27,9 @@ function _applyLighting(lighting) {
   const bl = 1.0 - temp * 0.15;
   L.setColor(r, g, bl);
   // 彩度 → CSSフィルター
-  document.getElementById('avatar-canvas').style.filter = sat !== 1.0 ? `saturate(${sat})` : '';
+  document.querySelectorAll('#avatar-area-1 canvas, #avatar-area-2 canvas').forEach(c => {
+    c.style.filter = sat !== 1.0 ? `saturate(${sat})` : '';
+  });
 }
 
 // === 保存済み設定（表示時の再適用用） ===
@@ -36,14 +38,20 @@ let _savedOverlaySettings = {};
 // === 設定適用（%/vw単位） ===
 function applySettings(s) {
   _savedOverlaySettings = { ..._savedOverlaySettings, ...s };
-  // === avatar ===
-  const avatarArea = document.getElementById('avatar-area');
-  if (s.avatar) {
-    applyCommonStyle(avatarArea, s.avatar);
-    // avatar固有: サイズ + キャンバスリサイズ
-    if (s.avatar.width != null) avatarArea.style.width = s.avatar.width + '%';
-    if (s.avatar.height != null) avatarArea.style.height = s.avatar.height + '%';
+  // === avatar1（先生） ===
+  const avatarArea1 = document.getElementById('avatar-area-1');
+  if (s.avatar1) {
+    applyCommonStyle(avatarArea1, s.avatar1);
+    if (s.avatar1.width != null) avatarArea1.style.width = s.avatar1.width + '%';
+    if (s.avatar1.height != null) avatarArea1.style.height = s.avatar1.height + '%';
     if (window.dispatchEvent) window.dispatchEvent(new Event('resize'));
+  }
+  // === avatar2（生徒） ===
+  const avatarArea2 = document.getElementById('avatar-area-2');
+  if (s.avatar2) {
+    applyCommonStyle(avatarArea2, s.avatar2);
+    if (s.avatar2.width != null) avatarArea2.style.width = s.avatar2.width + '%';
+    if (s.avatar2.height != null) avatarArea2.style.height = s.avatar2.height + '%';
   }
   // === lighting ===
   if (s.lighting) {

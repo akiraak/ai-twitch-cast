@@ -313,9 +313,14 @@ def _make_item_defaults(overrides):
 
 
 _OVERLAY_DEFAULTS = {
-    "avatar": _make_item_defaults({
+    "avatar1": _make_item_defaults({
         "positionX": 46.5, "positionY": 24.3, "width": 53.5, "height": 75.7,
         "zIndex": 5, "bgOpacity": 0, "borderRadius": 0, "padding": 0,
+    }),
+    "avatar2": _make_item_defaults({
+        "positionX": 0, "positionY": 30, "width": 40, "height": 70,
+        "zIndex": 4, "bgOpacity": 0, "borderRadius": 0, "borderSize": 0,
+        "padding": 0, "backdropBlur": 0,
     }),
     "lighting": {
         "brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0,
@@ -559,7 +564,7 @@ async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
     logger.info("[overlay] save_settings: %s", {k: v for k, v in body.items() if k != "type"})
-    fixed_items = {"avatar", "subtitle", "todo", "lesson_text", "lesson_progress"}
+    fixed_items = {"avatar", "avatar1", "avatar2", "subtitle", "todo", "lesson_text", "lesson_progress"}
     for section, props in body.items():
         if not isinstance(props, dict):
             continue

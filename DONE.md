@@ -1,5 +1,16 @@
 # DONE
 
+## 生徒役キャラクター追加（Step 1: マルチアバター表示）
+
+- [x] avatar-renderer.js を AvatarInstance クラスにリファクタ（グローバル状態→クラス化、2体独立レンダリング）
+- [x] broadcast.html に先生（avatar-area-1）+ 生徒（avatar-area-2）の2体表示
+- [x] WebUI「配信画面」タブに「アバター（先生）」「アバター（生徒）」2パネル追加
+- [x] 生徒用VRMファイル管理（avatar2カテゴリ、独立したactive選択）
+- [x] DB マイグレーション（avatar→avatar1リネーム、avatar2デフォルト追加）
+- [x] overlay settings / broadcast_items のavatar1・avatar2対応
+- [x] server_restart イベントで broadcast.html 自動リロード
+- [x] window.avatarVRM / window.avatarLighting 後方互換維持
+
 ## 教師モード改善 v2
 
 - [x] 英語のみモード対応（`plans/english-only-mode.md`）— prompt_builder/tts/ai_responder/lesson_generator の全プロンプトを primary≠ja で英語切替、TTSベース言語動的化

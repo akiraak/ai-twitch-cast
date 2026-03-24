@@ -1398,7 +1398,8 @@ _ITEM_SPECIFIC_KEYS = {
 }
 
 _ITEM_LABELS = {
-    "avatar": "アバター",
+    "avatar1": "アバター（先生）",
+    "avatar2": "アバター（生徒）",
     "subtitle": "字幕",
     "todo": "TODO",
 }
@@ -1673,11 +1674,28 @@ def _migrate_capture_windows_to_items():
     conn.commit()
 
 
+def _migrate_avatar_to_avatar1():
+    """broadcast_items: avatar → avatar1 にリネーム"""
+    conn = get_connection()
+    old = conn.execute("SELECT id FROM broadcast_items WHERE id = 'avatar'").fetchone()
+    if not old:
+        return
+    already = conn.execute("SELECT id FROM broadcast_items WHERE id = 'avatar1'").fetchone()
+    if already:
+        # avatar1 が既にあれば旧 avatar を削除するだけ
+        conn.execute("DELETE FROM broadcast_items WHERE id = 'avatar'")
+    else:
+        conn.execute("UPDATE broadcast_items SET id = 'avatar1' WHERE id = 'avatar'")
+    conn.commit()
+
+
 def migrate_overlay_to_items():
     """overlay.* settings → broadcast_items に移行（初回起動時に自動実行）"""
     conn = get_connection()
+    # avatar → avatar1 リネーム
+    _migrate_avatar_to_avatar1()
     existing = conn.execute(
-        "SELECT id FROM broadcast_items WHERE id = 'avatar'"
+        "SELECT id FROM broadcast_items WHERE id = 'avatar1'"
     ).fetchone()
     if existing:
         # 固定アイテム移行済み、動的アイテムの移行もチェック
@@ -1688,7 +1706,7 @@ def migrate_overlay_to_items():
     from scripts.routes.overlay import _OVERLAY_DEFAULTS, _COMMON_DEFAULTS
 
     now = _now()
-    fixed_items = ["avatar", "subtitle", "todo"]
+    fixed_items = ["avatar1", "avatar2", "subtitle", "todo"]
     for item_type in fixed_items:
         defaults = _OVERLAY_DEFAULTS.get(item_type, {})
         # overlay.* settingsからDB値を読み込み

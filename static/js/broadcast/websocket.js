@@ -50,6 +50,12 @@ function connectWS() {
         }
         break;
 
+      // サーバー再起動 → ページリロード（HTML/JS更新を反映）
+      case 'server_restart':
+        console.log('[WS] server_restart received, reloading...');
+        setTimeout(() => location.reload(), 500);
+        return;
+
       // 配信状態（リップシンク遅延切替用）
       case 'stream_status':
         _isStreaming = !!data.streaming;
@@ -166,6 +172,11 @@ function connectWS() {
       // 素材変更
       case 'avatar_vrm_change':
         if (data.url) loadVRM(data.url);
+        break;
+      case 'avatar2_vrm_change':
+        if (data.url && window.avatarInstances?.['student']) {
+          window.avatarInstances['student'].loadVRM(data.url);
+        }
         break;
       case 'background_change':
         if (data.url) document.getElementById('background').src = data.url;
