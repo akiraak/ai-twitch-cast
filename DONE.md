@@ -15,6 +15,15 @@
 - [x] ライティングをアバター個別化（lighting_teacher / lighting_student）
 - [x] 生徒選択時はセリフの第2〜5層・発話設定・テスト再生を非表示
 
+## 生徒役キャラクター追加（Step 1: WebSocketアバター制御）
+
+- [x] websocket.js に getAvatar() ヘルパー追加、blendshape/lipsync/lipsync_stop を avatar_id でルーティング
+- [x] student_avatar_show / student_avatar_hide イベント追加
+- [x] speech_pipeline.py の notify_overlay/apply_emotion/speak に avatar_id パラメータ追加（全イベント必須）
+- [x] 字幕に data-speaker 属性設定、生徒字幕のスタイル（ボーダー色・テキストシャドウ）
+- [x] Debug タブにアバター制御テストUI（Teacher/Student × 表情/口パク/字幕 の6ボタン）
+- [x] POST /api/debug/avatar-test エンドポイント追加
+
 ## 生徒役キャラクター追加（Step 1: characters テーブル集約）
 
 - [x] Phase 1: 生徒を characters テーブルに追加（role フィールド、`/api/characters` 一覧、`/api/character/{id}` 個別読み書き）

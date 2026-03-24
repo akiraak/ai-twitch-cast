@@ -1,6 +1,6 @@
 # Step 1: WebSocket アバター制御
 
-## ステータス: 未着手
+## ステータス: 完了
 
 ## ゴール
 
@@ -32,10 +32,7 @@
 ヘルパー関数:
 ```javascript
 function getAvatar(avatarId) {
-  if (window.avatarInstances) {
-    return window.avatarInstances[avatarId || 'teacher'];
-  }
-  return window.avatarVRM;  // Step 1未適用時のフォールバック
+  return window.avatarInstances?.[avatarId];
 }
 ```
 
@@ -85,13 +82,11 @@ case 'student_avatar_hide': {
 
 `apply_emotion()`:
 ```python
-def apply_emotion(self, emotion, gesture=None, avatar_id=None):
+def apply_emotion(self, emotion, gesture=None, avatar_id="teacher"):
     char = get_character()
     blendshapes = char.get("emotion_blendshapes", {}).get(emotion, {})
     if self._on_overlay and blendshapes:
-        event = {"type": "blendshape", "shapes": blendshapes}
-        if avatar_id:
-            event["avatar_id"] = avatar_id
+        event = {"type": "blendshape", "shapes": blendshapes, "avatar_id": avatar_id}
         if gesture:
             event["gesture"] = gesture
         asyncio.create_task(self._on_overlay(event))
@@ -101,23 +96,19 @@ def apply_emotion(self, emotion, gesture=None, avatar_id=None):
 ```python
 # avatar_id パラメータを speak() → _speak_impl() に伝搬
 if lipsync_frames:
-    event = {"type": "lipsync", "frames": lipsync_frames, "autostart": True}
-    if avatar_id:
-        event["avatar_id"] = avatar_id
+    event = {"type": "lipsync", "frames": lipsync_frames, "autostart": True, "avatar_id": avatar_id}
     await self._on_overlay(event)
 
 # ...
 
 if lipsync_frames:
-    event = {"type": "lipsync_stop"}
-    if avatar_id:
-        event["avatar_id"] = avatar_id
+    event = {"type": "lipsync_stop", "avatar_id": avatar_id}
     await self._on_overlay(event)
 ```
 
 `notify_overlay()` にも avatar_id:
 ```python
-async def notify_overlay(self, author, trigger_text, result, avatar_id=None):
+async def notify_overlay(self, author, trigger_text, result, avatar_id="teacher"):
     event = {
         "type": "comment",
         "author": author,
@@ -125,9 +116,8 @@ async def notify_overlay(self, author, trigger_text, result, avatar_id=None):
         "speech": self.strip_lang_tags(result["speech"]),
         "translation": result.get("translation", ""),
         "emotion": result["emotion"],
+        "avatar_id": avatar_id,
     }
-    if avatar_id:
-        event["avatar_id"] = avatar_id
     await self._on_overlay(event)
 ```
 
@@ -137,7 +127,7 @@ async def notify_overlay(self, author, trigger_text, result, avatar_id=None):
 ```javascript
 // comment イベント受信時
 const subtitle = document.getElementById('subtitle');
-subtitle.dataset.speaker = data.avatar_id || 'teacher';
+subtitle.dataset.speaker = data.avatar_id;
 ```
 
 `broadcast.css`:
@@ -164,8 +154,7 @@ subtitle.dataset.speaker = data.avatar_id || 'teacher';
 
 ## 完了条件
 
-- [ ] `avatar_id` ありイベントが正しいアバターにルーティングされる
-- [ ] `avatar_id` なしイベントは teacher にフォールバック（後方互換）
+- [ ] `avatar_id` に基づきイベントが正しいアバターにルーティングされる
+- [ ] すべてのイベントに `avatar_id` が必須で含まれる
 - [ ] `student_avatar_show` / `student_avatar_hide` が動作する
 - [ ] 字幕に `data-speaker` 属性が設定され、生徒は色が変わる
-- [ ] 既存のコメント応答（授業モード外）が影響を受けない

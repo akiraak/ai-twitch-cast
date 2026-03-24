@@ -77,6 +77,12 @@
     font-style: italic;
     text-shadow: 0 0.05vw 0.2vw rgba(0, 0, 0, 0.5);
   }
+  #subtitle[data-speaker="student"] {
+    border-color: rgba(255, 136, 170, 0.3);
+  }
+  #subtitle[data-speaker="student"] .speech {
+    text-shadow: 0 0.1vw 0.4vw rgba(0, 0, 0, 0.7), 0 0 1vw rgba(255, 136, 170, 0.2);
+  }
 
   /* === TODOパネル（中央） === */
   #todo-panel {

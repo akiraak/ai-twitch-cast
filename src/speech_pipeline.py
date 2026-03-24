@@ -54,7 +54,7 @@ class SpeechPipeline:
 
         return segments if segments else [text]
 
-    async def notify_overlay(self, author, trigger_text, result):
+    async def notify_overlay(self, author, trigger_text, result, avatar_id="teacher"):
         """オーバーレイにコメント情報を送信する"""
         if not self._on_overlay:
             return
@@ -72,6 +72,7 @@ class SpeechPipeline:
             "speech": stripped_speech,
             "translation": result.get("translation", ""),
             "emotion": result["emotion"],
+            "avatar_id": avatar_id,
         })
 
     async def notify_overlay_end(self):
@@ -98,7 +99,8 @@ class SpeechPipeline:
             return None
 
     async def speak(self, text, voice=None, subtitle=None, chat_result=None,
-                    tts_text=None, post_to_chat=None, se=None, wav_path=None):
+                    tts_text=None, post_to_chat=None, se=None, wav_path=None,
+                    avatar_id="teacher"):
         """TTS生成・ブラウザソース経由で再生する（排他制御付き）
 
         Args:
@@ -110,15 +112,17 @@ class SpeechPipeline:
             post_to_chat: チャット投稿コールバック（async関数）
             se: SE情報 {filename, volume, duration, url} or None
             wav_path: 事前生成済みWAVパス（指定時はTTS生成をスキップ）
+            avatar_id: アバター識別子（"teacher" or "student"）
         """
         async with self._speak_lock:
             await self._speak_impl(text, voice=voice, subtitle=subtitle,
                                    chat_result=chat_result, tts_text=tts_text,
                                    post_to_chat=post_to_chat, se=se,
-                                   wav_path=wav_path)
+                                   wav_path=wav_path, avatar_id=avatar_id)
 
     async def _speak_impl(self, text, voice=None, subtitle=None, chat_result=None,
-                          tts_text=None, post_to_chat=None, se=None, wav_path=None):
+                          tts_text=None, post_to_chat=None, se=None, wav_path=None,
+                          avatar_id="teacher"):
         """speak()の実体（ロック取得済み前提）"""
         # === SE再生（TTS前） ===
         if se:
@@ -174,12 +178,14 @@ class SpeechPipeline:
                 if subtitle:
                     await self.notify_overlay(
                         subtitle["author"], subtitle["trigger_text"], subtitle["result"],
+                        avatar_id=avatar_id,
                     )
                 if lipsync_frames:
                     await self._on_overlay({
                         "type": "lipsync",
                         "frames": lipsync_frames,
                         "autostart": True,
+                        "avatar_id": avatar_id,
                     })
 
                 logger.info("[tts] 字幕・口パク発火完了: %.0fms（音声投入から）",
@@ -197,7 +203,7 @@ class SpeechPipeline:
 
                 # リップシンク停止
                 if lipsync_frames:
-                    await self._on_overlay({"type": "lipsync_stop"})
+                    await self._on_overlay({"type": "lipsync_stop", "avatar_id": avatar_id})
             else:
                 # TTS失敗時: チャット投稿してテキスト表示のみ（数秒待つ）
                 if chat_result and post_to_chat:
@@ -276,11 +282,11 @@ class SpeechPipeline:
         "grateful": "bow",
     }
 
-    def apply_emotion(self, emotion, gesture=None):
+    def apply_emotion(self, emotion, gesture=None, avatar_id="teacher"):
         """感情に対応するBlendShape + ジェスチャーを適用する"""
         char = get_character()
         blendshapes = char.get("emotion_blendshapes", {}).get(emotion, {})
-        logger.info("[emotion] %s → blendshapes=%s", emotion, blendshapes)
+        logger.info("[emotion] %s → blendshapes=%s (avatar=%s)", emotion, blendshapes, avatar_id)
         if not blendshapes:
             # ニュートラル: 表情リセット
             all_emotions = set()
@@ -297,6 +303,7 @@ class SpeechPipeline:
             event = {
                 "type": "blendshape",
                 "shapes": blendshapes,
+                "avatar_id": avatar_id,
             }
             if gesture:
                 event["gesture"] = gesture

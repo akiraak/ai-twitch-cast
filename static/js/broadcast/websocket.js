@@ -1,5 +1,10 @@
 // WebSocket接続（統合: overlay + tts + bgm）
 
+// avatar_id に基づきアバターインスタンスを取得
+function getAvatar(avatarId) {
+  return window.avatarInstances?.[avatarId];
+}
+
 function connectWS() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${protocol}//${location.host}/ws/broadcast`);
@@ -73,36 +78,52 @@ function connectWS() {
         break;
 
 
-      // VRMアバター制御
-      case 'blendshape':
-        if (window.avatarVRM && data.shapes) {
-          window.avatarVRM.setBlendShapes(data.shapes);
-        }
-        if (window.avatarVRM && data.gesture) {
-          window.avatarVRM.playGesture(data.gesture);
-        }
+      // VRMアバター制御（avatar_id でルーティング）
+      case 'blendshape': {
+        const avatar = getAvatar(data.avatar_id);
+        if (avatar && data.shapes) avatar.setBlendShapes(data.shapes);
+        if (avatar && data.gesture) avatar.playGesture(data.gesture);
         break;
-      case 'lipsync':
-        if (window.avatarVRM && data.frames) {
+      }
+      case 'lipsync': {
+        const avatar = getAvatar(data.avatar_id);
+        if (avatar && data.frames) {
           const delay = _isStreaming ? _lipsyncDelay : 0;
-          window.avatarVRM.setLipsync(data.frames);
+          avatar.setLipsync(data.frames);
           clearTimeout(_syncTimer);
           if (delay > 0) {
             _syncTimer = setTimeout(() => {
               if (_pendingSubtitle) { showSubtitle(_pendingSubtitle); _pendingSubtitle = null; }
-              window.avatarVRM.startLipsync();
+              avatar.startLipsync();
             }, delay);
           } else {
-            window.avatarVRM.startLipsync();
+            avatar.startLipsync();
           }
-          console.log(`[Sync] lipsync: ${data.frames.length} frames, delay=${delay}ms`);
+          console.log(`[Sync] lipsync: avatar=${data.avatar_id}, ${data.frames.length} frames, delay=${delay}ms`);
         }
         break;
-      case 'lipsync_stop':
-        if (window.avatarVRM) {
-          window.avatarVRM.stopLipsync();
+      }
+      case 'lipsync_stop': {
+        const avatar = getAvatar(data.avatar_id);
+        if (avatar) avatar.stopLipsync();
+        break;
+      }
+
+      // 生徒アバター表示/非表示
+      case 'student_avatar_show': {
+        const area = document.getElementById('avatar-area-2');
+        if (area) area.style.display = 'block';
+        const student = window.avatarInstances?.['student'];
+        if (student && data.vrm) {
+          student.loadVRM(`/resources/vrm/${data.vrm}`);
         }
         break;
+      }
+      case 'student_avatar_hide': {
+        const area = document.getElementById('avatar-area-2');
+        if (area) area.style.display = 'none';
+        break;
+      }
 
       // アバターストリーム（MJPEG fallback）
       case 'avatar_stream':

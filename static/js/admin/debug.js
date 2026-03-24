@@ -1,3 +1,23 @@
+// アバター制御テスト
+async function avatarTest(avatarId, testType) {
+  const st = document.getElementById('avatar-test-status');
+  st.textContent = `${avatarId}/${testType} 送信中...`;
+  st.style.color = '#9a88b5';
+  try {
+    const res = await api('POST', '/api/debug/avatar-test', { avatar_id: avatarId, test_type: testType });
+    if (res?.ok) {
+      st.textContent = `${avatarId}/${testType} 送信OK`;
+      st.style.color = '#2e7d32';
+    } else {
+      st.textContent = res?.error || '失敗';
+      st.style.color = '#c62828';
+    }
+  } catch (e) {
+    st.textContent = 'エラー: ' + e.message;
+    st.style.color = '#c62828';
+  }
+}
+
 // スクリーンショット
 
 async function takeScreenshot() {

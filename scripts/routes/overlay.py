@@ -236,20 +236,73 @@ async def debug_lesson_text_hide():
 
 
 @router.post("/api/debug/expression/{name}")
-async def debug_expression(name: str, value: float = 1.0):
+async def debug_expression(name: str, value: float = 1.0, avatar_id: str = "teacher"):
     """デバッグ用：表情テスト（blendshapeイベント直送）"""
-    event = {"type": "blendshape", "shapes": {name: value}}
+    event = {"type": "blendshape", "shapes": {name: value}, "avatar_id": avatar_id}
     await state.broadcast_overlay(event)
     return {"ok": True, "sent": event}
 
 
 @router.post("/api/debug/expression-reset")
-async def debug_expression_reset():
+async def debug_expression_reset(avatar_id: str = "teacher"):
     """デバッグ用：全表情リセット"""
     shapes = {n: 0.0 for n in ["happy", "angry", "sad", "relaxed", "surprised"]}
-    event = {"type": "blendshape", "shapes": shapes}
+    event = {"type": "blendshape", "shapes": shapes, "avatar_id": avatar_id}
     await state.broadcast_overlay(event)
     return {"ok": True, "sent": event}
+
+
+@router.post("/api/debug/avatar-test")
+async def debug_avatar_test(request: Request):
+    """デバッグ用：avatar_idルーティングのテスト（blendshape / lipsync）"""
+    import math
+    body = await request.json()
+    avatar_id = body.get("avatar_id", "teacher")
+    test_type = body.get("test_type", "blendshape")
+
+    if test_type == "blendshape":
+        event = {"type": "blendshape", "shapes": {"happy": 1.0}, "avatar_id": avatar_id}
+        await state.broadcast_overlay(event)
+        # 2秒後にリセット
+        async def _reset():
+            await asyncio.sleep(2.0)
+            await state.broadcast_overlay({
+                "type": "blendshape",
+                "shapes": {"happy": 0.0},
+                "avatar_id": avatar_id,
+            })
+        asyncio.create_task(_reset())
+        return {"ok": True, "sent": event}
+
+    elif test_type == "lipsync":
+        # ダミーリップシンクフレーム（サイン波、約2秒）
+        frames = [abs(math.sin(i * 0.15)) * 0.8 for i in range(60)]
+        event = {"type": "lipsync", "frames": frames, "autostart": True, "avatar_id": avatar_id}
+        await state.broadcast_overlay(event)
+        # 2秒後に停止
+        async def _stop():
+            await asyncio.sleep(2.0)
+            await state.broadcast_overlay({"type": "lipsync_stop", "avatar_id": avatar_id})
+        asyncio.create_task(_stop())
+        return {"ok": True, "avatar_id": avatar_id, "frames": len(frames)}
+
+    elif test_type == "subtitle":
+        event = {
+            "type": "comment",
+            "trigger_text": f"[{avatar_id}] テスト字幕",
+            "speech": f"これは{avatar_id}アバターの字幕テストです",
+            "translation": f"Subtitle test for {avatar_id}",
+            "emotion": "joy",
+            "avatar_id": avatar_id,
+        }
+        await state.broadcast_overlay(event)
+        async def _fade():
+            await asyncio.sleep(3.0)
+            await state.broadcast_overlay({"type": "speaking_end"})
+        asyncio.create_task(_fade())
+        return {"ok": True, "sent": event}
+
+    return {"error": "unknown test_type"}
 
 
 @router.post("/api/debug/jslog")

@@ -423,6 +423,19 @@ users       1──N  comments      (user_id)</div>
   <div class="tab-content" id="tab-debug">
     <div class="grid">
       <div class="card">
+        <h2>アバター制御テスト</h2>
+        <p style="font-size:0.75rem; color:#9a88b5; margin-bottom:8px;">avatar_id ルーティング確認（/broadcast を横に開いて確認）</p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+          <button onclick="avatarTest('teacher','blendshape')" style="padding:6px 8px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">Teacher: 表情</button>
+          <button onclick="avatarTest('student','blendshape')" style="padding:6px 8px; background:#c2185b; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">Student: 表情</button>
+          <button onclick="avatarTest('teacher','lipsync')" style="padding:6px 8px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">Teacher: 口パク</button>
+          <button onclick="avatarTest('student','lipsync')" style="padding:6px 8px; background:#c2185b; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">Student: 口パク</button>
+          <button onclick="avatarTest('teacher','subtitle')" style="padding:6px 8px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">Teacher: 字幕</button>
+          <button onclick="avatarTest('student','subtitle')" style="padding:6px 8px; background:#c2185b; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">Student: 字幕</button>
+        </div>
+        <div class="status" id="avatar-test-status" style="margin-top:6px; font-size:0.75rem;"></div>
+      </div>
+      <div class="card">
         <h2>スクリーンショット</h2>
         <div class="btn-row">
           <button onclick="takeScreenshot()" id="btn-screenshot">スクリーンショット撮影</button>

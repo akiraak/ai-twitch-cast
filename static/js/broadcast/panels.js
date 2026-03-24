@@ -10,6 +10,7 @@ function stripLangTags(text) {
 function showSubtitle(data) {
   clearTimeout(fadeTimer);
   subtitleEl.classList.remove('fading');
+  subtitleEl.dataset.speaker = data.avatar_id;
   subtitleEl.querySelector('.author').textContent = '';
   subtitleEl.querySelector('.trigger-text').textContent = stripLangTags(data.trigger_text);
   subtitleEl.querySelector('.speech').textContent = stripLangTags(data.speech);
