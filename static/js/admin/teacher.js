@@ -589,7 +589,6 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap) {
         ${hasCacheFlag ? '<span style="font-size:0.65rem; color:#2e7d32; margin-left:6px; background:#e8f5e9; padding:1px 5px; border-radius:3px;">TTS cached</span>' : ''}
       </div>
       <div style="display:flex; gap:4px;">
-        ${hasCacheFlag ? `<button onclick="clearSectionCache(${lessonId}, ${s.order_index})" style="width:24px; height:24px; background:#fff3e0; color:#e65100; border:1px solid #ffe0b2; border-radius:3px; cursor:pointer; font-size:0.65rem;" title="TTSキャッシュ削除">C</button>` : ''}
         <button onclick="moveSectionUp(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#f0ecf5; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.7rem;" ${i === 0 ? 'disabled' : ''}>\u25B2</button>
         <button onclick="moveSectionDown(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#f0ecf5; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.7rem;" ${i === sections.length - 1 ? 'disabled' : ''}>\u25BC</button>
         <button onclick="deleteSection(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#c62828; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.7rem;">\u00D7</button>
