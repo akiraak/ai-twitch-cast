@@ -235,6 +235,11 @@ def generate_lesson_plan(lesson_name: str, extracted_text: str, source_images: l
 - 詰め込みすぎを防ぎ、適切なセクション数（3〜15）に調整する
 - 知識の正確性を損なわない範囲でエンタメ要素を採用する
 
+### titleの書き方
+- **10文字以内**で、そのセクションの内容が一目で分かるようにする
+- 具体的な名詞・動詞を使う（NG: 「導入・フック」「知識の積み上げ」→ OK: 「今日のテーマ」「基本単語」）
+- 視聴者が進捗パネルを見て「今どこをやっているか」すぐ分かることが目的
+
 ### 矛盾・分かりにくさの修正
 - セクション間の流れに矛盾がないかチェックする
 - 前のセクションで説明していない用語を使っていないか確認する
@@ -255,7 +260,7 @@ def generate_lesson_plan(lesson_name: str, extracted_text: str, source_images: l
 [
   {
     "section_type": "introduction",
-    "title": "セクションの短いタイトル",
+    "title": "10文字以内の具体的なタイトル（例: 基本の挨拶、クイズタイム、まとめ）",
     "summary": "このセクションで扱う内容の概要（2〜3文）",
     "emotion": "excited",
     "has_question": false,

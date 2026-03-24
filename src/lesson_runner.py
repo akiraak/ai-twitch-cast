@@ -402,7 +402,7 @@ class LessonRunner:
                 event["sections"] = [
                     {
                         "type": s["section_type"],
-                        "summary": s.get("title") or (s.get("content") or "")[:40],
+                        "summary": (s.get("title") or (s.get("content") or "")[:40])[:20],
                     }
                     for s in self._sections
                 ]
