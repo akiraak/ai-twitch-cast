@@ -1,5 +1,9 @@
 # DONE
 
+## 教師モード改善 v2
+
+- [x] 授業テキストパネルを次のセクションまで表示し続ける（発話完了直後のhideを削除、display_textがないセクションでのみ非表示）
+
 ## 教師モード Phase 1: DB + 画像/URL解析 + スクリプト生成 + 管理画面
 
 - [x] DBテーブル追加（lessons, lesson_sources, lesson_sections）+ CRUD関数
