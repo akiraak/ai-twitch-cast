@@ -34,20 +34,20 @@
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('layout', this)">配信画面</div>
-  <div class="tab" onclick="switchTab('character', this)">キャラクター</div>
+  <div class="tab active" onclick="switchTab('character', this)">キャラクター</div>
+  <div class="tab" onclick="switchTab('convmode', this)">会話モード</div>
+  <div class="tab" onclick="switchTab('layout', this)">配信画面</div>
   <div class="tab" onclick="switchTab('sound', this)">サウンド</div>
   <div class="tab" onclick="switchTab('chat', this)">チャット</div>
   <div class="tab" onclick="switchTab('todo', this)">TODO</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
   <div class="tab" onclick="switchTab('db', this)">DB</div>
-  <div class="tab" onclick="switchTab('convmode', this)">会話モード</div>
 </div>
 
 <div class="main">
 
   <!-- ===== 配信画面 ===== -->
-  <div class="tab-content active" id="tab-layout">
+  <div class="tab-content" id="tab-layout">
     <div class="card">
       <h2>配信画面</h2>
       <div id="panel-list">
@@ -128,7 +128,7 @@
   </div>
 
   <!-- ===== キャラクター ===== -->
-  <div class="tab-content" id="tab-character">
+  <div class="tab-content active" id="tab-character">
     <!-- サブタブ -->
     <div class="char-subtabs">
       <div class="char-subtab active" onclick="switchCharSubtab('appearance', this)">ビジュアル</div>

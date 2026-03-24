@@ -1,6 +1,6 @@
 // 共通ユーティリティ（タブ切替・トースト・モーダル・API）
 let _volTimer = null;
-const TAB_NAMES = ['layout', 'character', 'sound', 'chat', 'todo', 'db', 'debug', 'convmode'];
+const TAB_NAMES = ['character', 'convmode', 'layout', 'sound', 'chat', 'todo', 'debug', 'db'];
 
 function switchCharSubtab(name, el) {
   document.querySelectorAll('.char-subtab').forEach(t => t.classList.remove('active'));

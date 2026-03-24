@@ -4,7 +4,12 @@
 
 ### 教師モード改善
 - [ ] 生徒役のキャラを入れる → [plans/student-character/](plans/student-character/README.md)
-  - [>] Step 1: マルチアバター表示 — 画面に2体のVRMアバターを並べて表示 → [01-multi-avatar.md](plans/student-character/01-multi-avatar.md)
+  - [>] Step 1: マルチアバター表示（実装済み、WebUI整理残） → [01-multi-avatar.md](plans/student-character/01-multi-avatar.md)
+    - [ ] WebUIタブ順変更（会話モード→キャラクター→配信画面）
+    - [ ] キャラクター切替セレクタ（先生/生徒）
+    - [ ] VRM選択を配信画面→キャラクタータブに移動
+    - [ ] ライティングをアバター個別化
+    - [ ] 会話モードに登場キャラクター設定追加
   - [ ] Step 2: WebSocketアバター制御 — avatar_idでリップシンク・感情を振り分け → [02-websocket-routing.md](plans/student-character/02-websocket-routing.md)
   - [ ] Step 3: TTS styleパラメータ — 話者ごとに異なる声・スタイルで発話 → [03-tts-style.md](plans/student-character/03-tts-style.md)
   - [ ] Step 4: DBスキーマ + 設定 — dialoguesカラム・生徒キャラ設定 → [04-db-schema.md](plans/student-character/04-db-schema.md)
