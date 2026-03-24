@@ -484,11 +484,11 @@
   /* === 授業テキストパネル === */
   #lesson-text-panel {
     position: absolute;
-    top: 50%; left: 50%;
+    top: 35%; left: 50%;
     transform: translate(-50%, -50%);
     z-index: 12;
     width: 55%;
-    max-height: 70%;
+    max-height: 60%;
     overflow-y: auto;
     --bg-opacity: 0.65;
     --item-bg-color: #0a0a1e;
