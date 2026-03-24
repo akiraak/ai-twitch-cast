@@ -243,9 +243,11 @@ class LessonRunner:
         if display_text and _ssml_pat.search(display_text):
             logger.warning("[lesson]   ⚠ display_text に言語タグが混入: %s", _ssml_pat.findall(display_text))
 
-        # 画面テキスト表示
+        # 画面テキスト: あれば更新、なければ非表示
         if display_text:
             await self._show_lesson_text(display_text)
+        else:
+            await self._hide_lesson_text()
 
         # 感情適用 → TTS → リセット
         self._speech.apply_emotion(emotion)
@@ -317,11 +319,6 @@ class LessonRunner:
         # questionセクションの場合: 問いかけ → 待ち → 回答
         if section_type == "question" and section.get("question"):
             await self._handle_question(section)
-
-        # 画面テキスト非表示
-        if display_text:
-            await asyncio.sleep(0.5)
-            await self._hide_lesson_text()
 
         # アバター発話をDB保存
         if self._episode_id:
