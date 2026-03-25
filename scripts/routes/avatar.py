@@ -260,14 +260,20 @@ async def conversation_demo_status():
     teacher_cfg = meta.get("teacher_cfg", {})
     student_cfg = meta.get("student_cfg", {})
     dialogues = meta["dialogues"]
+    wav_paths = meta.get("wav_paths", [])
     items = []
-    for dlg in dialogues:
+    for i, dlg in enumerate(dialogues):
         speaker = dlg.get("speaker", "teacher")
         cfg = teacher_cfg if speaker == "teacher" else student_cfg
+        wav_str = wav_paths[i] if i < len(wav_paths) else None
+        wav_url = None
+        if wav_str and _Path(wav_str).exists():
+            wav_url = f"/resources/audio/conv_demo/{_Path(wav_str).name}"
         items.append({
             "speaker": cfg.get("name", speaker),
             "content": dlg.get("content", ""),
             "emotion": dlg.get("emotion", "neutral"),
+            "wav_url": wav_url,
         })
     return {
         "has_data": True,

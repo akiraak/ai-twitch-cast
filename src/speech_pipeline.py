@@ -214,7 +214,7 @@ class SpeechPipeline:
         # クリーンアップ（参照クリア→ファイル削除の順でrace condition防止）
         # キャッシュ済みWAV（resources/audio/lessons/配下）は削除しない
         self._current_audio = None
-        is_cached = "resources/audio/lessons/" in str(wav_path)
+        is_cached = "resources/audio/" in str(wav_path)
         if not is_cached:
             wav_path.unlink(missing_ok=True)
             try:

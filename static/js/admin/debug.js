@@ -15,7 +15,8 @@ async function convDemoLoadStatus() {
       if (i === 0) teacherName = d.speaker;
       log.dataset.teacherName = teacherName;
       const color = d.speaker === teacherName ? '#7b1fa2' : '#c2185b';
-      log.innerHTML += `<div style="font-size:0.8rem; margin:2px 0;"><span style="color:${color}; font-weight:600;">${esc(d.speaker)}</span> <span style="color:#888;">[${d.emotion}]</span> ${esc(d.content)}</div>`;
+      const wavLink = d.wav_url ? ` <a href="${d.wav_url}" target="_blank" style="color:#5c6bc0; font-size:0.7rem;">&#9654; wav</a>` : ' <span style="color:#c62828; font-size:0.7rem;">wav無し</span>';
+      log.innerHTML += `<div style="font-size:0.8rem; margin:2px 0;"><span style="color:${color}; font-weight:600;">${esc(d.speaker)}</span> <span style="color:#888;">[${d.emotion}]</span> ${esc(d.content)}${wavLink}</div>`;
     }
     st.textContent = `生成済み（${res.dialogues_count}発話）— 再生ボタンで再生`;
     st.style.color = '#2e7d32';
@@ -92,6 +93,7 @@ async function convDemoGenerate() {
           st.textContent = `生成完了（${data.dialogues_count}発話）— 再生ボタンで再生`;
           st.style.color = '#2e7d32';
           btnPlay.disabled = false;
+          convDemoLoadStatus();
         } else if (data.ok === false) {
           st.textContent = data.error || '失敗';
           st.style.color = '#c62828';
