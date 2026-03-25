@@ -13,8 +13,8 @@ from src.prompt_builder import build_language_rules, build_multi_system_prompt, 
 logger = logging.getLogger(__name__)
 
 # DBが空のときに使うデフォルトキャラクター設定
+DEFAULT_CHARACTER_NAME = "ちょビ"
 DEFAULT_CHARACTER = {
-    "name": "ちょビ",
     "role": "teacher",
     "tts_voice": "Despina",
     "tts_style": "終始にこにこしているような、柔らかく楽しげなトーンで読み上げてください",
@@ -61,8 +61,8 @@ DEFAULT_CHARACTER = {
     },
 }
 
+DEFAULT_STUDENT_CHARACTER_NAME = "なるこ"
 DEFAULT_STUDENT_CHARACTER = {
-    "name": "なるこ",
     "role": "student",
     "tts_voice": "Kore",
     "tts_style": "元気で明るい声で、好奇心いっぱいに読み上げてください",
@@ -115,7 +115,7 @@ def seed_character(channel_id):
         return existing
 
     config = json.dumps(DEFAULT_CHARACTER, ensure_ascii=False)
-    return db.get_or_create_character(channel_id, DEFAULT_CHARACTER["name"], config)
+    return db.get_or_create_character(channel_id, DEFAULT_CHARACTER_NAME, config)
 
 
 def seed_all_characters(channel_id):
@@ -138,13 +138,12 @@ def seed_all_characters(channel_id):
     )
     if not student_exists:
         config = json.dumps(DEFAULT_STUDENT_CHARACTER, ensure_ascii=False)
-        db.get_or_create_character(channel_id, DEFAULT_STUDENT_CHARACTER["name"], config)
+        db.get_or_create_character(channel_id, DEFAULT_STUDENT_CHARACTER_NAME, config)
     else:
         # マイグレーション: 生徒名「まなび」→「なるこ」
         for c in chars:
             cfg = json.loads(c["config"])
-            if cfg.get("role") == "student" and cfg.get("name") == "まなび":
-                cfg["name"] = "なるこ"
+            if cfg.get("role") == "student" and c["name"] == "まなび":
                 if "system_prompt" in cfg:
                     cfg["system_prompt"] = cfg["system_prompt"].replace(
                         "「まなび」", "「なるこ」"
@@ -167,6 +166,7 @@ def load_character(channel_id=None):
     db_char = db.get_character_by_channel(channel_id)
     _character_id = db_char["id"]
     _character = json.loads(db_char["config"])
+    _character["name"] = db_char["name"]
     return _character
 
 
@@ -180,6 +180,7 @@ def get_all_characters():
     result = []
     for c in chars:
         config = json.loads(c["config"])
+        config["name"] = c["name"]
         result.append({"id": c["id"], **config})
     return result
 
@@ -712,8 +713,16 @@ def get_chat_characters():
     teacher_row = db.get_character_by_role(channel_id, "teacher")
     student_row = db.get_character_by_role(channel_id, "student")
 
-    teacher_cfg = json.loads(teacher_row["config"]) if teacher_row else get_character()
-    student_cfg = json.loads(student_row["config"]) if student_row else None
+    if teacher_row:
+        teacher_cfg = json.loads(teacher_row["config"])
+        teacher_cfg["name"] = teacher_row["name"]
+    else:
+        teacher_cfg = get_character()
+    if student_row:
+        student_cfg = json.loads(student_row["config"])
+        student_cfg["name"] = student_row["name"]
+    else:
+        student_cfg = None
 
     return {"teacher": teacher_cfg, "student": student_cfg}
 

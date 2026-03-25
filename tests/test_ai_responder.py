@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, patch
 
 from src.ai_responder import (
     DEFAULT_CHARACTER,
+    DEFAULT_CHARACTER_NAME,
     DEFAULT_STUDENT_CHARACTER,
+    DEFAULT_STUDENT_CHARACTER_NAME,
     generate_multi_event_response,
     generate_multi_response,
     generate_persona_from_prompt,
@@ -33,7 +35,7 @@ class TestCharacterManagement:
     def test_seed_character_creates(self, test_db):
         ch = test_db.get_or_create_channel("test_ch")
         char = seed_character(ch["id"])
-        assert char["name"] == DEFAULT_CHARACTER["name"]
+        assert char["name"] == DEFAULT_CHARACTER_NAME
 
     def test_seed_character_idempotent(self, test_db):
         ch = test_db.get_or_create_channel("test_ch")
@@ -43,7 +45,7 @@ class TestCharacterManagement:
 
     def test_load_character_from_db(self, test_db, mock_env):
         result = load_character()
-        assert result["name"] == DEFAULT_CHARACTER["name"]
+        assert result["name"] == DEFAULT_CHARACTER_NAME
 
     def test_get_character_lazy_loads(self, test_db, mock_env):
         char = get_character()
@@ -233,9 +235,9 @@ class TestGetChatCharacters:
     def test_returns_teacher_and_student(self, test_db, mock_env):
         result = get_chat_characters()
         assert result["teacher"] is not None
-        assert result["teacher"]["name"] == DEFAULT_CHARACTER["name"]
+        assert result["teacher"]["name"] == DEFAULT_CHARACTER_NAME
         assert result["student"] is not None
-        assert result["student"]["name"] == DEFAULT_STUDENT_CHARACTER["name"]
+        assert result["student"]["name"] == DEFAULT_STUDENT_CHARACTER_NAME
 
 
 class TestValidateMultiResponse:

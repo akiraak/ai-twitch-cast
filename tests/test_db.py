@@ -59,7 +59,7 @@ class TestChannels:
 class TestCharacters:
     def test_create_and_get(self, test_db):
         ch = test_db.get_or_create_channel("ch")
-        char = test_db.get_or_create_character(ch["id"], "ちょビ", '{"name":"ちょビ"}')
+        char = test_db.get_or_create_character(ch["id"], "ちょビ", '{"role":"teacher"}')
         assert char["name"] == "ちょビ"
         assert char["channel_id"] == ch["id"]
 
@@ -136,16 +136,16 @@ class TestCharacters:
 
     def test_update_character_config_field(self, test_db):
         ch = test_db.get_or_create_channel("ch")
-        char = test_db.get_or_create_character(ch["id"], "char", '{"name":"char"}')
+        char = test_db.get_or_create_character(ch["id"], "char", '{"role":"teacher"}')
         test_db.update_character_config_field(char["id"], "vrm", "test.vrm")
         result = test_db.get_character_config_field(char["id"], "vrm")
         assert result == "test.vrm"
         # 既存フィールドは保持される
-        assert test_db.get_character_config_field(char["id"], "name") == "char"
+        assert test_db.get_character_config_field(char["id"], "role") == "teacher"
 
     def test_get_character_config_field_default(self, test_db):
         ch = test_db.get_or_create_channel("ch")
-        char = test_db.get_or_create_character(ch["id"], "char", '{"name":"char"}')
+        char = test_db.get_or_create_character(ch["id"], "char", '{"role":"teacher"}')
         assert test_db.get_character_config_field(char["id"], "missing") is None
         assert test_db.get_character_config_field(char["id"], "missing", "default") == "default"
 

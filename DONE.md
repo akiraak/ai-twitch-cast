@@ -1,5 +1,14 @@
 # DONE
 
+## 管理画面の項目名をメイン/サブに変更 & キャラ名の一元管理化
+
+- [x] アバター（ちょび/まなび）→ アバター（メイン/サブ）、字幕（先生/生徒）→ 字幕（メイン/サブ）に変更
+- [x] index.html / broadcast.html / items.py / character.js / db.py のラベル更新
+- [x] キャラ名の定義を `characters.name` カラムに一元化（config JSON の "name" を廃止）
+- [x] DB読み出し時に name を config dict へ注入、書き込み時に自動除去
+- [x] マイグレーション追加（既存DBの config.name を自動除去）
+- [x] テスト更新
+
 ## C#プレビュー黒画面修正（サーバー再起動時の403トークン失効）
 
 - [x] OnNavigationCompletedで403チェックをIsSuccessチェックの前に移動（到達不能だったトークンリフレッシュを修正）

@@ -331,7 +331,7 @@ class TestItemSchema:
         data = resp.json()
         assert data["item_id"] == "subtitle"
         assert data["item_type"] == "subtitle"
-        assert data["label"] == "字幕"
+        assert data["label"] == "字幕（メイン）"
         # 固有設定グループが先頭にある
         assert data["groups"][0]["title"] == "固有設定"
         specific_keys = [f["key"] for f in data["groups"][0]["fields"]]

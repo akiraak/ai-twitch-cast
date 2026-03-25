@@ -46,11 +46,12 @@ async function loadCharacterList() {
       const teacher = chars.find(c => c.role === 'teacher') || chars[0];
       _currentCharId = teacher.id;
     }
-    // 配信画面タブのアバターラベルをキャラ名で更新
-    const roleLabel = { teacher: 'avatar1-label', student: 'avatar2-label' };
+    // 配信画面タブのアバターラベルをロール名で更新
+    const roleLabel = { teacher: { el: 'avatar1-label', label: 'メイン' }, student: { el: 'avatar2-label', label: 'サブ' } };
     for (const c of chars) {
-      const el = document.getElementById(roleLabel[c.role]);
-      if (el) el.textContent = `アバター（${c.name}）`;
+      const info = roleLabel[c.role];
+      const el = info && document.getElementById(info.el);
+      if (el) el.textContent = `アバター（${info.label}）`;
     }
   } catch (e) {
     console.error('キャラクター一覧取得失敗:', e);

@@ -418,6 +418,12 @@ def _create_tables(conn):
     except sqlite3.OperationalError:
         pass
 
+    # Migration: characters.config から "name" キーを除去（characters.name カラムがマスター）
+    try:
+        _migrate_remove_name_from_config(conn)
+    except Exception:
+        pass
+
 
 def _migrate_vrm_to_character_config(conn):
     """settings の files.active_avatar* を characters.config.vrm に移行（冪等）"""
@@ -615,6 +621,24 @@ def _migrate_characters_tts_defaults(conn):
     conn.commit()
 
 
+def _migrate_remove_name_from_config(conn):
+    """characters.config JSON から "name" キーを除去する（冪等）"""
+    rows = conn.execute("SELECT id, config FROM characters").fetchall()
+    for row in rows:
+        try:
+            config = _json.loads(row["config"])
+        except (ValueError, TypeError):
+            continue
+        if "name" not in config:
+            continue
+        config.pop("name")
+        conn.execute(
+            "UPDATE characters SET config = ? WHERE id = ?",
+            (_json.dumps(config, ensure_ascii=False), row["id"]),
+        )
+    conn.commit()
+
+
 def _migrate_comments_split(conn):
     """commentsテーブルからavatar_commentsを分離するマイグレーション（冪等）"""
     # messageカラムが存在する＝未マイグレーション
@@ -629,14 +653,10 @@ def _migrate_comments_split(conn):
         # キャラクター名を取得
         char_names = set()
         try:
-            chars = conn.execute("SELECT config FROM characters").fetchall()
+            chars = conn.execute("SELECT name FROM characters").fetchall()
             for c in chars:
-                try:
-                    name = _json.loads(c["config"]).get("name", "")
-                    if name:
-                        char_names.add(name)
-                except (ValueError, TypeError):
-                    pass
+                if c["name"]:
+                    char_names.add(c["name"])
         except Exception:
             pass
 
@@ -676,7 +696,7 @@ def _migrate_character_memory(conn):
     if existing["cnt"] > 0:
         return
     # 全キャラクターに対して移行
-    characters = conn.execute("SELECT id, config FROM characters").fetchall()
+    characters = conn.execute("SELECT id, name FROM characters").fetchall()
     if not characters:
         return
     now = _now()
@@ -685,12 +705,7 @@ def _migrate_character_memory(conn):
     persona = persona_row["value"] if persona_row else ""
     for char in characters:
         char_id = char["id"]
-        # キャラ名を config JSON から取得
-        try:
-            config = _json.loads(char["config"])
-            char_name = config.get("name", "")
-        except (ValueError, TypeError):
-            char_name = ""
+        char_name = char["name"] or ""
         # users テーブルからセルフメモを取得
         self_note = ""
         if char_name:
@@ -733,6 +748,13 @@ def get_or_create_character(channel_id, name, config="{}"):
     ).fetchone()
     if row:
         return dict(row)
+    # config JSON から name を除去（characters.name カラムがマスター）
+    try:
+        cfg = _json.loads(config)
+        cfg.pop("name", None)
+        config = _json.dumps(cfg, ensure_ascii=False)
+    except (ValueError, TypeError):
+        pass
     conn.execute(
         "INSERT INTO characters (channel_id, name, config, created_at) VALUES (?, ?, ?, ?)",
         (channel_id, name, config, _now()),
@@ -801,12 +823,22 @@ def get_character_by_role(channel_id, role):
 
 
 def update_character(character_id, name=None, config=None):
-    """キャラクター設定を更新する"""
+    """キャラクター設定を更新する
+
+    config JSON に "name" が含まれていれば自動除去する（nameはカラムで管理）。
+    """
     conn = get_connection()
     fields = {}
     if name is not None:
         fields["name"] = name
     if config is not None:
+        # config JSON から name を除去（characters.name カラムがマスター）
+        try:
+            cfg = _json.loads(config)
+            cfg.pop("name", None)
+            config = _json.dumps(cfg, ensure_ascii=False)
+        except (ValueError, TypeError):
+            pass
         fields["config"] = config
     if not fields:
         return
@@ -1717,9 +1749,10 @@ _ITEM_SPECIFIC_KEYS = {
 }
 
 _ITEM_LABELS = {
-    "avatar1": "アバター（先生）",
-    "avatar2": "アバター（生徒）",
-    "subtitle": "字幕",
+    "avatar1": "アバター（メイン）",
+    "avatar2": "アバター（サブ）",
+    "subtitle": "字幕（メイン）",
+    "subtitle2": "字幕（サブ）",
     "todo": "TODO",
 }
 

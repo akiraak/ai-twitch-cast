@@ -61,11 +61,11 @@
           </div>
           <div id="background-files-list"></div>
         </div></details>
-        <details data-section="avatar1" class="panel-item"><summary id="avatar1-label">アバター</summary><div class="panel-body">
+        <details data-section="avatar1" class="panel-item"><summary id="avatar1-label">アバター（メイン）</summary><div class="panel-body">
         </div></details>
-        <details data-section="avatar2" class="panel-item"><summary id="avatar2-label">アバター</summary><div class="panel-body">
+        <details data-section="avatar2" class="panel-item"><summary id="avatar2-label">アバター（サブ）</summary><div class="panel-body">
         </div></details>
-        <details data-section="subtitle" class="panel-item"><summary id="subtitle1-label">字幕（先生）</summary><div class="panel-body">
+        <details data-section="subtitle" class="panel-item"><summary id="subtitle1-label">字幕（メイン）</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">下端 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-bottom" min="0" max="30" step="0.1" data-key="subtitle.bottom" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">最大幅 (%)</span><input type="range" class="vol-slider layout-slider" min="20" max="90" step="1" data-key="subtitle.maxWidth" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-maxWidth" min="20" max="90" step="1" data-key="subtitle.maxWidth" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">フェード (秒)</span><input type="range" class="vol-slider layout-slider" min="1" max="10" step="0.5" data-key="subtitle.fadeDuration" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle-fadeDuration" min="1" max="10" step="0.5" data-key="subtitle.fadeDuration" oninput="onLayoutNum(this)"></div>
@@ -74,7 +74,7 @@
             <button onclick="fetch('/api/debug/subtitle/hide',{method:'POST'})" style="flex:1; padding:4px 8px; background:#666; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; margin-left:4px;">非表示</button>
           </div>
         </div></details>
-        <details data-section="subtitle2" class="panel-item"><summary id="subtitle2-label">字幕（生徒）</summary><div class="panel-body">
+        <details data-section="subtitle2" class="panel-item"><summary id="subtitle2-label">字幕（サブ）</summary><div class="panel-body">
           <div class="layout-row"><span class="layout-label">下端 (%)</span><input type="range" class="vol-slider layout-slider" min="0" max="30" step="0.1" data-key="subtitle2.bottom" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle2-bottom" min="0" max="30" step="0.1" data-key="subtitle2.bottom" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">最大幅 (%)</span><input type="range" class="vol-slider layout-slider" min="20" max="90" step="1" data-key="subtitle2.maxWidth" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle2-maxWidth" min="20" max="90" step="1" data-key="subtitle2.maxWidth" oninput="onLayoutNum(this)"></div>
           <div class="layout-row"><span class="layout-label">フェード (秒)</span><input type="range" class="vol-slider layout-slider" min="1" max="10" step="0.5" data-key="subtitle2.fadeDuration" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-subtitle2-fadeDuration" min="1" max="10" step="0.5" data-key="subtitle2.fadeDuration" oninput="onLayoutNum(this)"></div>

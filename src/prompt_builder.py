@@ -361,7 +361,7 @@ def build_multi_system_prompt(teacher_char, student_char, stream_context=None, s
         teacher_char: 先生キャラクター設定dict
         student_char: 生徒キャラクター設定dict
         stream_context: 配信情報 {title, topic, todo_items}
-        self_note: アバター（先生）の記憶メモ
+        self_note: アバター（メイン）の記憶メモ
         persona: ペルソナ（過去の応答から抽出した性格特徴）
     """
     from src import db

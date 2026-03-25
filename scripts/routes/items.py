@@ -113,9 +113,10 @@ _ITEM_SPECIFIC_SCHEMA = {
 }
 
 _SCHEMA_ITEM_LABELS = {
-    "avatar": "アバター",
-    "subtitle": "字幕（先生）",
-    "subtitle2": "字幕（生徒）",
+    "avatar1": "アバター（メイン）",
+    "avatar2": "アバター（サブ）",
+    "subtitle": "字幕（メイン）",
+    "subtitle2": "字幕（サブ）",
     "todo": "TODO",
     "lesson_text": "授業テキスト",
     "lesson_progress": "授業進捗",

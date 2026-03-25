@@ -33,8 +33,16 @@ def get_lesson_characters() -> dict:
     teacher_row = db.get_character_by_role(channel_id, "teacher")
     student_row = db.get_character_by_role(channel_id, "student")
 
-    teacher = json.loads(teacher_row["config"]) if teacher_row else None
-    student = json.loads(student_row["config"]) if student_row else None
+    if teacher_row:
+        teacher = json.loads(teacher_row["config"])
+        teacher["name"] = teacher_row["name"]
+    else:
+        teacher = None
+    if student_row:
+        student = json.loads(student_row["config"])
+        student["name"] = student_row["name"]
+    else:
+        student = None
     return {"teacher": teacher, "student": student}
 
 

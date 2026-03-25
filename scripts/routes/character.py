@@ -158,6 +158,7 @@ async def get_character_by_id_api(character_id: int):
     if not row:
         return {"ok": False, "error": "キャラクターが見つかりません"}
     config = json.loads(row["config"])
+    config["name"] = row["name"]
     return {"id": row["id"], **config}
 
 
