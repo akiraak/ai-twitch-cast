@@ -7,7 +7,7 @@
   - [x] Step 1: WebSocketアバター制御 — avatar_idでリップシンク・感情を振り分け → [01-websocket-routing.md](plans/student-character/01-websocket-routing.md)
   - [x] Step 2: TTS styleパラメータ + WebUI設定 + サウンドテストDebug移動 → [02-tts-style.md](plans/student-character/02-tts-style.md)
   - [x] Step 3: スクリプト生成の対話化 — dialoguesカラム + LLMで掛け合い生成 → [03-script-generation.md](plans/student-character/03-script-generation.md)
-  - [ ] Step 4: レッスンランナーの対話再生 — dialoguesを話者別に順次再生 → [04-lesson-runner.md](plans/student-character/04-lesson-runner.md)
+  - [x] Step 4: レッスンランナーの対話再生 — dialoguesを話者別に順次再生 → [04-lesson-runner.md](plans/student-character/04-lesson-runner.md)
 - [ ] 全体の構成が悪いところがある。どうしたら改善できるか検討する
 - [ ] 授業パネルの内容が大きすぎて表示がおかしいときがある。内容を適切な量に。多ければ文字を小さくなどちゃんと見えるような対策をする
 - [ ] 英語授業なのに英語の発音が悪すぎる。改善したい

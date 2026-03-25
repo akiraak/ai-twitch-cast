@@ -1,5 +1,15 @@
 # DONE
 
+## Step 4: レッスンランナーの対話再生
+
+- [x] `_play_section()`をdialogues有無で分岐（`_play_dialogues` / `_play_single_speaker`）
+- [x] `_play_dialogues()`: dialogueエントリごとに話者別voice/style/avatar_idで再生
+- [x] 生徒キャラなしの場合は従来の単話者再生（後方互換）
+- [x] dialogue用TTSキャッシュ（`section_XX_dlg_YY.wav`）
+- [x] 授業開始時にキャラクター設定を取得
+- [x] テスト: 対話再生・単話者フォールバック・student_cfg無し時の動作
+- [x] プランファイル: [plans/student-character/04-lesson-runner.md](plans/student-character/04-lesson-runner.md)
+
 ## Step 3: スクリプト生成の対話化
 
 - [x] DB: `lesson_sections`に`dialogues`カラム追加（マイグレーション + create_tables）

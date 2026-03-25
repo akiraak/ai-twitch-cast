@@ -1,12 +1,14 @@
 """授業再生エンジン — セクションを順次再生する"""
 
 import asyncio
+import json as _json
 import logging
 import shutil
 from enum import Enum
 from pathlib import Path
 
 from src import db
+from src.lesson_generator import get_lesson_characters
 from src.speech_pipeline import SpeechPipeline
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -24,6 +26,11 @@ class LessonState(str, Enum):
 def _cache_path(lesson_id: int, order_index: int, part_index: int, lang: str = "ja") -> Path:
     """TTSキャッシュファイルのパスを返す"""
     return LESSON_AUDIO_DIR / str(lesson_id) / lang / f"section_{order_index:02d}_part_{part_index:02d}.wav"
+
+
+def _dlg_cache_path(lesson_id: int, order_index: int, dlg_index: int, lang: str = "ja") -> Path:
+    """dialogue用TTSキャッシュファイルのパスを返す"""
+    return LESSON_AUDIO_DIR / str(lesson_id) / lang / f"section_{order_index:02d}_dlg_{dlg_index:02d}.wav"
 
 
 def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | None = None):
@@ -92,6 +99,8 @@ class LessonRunner:
         self._pause_event = asyncio.Event()
         self._pause_event.set()  # 初期状態は非一時停止
         self._episode_id: int | None = None
+        self._teacher_cfg: dict | None = None
+        self._student_cfg: dict | None = None
 
     @property
     def state(self) -> LessonState:
@@ -132,8 +141,19 @@ class LessonRunner:
         self._state = LessonState.RUNNING
         self._pause_event.set()
 
-        logger.info("授業開始: lesson=%d (%s), sections=%d",
-                     lesson_id, lesson["name"], len(sections))
+        # キャラクター設定を取得
+        try:
+            characters = await asyncio.to_thread(get_lesson_characters)
+            self._teacher_cfg = characters.get("teacher")
+            self._student_cfg = characters.get("student")
+        except Exception as e:
+            logger.warning("キャラクター設定取得失敗: %s", e)
+            self._teacher_cfg = None
+            self._student_cfg = None
+
+        logger.info("授業開始: lesson=%d (%s), sections=%d, dialogue=%s",
+                     lesson_id, lesson["name"], len(sections),
+                     "有" if self._student_cfg else "無")
 
         # ステータス通知
         await self._notify_status()
@@ -176,6 +196,8 @@ class LessonRunner:
         self._lesson_id = None
         self._sections = []
         self._current_index = 0
+        self._teacher_cfg = None
+        self._student_cfg = None
         logger.info("授業停止")
         await self._hide_lesson_text()
         await self._notify_status()
@@ -213,6 +235,8 @@ class LessonRunner:
                 self._lesson_id = None
                 self._sections = []
                 self._current_index = 0
+                self._teacher_cfg = None
+                self._student_cfg = None
 
         except asyncio.CancelledError:
             pass
@@ -223,29 +247,12 @@ class LessonRunner:
             await self._notify_status()
 
     async def _play_section(self, section: dict):
-        """1セクションを再生する"""
+        """1セクションを再生する（dialoguesがあれば対話再生）"""
         section_type = section["section_type"]
-        content = section["content"]
-        tts_text = section.get("tts_text") or content
         display_text = section.get("display_text", "")
-        emotion = section.get("emotion", "neutral")
 
-        logger.info("[lesson] セクション %d/%d [%s] %s",
-                     self._current_index + 1, len(self._sections),
-                     emotion, section_type)
-        logger.info("[lesson]   content=%s", repr(content[:200]))
-        logger.info("[lesson]   tts_text=%s", repr(tts_text[:200]))
-        logger.info("[lesson]   display_text=%s", repr(display_text[:200]) if display_text else "（なし）")
-        # content==tts_textの場合は警告
-        if content == tts_text:
-            logger.warning("[lesson]   ⚠ content と tts_text が同一（分離されていない）")
-        # SSMLタグやlangタグの混入チェック
-        import re as _re
-        _ssml_pat = _re.compile(r'<lang\b|</?lang>|\[lang:', _re.IGNORECASE)
-        if _ssml_pat.search(content):
-            logger.warning("[lesson]   ⚠ content に言語タグが混入: %s", _ssml_pat.findall(content))
-        if display_text and _ssml_pat.search(display_text):
-            logger.warning("[lesson]   ⚠ display_text に言語タグが混入: %s", _ssml_pat.findall(display_text))
+        logger.info("[lesson] セクション %d/%d [%s]",
+                     self._current_index + 1, len(self._sections), section_type)
 
         # 画面テキスト: あれば更新、なければ非表示
         if display_text:
@@ -253,11 +260,50 @@ class LessonRunner:
         else:
             await self._hide_lesson_text()
 
-        # 感情適用 → TTS → リセット
-        self._speech.apply_emotion(emotion)
+        # dialoguesがあれば対話再生、なければ従来の単話者再生
+        dialogues_raw = section.get("dialogues", "")
+        dialogues = None
+        if dialogues_raw and self._student_cfg:
+            try:
+                dialogues = _json.loads(dialogues_raw) if isinstance(dialogues_raw, str) else dialogues_raw
+                if not isinstance(dialogues, list) or len(dialogues) == 0:
+                    dialogues = None
+            except (_json.JSONDecodeError, TypeError):
+                dialogues = None
 
-        # 発話をSpeechPipelineで行う
-        # 長文は文分割して順次再生（全パートのTTSを事前生成してから再生）
+        if dialogues:
+            await self._play_dialogues(section, dialogues)
+        else:
+            await self._play_single_speaker(section)
+
+        # questionセクションの場合: 問いかけ → 待ち → 回答
+        if section_type == "question" and section.get("question"):
+            await self._handle_question(section)
+
+        # アバター発話をDB保存
+        content = section["content"]
+        emotion = section.get("emotion", "neutral")
+        if self._episode_id:
+            try:
+                await asyncio.to_thread(
+                    db.save_avatar_comment, self._episode_id,
+                    "lesson", f"[授業:{section_type}]", content, emotion,
+                )
+            except Exception as e:
+                logger.warning("授業コメントDB保存失敗: %s", e)
+
+    async def _play_single_speaker(self, section: dict):
+        """従来の単話者再生（先生のみ）"""
+        content = section["content"]
+        tts_text = section.get("tts_text") or content
+        emotion = section.get("emotion", "neutral")
+        section_type = section["section_type"]
+        teacher_name = (self._teacher_cfg or {}).get("name", "ちょビ")
+
+        logger.info("[lesson]   単話者モード: content=%s", repr(content[:200]))
+
+        self._speech.apply_emotion(emotion, avatar_id="teacher")
+
         content_parts = SpeechPipeline.split_sentences(content)
         tts_parts = SpeechPipeline.split_sentences(tts_text)
 
@@ -270,21 +316,17 @@ class LessonRunner:
                 break
             part_tts = tts_parts[i] if i < len(tts_parts) else part
 
-            # キャッシュ確認
             cached = _cache_path(self._lesson_id, order_index, i, lang=self._lang)
             if cached.exists():
-                logger.info("[lesson]   part[%d] cache hit: %s", i, cached)
                 wav_paths.append(cached)
                 cache_hits += 1
                 continue
 
-            # キャッシュなし → TTS生成 → キャッシュ保存
             logger.info("[lesson]   generating part[%d] tts=%s", i, repr(part_tts[:100]))
             wav = await self._speech.generate_tts(part, tts_text=part_tts)
             if wav and wav.exists():
                 cached.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(wav, cached)
-                # 一時ファイルを削除してキャッシュパスを使う
                 wav.unlink(missing_ok=True)
                 try:
                     wav.parent.rmdir()
@@ -296,43 +338,98 @@ class LessonRunner:
         logger.info("[lesson]   TTS事前生成完了: %d/%d パート (cache hit: %d)",
                      len(wav_paths), len(content_parts), cache_hits)
 
-        # 事前生成済みWAVで順次再生
         for i, part in enumerate(content_parts):
             if self._state == LessonState.IDLE:
                 break
-            logger.info("[lesson]   part[%d] subtitle=%s", i, repr(part[:100]))
             await self._speech.speak(part, subtitle={
-                "author": "ちょビ",
+                "author": teacher_name,
                 "trigger_text": f"[授業] {section_type}",
                 "result": {"speech": part, "emotion": emotion, "translation": ""},
             }, tts_text=tts_parts[i] if i < len(tts_parts) else part,
-               wav_path=wav_paths[i] if i < len(wav_paths) else None)
+               wav_path=wav_paths[i] if i < len(wav_paths) else None,
+               avatar_id="teacher")
             await self._speech.notify_overlay_end()
 
-        # 停止時の未再生WAVクリーンアップ（キャッシュファイルは残す）
-        for wav in wav_paths:
-            if wav and wav.exists() and not str(wav).startswith(str(LESSON_AUDIO_DIR)):
+        self._speech.apply_emotion("neutral", avatar_id="teacher")
+
+    async def _play_dialogues(self, section: dict, dialogues: list[dict]):
+        """対話再生 — dialogueエントリごとに話者別voice/style/avatar_idで再生"""
+        section_type = section["section_type"]
+        order_index = section.get("order_index", self._current_index)
+        teacher_cfg = self._teacher_cfg or {}
+        student_cfg = self._student_cfg or {}
+        teacher_name = teacher_cfg.get("name", "ちょビ")
+        student_name = student_cfg.get("name", "まなび")
+
+        logger.info("[lesson]   対話モード: %d発話", len(dialogues))
+
+        # 全dialogueのTTSを事前生成
+        wav_paths = []
+        cache_hits = 0
+        for i, dlg in enumerate(dialogues):
+            if self._state == LessonState.IDLE:
+                break
+            speaker = dlg.get("speaker", "teacher")
+            cfg = teacher_cfg if speaker == "teacher" else student_cfg
+            voice = cfg.get("tts_voice")
+            style = cfg.get("tts_style")
+            tts_text = dlg.get("tts_text", dlg.get("content", ""))
+
+            cached = _dlg_cache_path(self._lesson_id, order_index, i, lang=self._lang)
+            if cached.exists():
+                wav_paths.append(cached)
+                cache_hits += 1
+                continue
+
+            logger.info("[lesson]   generating dlg[%d] speaker=%s tts=%s",
+                         i, speaker, repr(tts_text[:100]))
+            wav = await self._speech.generate_tts(tts_text, voice=voice, style=style,
+                                                   tts_text=tts_text)
+            if wav and wav.exists():
+                cached.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(wav, cached)
                 wav.unlink(missing_ok=True)
                 try:
                     wav.parent.rmdir()
                 except OSError:
                     pass
+                wav_paths.append(cached)
+            else:
+                wav_paths.append(wav)
+        logger.info("[lesson]   対話TTS事前生成完了: %d/%d (cache hit: %d)",
+                     len(wav_paths), len(dialogues), cache_hits)
 
-        self._speech.apply_emotion("neutral")
+        # 順次再生
+        for i, dlg in enumerate(dialogues):
+            if self._state == LessonState.IDLE:
+                break
+            speaker = dlg.get("speaker", "teacher")
+            avatar_id = speaker
+            cfg = teacher_cfg if speaker == "teacher" else student_cfg
+            voice = cfg.get("tts_voice")
+            style = cfg.get("tts_style")
+            content = dlg.get("content", "")
+            tts_text = dlg.get("tts_text", content)
+            emotion = dlg.get("emotion", "neutral")
+            name = teacher_name if speaker == "teacher" else student_name
 
-        # questionセクションの場合: 問いかけ → 待ち → 回答
-        if section_type == "question" and section.get("question"):
-            await self._handle_question(section)
+            self._speech.apply_emotion(emotion, avatar_id=avatar_id)
+            await self._speech.speak(
+                content, voice=voice, style=style, avatar_id=avatar_id,
+                tts_text=tts_text,
+                wav_path=wav_paths[i] if i < len(wav_paths) else None,
+                subtitle={
+                    "author": name,
+                    "trigger_text": f"[授業] {section_type}",
+                    "result": {"speech": content, "emotion": emotion, "translation": ""},
+                },
+            )
+            self._speech.apply_emotion("neutral", avatar_id=avatar_id)
+            await self._speech.notify_overlay_end()
 
-        # アバター発話をDB保存
-        if self._episode_id:
-            try:
-                await asyncio.to_thread(
-                    db.save_avatar_comment, self._episode_id,
-                    "lesson", f"[授業:{section_type}]", content, emotion,
-                )
-            except Exception as e:
-                logger.warning("授業コメントDB保存失敗: %s", e)
+            # 発話間に短い間
+            if i < len(dialogues) - 1 and self._state != LessonState.IDLE:
+                await asyncio.sleep(0.3)
 
     def _get_pace_scale(self) -> float:
         """settings DBから間のスケールを取得する（デフォルト1.0）"""
