@@ -17,6 +17,7 @@ from src.lesson_generator import (
     generate_lesson_plan,
     generate_lesson_script,
     generate_lesson_script_from_plan,
+    get_lesson_characters,
 )
 from src.lesson_runner import LESSON_AUDIO_DIR, _cache_path, clear_tts_cache, get_tts_cache_info
 from src.prompt_builder import get_stream_language, set_stream_language
@@ -515,6 +516,10 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
             except Exception:
                 pass
 
+    # 生徒キャラ取得（存在すれば対話モード）
+    characters = get_lesson_characters()
+    student_config = characters.get("student")
+
     async def event_stream():
         # 指定言語のスクリプトとTTSキャッシュを削除
         clear_tts_cache(lesson_id, lang=lang)
@@ -534,12 +539,14 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                         generate_lesson_script_from_plan,
                         lesson["name"], extracted_text, plan_sections, image_paths or None,
                         on_progress=on_progress,
+                        student_config=student_config,
                     )
                 else:
                     return await asyncio.to_thread(
                         generate_lesson_script,
                         lesson["name"], extracted_text, image_paths or None,
                         on_progress=on_progress,
+                        student_config=student_config,
                     )
             finally:
                 restore_lang()
@@ -574,6 +581,7 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                     answer=s.get("answer", ""),
                     wait_seconds=s.get("wait_seconds", 0),
                     lang=lang,
+                    dialogues=s.get("dialogues", ""),
                 )
                 saved.append(sec)
             logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))

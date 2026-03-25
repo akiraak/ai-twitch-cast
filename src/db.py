@@ -345,6 +345,13 @@ def _create_tables(conn):
     except sqlite3.OperationalError:
         pass
 
+    # Migration: lesson_sections に dialogues カラム追加（対話形式スクリプト用）
+    try:
+        conn.execute("ALTER TABLE lesson_sections ADD COLUMN dialogues TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # Migration: 既存の lessons.plan_* データを lesson_plans に移行
     try:
         rows = conn.execute(
@@ -1280,16 +1287,16 @@ def delete_lesson_source(source_id):
 
 def add_lesson_section(lesson_id, order_index, section_type, content, tts_text="",
                        display_text="", emotion="neutral", question="", answer="",
-                       wait_seconds=8, title="", lang="ja"):
+                       wait_seconds=8, title="", lang="ja", dialogues=""):
     """授業セクションを追加する"""
     conn = get_connection()
     cur = conn.execute(
         "INSERT INTO lesson_sections "
         "(lesson_id, order_index, section_type, title, content, tts_text, display_text, "
-        "emotion, question, answer, wait_seconds, lang, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "emotion, question, answer, wait_seconds, lang, dialogues, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (lesson_id, order_index, section_type, title, content, tts_text,
-         display_text, emotion, question, answer, wait_seconds, lang, _now()),
+         display_text, emotion, question, answer, wait_seconds, lang, dialogues, _now()),
     )
     conn.commit()
     return dict(conn.execute("SELECT * FROM lesson_sections WHERE id = ?", (cur.lastrowid,)).fetchone())
@@ -1315,7 +1322,8 @@ def update_lesson_section(section_id, **fields):
     """授業セクションを更新する"""
     conn = get_connection()
     allowed = {"order_index", "section_type", "title", "content", "tts_text",
-               "display_text", "emotion", "question", "answer", "wait_seconds"}
+               "display_text", "emotion", "question", "answer", "wait_seconds",
+               "dialogues"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
