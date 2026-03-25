@@ -193,6 +193,7 @@ python3 -m pytest tests/test_db.py   # 特定ファイルのみ
 | `test_api_stream.py` | 配信制御API | シーン・音量・アバター |
 | `test_api_teacher.py` | 教師モードAPI | コンテンツCRUD・スクリプト生成・授業制御 |
 | `test_lesson_runner.py` | LessonRunner | 状態管理・ライフサイクル |
+| `test_lesson_generator.py` | `src/lesson_generator.py` | 対話スクリプト構築・プロンプト生成 |
 
 ### テスト規約
 - **新しいDB関数を追加したら `test_db.py` にテストを追加すること**

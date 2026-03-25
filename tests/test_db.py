@@ -744,3 +744,42 @@ class TestLessonSections:
         assert s["question"] == "What is 1+1?"
         assert s["answer"] == "2"
         assert s["wait_seconds"] == 10
+
+    def test_dialogues_column(self, test_db):
+        """dialoguesカラムのCRUD"""
+        import json
+        lesson = test_db.create_lesson("DlgTest")
+        dialogues_data = [
+            {"speaker": "teacher", "content": "こんにちは！", "tts_text": "こんにちは！", "emotion": "excited"},
+            {"speaker": "student", "content": "こんにちは！", "tts_text": "こんにちは！", "emotion": "joy"},
+        ]
+        dialogues_json = json.dumps(dialogues_data, ensure_ascii=False)
+        s = test_db.add_lesson_section(
+            lesson["id"], 0, "introduction", "導入",
+            dialogues=dialogues_json,
+        )
+        assert s["dialogues"] == dialogues_json
+        # JSONとしてパースできる
+        parsed = json.loads(s["dialogues"])
+        assert len(parsed) == 2
+        assert parsed[0]["speaker"] == "teacher"
+        assert parsed[1]["speaker"] == "student"
+
+    def test_dialogues_default_empty(self, test_db):
+        """dialoguesのデフォルトは空文字"""
+        lesson = test_db.create_lesson("DlgEmpty")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "テスト")
+        assert s["dialogues"] == ""
+
+    def test_dialogues_update(self, test_db):
+        """dialoguesの更新"""
+        import json
+        lesson = test_db.create_lesson("DlgUpd")
+        s = test_db.add_lesson_section(lesson["id"], 0, "introduction", "元")
+        assert s["dialogues"] == ""
+        new_dialogues = json.dumps([
+            {"speaker": "teacher", "content": "更新後", "emotion": "neutral"},
+        ], ensure_ascii=False)
+        test_db.update_lesson_section(s["id"], dialogues=new_dialogues)
+        sections = test_db.get_lesson_sections(lesson["id"])
+        assert sections[0]["dialogues"] == new_dialogues

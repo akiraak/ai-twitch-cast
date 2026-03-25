@@ -1,5 +1,16 @@
 # DONE
 
+## Step 3: スクリプト生成の対話化
+
+- [x] DB: `lesson_sections`に`dialogues`カラム追加（マイグレーション + create_tables）
+- [x] プロンプト: 先生・生徒の対話形式指示を自動構築（`_build_dialogue_prompt` / `_build_dialogue_output_example`）
+- [x] 後処理: `_build_section_from_dialogues`でcontent/tts_text/emotionを自動構築
+- [x] 生徒キャラなしの場合は従来の一人語り形式で生成
+- [x] 英語モードでも対話スクリプト生成に対応
+- [x] APIルート（teacher.py）でstudent_config伝搬・dialogues DB保存
+- [x] テスト: DB dialogues CRUD + _build_section_from_dialogues + プロンプト構築
+- [x] プランファイル: [plans/student-character/03-script-generation.md](plans/student-character/03-script-generation.md)
+
 ## 二人会話デモ（Debugタブ）
 
 - [x] Debugタブに会話デモUI追加（テーマ入力 + 生成/再生ボタン分離）

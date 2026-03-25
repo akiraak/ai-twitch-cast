@@ -31,6 +31,8 @@ def _with_lang(lang: str):
     prev = get_stream_language()
     if lang == "en":
         set_stream_language("en", "none", "low")
+    elif lang == "ja":
+        set_stream_language("ja", "en", "low")
     else:
         set_stream_language(prev["primary"], prev["sub"], prev["mix"])
 
