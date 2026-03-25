@@ -1,3 +1,28 @@
+// 会話デモ — 起動時に既存データを復元
+async function convDemoLoadStatus() {
+  try {
+    const res = await api('GET', '/api/debug/conversation-demo/status');
+    if (!res?.has_data) return;
+    const log = document.getElementById('conv-demo-log');
+    const st = document.getElementById('conv-demo-status');
+    const btnPlay = document.getElementById('btn-conv-play');
+    const topicInput = document.getElementById('conv-demo-topic');
+    if (topicInput && res.topic) topicInput.value = res.topic;
+    log.innerHTML = '';
+    let teacherName = '';
+    for (let i = 0; i < res.dialogues.length; i++) {
+      const d = res.dialogues[i];
+      if (i === 0) teacherName = d.speaker;
+      log.dataset.teacherName = teacherName;
+      const color = d.speaker === teacherName ? '#7b1fa2' : '#c2185b';
+      log.innerHTML += `<div style="font-size:0.8rem; margin:2px 0;"><span style="color:${color}; font-weight:600;">${esc(d.speaker)}</span> <span style="color:#888;">[${d.emotion}]</span> ${esc(d.content)}</div>`;
+    }
+    st.textContent = `生成済み（${res.dialogues_count}発話）— 再生ボタンで再生`;
+    st.style.color = '#2e7d32';
+    btnPlay.disabled = false;
+  } catch {}
+}
+
 // アバター制御テスト
 async function avatarTest(avatarId, testType) {
   const st = document.getElementById('avatar-test-status');
@@ -15,6 +40,92 @@ async function avatarTest(avatarId, testType) {
   } catch (e) {
     st.textContent = 'エラー: ' + e.message;
     st.style.color = '#c62828';
+  }
+}
+
+// 会話デモ — 生成
+async function convDemoGenerate() {
+  const topic = document.getElementById('conv-demo-topic').value.trim();
+  if (!topic) return;
+  const btnGen = document.getElementById('btn-conv-generate');
+  const btnPlay = document.getElementById('btn-conv-play');
+  const st = document.getElementById('conv-demo-status');
+  const log = document.getElementById('conv-demo-log');
+  btnGen.disabled = true;
+  btnPlay.disabled = true;
+  st.textContent = '会話生成中...';
+  st.style.color = '#9a88b5';
+  log.innerHTML = '';
+
+  try {
+    const resp = await fetch('/api/debug/conversation-demo/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic }),
+    });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let data;
+        try { data = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (data.phase === 'generate') {
+          st.textContent = data.message;
+        } else if (data.phase === 'script') {
+          const color = data.speaker === (log.dataset.teacherName || '') ? '#7b1fa2' : '#c2185b';
+          if (data.index === 0) log.dataset.teacherName = data.speaker;
+          log.innerHTML += `<div style="font-size:0.8rem; margin:2px 0;"><span style="color:${color}; font-weight:600;">${esc(data.speaker)}</span> <span style="color:#888;">[${data.emotion}]</span> ${esc(data.content)}</div>`;
+        } else if (data.phase === 'tts') {
+          st.textContent = data.message;
+        } else if (data.ok === true) {
+          st.textContent = `生成完了（${data.dialogues_count}発話）— 再生ボタンで再生`;
+          st.style.color = '#2e7d32';
+          btnPlay.disabled = false;
+        } else if (data.ok === false) {
+          st.textContent = data.error || '失敗';
+          st.style.color = '#c62828';
+        }
+      }
+    }
+  } catch (e) {
+    st.textContent = 'エラー: ' + e.message;
+    st.style.color = '#c62828';
+  } finally {
+    btnGen.disabled = false;
+  }
+}
+
+// 会話デモ — 再生
+async function convDemoPlay() {
+  const btnPlay = document.getElementById('btn-conv-play');
+  const st = document.getElementById('conv-demo-status');
+  btnPlay.disabled = true;
+  st.textContent = '再生中...';
+  st.style.color = '#2e7d32';
+  try {
+    const res = await api('POST', '/api/debug/conversation-demo/play');
+    if (res?.ok) {
+      st.textContent = `再生開始（${res.dialogues_count}発話）`;
+    } else {
+      st.textContent = res?.error || '再生失敗';
+      st.style.color = '#c62828';
+    }
+  } catch (e) {
+    st.textContent = 'エラー: ' + e.message;
+    st.style.color = '#c62828';
+  } finally {
+    btnPlay.disabled = false;
   }
 }
 

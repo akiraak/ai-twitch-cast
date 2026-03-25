@@ -1,9 +1,10 @@
 """アバター制御ルート（発話）"""
 
 import asyncio
+import os
 
 from fastapi import APIRouter
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src import db
@@ -201,6 +202,261 @@ async def chat_webui(body: WebUIChatRequest):
     await state.ensure_reader()
     result = await state.reader.respond_webui(body.message)
     return result
+
+
+class ConversationDemoRequest(BaseModel):
+    topic: str
+
+
+# 会話デモの永続化ディレクトリ
+import json as _json
+from pathlib import Path as _Path
+
+_CONV_DEMO_DIR = _Path(__file__).resolve().parent.parent.parent / "resources" / "audio" / "conv_demo"
+
+
+def _save_conv_demo(topic, dialogues, wav_paths, teacher_cfg, student_cfg):
+    """会話デモデータをファイルに保存する"""
+    _CONV_DEMO_DIR.mkdir(parents=True, exist_ok=True)
+    # WAVファイルを移動
+    saved_wavs = []
+    for i, src in enumerate(wav_paths):
+        if src and _Path(src).exists():
+            dst = _CONV_DEMO_DIR / f"{i:02d}.wav"
+            import shutil
+            shutil.move(src, dst)
+            saved_wavs.append(str(dst))
+        else:
+            saved_wavs.append(None)
+    # メタデータ保存
+    meta = {
+        "topic": topic,
+        "dialogues": dialogues,
+        "wav_paths": saved_wavs,
+        "teacher_cfg": teacher_cfg,
+        "student_cfg": student_cfg,
+    }
+    (_CONV_DEMO_DIR / "meta.json").write_text(_json.dumps(meta, ensure_ascii=False, indent=2))
+    return meta
+
+
+def _load_conv_demo():
+    """保存済み会話デモデータを読み込む"""
+    meta_path = _CONV_DEMO_DIR / "meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        return _json.loads(meta_path.read_text())
+    except Exception:
+        return None
+
+
+@router.get("/api/debug/conversation-demo/status")
+async def conversation_demo_status():
+    """会話デモ: 保存済みデータの有無を返す"""
+    meta = _load_conv_demo()
+    if not meta or not meta.get("dialogues"):
+        return {"has_data": False}
+    teacher_cfg = meta.get("teacher_cfg", {})
+    student_cfg = meta.get("student_cfg", {})
+    dialogues = meta["dialogues"]
+    items = []
+    for dlg in dialogues:
+        speaker = dlg.get("speaker", "teacher")
+        cfg = teacher_cfg if speaker == "teacher" else student_cfg
+        items.append({
+            "speaker": cfg.get("name", speaker),
+            "content": dlg.get("content", ""),
+            "emotion": dlg.get("emotion", "neutral"),
+        })
+    return {
+        "has_data": True,
+        "topic": meta.get("topic", ""),
+        "dialogues_count": len(dialogues),
+        "dialogues": items,
+    }
+
+
+@router.post("/api/debug/conversation-demo/generate")
+async def conversation_demo_generate(body: ConversationDemoRequest):
+    """会話デモ: スクリプト生成 + TTS事前生成（SSE）"""
+    import json as _json
+    import logging
+    import re
+    import tempfile
+
+    from google.genai import types
+
+    from src.gemini_client import get_client
+    from src.lesson_generator import _format_character_for_prompt, get_lesson_characters
+    from src.tts import synthesize
+
+    logger = logging.getLogger(__name__)
+
+    async def event_stream():
+        def _emit(data):
+            return f"data: {_json.dumps(data, ensure_ascii=False)}\n\n"
+
+        # --- 1. キャラ取得 ---
+        characters = get_lesson_characters()
+        teacher_cfg = characters.get("teacher")
+        student_cfg = characters.get("student")
+        if not teacher_cfg or not student_cfg:
+            yield _emit({"ok": False, "error": "先生・生徒キャラがDBに登録されていません"})
+            return
+
+        yield _emit({"phase": "generate", "message": "会話スクリプト生成中..."})
+
+        # --- 2. LLMで会話生成 ---
+        teacher_desc = _format_character_for_prompt(teacher_cfg, "teacher", en=False)
+        student_desc = _format_character_for_prompt(student_cfg, "student", en=False)
+
+        prompt = f"""以下の2人のキャラクターが「{body.topic}」について雑談します。
+4往復（8発話）の自然な会話を生成してください。
+teacherから始めてください。
+
+{teacher_desc}
+
+{student_desc}
+
+## ルール
+- 各発話は1〜2文（短く自然に）
+- 感情は各キャラの使用可能な感情から選ぶ
+- tts_textはcontentと同じ（英語部分がある場合のみ[lang:en]タグ付き）
+
+## 出力形式（JSON配列のみ）
+[
+  {{"speaker": "teacher", "content": "発話テキスト", "tts_text": "TTS用テキスト", "emotion": "neutral"}}
+]"""
+
+        try:
+            client = get_client()
+            model = os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview")
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.9,
+                    max_output_tokens=4096,
+                ),
+            )
+        except Exception as e:
+            logger.error("会話デモLLM呼び出し失敗: %s", e)
+            yield _emit({"ok": False, "error": f"会話生成失敗: {e}"})
+            return
+
+        text = response.text.strip()
+        m = re.search(r'```(?:json)?\s*\n?(.*?)\n?\s*```', text, re.DOTALL)
+        if m:
+            text = m.group(1).strip()
+
+        try:
+            dialogues = _json.loads(text)
+        except _json.JSONDecodeError as e:
+            logger.error("会話デモJSONパース失敗: %s", e)
+            yield _emit({"ok": False, "error": "会話生成のJSONパースに失敗"})
+            return
+
+        if not isinstance(dialogues, list) or len(dialogues) == 0:
+            yield _emit({"ok": False, "error": "会話が生成されませんでした"})
+            return
+
+        total = len(dialogues)
+
+        # 生成された会話ログを送信
+        for i, dlg in enumerate(dialogues):
+            speaker = dlg.get("speaker", "teacher")
+            cfg = teacher_cfg if speaker == "teacher" else student_cfg
+            name = cfg.get("name", speaker)
+            yield _emit({
+                "phase": "script",
+                "index": i,
+                "total": total,
+                "speaker": name,
+                "content": dlg.get("content", ""),
+                "emotion": dlg.get("emotion", "neutral"),
+            })
+
+        # --- 3. TTS事前生成 ---
+        yield _emit({"phase": "tts", "message": f"TTS生成中... (0/{total})"})
+        wav_paths = []
+        for i, dlg in enumerate(dialogues):
+            speaker = dlg.get("speaker", "teacher")
+            cfg = teacher_cfg if speaker == "teacher" else student_cfg
+            voice = cfg.get("tts_voice")
+            style = cfg.get("tts_style")
+            tts_text = dlg.get("tts_text", dlg.get("content", ""))
+
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, prefix=f"conv_demo_{i:02d}_")
+            tmp.close()
+            try:
+                await asyncio.to_thread(synthesize, tts_text, tmp.name, voice=voice, style=style)
+                wav_paths.append(tmp.name)
+            except Exception as e:
+                logger.warning("会話デモTTS生成失敗 (%d): %s", i, e)
+                wav_paths.append(None)
+
+            yield _emit({
+                "phase": "tts",
+                "message": f"TTS生成中... ({i + 1}/{total})",
+                "step": i + 1,
+                "total": total,
+            })
+
+        # ファイルに保存
+        _save_conv_demo(body.topic, dialogues, wav_paths, teacher_cfg, student_cfg)
+
+        yield _emit({"ok": True, "dialogues_count": total})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.post("/api/debug/conversation-demo/play")
+async def conversation_demo_play():
+    """会話デモ: 保存済みの会話を再生する"""
+    meta = _load_conv_demo()
+    if not meta or not meta.get("dialogues"):
+        return {"ok": False, "error": "生成済みの会話がありません。先に生成してください"}
+
+    dialogues = meta["dialogues"]
+    wav_paths = meta.get("wav_paths", [])
+    topic = meta.get("topic", "")
+    teacher_cfg = meta.get("teacher_cfg", {})
+    student_cfg = meta.get("student_cfg", {})
+
+    async def _play():
+        await state.ensure_reader()
+        for i, dlg in enumerate(dialogues):
+            speaker = dlg.get("speaker", "teacher")
+            avatar_id = speaker
+            cfg = teacher_cfg if speaker == "teacher" else student_cfg
+            voice = cfg.get("tts_voice")
+            style = cfg.get("tts_style")
+            content = dlg.get("content", "")
+            tts_text = dlg.get("tts_text", content)
+            emotion = dlg.get("emotion", "neutral")
+            from pathlib import Path
+            wav_str = wav_paths[i] if i < len(wav_paths) else None
+            wav = Path(wav_str) if wav_str else None
+
+            reader = state.reader
+            reader._speech.apply_emotion(emotion, avatar_id=avatar_id)
+            await reader._speech.speak(
+                content, voice=voice, style=style, avatar_id=avatar_id,
+                tts_text=tts_text, wav_path=wav,
+                subtitle={
+                    "author": cfg.get("name", speaker),
+                    "trigger_text": f"[会話デモ] {topic}",
+                    "result": {"speech": content, "emotion": emotion},
+                },
+            )
+            reader._speech.apply_emotion("neutral", avatar_id=avatar_id)
+            await reader._speech.notify_overlay_end()
+
+    asyncio.create_task(_play())
+    return {"ok": True, "dialogues_count": len(dialogues)}
 
 
 class ChatMessage(BaseModel):

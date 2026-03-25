@@ -29,7 +29,7 @@ function switchTab(name, el) {
   if (name === 'character') { loadLanguageModes(); loadCharacterLayers(); loadSpeechSettings(); }
   if (name === 'sound') loadBgmTracks();
   if (name === 'todo') loadTodoList();
-  if (name === 'debug') { loadScreenshots(); }
+  if (name === 'debug') { loadScreenshots(); convDemoLoadStatus(); }
   if (name === 'layout') loadCustomTexts();
   if (name === 'convmode') { loadLessons(); } else { if (typeof stopLessonStatusPolling === 'function') stopLessonStatusPolling(); }
 }

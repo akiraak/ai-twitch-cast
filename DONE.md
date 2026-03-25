@@ -1,5 +1,14 @@
 # DONE
 
+## 二人会話デモ（Debugタブ）
+
+- [x] Debugタブに会話デモUI追加（テーマ入力 + 生成/再生ボタン分離）
+- [x] LLMで先生・生徒の4往復会話スクリプト生成（DBのキャラ設定を使用）
+- [x] TTS事前生成 + avatar_id付きで話者別に順次再生
+- [x] SSEで生成進捗・会話ログをリアルタイム表示
+- [x] 会話データをファイルに永続化（resources/audio/conv_demo/）、サーバー再起動後も復元
+- [x] プランファイル: [plans/conversation-demo.md](plans/conversation-demo.md)
+
 ## キャラクター設定の改善
 
 - [x] ボイスサンプル再生ボタン追加（キャラタブのvoice/style選択後に試聴、AI生成でバリエーション豊富）
