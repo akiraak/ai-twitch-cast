@@ -8,15 +8,20 @@ from unittest.mock import MagicMock, patch
 
 from src.ai_responder import (
     DEFAULT_CHARACTER,
+    DEFAULT_STUDENT_CHARACTER,
+    generate_multi_event_response,
+    generate_multi_response,
     generate_persona_from_prompt,
     generate_response,
     generate_event_response,
     generate_user_notes,
     generate_self_note,
     get_character,
+    get_chat_characters,
     invalidate_character_cache,
     load_character,
     seed_character,
+    _validate_multi_response,
 )
 from src.prompt_builder import set_stream_language
 
@@ -221,3 +226,132 @@ class TestGeneratePersonaFromPrompt:
         assert result == ""
 
 
+class TestGetChatCharacters:
+    def setup_method(self):
+        invalidate_character_cache()
+
+    def test_returns_teacher_and_student(self, test_db, mock_env):
+        result = get_chat_characters()
+        assert result["teacher"] is not None
+        assert result["teacher"]["name"] == DEFAULT_CHARACTER["name"]
+        assert result["student"] is not None
+        assert result["student"]["name"] == DEFAULT_STUDENT_CHARACTER["name"]
+
+
+class TestValidateMultiResponse:
+    def test_validates_teacher_emotion(self):
+        characters = {
+            "teacher": DEFAULT_CHARACTER,
+            "student": DEFAULT_STUDENT_CHARACTER,
+        }
+        result = [{"speaker": "teacher", "speech": "hi", "emotion": "rage"}]
+        validated = _validate_multi_response(result, characters)
+        assert validated[0]["emotion"] == "neutral"
+
+    def test_validates_student_emotion(self):
+        characters = {
+            "teacher": DEFAULT_CHARACTER,
+            "student": DEFAULT_STUDENT_CHARACTER,
+        }
+        # "embarrassed" はteacherにはあるがstudentにはない
+        result = [{"speaker": "student", "speech": "hi", "emotion": "embarrassed"}]
+        validated = _validate_multi_response(result, characters)
+        assert validated[0]["emotion"] == "neutral"
+
+    def test_valid_student_emotion_passes(self):
+        characters = {
+            "teacher": DEFAULT_CHARACTER,
+            "student": DEFAULT_STUDENT_CHARACTER,
+        }
+        result = [{"speaker": "student", "speech": "hi", "emotion": "joy"}]
+        validated = _validate_multi_response(result, characters)
+        assert validated[0]["emotion"] == "joy"
+
+    def test_invalid_speaker_defaults_to_teacher(self):
+        characters = {
+            "teacher": DEFAULT_CHARACTER,
+            "student": DEFAULT_STUDENT_CHARACTER,
+        }
+        result = [{"speaker": "unknown", "speech": "hi", "emotion": "neutral"}]
+        validated = _validate_multi_response(result, characters)
+        assert validated[0]["speaker"] == "teacher"
+
+    def test_defaults_added(self):
+        characters = {
+            "teacher": DEFAULT_CHARACTER,
+            "student": DEFAULT_STUDENT_CHARACTER,
+        }
+        result = [{"speaker": "teacher", "speech": "hi", "emotion": "neutral"}]
+        validated = _validate_multi_response(result, characters)
+        assert validated[0]["translation"] == ""
+        assert validated[0]["se"] is None
+
+
+class TestGenerateMultiResponse:
+    def setup_method(self):
+        set_stream_language("ja", "en", "low")
+        invalidate_character_cache()
+
+    def test_returns_array(self, test_db, mock_env, mock_gemini):
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {"speaker": "teacher", "speech": "やほー！", "emotion": "joy"},
+            {"speaker": "student", "speech": "こんにちは！", "emotion": "joy"},
+        ])
+        characters = {"teacher": DEFAULT_CHARACTER, "student": DEFAULT_STUDENT_CHARACTER}
+        result = generate_multi_response("viewer", "hi", characters)
+        assert len(result) == 2
+        assert result[0]["speaker"] == "teacher"
+        assert result[1]["speaker"] == "student"
+
+    def test_single_dict_fallback(self, test_db, mock_env, mock_gemini):
+        """AIが配列ではなく単一dictを返した場合のフォールバック"""
+        mock_gemini.models.generate_content.return_value.text = json.dumps(
+            {"speaker": "teacher", "speech": "ok", "emotion": "neutral"}
+        )
+        characters = {"teacher": DEFAULT_CHARACTER, "student": DEFAULT_STUDENT_CHARACTER}
+        result = generate_multi_response("viewer", "hi", characters)
+        assert len(result) == 1
+        assert result[0]["speaker"] == "teacher"
+
+    def test_invalid_json_fallback(self, test_db, mock_env, mock_gemini):
+        mock_gemini.models.generate_content.return_value.text = "bad json"
+        characters = {"teacher": DEFAULT_CHARACTER, "student": DEFAULT_STUDENT_CHARACTER}
+        result = generate_multi_response("viewer", "hi", characters)
+        assert len(result) == 1
+        assert result[0]["speaker"] == "teacher"
+        assert result[0]["emotion"] == "neutral"
+
+    def test_no_student_falls_back_to_single(self, test_db, mock_env, mock_gemini):
+        """studentがない場合はgenerate_responseにフォールバック"""
+        mock_gemini.models.generate_content.return_value.text = json.dumps(
+            {"speech": "solo", "emotion": "neutral"}
+        )
+        characters = {"teacher": DEFAULT_CHARACTER, "student": None}
+        result = generate_multi_response("viewer", "hi", characters)
+        assert len(result) == 1
+        assert result[0]["speaker"] == "teacher"
+        assert result[0]["speech"] == "solo"
+
+
+class TestGenerateMultiEventResponse:
+    def setup_method(self):
+        set_stream_language("ja", "en", "low")
+        invalidate_character_cache()
+
+    def test_returns_array(self, test_db, mock_env, mock_gemini):
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {"speaker": "teacher", "speech": "コミットきた！", "emotion": "joy"},
+        ])
+        characters = {"teacher": DEFAULT_CHARACTER, "student": DEFAULT_STUDENT_CHARACTER}
+        result = generate_multi_event_response("commit", "fix bug", characters)
+        assert len(result) == 1
+        assert result[0]["speaker"] == "teacher"
+
+    def test_no_student_falls_back(self, test_db, mock_env, mock_gemini):
+        mock_gemini.models.generate_content.return_value.text = json.dumps(
+            {"speech": "done", "emotion": "neutral"}
+        )
+        characters = {"teacher": DEFAULT_CHARACTER, "student": None}
+        result = generate_multi_event_response("commit", "detail", characters)
+        assert len(result) == 1
+        assert result[0]["speaker"] == "teacher"

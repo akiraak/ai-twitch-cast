@@ -6,12 +6,13 @@ from src.prompt_builder import (
     SUPPORTED_LANGUAGES,
     MIX_LEVELS,
     build_language_rules,
+    build_multi_system_prompt,
     build_system_prompt,
     build_tts_style,
     get_stream_language,
     set_stream_language,
 )
-from src.ai_responder import DEFAULT_CHARACTER
+from src.ai_responder import DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER
 
 
 # =====================================================
@@ -376,3 +377,44 @@ class TestModuleSeparation:
         source = inspect.getsource(ch)
         assert "from src.prompt_builder import" in source
         assert "from src.ai_responder import" in source
+
+
+class TestBuildMultiSystemPrompt:
+    """マルチキャラクター用プロンプト構築のテスト"""
+
+    def setup_method(self):
+        set_stream_language("ja", "en", "low")
+
+    def test_includes_both_characters(self, test_db, mock_env):
+        prompt = build_multi_system_prompt(DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER)
+        assert "ちょビ" in prompt
+        assert "まなび" in prompt
+
+    def test_includes_distribution_guidelines(self, test_db, mock_env):
+        prompt = build_multi_system_prompt(DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER)
+        assert "応答の分配" in prompt or "Response distribution" in prompt
+
+    def test_output_format_is_array(self, test_db, mock_env):
+        prompt = build_multi_system_prompt(DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER)
+        assert '"speaker"' in prompt
+        assert "JSON配列" in prompt or "JSON array" in prompt
+
+    def test_includes_both_emotions(self, test_db, mock_env):
+        prompt = build_multi_system_prompt(DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER)
+        # teacherの感情
+        assert "embarrassed" in prompt
+        # studentの感情（joyはteacherにもあるが、studentにもある）
+        assert "joy" in prompt
+
+    def test_en_mode(self, test_db, mock_env):
+        set_stream_language("en", "ja", "low")
+        prompt = build_multi_system_prompt(DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER)
+        assert "Response distribution" in prompt
+        assert "Characters on this stream" in prompt
+
+    def test_stream_context_included(self, test_db, mock_env):
+        ctx = {"title": "テスト配信"}
+        prompt = build_multi_system_prompt(
+            DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER, stream_context=ctx,
+        )
+        assert "テスト配信" in prompt

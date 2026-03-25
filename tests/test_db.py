@@ -312,6 +312,46 @@ class TestComments:
         test_db.clear_avatar_comments()
         assert len(test_db.get_recent_avatar_comments(limit=10)) == 0
 
+    def test_save_avatar_comment_with_speaker(self, test_db):
+        """speakerカラム付きでavatar_commentを保存できる"""
+        ep_id, _ = self._setup(test_db)
+        cid = test_db.save_avatar_comment(ep_id, "comment", "trigger", "speech", speaker="teacher")
+        assert cid is not None
+        cid2 = test_db.save_avatar_comment(ep_id, "comment", "trigger2", "speech2", speaker="student")
+        assert cid2 is not None
+        # speakerなし（デフォルト）
+        cid3 = test_db.save_avatar_comment(ep_id, "event", "trigger3", "speech3")
+        assert cid3 is not None
+
+    def test_get_recent_avatar_comments_includes_speaker(self, test_db):
+        """get_recent_avatar_commentsがspeakerを返す"""
+        ep_id, _ = self._setup(test_db)
+        test_db.save_avatar_comment(ep_id, "comment", "t1", "s1", speaker="teacher")
+        test_db.save_avatar_comment(ep_id, "comment", "t2", "s2", speaker="student")
+        results = test_db.get_recent_avatar_comments(limit=10)
+        assert len(results) == 2
+        assert results[0]["speaker"] == "teacher"
+        assert results[1]["speaker"] == "student"
+
+    def test_get_recent_timeline_includes_speaker(self, test_db):
+        """get_recent_timelineがavatar_commentのspeakerを返す"""
+        ep_id, user_id = self._setup(test_db)
+        test_db.save_comment(ep_id, user_id, "hello")
+        test_db.save_avatar_comment(ep_id, "comment", "trigger", "reply", speaker="student")
+        timeline = test_db.get_recent_timeline(limit=10)
+        assert len(timeline) == 2
+        assert timeline[0]["type"] == "comment"
+        assert timeline[0]["speaker"] is None  # コメントにはspeakerなし
+        assert timeline[1]["type"] == "avatar_comment"
+        assert timeline[1]["speaker"] == "student"
+
+    def test_save_avatar_comment_default_speaker_is_none(self, test_db):
+        """speaker未指定時はNoneとして保存される"""
+        ep_id, _ = self._setup(test_db)
+        test_db.save_avatar_comment(ep_id, "comment", "t", "s")
+        results = test_db.get_recent_avatar_comments(limit=10)
+        assert results[0]["speaker"] is None
+
 
 class TestSettings:
     def test_set_and_get(self, test_db):

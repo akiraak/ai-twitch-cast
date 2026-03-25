@@ -411,6 +411,13 @@ def _create_tables(conn):
     except Exception:
         pass
 
+    # Migration: avatar_comments に speaker カラム追加（マルチキャラクター応答分担）
+    try:
+        conn.execute("ALTER TABLE avatar_comments ADD COLUMN speaker TEXT DEFAULT NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
 
 def _migrate_vrm_to_character_config(conn):
     """settings の files.active_avatar* を characters.config.vrm に移行（冪等）"""
@@ -992,13 +999,13 @@ def get_recent_comments(limit=20, hours=2):
 
 # --- avatar_comments ---
 
-def save_avatar_comment(episode_id, trigger_type, trigger_text, text, emotion="neutral"):
+def save_avatar_comment(episode_id, trigger_type, trigger_text, text, emotion="neutral", speaker=None):
     """アバターのコメントを保存する"""
     conn = get_connection()
     cur = conn.execute(
-        "INSERT INTO avatar_comments (episode_id, trigger_type, trigger_text, text, emotion, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (episode_id, trigger_type, trigger_text, text, emotion, _now()),
+        "INSERT INTO avatar_comments (episode_id, trigger_type, trigger_text, text, emotion, speaker, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (episode_id, trigger_type, trigger_text, text, emotion, speaker, _now()),
     )
     conn.commit()
     return cur.lastrowid
@@ -1019,7 +1026,7 @@ def get_recent_avatar_comments(limit=20, hours=2, trigger_type=None):
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     if trigger_type:
         rows = conn.execute(
-            """SELECT trigger_type, trigger_text, text, emotion, created_at
+            """SELECT trigger_type, trigger_text, text, emotion, speaker, created_at
                FROM avatar_comments
                WHERE created_at > ? AND trigger_type = ?
                ORDER BY created_at DESC LIMIT ?""",
@@ -1027,7 +1034,7 @@ def get_recent_avatar_comments(limit=20, hours=2, trigger_type=None):
         ).fetchall()
     else:
         rows = conn.execute(
-            """SELECT trigger_type, trigger_text, text, emotion, created_at
+            """SELECT trigger_type, trigger_text, text, emotion, speaker, created_at
                FROM avatar_comments
                WHERE created_at > ?
                ORDER BY created_at DESC LIMIT ?""",
@@ -1048,13 +1055,13 @@ def get_recent_timeline(limit=20, hours=2):
         """SELECT * FROM (
                SELECT 'comment' as type, u.name as user_name, c.text,
                       NULL as trigger_type, NULL as trigger_text, NULL as emotion,
-                      c.created_at
+                      NULL as speaker, c.created_at
                FROM comments c JOIN users u ON c.user_id = u.id
                WHERE c.created_at > ?
                UNION ALL
                SELECT 'avatar_comment' as type, NULL as user_name, ac.text,
                       ac.trigger_type, ac.trigger_text, ac.emotion,
-                      ac.created_at
+                      ac.speaker, ac.created_at
                FROM avatar_comments ac
                WHERE ac.created_at > ?
            ) ORDER BY created_at DESC LIMIT ?""",

@@ -283,9 +283,9 @@ class SpeechPipeline:
         "grateful": "bow",
     }
 
-    def apply_emotion(self, emotion, gesture=None, avatar_id="teacher"):
+    def apply_emotion(self, emotion, gesture=None, avatar_id="teacher", character_config=None):
         """感情に対応するBlendShape + ジェスチャーを適用する"""
-        char = get_character()
+        char = character_config or get_character()
         blendshapes = char.get("emotion_blendshapes", {}).get(emotion, {})
         logger.info("[emotion] %s → blendshapes=%s (avatar=%s)", emotion, blendshapes, avatar_id)
         if not blendshapes:

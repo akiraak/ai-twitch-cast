@@ -1,5 +1,19 @@
 # DONE
 
+## チャット・イベント応答のマルチキャラクター分担
+
+- [x] DB: `avatar_comments`に`speaker`カラム追加（マイグレーション）
+- [x] `save_avatar_comment`/`get_recent_avatar_comments`/`get_recent_timeline`にspeaker対応
+- [x] `build_multi_system_prompt()`: 両キャラの性格・感情・応答分配ガイドライン含むプロンプト構築
+- [x] `generate_multi_response()`: 単一Gemini呼び出しで配列形式のマルチキャラ応答生成
+- [x] `generate_multi_event_response()`: イベント応答のマルチキャラ対応
+- [x] `get_chat_characters()`: teacher+student設定取得
+- [x] `apply_emotion()`に`character_config`パラメータ追加（キャラ別BlendShape）
+- [x] CommentReader: `_respond`/`speak_event`/`respond_webui`/`_speak_segment`をマルチキャラ対応
+- [x] タイムラインにspeaker情報を含め、会話履歴でキャラ名を区別
+- [x] テスト22件追加（DB/ai_responder/prompt_builder）
+- [x] キャラ1人の場合は既存動作を完全維持（後方互換）
+
 ## Step 4: レッスンランナーの対話再生
 
 - [x] `_play_section()`をdialogues有無で分岐（`_play_dialogues` / `_play_single_speaker`）

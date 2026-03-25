@@ -8,7 +8,7 @@ from pathlib import Path
 from google.genai import types
 
 from src.gemini_client import get_client
-from src.prompt_builder import build_language_rules, build_system_prompt, get_stream_language
+from src.prompt_builder import build_language_rules, build_multi_system_prompt, build_system_prompt, get_stream_language
 
 logger = logging.getLogger(__name__)
 
@@ -685,4 +685,309 @@ def generate_event_response(event_type, detail, last_event_responses=None):
 
     return result
 
+
+def get_chat_characters():
+    """チャット応答用のキャラクター設定を取得する
+
+    Returns:
+        dict: {"teacher": config_dict, "student": config_dict or None}
+    """
+    from src import db
+
+    channel_id = _get_channel_id()
+    seed_all_characters(channel_id)
+
+    teacher_row = db.get_character_by_role(channel_id, "teacher")
+    student_row = db.get_character_by_role(channel_id, "student")
+
+    teacher_cfg = json.loads(teacher_row["config"]) if teacher_row else get_character()
+    student_cfg = json.loads(student_row["config"]) if student_row else None
+
+    return {"teacher": teacher_cfg, "student": student_cfg}
+
+
+def _build_multi_context(author, message, comment_count, user_note, already_greeted, timeline, en):
+    """マルチキャラ応答用のコンテキスト文字列とcontentsを構築する"""
+    context_parts = []
+    if en:
+        if comment_count == 0 and not already_greeted:
+            context_parts.append("First-time viewer")
+        elif not already_greeted:
+            context_parts.append(f"Regular viewer with {comment_count} past comments, hasn't been greeted today yet")
+        else:
+            context_parts.append("Already greeted this stream, no need to greet again")
+        if author == "GM":
+            context_parts.append("GM is the developer of this stream system. Close relationship, casual tone OK")
+        if user_note:
+            context_parts.append(f"Note: {user_note} (*Don't mention the note directly. Use it subtly to shape the conversation)")
+        if timeline:
+            recent_speeches = [h["text"][:30] for h in timeline[-3:] if h.get("type") == "avatar_comment"]
+            if recent_speeches:
+                context_parts.append(f"Forbidden patterns (avoid same openings): {', '.join(recent_speeches)}")
+        context = f" ({', '.join(context_parts)})"
+    else:
+        if comment_count == 0 and not already_greeted:
+            context_parts.append("初見のユーザーです")
+        elif not already_greeted:
+            context_parts.append(f"過去{comment_count}回コメントしている常連です、今日はまだ挨拶していません")
+        else:
+            context_parts.append("この配信で挨拶済み、再度の挨拶は不要")
+        if author == "GM":
+            context_parts.append("GMはこの配信システムの開発者。親しい関係、敬語不要、タメ口でOK")
+        if user_note:
+            context_parts.append(f"メモ: {user_note}（※メモの内容を直接言及しないこと。会話の雰囲気づくりに自然に活かす程度に）")
+        if timeline:
+            recent_speeches = [h["text"][:30] for h in timeline[-3:] if h.get("type") == "avatar_comment"]
+            if recent_speeches:
+                context_parts.append(f"禁止パターン（同じ書き出しを避けろ）: {', '.join(recent_speeches)}")
+        context = f"（{'、'.join(context_parts)}）"
+
+    # 会話履歴をcontentsに組み立て（タイムラインのspeaker情報を含む）
+    contents = []
+    if timeline:
+        for h in timeline:
+            if h["type"] == "comment":
+                if en:
+                    contents.append(types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"{h['user_name']}'s comment: {h['text']}")]
+                    ))
+                else:
+                    contents.append(types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"{h['user_name']}さんのコメント: {h['text']}")]
+                    ))
+            elif h["type"] == "avatar_comment":
+                # speaker情報があればキャラ名をプレフィックス
+                speaker = h.get("speaker")
+                text = h["text"]
+                if speaker:
+                    text = f"[{speaker}] {text}"
+                contents.append(types.Content(
+                    role="model",
+                    parts=[types.Part(text=text)]
+                ))
+
+    if en:
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=f"{author}'s comment{context}: {message}")]
+        ))
+    else:
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=f"{author}さんのコメント{context}: {message}")]
+        ))
+
+    return contents
+
+
+def _validate_multi_response(result, characters):
+    """マルチキャラ応答の各エントリを検証・修正する"""
+    teacher_emotions = characters["teacher"].get("emotions", {})
+    student_cfg = characters.get("student")
+    student_emotions = student_cfg.get("emotions", {}) if student_cfg else {}
+
+    validated = []
+    for entry in result:
+        entry.setdefault("translation", "")
+        entry.setdefault("se", None)
+        speaker = entry.get("speaker", "teacher")
+        if speaker not in ("teacher", "student"):
+            speaker = "teacher"
+        entry["speaker"] = speaker
+
+        # emotion検証（キャラごと）
+        emotions = teacher_emotions if speaker == "teacher" else student_emotions
+        if entry.get("emotion") not in emotions:
+            entry["emotion"] = "neutral"
+
+        validated.append(entry)
+    return validated
+
+
+def generate_multi_response(author, message, characters, comment_count=0, timeline=None,
+                            stream_context=None, user_note=None, already_greeted=False,
+                            self_note=None, persona=None):
+    """マルチキャラクター応答を生成する
+
+    Args:
+        characters: {"teacher": config, "student": config}
+        （他の引数はgenerate_responseと同じ）
+
+    Returns:
+        list[dict]: [{"speaker", "speech", "tts_text", "emotion", "translation", "se"}, ...]
+    """
+    client = get_client()
+    lang = get_stream_language()
+    en = lang["primary"] != "ja"
+
+    teacher_char = characters["teacher"]
+    student_char = characters.get("student")
+
+    # studentがなければ既存のsingle-character応答にフォールバック
+    if not student_char:
+        result = generate_response(
+            author, message, comment_count, timeline=timeline,
+            stream_context=stream_context, user_note=user_note,
+            already_greeted=already_greeted, self_note=self_note, persona=persona,
+        )
+        result["speaker"] = "teacher"
+        return [result]
+
+    system_prompt = build_multi_system_prompt(
+        teacher_char, student_char,
+        stream_context=stream_context, self_note=self_note, persona=persona,
+    )
+
+    contents = _build_multi_context(
+        author, message, comment_count, user_note, already_greeted, timeline, en,
+    )
+
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+            temperature=1.0,
+        ),
+    )
+
+    try:
+        result = json.loads(response.text)
+    except (json.JSONDecodeError, AttributeError):
+        return [{"speaker": "teacher", "speech": message, "emotion": "neutral", "translation": "", "se": None}]
+
+    # 配列でない場合（単一dictが返った場合）のフォールバック
+    if isinstance(result, dict):
+        result.setdefault("speaker", "teacher")
+        result = [result]
+
+    if not result:
+        return [{"speaker": "teacher", "speech": message, "emotion": "neutral", "translation": "", "se": None}]
+
+    return _validate_multi_response(result, characters)
+
+
+def generate_multi_event_response(event_type, detail, characters, last_event_responses=None):
+    """マルチキャラクターのイベント応答を生成する
+
+    Args:
+        event_type: イベント種別
+        detail: イベントの詳細情報
+        characters: {"teacher": config, "student": config}
+        last_event_responses: 直前のイベント応答リスト
+
+    Returns:
+        list[dict]: [{"speaker", "speech", "tts_text", "emotion", "translation"}, ...]
+    """
+    student_char = characters.get("student")
+    if not student_char:
+        result = generate_event_response(event_type, detail, last_event_responses)
+        result["speaker"] = "teacher"
+        return [result]
+
+    client = get_client()
+    teacher_char = characters["teacher"]
+    teacher_name = teacher_char.get("name", "ちょビ")
+    student_name = student_char.get("name", "まなび")
+    teacher_emotions = teacher_char.get("emotions", {})
+    student_emotions = student_char.get("emotions", {})
+
+    lang = get_stream_language()
+    is_en = lang["primary"] != "ja"
+    lang_rules = build_language_rules()
+
+    if is_en:
+        parts = [
+            teacher_char["system_prompt"],
+            "",
+            "## Characters",
+            f"### {teacher_name} (speaker: \"teacher\")",
+            f"Available emotions: {', '.join(teacher_emotions.keys())}",
+            f"### {student_name} (speaker: \"student\")",
+            student_char.get("system_prompt", ""),
+            f"Available emotions: {', '.join(student_emotions.keys())}",
+            "",
+            "## Rules",
+            "- Comment briefly on stream events (commits, work updates, etc.)",
+            "- 1-2 entries in the array. Each entry: 1 sentence, ~10 words",
+            f"- {teacher_name} alone (~70%) or both characters (~30%)",
+            "- Vary reactions — don't repeat the same expressions",
+        ]
+        if last_event_responses:
+            parts.extend(["", "## Recent event responses (avoid repeating)"])
+            for r in last_event_responses[-3:]:
+                parts.append(f"- {r}")
+        parts.extend(["", "## Language rules"])
+        for rule in lang_rules:
+            parts.append(rule)
+        parts.extend([
+            "",
+            "## Output format",
+            "Reply ONLY in a JSON array.",
+            '[{"speaker": "teacher", "speech": "text", "tts_text": "TTS text", "emotion": "emotion", "translation": "translation"}]',
+        ])
+        user_prompt = f"[{event_type} event] {detail}"
+    else:
+        parts = [
+            teacher_char["system_prompt"],
+            "",
+            "## キャラクター",
+            f"### {teacher_name}（speaker: \"teacher\"）",
+            f"使用可能な感情: {', '.join(teacher_emotions.keys())}",
+            f"### {student_name}（speaker: \"student\"）",
+            student_char.get("system_prompt", ""),
+            f"使用可能な感情: {', '.join(student_emotions.keys())}",
+            "",
+            "## ルール",
+            "- 配信中のイベント（コミット、作業開始など）について短くコメント",
+            "- 配列は1〜2エントリ。各エントリ: 1文、40文字以内",
+            f"- {teacher_name}単独（約70%）または両者応答（約30%）",
+            "- 毎回同じリアクションをしない。バリエーションを出す",
+        ]
+        if last_event_responses:
+            parts.extend(["", "## 直前のイベント応答（同じ表現を避けろ）"])
+            for r in last_event_responses[-3:]:
+                parts.append(f"- {r}")
+        parts.extend(["", "## 言語ルール"])
+        for rule in lang_rules:
+            parts.append(rule)
+        parts.extend([
+            "",
+            "## 出力形式",
+            "必ずJSON配列で返答してください。",
+            '[{"speaker": "teacher", "speech": "返答", "tts_text": "読み上げ用", "emotion": "感情", "translation": "翻訳"}]',
+            "",
+            "## speechとtts_textの違い",
+            "- speech: 字幕表示用。タグなし。",
+            "- tts_text: TTS用。日本語以外に[lang:xx]タグを付ける。",
+        ])
+        user_prompt = f"【{event_type}イベント】{detail}"
+
+    system_prompt = "\n".join(parts)
+
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+        ),
+    )
+
+    try:
+        result = json.loads(response.text)
+    except (json.JSONDecodeError, AttributeError):
+        return [{"speaker": "teacher", "speech": detail, "emotion": "neutral", "translation": ""}]
+
+    if isinstance(result, dict):
+        result.setdefault("speaker", "teacher")
+        result = [result]
+
+    if not result:
+        return [{"speaker": "teacher", "speech": detail, "emotion": "neutral", "translation": ""}]
+
+    return _validate_multi_response(result, characters)
 
