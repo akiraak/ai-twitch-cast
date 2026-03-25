@@ -1,5 +1,9 @@
 # DONE
 
+## C#プレビュー黒画面修正（サーバー再起動時の403トークン失効）
+
+- [x] OnNavigationCompletedで403チェックをIsSuccessチェックの前に移動（到達不能だったトークンリフレッシュを修正）
+
 ## 生徒名を「まなび」→「なるこ」に変更
 
 - [x] DEFAULT_STUDENT_CHARACTERのname・system_promptを更新

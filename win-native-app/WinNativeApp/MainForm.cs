@@ -1169,15 +1169,16 @@ public class MainForm : Form
         Log.Information("[MainForm] Navigation completed, success={Success}, status={Status}",
             e.IsSuccess, e.HttpStatusCode);
 
-        if (!e.IsSuccess) return;
-
         // 403 = トークン失効（サーバー再起動時）→ 新トークン取得してリロード
+        // ※ HTTP 4xxはIsSuccess=falseになるため、IsSuccessチェックの前に判定する
         if (e.HttpStatusCode == 403)
         {
             Log.Warning("[MainForm] Got 403 (token expired), fetching new token...");
             _ = RefreshBroadcastTokenAsync();
             return;
         }
+
+        if (!e.IsSuccess) return;
 
         Text = "AI Twitch Cast - 待機中";
 
