@@ -11,12 +11,31 @@ function _getSubtitleEl(avatarId) {
   return avatarId === 'student' ? subtitle2El : subtitleEl;
 }
 
+// z-indexカウンタ: 最後に表示された字幕を上に
+let _subtitleZCounter = 20;
+
 function showSubtitle(data) {
   const el = _getSubtitleEl(data.avatar_id);
   const isStudent = data.avatar_id === 'student';
   const timer = isStudent ? fadeTimerStudent : fadeTimerTeacher;
   clearTimeout(timer);
+
+  // もう一方の字幕を速めにフェードアウト（重なり軽減）
+  const otherEl = isStudent ? subtitleEl : subtitle2El;
+  if (otherEl.classList.contains('visible')) {
+    const otherTimerKey = isStudent ? 'fadeTimerTeacher' : 'fadeTimerStudent';
+    clearTimeout(isStudent ? fadeTimerTeacher : fadeTimerStudent);
+    otherEl.classList.add('fading-fast');
+    otherEl.classList.remove('visible');
+    const tid = setTimeout(() => { otherEl.classList.remove('fading-fast'); }, 600);
+    if (isStudent) fadeTimerTeacher = tid; else fadeTimerStudent = tid;
+  }
+
+  // 新しい字幕を上に表示
+  _subtitleZCounter++;
+  el.style.zIndex = _subtitleZCounter;
   el.classList.remove('fading');
+  el.classList.remove('fading-fast');
   el.querySelector('.author').textContent = '';
   el.querySelector('.trigger-text').textContent = stripLangTags(data.trigger_text);
   el.querySelector('.speech').textContent = stripLangTags(data.speech);
