@@ -50,11 +50,12 @@ _capture_ws = None
 _capture_ws_lock = asyncio.Lock()
 _pending_requests: dict[str, asyncio.Future] = {}
 _ws_reader_task = None
+_ws_connect_cooldown_until: float = 0  # 接続失敗後のクールダウン期限（monotonic）
 
 
 async def ensure_capture_ws():
     """配信アプリへの制御WebSocket接続を確保する"""
-    global _capture_ws, _ws_reader_task
+    global _capture_ws, _ws_reader_task, _ws_connect_cooldown_until
     import websockets
 
     if _capture_ws is not None:
@@ -64,8 +65,23 @@ async def ensure_capture_ws():
         except Exception:
             _capture_ws = None
 
+    # 接続失敗後のクールダウン中はすぐに失敗させる
+    now = time.monotonic()
+    if now < _ws_connect_cooldown_until:
+        raise ConnectionError("C#アプリ未接続（クールダウン中）")
+
     url = capture_ws_url()
-    _capture_ws = await websockets.connect(url, close_timeout=2)
+    try:
+        _capture_ws = await asyncio.wait_for(
+            websockets.connect(url, close_timeout=2, open_timeout=3),
+            timeout=5,
+        )
+    except Exception:
+        # 接続失敗 → 30秒間リトライしない
+        _ws_connect_cooldown_until = time.monotonic() + 30
+        raise
+
+    _ws_connect_cooldown_until = 0  # 接続成功 → クールダウンリセット
     _ws_reader_task = asyncio.create_task(_read_capture_ws())
     logger.info("配信アプリ制御WebSocket接続: %s", url)
 
