@@ -150,12 +150,12 @@ class CommentReader:
             logger.error("セグメント発話失敗: %s", e, exc_info=True)
 
     async def respond_webui(self, message):
-        """WebUIからの会話に応答する（GMのメッセージをTwitchチャットに投稿）"""
-        author = "GM"
+        """WebUIからの会話に応答する（あキらのメッセージをTwitchチャットに投稿）"""
+        author = "あキら"
         try:
-            # GMのメッセージをTwitchチャットに投稿
+            # あキらのメッセージをTwitchチャットに投稿
             try:
-                await self._chat.send_message(f"[GM] {message}")
+                await self._chat.send_message(f"[あキら] {message}")
             except Exception as e:
                 logger.warning("GMメッセージのチャット投稿失敗: %s", e)
             user = await asyncio.to_thread(db.get_or_create_user, author)

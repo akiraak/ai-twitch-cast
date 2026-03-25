@@ -239,7 +239,7 @@ def generate_response(author, message, comment_count=0, timeline=None, stream_co
             context_parts.append(f"Regular viewer with {comment_count} past comments, hasn't been greeted today yet")
         else:
             context_parts.append("Already greeted this stream, no need to greet again")
-        if author == "GM":
+        if author in ("GM", "あキら"):
             context_parts.append("GM is the developer of this stream system. Close relationship, casual tone OK")
         if user_note:
             context_parts.append(f"Note: {user_note} (*Don't mention the note directly. Use it subtly to shape the conversation)")
@@ -255,7 +255,7 @@ def generate_response(author, message, comment_count=0, timeline=None, stream_co
             context_parts.append(f"過去{comment_count}回コメントしている常連です、今日はまだ挨拶していません")
         else:
             context_parts.append("この配信で挨拶済み、再度の挨拶は不要")
-        if author == "GM":
+        if author in ("GM", "あキら"):
             context_parts.append("GMはこの配信システムの開発者。親しい関係、敬語不要、タメ口でOK")
         if user_note:
             context_parts.append(f"メモ: {user_note}（※メモの内容を直接言及しないこと。会話の雰囲気づくりに自然に活かす程度に）")
@@ -716,7 +716,7 @@ def _build_multi_context(author, message, comment_count, user_note, already_gree
             context_parts.append(f"Regular viewer with {comment_count} past comments, hasn't been greeted today yet")
         else:
             context_parts.append("Already greeted this stream, no need to greet again")
-        if author == "GM":
+        if author in ("GM", "あキら"):
             context_parts.append("GM is the developer of this stream system. Close relationship, casual tone OK")
         if user_note:
             context_parts.append(f"Note: {user_note} (*Don't mention the note directly. Use it subtly to shape the conversation)")
@@ -732,7 +732,7 @@ def _build_multi_context(author, message, comment_count, user_note, already_gree
             context_parts.append(f"過去{comment_count}回コメントしている常連です、今日はまだ挨拶していません")
         else:
             context_parts.append("この配信で挨拶済み、再度の挨拶は不要")
-        if author == "GM":
+        if author in ("GM", "あキら"):
             context_parts.append("GMはこの配信システムの開発者。親しい関係、敬語不要、タメ口でOK")
         if user_note:
             context_parts.append(f"メモ: {user_note}（※メモの内容を直接言及しないこと。会話の雰囲気づくりに自然に活かす程度に）")

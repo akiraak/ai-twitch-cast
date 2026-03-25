@@ -1,5 +1,11 @@
 # DONE
 
+## C#プレビューチャットのユーザー名を「あキら」に変更
+
+- [x] control-panel.html: 表示名を「GM」→「あキら」に変更
+- [x] comment_reader.py: respond_webuiのauthorを「あキら」に変更
+- [x] ai_responder.py: 開発者判定を「GM」「あキら」両方に対応
+
 ## チャット・イベント応答のマルチキャラクター分担
 
 - [x] DB: `avatar_comments`に`speaker`カラム追加（マイグレーション）
