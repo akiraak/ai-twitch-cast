@@ -354,15 +354,18 @@ def build_system_prompt(char, stream_context=None, self_note=None, persona=None)
     return "\n".join(parts)
 
 
-def build_multi_system_prompt(teacher_char, student_char, stream_context=None, self_note=None, persona=None):
+def build_multi_system_prompt(teacher_char, student_char, stream_context=None, self_note=None, persona=None,
+                              student_self_note=None, student_persona=None):
     """マルチキャラクター応答用のシステムプロンプトを構築する
 
     Args:
         teacher_char: 先生キャラクター設定dict
         student_char: 生徒キャラクター設定dict
         stream_context: 配信情報 {title, topic, todo_items}
-        self_note: アバター（メイン）の記憶メモ
-        persona: ペルソナ（過去の応答から抽出した性格特徴）
+        self_note: 先生キャラの記憶メモ
+        persona: 先生キャラのペルソナ
+        student_self_note: 生徒キャラの記憶メモ
+        student_persona: 生徒キャラのペルソナ
     """
     from src import db
     primary = _stream_lang["primary"]
@@ -458,19 +461,33 @@ def build_multi_system_prompt(teacher_char, student_char, stream_context=None, s
             "- 毎回両者が応答する必要はない。単独応答が自然で多いのは正常",
         ])
 
-    # 記憶メモ
+    # 先生の記憶メモ
     if self_note:
         if en:
             parts.extend(["", f"## {teacher_name}'s memory notes", self_note])
         else:
             parts.extend(["", f"## {teacher_name}の記憶メモ", self_note])
 
-    # ペルソナ
+    # 先生のペルソナ
     if persona:
         if en:
             parts.extend(["", f"## {teacher_name}'s personality", persona])
         else:
             parts.extend(["", f"## {teacher_name}の性格", persona])
+
+    # 生徒の記憶メモ
+    if student_self_note:
+        if en:
+            parts.extend(["", f"## {student_name}'s memory notes", student_self_note])
+        else:
+            parts.extend(["", f"## {student_name}の記憶メモ", student_self_note])
+
+    # 生徒のペルソナ
+    if student_persona:
+        if en:
+            parts.extend(["", f"## {student_name}'s personality", student_persona])
+        else:
+            parts.extend(["", f"## {student_name}の性格", student_persona])
 
     # 配信コンテキスト
     if stream_context:

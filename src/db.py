@@ -1043,35 +1043,37 @@ def save_avatar_comment(episode_id, trigger_type, trigger_text, text, emotion="n
     return cur.lastrowid
 
 
-def get_recent_avatar_comments(limit=20, hours=2, trigger_type=None):
+def get_recent_avatar_comments(limit=20, hours=2, trigger_type=None, speaker=None):
     """直近N時間以内のアバターコメントを取得する
 
     Args:
         limit: 最大件数
         hours: 遡る時間
         trigger_type: フィルタ（'comment', 'topic', 'event'）。Noneなら全件
+        speaker: 発話キャラフィルタ（'teacher', 'student'）。Noneなら全件
 
     Returns:
-        list[dict]: [{trigger_type, trigger_text, text, emotion, created_at}, ...]
+        list[dict]: [{trigger_type, trigger_text, text, emotion, speaker, created_at}, ...]
     """
     conn = get_connection()
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    conditions = ["created_at > ?"]
+    params = [since]
     if trigger_type:
-        rows = conn.execute(
-            """SELECT trigger_type, trigger_text, text, emotion, speaker, created_at
-               FROM avatar_comments
-               WHERE created_at > ? AND trigger_type = ?
-               ORDER BY created_at DESC LIMIT ?""",
-            (since, trigger_type, limit),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            """SELECT trigger_type, trigger_text, text, emotion, speaker, created_at
-               FROM avatar_comments
-               WHERE created_at > ?
-               ORDER BY created_at DESC LIMIT ?""",
-            (since, limit),
-        ).fetchall()
+        conditions.append("trigger_type = ?")
+        params.append(trigger_type)
+    if speaker:
+        conditions.append("speaker = ?")
+        params.append(speaker)
+    where = " AND ".join(conditions)
+    params.append(limit)
+    rows = conn.execute(
+        f"""SELECT trigger_type, trigger_text, text, emotion, speaker, created_at
+           FROM avatar_comments
+           WHERE {where}
+           ORDER BY created_at DESC LIMIT ?""",
+        params,
+    ).fetchall()
     return [dict(r) for r in reversed(rows)]
 
 

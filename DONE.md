@@ -1,5 +1,19 @@
 # DONE
 
+## 生徒キャラにも先生と同等のテキスト生成フローを追加
+
+- [x] CharacterContextパターンで先生・生徒共通のメモ更新フローを実装
+- [x] db.py: get_recent_avatar_commentsにspeakerフィルタ追加
+- [x] ai_responder.py: generate_self_note/generate_persona/generate_persona_from_promptをchar_configパラメータ化
+- [x] ai_responder.py: build_character_context()/build_all_character_contexts()新規追加
+- [x] ai_responder.py: generate_multi_responseに生徒のself_note/persona引数追加
+- [x] prompt_builder.py: build_multi_system_promptに生徒のself_note/persona注入
+- [x] comment_reader.py: 共通メソッド_update_character_self_note/_update_character_personaで全キャラ更新
+- [x] comment_reader.py: _generate_multi_ai_responseで両キャラのメモ・ペルソナを取得して渡す
+- [x] 管理画面: teacher-only制限を削除し生徒でもペルソナ・セルフメモ・視聴者メモを表示
+- [x] API: /api/character/{id}/layers, persona, self-note/generate等キャラID対応エンドポイント追加
+- [x] JS: キャラ切替時にレイヤーリロード、全API呼び出しをキャラID対応
+
 ## キャラの位置を左に先生・右に生徒に変更
 
 - [x] アバター配置を変更（先生=左、生徒=右）

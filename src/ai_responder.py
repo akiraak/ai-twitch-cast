@@ -152,6 +152,42 @@ def seed_all_characters(channel_id):
                 db.update_character(c["id"], name="なるこ", config=config_str)
 
 
+def build_character_context(role="teacher"):
+    """指定roleのCharacterContextを構築する
+
+    Returns:
+        dict: {id, name, role, config, persona, self_note} or None
+    """
+    from src import db
+    channel_id = _get_channel_id()
+    seed_all_characters(channel_id)
+    row = db.get_character_by_role(channel_id, role)
+    if not row:
+        return None
+    config = json.loads(row["config"])
+    config["name"] = row["name"]
+    memory = db.get_character_memory(row["id"])
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "role": role,
+        "config": config,
+        "persona": memory.get("persona", ""),
+        "self_note": memory.get("self_note", ""),
+    }
+
+
+def build_all_character_contexts():
+    """全キャラのCharacterContextを構築する
+
+    Returns:
+        dict: {"teacher": CharacterContext, "student": CharacterContext or None}
+    """
+    teacher = build_character_context("teacher")
+    student = build_character_context("student")
+    return {"teacher": teacher, "student": student}
+
+
 def load_character(channel_id=None):
     """DBからキャラクター設定を読み込む（先生キャラ）"""
     global _character, _character_id
@@ -395,12 +431,13 @@ def generate_user_notes(users_with_comments):
         return {}
 
 
-def generate_self_note(timeline, current_note=""):
+def generate_self_note(timeline, current_note="", char_config=None):
     """アバター自身の記憶メモを生成する
 
     Args:
         timeline: 直近の会話タイムライン [{type, user_name, text, created_at, ...}, ...]
         current_note: 現在のメモ
+        char_config: キャラクター設定dict（None→デフォルトの先生キャラ）
 
     Returns:
         str: 更新されたメモ
@@ -409,8 +446,9 @@ def generate_self_note(timeline, current_note=""):
         return current_note or ""
 
     client = get_client()
-    char = get_character()
+    char = char_config or get_character()
     char_name = char.get("name", "ちょビ")
+    char_role = char.get("role")
 
     from datetime import datetime, timezone
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -443,6 +481,10 @@ def generate_self_note(timeline, current_note=""):
         if c["type"] == "comment":
             lines.append(f"  {c['user_name']}{timestamp}: {c['text']}")
         elif c["type"] == "avatar_comment":
+            # マルチキャラ時: speakerフィルタ（roleが指定されていれば自分の発話のみ）
+            speaker = c.get("speaker")
+            if char_role and speaker and speaker != char_role:
+                continue
             lines.append(f"  {char_name}{timestamp}: {c['text']}")
 
     response = client.models.generate_content(
@@ -461,16 +503,19 @@ def generate_self_note(timeline, current_note=""):
         return current_note or ""
 
 
-def generate_persona_from_prompt():
+def generate_persona_from_prompt(char_config=None):
     """システムプロンプトからペルソナを初期生成する
 
     応答履歴がまだない状態で、キャラクター設定からペルソナを抽出する。
+
+    Args:
+        char_config: キャラクター設定dict（None→デフォルトの先生キャラ）
 
     Returns:
         str: ペルソナ記述、または空文字
     """
     client = get_client()
-    char = get_character()
+    char = char_config or get_character()
     char_name = char.get("name", "ちょビ")
     system_prompt = char.get("system_prompt", "")
     rules = char.get("rules", [])
@@ -513,7 +558,7 @@ def generate_persona_from_prompt():
         return ""
 
 
-def generate_persona(avatar_comments, current_persona=""):
+def generate_persona(avatar_comments, current_persona="", char_config=None):
     """応答パターンからペルソナ（性格・話し方の特徴）を更新する
 
     既存ペルソナの90%を維持しつつ、最近の応答から新しい特徴を反映する。
@@ -521,6 +566,7 @@ def generate_persona(avatar_comments, current_persona=""):
     Args:
         avatar_comments: 直近のアバター発話 [{text, ...}, ...]
         current_persona: 現在のペルソナ記述
+        char_config: キャラクター設定dict（None→デフォルトの先生キャラ）
 
     Returns:
         str: 更新されたペルソナ記述、または空文字
@@ -534,7 +580,7 @@ def generate_persona(avatar_comments, current_persona=""):
         return current_persona or ""
 
     client = get_client()
-    char = get_character()
+    char = char_config or get_character()
     char_name = char.get("name", "ちょビ")
 
     parts = [
@@ -829,11 +875,16 @@ def _validate_multi_response(result, characters):
 
 def generate_multi_response(author, message, characters, comment_count=0, timeline=None,
                             stream_context=None, user_note=None, already_greeted=False,
-                            self_note=None, persona=None):
+                            self_note=None, persona=None,
+                            student_self_note=None, student_persona=None):
     """マルチキャラクター応答を生成する
 
     Args:
         characters: {"teacher": config, "student": config}
+        self_note: 先生キャラの記憶メモ
+        persona: 先生キャラのペルソナ
+        student_self_note: 生徒キャラの記憶メモ
+        student_persona: 生徒キャラのペルソナ
         （他の引数はgenerate_responseと同じ）
 
     Returns:
@@ -859,6 +910,7 @@ def generate_multi_response(author, message, characters, comment_count=0, timeli
     system_prompt = build_multi_system_prompt(
         teacher_char, student_char,
         stream_context=stream_context, self_note=self_note, persona=persona,
+        student_self_note=student_self_note, student_persona=student_persona,
     )
 
     contents = _build_multi_context(

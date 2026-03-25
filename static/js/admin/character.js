@@ -69,13 +69,10 @@ function switchCharacter(role, charId, btn) {
   // ライティングスライダー切替 + プリセット再読み込み
   if (typeof _loadCharLighting === 'function') _loadCharLighting();
   if (typeof loadLightingPresets === 'function') loadLightingPresets();
-  // セリフセクションの表示切替（生徒は第1層のみ）
-  const isTeacher = role === 'teacher';
-  document.querySelectorAll('.teacher-only').forEach(el => {
-    el.style.display = isTeacher ? '' : 'none';
-  });
   // キャラクター設定をIDで読み込み
   loadCharacterById(charId);
+  // レイヤー（ペルソナ・セルフメモ・視聴者メモ）をリロード
+  loadCharacterLayers();
 }
 
 function _loadCharVrmFiles() {
@@ -403,7 +400,8 @@ let _layerData = {};
 
 async function loadCharacterLayers() {
   try {
-    const d = await (await fetch('/api/character/layers')).json();
+    const url = _currentCharId ? `/api/character/${_currentCharId}/layers` : '/api/character/layers';
+    const d = await (await fetch(url)).json();
     _layerData = d;
 
     // 第2層: ペルソナ
@@ -542,7 +540,8 @@ async function saveLayerMemory(type) {
   const textarea = document.getElementById(`layer-${type}-textarea`);
   const text = textarea.value.trim();
   try {
-    const res = await fetch(`/api/character/${type}`, {
+    const url = _currentCharId ? `/api/character/${_currentCharId}/${type}` : `/api/character/${type}`;
+    const res = await fetch(url, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({text}),
@@ -562,7 +561,8 @@ async function generatePersonaFromPrompt() {
   const personaEl = document.getElementById('layer-persona');
   personaEl.innerHTML = '<div class="layer-empty">AI生成中...</div>';
   try {
-    const res = await fetch('/api/character/persona/generate', {method: 'POST'});
+    const url = _currentCharId ? `/api/character/${_currentCharId}/persona/generate` : '/api/character/persona/generate';
+    const res = await fetch(url, {method: 'POST'});
     const d = await res.json();
     if (d.ok) {
       loadCharacterLayers();
@@ -578,7 +578,8 @@ async function regenerateSelfNote() {
   const selfEl = document.getElementById('layer-self-note');
   selfEl.innerHTML = '<div class="layer-empty">AI生成中...</div>';
   try {
-    const res = await fetch('/api/character/self-note/generate', {method: 'POST'});
+    const url = _currentCharId ? `/api/character/${_currentCharId}/self-note/generate` : '/api/character/self-note/generate';
+    const res = await fetch(url, {method: 'POST'});
     const d = await res.json();
     if (d.ok) {
       loadCharacterLayers();

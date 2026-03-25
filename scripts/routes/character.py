@@ -76,19 +76,18 @@ async def update_character_api(body: CharacterUpdate):
 
 # --- リテラルパス（{character_id} より先に定義する） ---
 
-@router.get("/api/character/layers")
-async def get_character_layers():
-    """プロンプト第2〜4層の現在の状態を返す"""
-    char = get_character()
-    char_name = char.get("name", "ちょビ")
-    char_id = get_character_id()
+def _get_layers_for_character(char_id):
+    """指定キャラのプロンプトレイヤー情報を返す（共通処理）"""
+    row = db.get_character_by_id(char_id)
+    char_name = ""
+    if row:
+        config = json.loads(row["config"])
+        char_name = row["name"] or config.get("name", "")
 
-    # 第2層・第3層: character_memory テーブルから取得
     memory = db.get_character_memory(char_id)
     persona = memory.get("persona", "")
     self_note = memory.get("self_note", "")
 
-    # 第4層: 視聴者メモ（メモがあるユーザーのみ）
     viewer_notes = []
     try:
         conn = db.get_connection()
@@ -109,9 +108,15 @@ async def get_character_layers():
     }
 
 
+@router.get("/api/character/layers")
+async def get_character_layers():
+    """プロンプトレイヤー（後方互換・先生キャラ）"""
+    return _get_layers_for_character(get_character_id())
+
+
 @router.put("/api/character/persona")
 async def update_persona(body: MemoryUpdate):
-    """ペルソナ（第2層）を手動更新する"""
+    """ペルソナ手動更新（後方互換・先生キャラ）"""
     char_id = get_character_id()
     db.update_character_persona(char_id, body.text)
     return {"ok": True}
@@ -126,7 +131,7 @@ async def update_viewer_note(body: ViewerNoteUpdate):
 
 @router.post("/api/character/persona/generate")
 async def generate_persona_api():
-    """システムプロンプトからペルソナを初期生成する"""
+    """ペルソナAI生成（後方互換・先生キャラ）"""
     import asyncio
     persona = await asyncio.to_thread(generate_persona_from_prompt)
     if persona:
@@ -137,7 +142,7 @@ async def generate_persona_api():
 
 @router.post("/api/character/self-note/generate")
 async def generate_self_note_api():
-    """直近の会話からセルフメモを再生成する"""
+    """セルフメモAI生成（後方互換・先生キャラ）"""
     import asyncio
     char_id = get_character_id()
     memory = db.get_character_memory(char_id)
@@ -181,6 +186,60 @@ async def update_character_by_id_api(character_id: int, body: CharacterUpdate):
     if character_id == get_character_id():
         invalidate_character_cache()
     return {"ok": True}
+
+
+# --- キャラID指定のレイヤー操作 ---
+
+@router.get("/api/character/{character_id}/layers")
+async def get_character_layers_by_id(character_id: int):
+    """指定キャラのプロンプトレイヤーを返す"""
+    row = db.get_character_by_id(character_id)
+    if not row:
+        return {"ok": False, "error": "キャラクターが見つかりません"}
+    return _get_layers_for_character(character_id)
+
+
+@router.put("/api/character/{character_id}/persona")
+async def update_persona_by_id(character_id: int, body: MemoryUpdate):
+    """指定キャラのペルソナを手動更新する"""
+    row = db.get_character_by_id(character_id)
+    if not row:
+        return {"ok": False, "error": "キャラクターが見つかりません"}
+    db.update_character_persona(character_id, body.text)
+    return {"ok": True}
+
+
+@router.post("/api/character/{character_id}/persona/generate")
+async def generate_persona_by_id(character_id: int):
+    """指定キャラのシステムプロンプトからペルソナをAI生成する"""
+    import asyncio
+    row = db.get_character_by_id(character_id)
+    if not row:
+        return {"ok": False, "error": "キャラクターが見つかりません"}
+    config = json.loads(row["config"])
+    config["name"] = row["name"]
+    persona = await asyncio.to_thread(generate_persona_from_prompt, char_config=config)
+    if persona:
+        db.update_character_persona(character_id, persona)
+    return {"ok": True, "persona": persona}
+
+
+@router.post("/api/character/{character_id}/self-note/generate")
+async def generate_self_note_by_id(character_id: int):
+    """指定キャラの直近の会話からセルフメモをAI再生成する"""
+    import asyncio
+    row = db.get_character_by_id(character_id)
+    if not row:
+        return {"ok": False, "error": "キャラクターが見つかりません"}
+    config = json.loads(row["config"])
+    config["name"] = row["name"]
+    memory = db.get_character_memory(character_id)
+    recent = db.get_recent_timeline(50, 2)
+    current_note = memory.get("self_note", "")
+    new_note = await asyncio.to_thread(generate_self_note, recent, current_note, char_config=config)
+    if new_note is not None:
+        db.update_character_self_note(character_id, new_note)
+    return {"ok": True, "self_note": new_note}
 
 
 # --- その他 ---

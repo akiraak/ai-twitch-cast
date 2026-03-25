@@ -344,19 +344,32 @@ class CommentReader:
         return result
 
     async def _generate_multi_ai_response(self, author, message, comment_count, user_note="", already_greeted=False):
-        """マルチキャラAI応答を生成する"""
+        """マルチキャラAI応答を生成する（両キャラのメモ・ペルソナを使用）"""
         logger.info("[ai] マルチキャラ応答生成中...")
         timeline = await asyncio.to_thread(db.get_recent_timeline, 10, 2)
         stream_context = await self._get_stream_context()
-        self_note = await self._get_self_note()
-        char_id = get_character_id()
-        memory = await asyncio.to_thread(db.get_character_memory, char_id)
-        persona = memory.get("persona") or None
+
+        # 先生のコンテキスト
+        teacher_id = get_character_id()
+        teacher_memory = await asyncio.to_thread(db.get_character_memory, teacher_id)
+        self_note = teacher_memory.get("self_note") or None
+        persona = teacher_memory.get("persona") or None
+
+        # 生徒のコンテキスト（先生と同じフローで取得）
+        student_self_note = None
+        student_persona = None
+        student_ctx = self._get_student_context()
+        if student_ctx:
+            student_memory = await asyncio.to_thread(db.get_character_memory, student_ctx["id"])
+            student_self_note = student_memory.get("self_note") or None
+            student_persona = student_memory.get("persona") or None
+
         responses = await asyncio.to_thread(
             generate_multi_response, author, message, self._characters,
             comment_count=comment_count, timeline=timeline,
             stream_context=stream_context, user_note=user_note or None,
             already_greeted=already_greeted, self_note=self_note, persona=persona,
+            student_self_note=student_self_note, student_persona=student_persona,
         )
         for r in responses:
             logger.info("[ai] [%s/%s] %s", r["speaker"], r["emotion"], r["speech"])
@@ -512,8 +525,19 @@ class CommentReader:
         except Exception as e:
             logger.error("イベント発話失敗: %s", e)
 
+    def _get_student_context(self):
+        """生徒キャラのコンテキスト{id, config}を返す（なければNone）"""
+        if not self._characters or not self._characters.get("student"):
+            return None
+        student_cfg = self._characters["student"]
+        from src.ai_responder import _get_channel_id
+        row = db.get_character_by_role(_get_channel_id(), "student")
+        if not row:
+            return None
+        return {"id": row["id"], "config": student_cfg}
+
     async def _get_self_note(self):
-        """アバター自身の記憶メモを取得する"""
+        """先生キャラの記憶メモを取得する"""
         try:
             char_id = get_character_id()
             memory = await asyncio.to_thread(db.get_character_memory, char_id)
@@ -522,39 +546,66 @@ class CommentReader:
             logger.debug("アバターメモ取得失敗: %s", e)
             return None
 
-    async def _update_self_note(self):
-        """アバター自身の記憶メモを更新する"""
+    # --- 共通メモ更新メソッド ---
+
+    async def _update_character_self_note(self, char_id, char_config, char_name=None):
+        """1キャラのセルフメモを更新する（共通処理）"""
+        name = char_name or char_config.get("name", "?")
         try:
-            from datetime import datetime, timedelta, timezone
-            char_id = get_character_id()
             memory = await asyncio.to_thread(db.get_character_memory, char_id)
             timeline = await asyncio.to_thread(db.get_recent_timeline, 50, 2)
             if not timeline:
                 return
             new_note = await asyncio.to_thread(
-                generate_self_note, timeline,
+                generate_self_note, timeline, char_config=char_config,
             )
             if new_note and new_note != memory.get("self_note", ""):
                 await asyncio.to_thread(db.update_character_self_note, char_id, new_note)
-                logger.info("[note] アバターメモ更新: %s", new_note)
+                logger.info("[note] %sメモ更新: %s", name, new_note)
         except Exception as e:
-            logger.warning("[note] アバターメモ更新失敗: %s", e)
+            logger.warning("[note] %sメモ更新失敗: %s", name, e)
 
-    async def _update_persona(self):
-        """ペルソナ（性格特徴）を応答パターンから更新する"""
+    async def _update_character_persona(self, char_id, char_config, speaker=None, char_name=None):
+        """1キャラのペルソナを更新する（共通処理）"""
+        name = char_name or char_config.get("name", "?")
         try:
-            char_id = get_character_id()
             memory = await asyncio.to_thread(db.get_character_memory, char_id)
             current_persona = memory.get("persona", "")
-            avatar_comments = await asyncio.to_thread(db.get_recent_avatar_comments, 50, 2)
+            avatar_comments = await asyncio.to_thread(
+                db.get_recent_avatar_comments, 50, 2, speaker=speaker,
+            )
             if not avatar_comments:
                 return
-            persona = await asyncio.to_thread(generate_persona, avatar_comments, current_persona)
+            persona = await asyncio.to_thread(
+                generate_persona, avatar_comments, current_persona, char_config=char_config,
+            )
             if persona:
                 await asyncio.to_thread(db.update_character_persona, char_id, persona)
-                logger.info("[persona] ペルソナ更新: %s", persona[:80])
+                logger.info("[persona] %sペルソナ更新: %s", name, persona[:80])
         except Exception as e:
-            logger.warning("[persona] ペルソナ更新失敗: %s", e)
+            logger.warning("[persona] %sペルソナ更新失敗: %s", name, e)
+
+    async def _update_self_note(self):
+        """全キャラのセルフメモを更新する"""
+        # 先生
+        teacher_id = get_character_id()
+        await self._update_character_self_note(teacher_id, get_character())
+        # 生徒
+        student_ctx = self._get_student_context()
+        if student_ctx:
+            await self._update_character_self_note(student_ctx["id"], student_ctx["config"])
+
+    async def _update_persona(self):
+        """全キャラのペルソナを更新する"""
+        # 先生
+        teacher_id = get_character_id()
+        await self._update_character_persona(teacher_id, get_character())
+        # 生徒
+        student_ctx = self._get_student_context()
+        if student_ctx:
+            await self._update_character_persona(
+                student_ctx["id"], student_ctx["config"], speaker="student",
+            )
 
     async def _save_avatar_comment(self, trigger_type, trigger_text, text, emotion="neutral", speaker=None):
         """アバターのコメントをDBに保存する"""

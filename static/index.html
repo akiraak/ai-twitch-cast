@@ -140,7 +140,7 @@
         <div id="language-modes"></div>
         <div id="lang-description" style="margin-top:10px; padding:10px 14px; background:#f3e5f5; border-radius:8px; font-size:0.85rem; color:#4a148c; display:none;"></div>
       </div>
-      <div class="layer-header teacher-only">
+      <div class="layer-header">
         <span>5層プロンプト合成</span>
         <a href="#" onclick="event.preventDefault(); showCharacterPromptDoc()" style="font-size:0.75rem; font-weight:normal; color:#7c4dff; text-decoration:none;">会話生成の仕組み →</a>
       </div>
@@ -212,7 +212,7 @@
         </div>
         <div class="status" id="char-status"></div>
       </div>
-      <div class="card teacher-only">
+      <div class="card">
         <h2><span class="layer-badge">第2層</span> ペルソナ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分ごとAI抽出（応答10件以上で生成）</span></h2>
         <div id="layer-persona" class="layer-content"><span style="color:#9a88b5;">読み込み中...</span></div>
         <div id="layer-persona-edit" style="display:none;">
@@ -227,14 +227,14 @@
           <button class="secondary" style="font-size:0.7rem; padding:3px 8px;" onclick="generatePersonaFromPrompt()">AI初期生成</button>
         </div>
       </div>
-      <div class="card teacher-only">
+      <div class="card">
         <h2><span class="layer-badge">第3層</span> セルフメモ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分ごと更新・配信中の記憶</span></h2>
         <div id="layer-self-note" class="layer-content"><span style="color:#9a88b5;">読み込み中...</span></div>
         <div class="btn-row" style="margin-top:6px;">
           <button class="secondary" style="font-size:0.7rem; padding:3px 8px;" onclick="regenerateSelfNote()">AI再生成</button>
         </div>
       </div>
-      <div class="card teacher-only">
+      <div class="card">
         <details>
           <summary style="cursor:pointer; user-select:none;">
             <h2 style="display:inline;"><span class="layer-badge">第4層</span> 視聴者メモ <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">15分バッチ更新・初回挨拶時に注入</span></h2>
@@ -243,11 +243,11 @@
           <div id="layer-viewer-notes" class="layer-content" style="margin-top:8px;"><span style="color:#9a88b5;">読み込み中...</span></div>
         </details>
       </div>
-      <div class="card teacher-only" style="background:linear-gradient(135deg, #f8f6ff, #f3e5f5); border:1px dashed #d0c0e8;">
+      <div class="card" style="background:linear-gradient(135deg, #f8f6ff, #f3e5f5); border:1px dashed #d0c0e8;">
         <h2><span class="layer-badge" style="background:#e0d8f0; color:#6a5590;">第5層</span> リアルタイム状態 <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">配信タイトル・トピック・TODO</span></h2>
         <div style="font-size:0.82rem; color:#6a5590;">配信中に自動注入されます（Twitchタイトル・現在のトピック・作業中タスク）</div>
       </div>
-      <div class="card teacher-only">
+      <div class="card">
         <h2>発話設定</h2>
         <div class="vol-row">
           <span class="vol-label">文字数上限</span>
