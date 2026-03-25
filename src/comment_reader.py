@@ -297,7 +297,7 @@ class CommentReader:
         except Exception as e:
             logger.error("チャット投稿失敗: %s", e)
 
-    async def speak_event(self, event_type, detail, voice=None):
+    async def speak_event(self, event_type, detail, voice=None, style=None):
         """イベントに対してアバターが発話する（コミット・作業開始等）"""
         try:
             logger.info("[event] %s: %s", event_type, detail)
@@ -312,7 +312,7 @@ class CommentReader:
             logger.info("[event] [%s] %s", result["emotion"], result["speech"])
             self._speech.apply_emotion(result["emotion"])
             # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
-            await self._speech.speak(result["speech"], voice=voice, subtitle={
+            await self._speech.speak(result["speech"], voice=voice, style=style, subtitle={
                 "author": "システム",
                 "trigger_text": f"[{event_type}] {detail}",
                 "result": result,

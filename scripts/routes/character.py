@@ -1,7 +1,10 @@
 """キャラクター設定ルート"""
 
 import json
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter
 from fastapi import Request
@@ -167,8 +170,13 @@ async def update_character_by_id_api(character_id: int, body: CharacterUpdate):
     # 既存の config を読み込んで role 等の追加フィールドを保持
     existing_config = json.loads(existing["config"])
     new_config = {**existing_config, **body.model_dump()}
+    logger.info("[char-save] id=%s tts_voice=%r tts_style=%r", character_id, new_config.get("tts_voice"), new_config.get("tts_style"))
     config = json.dumps(new_config, ensure_ascii=False)
     db.update_character(character_id, name=body.name, config=config)
+    # 保存後の確認読み取り
+    saved = db.get_character_by_id(character_id)
+    saved_config = json.loads(saved["config"])
+    logger.info("[char-save] 保存後確認: tts_voice=%r tts_style=%r", saved_config.get("tts_voice"), saved_config.get("tts_style"))
     if character_id == get_character_id():
         invalidate_character_cache()
     return {"ok": True}

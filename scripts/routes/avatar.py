@@ -86,6 +86,66 @@ async def tts_test_emotion(body: EmotionTestRequest):
     return {"ok": True}
 
 
+class VoiceSampleRequest(BaseModel):
+    voice: str | None = None
+    style: str | None = None
+    avatar_id: str = "teacher"
+
+
+# 声サンプル用プロンプト（バリエーション豊富、短文〜長文混在）
+_VOICE_SAMPLE_PROMPTS = [
+    # --- 短め（1文）---
+    "配信を見てくれている視聴者に、今日初めて来てくれた人に向けて歓迎の一言を。",
+    "好きな食べ物について一言で熱く語って。",
+    "今朝あった小さな幸せを報告して。",
+    "視聴者に突然クイズを出して（答えは言わないで）。",
+    "今日の天気を超テンション高めに実況して。",
+    # --- 中くらい（2〜3文）---
+    "最近ハマっていることについて語って。なぜハマったか、どこが面白いかも含めて（2〜3文で）。",
+    "昨日見た夢の話をして。できるだけ詳しく、でもちょっとオチをつけて（2〜3文で）。",
+    "プログラミングの面白さを、プログラミングを知らない人に向けて説明して（2〜3文で）。",
+    "配信中に起きた面白いハプニングのエピソードを作って話して（2〜3文で）。",
+    "お気に入りの場所について、そこの魅力を伝えて（2〜3文で）。",
+    "朝型 vs 夜型、自分の立場を熱弁して（2〜3文で）。",
+    # --- 長め（3〜5文）---
+    "AIについて思うことを自由に語って。未来への期待も不安も含めて正直に（3〜5文で）。",
+    "もし1日だけ別の職業を体験できるなら何がいい？理由と妄想を膨らませて（3〜5文で）。",
+    "子供の頃に夢中だったことと、今の自分との繋がりについて語って（3〜5文で）。",
+    "無人島に3つだけ持っていけるとしたら何を持っていく？理由も詳しく（3〜5文で）。",
+    "配信を始めたきっかけと、続けている理由を視聴者に話して（3〜5文で）。",
+    "最近感動したこと（映画、本、出来事なんでも）について熱く語って（3〜5文で）。",
+    "自分の長所と短所を正直に語って。短所はちょっと面白おかしく（3〜5文で）。",
+    "10年後の自分に手紙を書くつもりで語りかけて（3〜5文で）。",
+]
+
+
+@router.post("/api/tts/voice-sample")
+async def tts_voice_sample(body: VoiceSampleRequest):
+    """キャラクタータブから声のサンプルを再生する（フォーム上のvoice/styleで試聴）"""
+    import random
+    from src.prompt_builder import get_stream_language, SUPPORTED_LANGUAGES
+
+    lang = get_stream_language()
+    p_name = SUPPORTED_LANGUAGES.get(lang["primary"], lang["primary"])
+
+    prompt = random.choice(_VOICE_SAMPLE_PROMPTS)
+    if lang["sub"] != "none":
+        s_name = SUPPORTED_LANGUAGES.get(lang["sub"], lang["sub"])
+        detail = f"{prompt} Mix {p_name} and {s_name}."
+    else:
+        detail = f"{prompt} Speak in {p_name}."
+
+    await state.ensure_reader()
+    asyncio.create_task(
+        state.reader.speak_event(
+            "ボイスサンプル", detail,
+            voice=body.voice or None,
+            style=body.style or None,
+        )
+    )
+    return {"ok": True}
+
+
 @router.post("/api/tts/test-multi")
 async def tts_test_multi():
     """連続発話テスト（長文生成→句読点分割→順次再生）"""

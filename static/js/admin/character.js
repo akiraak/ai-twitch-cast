@@ -1,5 +1,20 @@
 // キャラクター設定・プロンプトレイヤー・視聴者メモ
 
+// --- 自動保存（デバウンス） ---
+let _autoSaveTimer = null;
+let _autoSaveLoading = false;  // loadCharacter中はトリガーしない
+
+function _scheduleAutoSave() {
+  if (_autoSaveLoading) return;
+  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+  const statusEl = document.getElementById('char-status');
+  if (statusEl) statusEl.textContent = '変更あり…';
+  _autoSaveTimer = setTimeout(() => {
+    _autoSaveTimer = null;
+    saveCharacter();
+  }, 800);
+}
+
 // --- キャラクター切替 ---
 let _currentChar = 'teacher';  // role: 'teacher' or 'student'
 let _currentCharId = null;     // DB上のキャラクターID
@@ -155,6 +170,7 @@ async function loadCharacterById(charId) {
 }
 
 async function _loadCharacterFromApi(url) {
+  _autoSaveLoading = true;
   try {
     const data = await (await fetch(url)).json();
     if (data.ok === false) {
@@ -171,7 +187,7 @@ async function _loadCharacterFromApi(url) {
     document.getElementById('char-tts-style').value = data.tts_style || '';
     renderEmotions();
     renderBlendshapes();
-    document.getElementById('char-status').textContent = '読み込みました';
+    document.getElementById('char-status').textContent = '';
     // バナー更新（先生のみ）
     if (_currentChar === 'teacher') {
       try {
@@ -183,6 +199,8 @@ async function _loadCharacterFromApi(url) {
     }
   } catch (e) {
     document.getElementById('char-status').textContent = 'エラー: ' + e.message;
+  } finally {
+    _autoSaveLoading = false;
   }
 }
 
@@ -237,7 +255,7 @@ function renderRules(rules) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
     row.innerHTML = `<input type="text" class="char-rule text-input" value="${escHtml(rule)}" style="flex:1; padding:2px 6px; font-size:0.8rem;">
-      <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
+      <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove(); _scheduleAutoSave()">×</button>`;
     el.appendChild(row);
   });
 }
@@ -247,7 +265,7 @@ function addRule() {
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
   row.innerHTML = `<input type="text" class="char-rule text-input" value="" style="flex:1; padding:2px 6px; font-size:0.8rem;">
-    <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
+    <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove(); _scheduleAutoSave()">×</button>`;
   el.appendChild(row);
 }
 
@@ -263,7 +281,7 @@ function renderEmotions() {
     row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
     row.innerHTML = `<input type="text" class="emo-key text-input" value="${escHtml(key)}" style="width:70px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
       <input type="text" class="emo-desc text-input" value="${escHtml(desc)}" style="flex:1; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
-      <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
+      <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove(); _scheduleAutoSave()">×</button>`;
     el.appendChild(row);
   }
 }
@@ -274,7 +292,7 @@ function addEmotion() {
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
   row.innerHTML = `<input type="text" class="emo-key text-input" value="" style="width:70px; padding:2px 6px; font-size:0.8rem;" placeholder="キー">
     <input type="text" class="emo-desc text-input" value="" style="flex:1; padding:2px 6px; font-size:0.8rem;" placeholder="説明">
-    <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove()">×</button>`;
+    <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove(); _scheduleAutoSave()">×</button>`;
   el.appendChild(row);
 }
 
@@ -315,7 +333,7 @@ function makeBlendshapeRow(name, val) {
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:2px;';
   row.innerHTML = `<input type="text" class="bs-name text-input" value="${escHtml(name)}" style="width:80px; padding:2px 4px; font-size:0.75rem;">
     <input type="number" class="bs-val num-input" value="${val}" step="0.1" min="0" max="1" style="width:60px; font-size:0.75rem;">
-    <button class="danger" style="font-size:0.65rem; padding:1px 4px;" onclick="this.parentElement.remove()">×</button>`;
+    <button class="danger" style="font-size:0.65rem; padding:1px 4px;" onclick="this.parentElement.remove(); _scheduleAutoSave()">×</button>`;
   return row;
 }
 
@@ -343,25 +361,41 @@ function collectBlendshapes() {
 }
 
 async function saveCharacter() {
-  const body = {
-    name: document.getElementById('char-name').value,
-    system_prompt: document.getElementById('char-prompt').value,
-    rules: collectRules(),
-    emotions: collectEmotions(),
-    emotion_blendshapes: collectBlendshapes(),
-    tts_voice: document.getElementById('char-tts-voice').value || null,
-    tts_style: document.getElementById('char-tts-style').value || null,
-  };
-  // キャラクターIDがあればID指定APIを使う
-  const url = _currentCharId ? '/api/character/' + _currentCharId : '/api/character';
-  const res = await api('PUT', url, body);
-  if (res?.ok) {
-    document.getElementById('char-status').textContent = '保存しました';
-    // キャラクターリストも更新（名前が変わった可能性）
-    await loadCharacterList();
-    await loadCharacterById(_currentCharId);
+  const statusEl = document.getElementById('char-status');
+  try {
+    const body = {
+      name: document.getElementById('char-name').value,
+      system_prompt: document.getElementById('char-prompt').value,
+      rules: collectRules(),
+      emotions: collectEmotions(),
+      emotion_blendshapes: collectBlendshapes(),
+      tts_voice: document.getElementById('char-tts-voice').value || null,
+      tts_style: document.getElementById('char-tts-style').value || null,
+    };
+    const url = _currentCharId ? '/api/character/' + _currentCharId : '/api/character';
+    const res = await api('PUT', url, body);
+    if (res?.ok) {
+      statusEl.textContent = '保存しました';
+      setTimeout(() => { if (statusEl.textContent === '保存しました') statusEl.textContent = ''; }, 2000);
+    } else {
+      statusEl.textContent = '保存失敗';
+    }
+  } catch (e) {
+    statusEl.textContent = 'エラー: ' + e.message;
   }
 }
+
+// 静的フィールドの自動保存リスナー
+['char-name', 'char-prompt', 'char-tts-style'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', _scheduleAutoSave);
+});
+document.getElementById('char-tts-voice')?.addEventListener('change', _scheduleAutoSave);
+
+// 動的フィールド（ルール・感情・BlendShape）のイベント委譲
+['char-rules', 'char-emotions', 'char-blendshapes'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', _scheduleAutoSave);
+  document.getElementById(id)?.addEventListener('change', _scheduleAutoSave);
+});
 
 // --- プロンプトレイヤー表示 ---
 let _layerData = {};
@@ -450,6 +484,27 @@ async function saveViewerNote(btn, userId) {
     if (d.ok) loadCharacterLayers();
   } catch (e) {
     console.error('視聴者メモ保存失敗:', e);
+  }
+}
+
+// --- ボイスサンプル ---
+async function voiceSample() {
+  const btn = document.getElementById('btn-voice-sample');
+  const status = document.getElementById('voice-sample-status');
+  const voice = document.getElementById('char-tts-voice').value || null;
+  const style = document.getElementById('char-tts-style').value || null;
+  // avatar_idはキャラクターのroleから
+  const avatarId = _currentChar || 'teacher';
+  btn.disabled = true;
+  status.textContent = '生成中...';
+  try {
+    await api('POST', '/api/tts/voice-sample', { voice, style, avatar_id: avatarId });
+    status.textContent = '再生中';
+    setTimeout(() => { status.textContent = ''; }, 5000);
+  } catch (e) {
+    status.textContent = 'エラー: ' + e.message;
+  } finally {
+    btn.disabled = false;
   }
 }
 

@@ -192,14 +192,14 @@
             <label class="field-label">話し方スタイル（TTS Style）</label>
             <textarea id="char-tts-style" rows="2" class="text-input" placeholder="例: 元気で明るい声で、好奇心いっぱいに読み上げてください"></textarea>
           </div>
+          <div>
+            <button id="btn-voice-sample" onclick="voiceSample()" style="font-size:0.8rem;">&#9654; サンプル再生</button>
+            <span id="voice-sample-status" style="font-size:0.75rem; color:#9a88b5; margin-left:8px;"></span>
+          </div>
           <div style="grid-column: 1 / -1;">
             <label class="field-label">感情BlendShape</label>
             <div id="char-blendshapes"></div>
           </div>
-        </div>
-        <div class="btn-row" style="margin-top:16px;">
-          <button onclick="saveCharacter()">保存</button>
-          <button class="secondary" onclick="loadCharacter()">リロード</button>
         </div>
         <div class="status" id="char-status"></div>
       </div>

@@ -39,7 +39,7 @@ def _create_tables(conn):
         CREATE TABLE IF NOT EXISTS characters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             channel_id INTEGER NOT NULL REFERENCES channels(id),
-            name TEXT NOT NULL,
+            name TEXT NOT NULL UNIQUE,
             config TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL
         );
@@ -392,6 +392,18 @@ def _create_tables(conn):
     except Exception:
         pass
 
+    # Migration: characters.name を UNIQUE に（重複キャラを削除して制約追加）
+    try:
+        _migrate_characters_unique_name(conn)
+    except Exception:
+        pass
+
+    # Migration: characters.config に tts_voice/tts_style がなければデフォルト値を補完
+    try:
+        _migrate_characters_tts_defaults(conn)
+    except Exception:
+        pass
+
 
 def _migrate_vrm_to_character_config(conn):
     """settings の files.active_avatar* を characters.config.vrm に移行（冪等）"""
@@ -511,6 +523,84 @@ def _cleanup_old_character_settings(conn):
     conn.commit()
 
 
+def _migrate_characters_unique_name(conn):
+    """characters.name に UNIQUE 制約を追加する（冪等）
+
+    同名キャラクターが複数存在する場合、最も config が充実している1件を残して
+    他を削除する。関連する character_memory も削除。不要なチャンネルも削除。
+    """
+    # 既に UNIQUE 制約があるかチェック
+    index_info = conn.execute("PRAGMA index_list('characters')").fetchall()
+    for idx in index_info:
+        cols = conn.execute(f"PRAGMA index_info('{idx['name']}')").fetchall()
+        if len(cols) == 1 and any(c["name"] == "name" for c in cols) and idx["unique"]:
+            return  # 既に UNIQUE
+
+    # 同名キャラの重複を解消: config が最も充実している（長い）1件を残す
+    rows = conn.execute(
+        "SELECT id, name, LENGTH(config) as config_len FROM characters ORDER BY name, config_len DESC"
+    ).fetchall()
+    seen_names = {}
+    delete_ids = []
+    for row in rows:
+        if row["name"] in seen_names:
+            delete_ids.append(row["id"])
+        else:
+            seen_names[row["name"]] = row["id"]
+
+    if delete_ids:
+        placeholders = ",".join("?" * len(delete_ids))
+        conn.execute(f"DELETE FROM character_memory WHERE character_id IN ({placeholders})", delete_ids)
+        conn.execute(f"DELETE FROM characters WHERE id IN ({placeholders})", delete_ids)
+        conn.commit()
+
+    # 使われなくなったチャンネルを削除
+    orphan_channels = conn.execute(
+        "SELECT c.id FROM channels c LEFT JOIN characters ch ON ch.channel_id = c.id "
+        "WHERE ch.id IS NULL"
+    ).fetchall()
+    for ch in orphan_channels:
+        conn.execute("DELETE FROM channels WHERE id = ?", (ch["id"],))
+    conn.commit()
+
+    # UNIQUE 制約を追加（テーブル再作成）
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_characters_name ON characters(name)")
+    conn.commit()
+
+
+def _migrate_characters_tts_defaults(conn):
+    """characters.config に tts_voice/tts_style がなければデフォルト値を補完する（冪等）"""
+    from src.ai_responder import DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER
+
+    defaults_by_role = {
+        "teacher": {
+            "tts_voice": DEFAULT_CHARACTER.get("tts_voice"),
+            "tts_style": DEFAULT_CHARACTER.get("tts_style"),
+        },
+        "student": {
+            "tts_voice": DEFAULT_STUDENT_CHARACTER.get("tts_voice"),
+            "tts_style": DEFAULT_STUDENT_CHARACTER.get("tts_style"),
+        },
+    }
+
+    rows = conn.execute("SELECT id, config FROM characters").fetchall()
+    for row in rows:
+        config = _json.loads(row["config"])
+        role = config.get("role", "teacher")
+        defaults = defaults_by_role.get(role, defaults_by_role["teacher"])
+        updated = False
+        for key, default_val in defaults.items():
+            if not config.get(key) and default_val:
+                config[key] = default_val
+                updated = True
+        if updated:
+            conn.execute(
+                "UPDATE characters SET config = ? WHERE id = ?",
+                (_json.dumps(config, ensure_ascii=False), row["id"]),
+            )
+    conn.commit()
+
+
 def _migrate_comments_split(conn):
     """commentsテーブルからavatar_commentsを分離するマイグレーション（冪等）"""
     # messageカラムが存在する＝未マイグレーション
@@ -622,9 +712,10 @@ def get_or_create_channel(name):
 
 def get_or_create_character(channel_id, name, config="{}"):
     conn = get_connection()
+    # name は UNIQUE — channel_id に関わらず名前で検索
     row = conn.execute(
-        "SELECT * FROM characters WHERE channel_id = ? AND name = ?",
-        (channel_id, name),
+        "SELECT * FROM characters WHERE name = ?",
+        (name,),
     ).fetchone()
     if row:
         return dict(row)
@@ -634,28 +725,40 @@ def get_or_create_character(channel_id, name, config="{}"):
     )
     conn.commit()
     return dict(conn.execute(
-        "SELECT * FROM characters WHERE channel_id = ? AND name = ?",
-        (channel_id, name),
+        "SELECT * FROM characters WHERE name = ?",
+        (name,),
     ).fetchone())
 
 
 def get_character_by_channel(channel_id):
-    """チャンネルのキャラクター設定を取得する（先頭1件）"""
+    """チャンネルのキャラクター設定を取得する（先頭1件）
+
+    name UNIQUE 化により、channel_id に該当がなければ全キャラクターから返す。
+    """
     conn = get_connection()
     row = conn.execute(
         "SELECT * FROM characters WHERE channel_id = ? ORDER BY id LIMIT 1",
         (channel_id,),
     ).fetchone()
+    if not row:
+        # channel_id 不一致でもキャラが存在すれば返す（env変更時の救済）
+        row = conn.execute("SELECT * FROM characters ORDER BY id LIMIT 1").fetchone()
     return dict(row) if row else None
 
 
 def get_characters_by_channel(channel_id):
-    """チャンネルの全キャラクター一覧を返す"""
+    """チャンネルの全キャラクター一覧を返す
+
+    name UNIQUE 化により、channel_id に該当がなければ全キャラクターを返す。
+    """
     conn = get_connection()
     rows = conn.execute(
         "SELECT * FROM characters WHERE channel_id = ? ORDER BY id",
         (channel_id,),
     ).fetchall()
+    if not rows:
+        # channel_id 不一致でもキャラが存在すれば返す
+        rows = conn.execute("SELECT * FROM characters ORDER BY id").fetchall()
     return [dict(r) for r in rows]
 
 

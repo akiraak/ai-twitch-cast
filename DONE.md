@@ -1,5 +1,14 @@
 # DONE
 
+## キャラクター設定の改善
+
+- [x] ボイスサンプル再生ボタン追加（キャラタブのvoice/style選択後に試聴、AI生成でバリエーション豊富）
+- [x] TTS voice/style をキャラDBから自動取得（synthesize()でget_tts_config()参照、全発話パスで反映）
+- [x] characters.name UNIQUE制約追加 + 重複キャラ・チャンネル自動削除マイグレーション
+- [x] channel_id不一致時のフォールバック（get_character_by_channel/get_characters_by_channel）
+- [x] 既存キャラにtts_voice/tts_styleデフォルト値を補完するマイグレーション
+- [x] キャラクター設定の自動保存（保存ボタン廃止、フォーム変更時800msデバウンスで即保存）
+
 ## Step 2: TTS style パラメータ + WebUI設定
 
 - [x] speech_pipeline.py に style 引数を伝搬（generate_tts / speak / _speak_impl → synthesize）

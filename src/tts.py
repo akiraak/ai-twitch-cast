@@ -97,9 +97,20 @@ def synthesize(text, output_path, voice=None, style=None):
     Args:
         text: 読み上げるテキスト
         output_path: 出力ファイルパス (.wav)
-        voice: 音声名 (デフォルト: Despina)
-        style: TTSスタイル指示（デフォルト: 環境変数 or 言語設定から自動生成）
+        voice: 音声名 (デフォルト: キャラDB設定 or Despina)
+        style: TTSスタイル指示（デフォルト: キャラDB設定 or 言語設定から自動生成）
     """
+    # voice/style が未指定ならキャラDBから取得
+    if voice is None or style is None:
+        try:
+            from src.ai_responder import get_tts_config
+            tts_config = get_tts_config()
+            if voice is None:
+                voice = tts_config.get("voice")
+            if style is None:
+                style = tts_config.get("style")
+        except Exception:
+            pass
     if style is None:
         style = os.environ.get("TTS_STYLE") or _get_tts_style()
     processed_text = _convert_lang_tags(text)
