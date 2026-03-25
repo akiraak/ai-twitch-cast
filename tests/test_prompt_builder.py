@@ -388,7 +388,7 @@ class TestBuildMultiSystemPrompt:
     def test_includes_both_characters(self, test_db, mock_env):
         prompt = build_multi_system_prompt(DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER)
         assert "ちょビ" in prompt
-        assert "まなび" in prompt
+        assert "なるこ" in prompt
 
     def test_includes_distribution_guidelines(self, test_db, mock_env):
         prompt = build_multi_system_prompt(DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER)

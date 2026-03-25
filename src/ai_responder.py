@@ -62,12 +62,12 @@ DEFAULT_CHARACTER = {
 }
 
 DEFAULT_STUDENT_CHARACTER = {
-    "name": "まなび",
+    "name": "なるこ",
     "role": "student",
     "tts_voice": "Kore",
     "tts_style": "元気で明るい声で、好奇心いっぱいに読み上げてください",
     "system_prompt": "\n".join([
-        "あなたは配信に参加している生徒キャラ「まなび」です。",
+        "あなたは配信に参加している生徒キャラ「なるこ」です。",
         "先生（ちょビ）の授業を受けている元気な生徒です。",
         "",
         "## 性格",
@@ -139,6 +139,18 @@ def seed_all_characters(channel_id):
     if not student_exists:
         config = json.dumps(DEFAULT_STUDENT_CHARACTER, ensure_ascii=False)
         db.get_or_create_character(channel_id, DEFAULT_STUDENT_CHARACTER["name"], config)
+    else:
+        # マイグレーション: 生徒名「まなび」→「なるこ」
+        for c in chars:
+            cfg = json.loads(c["config"])
+            if cfg.get("role") == "student" and cfg.get("name") == "まなび":
+                cfg["name"] = "なるこ"
+                if "system_prompt" in cfg:
+                    cfg["system_prompt"] = cfg["system_prompt"].replace(
+                        "「まなび」", "「なるこ」"
+                    )
+                config_str = json.dumps(cfg, ensure_ascii=False)
+                db.update_character(c["id"], name="なるこ", config=config_str)
 
 
 def load_character(channel_id=None):
@@ -891,7 +903,7 @@ def generate_multi_event_response(event_type, detail, characters, last_event_res
     client = get_client()
     teacher_char = characters["teacher"]
     teacher_name = teacher_char.get("name", "ちょビ")
-    student_name = student_char.get("name", "まなび")
+    student_name = student_char.get("name", "なるこ")
     teacher_emotions = teacher_char.get("emotions", {})
     student_emotions = student_char.get("emotions", {})
 

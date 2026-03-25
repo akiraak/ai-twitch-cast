@@ -359,7 +359,7 @@ class LessonRunner:
         teacher_cfg = self._teacher_cfg or {}
         student_cfg = self._student_cfg or {}
         teacher_name = teacher_cfg.get("name", "ちょビ")
-        student_name = student_cfg.get("name", "まなび")
+        student_name = student_cfg.get("name", "なるこ")
 
         logger.info("[lesson]   対話モード: %d発話", len(dialogues))
 

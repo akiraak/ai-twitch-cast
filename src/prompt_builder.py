@@ -371,7 +371,7 @@ def build_multi_system_prompt(teacher_char, student_char, stream_context=None, s
     p_name = _lang_name(primary)
 
     teacher_name = teacher_char.get("name", "ちょビ")
-    student_name = student_char.get("name", "まなび")
+    student_name = student_char.get("name", "なるこ")
     teacher_emotions = teacher_char.get("emotions", {})
     student_emotions = student_char.get("emotions", {})
 

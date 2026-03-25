@@ -1,5 +1,13 @@
 # DONE
 
+## 生徒名を「まなび」→「なるこ」に変更
+
+- [x] DEFAULT_STUDENT_CHARACTERのname・system_promptを更新
+- [x] フォールバック値を全箇所更新（ai_responder/prompt_builder/lesson_runner）
+- [x] seed_all_characters()にDBマイグレーション追加（既存レコードの自動更新）
+- [x] デモデータ（conv_demo/meta.json）の名前・会話テキスト更新
+- [x] テスト更新（test_lesson_generator/test_prompt_builder）
+
 ## 字幕の重なり防止（先生・生徒の会話時）
 
 - [x] 新しい字幕を上（z-index高）に表示、前の字幕は0.5秒で速くフェードアウト

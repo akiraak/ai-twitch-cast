@@ -21,7 +21,7 @@ TEACHER_CFG = {
 }
 
 STUDENT_CFG = {
-    "name": "まなび",
+    "name": "なるこ",
     "system_prompt": "好奇心旺盛で素直な生徒",
     "emotions": {"joy": "嬉しい", "surprise": "驚き", "neutral": "通常"},
 }
@@ -124,7 +124,7 @@ class TestFormatCharacterForPrompt:
 
     def test_english(self):
         text = _format_character_for_prompt(STUDENT_CFG, "student", en=True)
-        assert "student: まなび" in text
+        assert "student: なるこ" in text
         assert "Available emotions" in text
 
     def test_no_emotions(self):
@@ -149,7 +149,7 @@ class TestBuildDialoguePrompt:
         assert "teacher" in prompt
         assert "student" in prompt
         assert "ちょビ" in prompt
-        assert "まなび" in prompt
+        assert "なるこ" in prompt
 
     def test_english_prompt(self):
         prompt = _build_dialogue_prompt(TEACHER_CFG, STUDENT_CFG, en=True)
