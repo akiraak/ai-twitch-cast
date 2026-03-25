@@ -141,6 +141,7 @@ async def tts_voice_sample(body: VoiceSampleRequest):
             "ボイスサンプル", detail,
             voice=body.voice or None,
             style=body.style or None,
+            avatar_id=body.avatar_id,
         )
     )
     return {"ok": True}

@@ -8,6 +8,7 @@
 - [x] channel_id不一致時のフォールバック（get_character_by_channel/get_characters_by_channel）
 - [x] 既存キャラにtts_voice/tts_styleデフォルト値を補完するマイグレーション
 - [x] キャラクター設定の自動保存（保存ボタン廃止、フォーム変更時800msデバウンスで即保存）
+- [x] ボイスサンプル再生でavatar_idを伝搬（生徒キャラのサンプルで生徒アバターが動くように）
 
 ## Step 2: TTS style パラメータ + WebUI設定
 

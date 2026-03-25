@@ -297,7 +297,7 @@ class CommentReader:
         except Exception as e:
             logger.error("チャット投稿失敗: %s", e)
 
-    async def speak_event(self, event_type, detail, voice=None, style=None):
+    async def speak_event(self, event_type, detail, voice=None, style=None, avatar_id="teacher"):
         """イベントに対してアバターが発話する（コミット・作業開始等）"""
         try:
             logger.info("[event] %s: %s", event_type, detail)
@@ -310,15 +310,15 @@ class CommentReader:
                 pass
             result = await asyncio.to_thread(generate_event_response, event_type, detail, last_event_responses=last_responses)
             logger.info("[event] [%s] %s", result["emotion"], result["speech"])
-            self._speech.apply_emotion(result["emotion"])
+            self._speech.apply_emotion(result["emotion"], avatar_id=avatar_id)
             # 字幕・チャット投稿・音声を同時に送信（TTS生成後に全て発火）
-            await self._speech.speak(result["speech"], voice=voice, style=style, subtitle={
+            await self._speech.speak(result["speech"], voice=voice, style=style, avatar_id=avatar_id, subtitle={
                 "author": "システム",
                 "trigger_text": f"[{event_type}] {detail}",
                 "result": result,
             }, chat_result=result, tts_text=result.get("tts_text"),
                 post_to_chat=self._post_to_chat)
-            self._speech.apply_emotion("neutral")
+            self._speech.apply_emotion("neutral", avatar_id=avatar_id)
             await self._speech.notify_overlay_end()
             # アバター発話をDBに保存
             await self._save_avatar_comment("event", f"[{event_type}] {detail}", result["speech"], result["emotion"])
