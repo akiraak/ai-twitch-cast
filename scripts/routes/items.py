@@ -79,6 +79,13 @@ _ITEM_SPECIFIC_SCHEMA = {
             {"key": "fadeDuration", "label": "フェード (秒)", "type": "slider", "min": 1, "max": 10, "step": 0.5, "default": 3},
         ]},
     ],
+    "subtitle2": [
+        {"title": "固有設定", "fields": [
+            {"key": "bottom", "label": "下からの距離 (%)", "type": "slider", "min": 0, "max": 30, "step": 0.1, "default": 7.4},
+            {"key": "maxWidth", "label": "最大幅 (%)", "type": "slider", "min": 20, "max": 90, "step": 1, "default": 60},
+            {"key": "fadeDuration", "label": "フェード (秒)", "type": "slider", "min": 1, "max": 10, "step": 0.5, "default": 3},
+        ]},
+    ],
     "todo": [
         {"title": "固有設定", "fields": [
             {"key": "titleFontSize", "label": "タイトルサイズ (vw)", "type": "slider", "min": 0.5, "max": 3, "step": 0.05, "default": 1.0},
@@ -107,7 +114,8 @@ _ITEM_SPECIFIC_SCHEMA = {
 
 _SCHEMA_ITEM_LABELS = {
     "avatar": "アバター",
-    "subtitle": "字幕",
+    "subtitle": "字幕（先生）",
+    "subtitle2": "字幕（生徒）",
     "todo": "TODO",
     "lesson_text": "授業テキスト",
     "lesson_progress": "授業進捗",

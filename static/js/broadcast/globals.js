@@ -24,9 +24,11 @@
 
 // === DOM参照 ===
 const subtitleEl = document.getElementById('subtitle');
+const subtitle2El = document.getElementById('subtitle-2');
 const todoPanelEl = document.getElementById('todo-panel');
 const todoListEl = document.getElementById('todo-list');
-let fadeTimer = null;
+let fadeTimerTeacher = null;
+let fadeTimerStudent = null;
 let todoSettings = {};
 
 // === 音量管理（C#アプリに送信用、ブラウザでは音声再生しない） ===
@@ -48,6 +50,7 @@ const ITEM_REGISTRY = [
   { id: 'avatar-area-1', prefix: 'avatar1', hasSize: true, defaultZ: 5 },
   { id: 'avatar-area-2', prefix: 'avatar2', hasSize: true, defaultZ: 4 },
   { id: 'subtitle', prefix: 'subtitle', hasSize: false, defaultZ: 20 },
+  { id: 'subtitle-2', prefix: 'subtitle2', hasSize: false, defaultZ: 20 },
   { id: 'todo-panel', prefix: 'todo', hasSize: true, defaultZ: 20 },
 ];
 

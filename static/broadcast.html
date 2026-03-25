@@ -39,8 +39,14 @@
     <img id="avatar-stream" style="display:none;" alt="">
   </div>
 
-  <!-- 字幕 -->
-  <div id="subtitle" data-editable="subtitle">
+  <!-- 字幕（先生） -->
+  <div id="subtitle" class="subtitle-panel" data-editable="subtitle" data-speaker="teacher">
+    <div class="comment"><span class="author"></span><span class="trigger-text"></span></div>
+    <div class="speech"></div>
+    <div class="translation"></div>
+  </div>
+  <!-- 字幕（生徒） -->
+  <div id="subtitle-2" class="subtitle-panel" data-editable="subtitle2" data-speaker="student">
     <div class="comment"><span class="author"></span><span class="trigger-text"></span></div>
     <div class="speech"></div>
     <div class="translation"></div>

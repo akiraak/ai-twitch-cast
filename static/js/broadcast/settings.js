@@ -80,17 +80,18 @@ function applySettings(s) {
       window._pendingLighting = s.lighting;
     }
   }
-  // === subtitle ===
-  if (s.subtitle) {
-    applyCommonStyle(subtitleEl, s.subtitle);
-    // 字幕固有: 常に水平中央配置 + bottom配置（commonのtop/leftをオーバーライド）
-    if (s.subtitle.bottom != null) subtitleEl.style.bottom = s.subtitle.bottom + '%';
-    subtitleEl.style.top = '';
-    subtitleEl.style.left = '50%';
-    subtitleEl.style.transform = 'translateX(-50%)';
-    if (s.subtitle.fontSize != null) subtitleEl.querySelector('.speech').style.fontSize = s.subtitle.fontSize + 'vw';
-    if (s.subtitle.maxWidth != null) subtitleEl.style.maxWidth = s.subtitle.maxWidth + '%';
-    if (s.subtitle.fadeDuration != null) subtitleEl.dataset.fadeDuration = s.subtitle.fadeDuration;
+  // === subtitle (teacher + student) ===
+  for (const [key, el] of [['subtitle', subtitleEl], ['subtitle2', subtitle2El]]) {
+    if (s[key]) {
+      applyCommonStyle(el, s[key]);
+      // 字幕固有: bottom配置 + 中心基準（commonのtopをオーバーライド）
+      if (s[key].bottom != null) el.style.bottom = s[key].bottom + '%';
+      el.style.top = '';
+      el.style.transform = 'translateX(-50%)';
+      if (s[key].fontSize != null) el.querySelector('.speech').style.fontSize = s[key].fontSize + 'vw';
+      if (s[key].maxWidth != null) el.style.maxWidth = s[key].maxWidth + '%';
+      if (s[key].fadeDuration != null) el.dataset.fadeDuration = s[key].fadeDuration;
+    }
   }
   // === todo ===
   if (s.todo) {

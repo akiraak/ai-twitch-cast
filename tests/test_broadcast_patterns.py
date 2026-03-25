@@ -146,7 +146,7 @@ class TestApplySettingsUsesCommon:
         # 各アイテムでapplyCommonStyleが呼ばれているか
         expected_calls = [
             "applyCommonStyle(avatarArea",
-            "applyCommonStyle(subtitleEl",
+            "applyCommonStyle(el",
             "applyCommonStyle(todoPanelEl",
         ]
         for call in expected_calls:
@@ -186,12 +186,13 @@ class TestEditSaveUsesRegistry:
             r"async function editSave\(\)\s*\{(.*?)\n\}", js, re.DOTALL
         )
         body = func_match.group(1)
-        assert "overlaySettings.subtitle" in body
-        assert "subtitle.bottom" in body or ".bottom" in body
-        assert "subtitle.fontSize" in body or ".fontSize" in body
-        assert "subtitle.maxWidth" in body or ".maxWidth" in body
-        assert "subtitle.fadeDuration" in body or ".fadeDuration" in body
-        assert "subtitle.bgOpacity" in body or ".bgOpacity" in body
+        # ループで subtitle + subtitle2 の固有プロパティを保存
+        assert "overlaySettings[key]" in body or "overlaySettings.subtitle" in body
+        assert ".bottom" in body
+        assert ".fontSize" in body
+        assert ".maxWidth" in body
+        assert ".fadeDuration" in body
+        assert ".bgOpacity" in body
 
     def test_custom_text_variable_expansion(self):
         """テキスト変数展開関数が共通ファイルに存在すること"""
@@ -302,9 +303,9 @@ class TestCssVariables:
         assert "var(--item-font-size" in css
 
     def test_existing_items_use_border_radius_var(self):
-        """subtitle, todoのborder-radiusがCSS変数を使っていること"""
+        """subtitle(.subtitle-panel), todoのborder-radiusがCSS変数を使っていること"""
         css = self._read_css()
-        for panel in ["#subtitle", "#todo-panel"]:
+        for panel in [".subtitle-panel", "#todo-panel"]:
             # パネルのCSSブロックを探してborder-radius: var(を確認
             idx = css.find(panel + " {") if panel + " {" in css else css.find(panel + " {\n")
             if idx == -1:

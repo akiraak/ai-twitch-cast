@@ -245,12 +245,13 @@ function startDrag(el, e) {
       if (snappedV) newLeft -= snappedV.delta;
       if (snappedH) newTop -= snappedH.delta;
 
-      // 字幕パネルは水平中央固定、垂直のみ移動（bottom基準）
-      if (el.dataset.editable === 'subtitle') {
+      // 字幕パネルはbottom基準、left=パネル中心（translateX(-50%)で中心基準配置）
+      if (el.dataset.editable === 'subtitle' || el.dataset.editable === 'subtitle2') {
         const bottomPct = 100 - ((newTop + elH) / wh * 100);
+        const centerPct = (newLeft + elW / 2) / ww * 100;
         el.style.bottom = bottomPct + '%';
         el.style.top = '';
-        el.style.left = '50%';
+        el.style.left = centerPct + '%';
         el.style.transform = 'translateX(-50%)';
       } else {
         el.style.left = (newLeft / ww * 100) + '%';
@@ -436,19 +437,20 @@ async function editSave() {
   }
 
   // アイテム固有プロパティの保存（保存漏れ修正）
-  if (overlaySettings.subtitle) {
-    // 字幕は水平中央固定なのでpositionXは常に50、positionYは不使用（bottom基準）
-    overlaySettings.subtitle.positionX = 50;
-    overlaySettings.subtitle.positionY = 0;
-    const bottom = parseFloat(subtitleEl.style.bottom);
-    if (!isNaN(bottom)) overlaySettings.subtitle.bottom = bottom;
-    const respFs = parseFloat(subtitleEl.querySelector('.speech')?.style.fontSize);
-    if (!isNaN(respFs)) overlaySettings.subtitle.fontSize = respFs;
-    const maxW = parseFloat(subtitleEl.style.maxWidth);
-    if (!isNaN(maxW)) overlaySettings.subtitle.maxWidth = maxW;
-    overlaySettings.subtitle.fadeDuration = parseFloat(subtitleEl.dataset.fadeDuration) || 3;
-    const bgOp = parseFloat(subtitleEl.style.getPropertyValue('--bg-opacity'));
-    if (!isNaN(bgOp)) overlaySettings.subtitle.bgOpacity = bgOp;
+  // 字幕パネル固有プロパティの保存（teacher + student）
+  for (const [key, el] of [['subtitle', subtitleEl], ['subtitle2', subtitle2El]]) {
+    if (overlaySettings[key]) {
+      overlaySettings[key].positionY = 0;
+      const bottom = parseFloat(el.style.bottom);
+      if (!isNaN(bottom)) overlaySettings[key].bottom = bottom;
+      const respFs = parseFloat(el.querySelector('.speech')?.style.fontSize);
+      if (!isNaN(respFs)) overlaySettings[key].fontSize = respFs;
+      const maxW = parseFloat(el.style.maxWidth);
+      if (!isNaN(maxW)) overlaySettings[key].maxWidth = maxW;
+      overlaySettings[key].fadeDuration = parseFloat(el.dataset.fadeDuration) || 3;
+      const bgOp = parseFloat(el.style.getPropertyValue('--bg-opacity'));
+      if (!isNaN(bgOp)) overlaySettings[key].bgOpacity = bgOp;
+    }
   }
   try {
     await fetch('/api/overlay/settings', {
@@ -516,6 +518,15 @@ async function editSave() {
 // === 編集モード初期化 ===
 function initEditMode() {
   document.querySelectorAll('[data-editable]').forEach(setupEditable);
+
+  // 字幕パネルにプレースホルダーテキストを設定（編集時に見えるように）
+  document.querySelectorAll('.subtitle-panel').forEach(el => {
+    const speechEl = el.querySelector('.speech');
+    if (speechEl && !speechEl.textContent.trim()) {
+      const speaker = el.dataset.speaker || 'teacher';
+      speechEl.textContent = speaker === 'student' ? '（生徒の字幕）' : '（先生の字幕）';
+    }
+  });
 
   // 非editableエリアでもブラウザデフォルトの右クリックメニューを抑制
   document.addEventListener('contextmenu', (e) => {

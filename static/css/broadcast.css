@@ -38,8 +38,8 @@
     pointer-events: none;
   }
 
-  /* === リアルタイム字幕（下中央） === */
-  #subtitle {
+  /* === リアルタイム字幕（共通） === */
+  .subtitle-panel {
     position: absolute;
     bottom: 7.4%;
     left: 50%;
@@ -59,10 +59,10 @@
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }
-  #subtitle.visible { opacity: 1; }
-  #subtitle.fading { opacity: 0; transition: opacity 1.5s ease; }
-  #subtitle .comment { display: none; }
-  #subtitle .speech {
+  .subtitle-panel.visible { opacity: 1; }
+  .subtitle-panel.fading { opacity: 0; transition: opacity 1.5s ease; }
+  .subtitle-panel .comment { display: none; }
+  .subtitle-panel .speech {
     font-size: 1.875vw;
     color: #ffffff;
     font-weight: bold;
@@ -71,17 +71,24 @@
     text-shadow: 0 0.1vw 0.4vw rgba(0, 0, 0, 0.7), 0 0 1vw rgba(124, 77, 255, 0.2);
     letter-spacing: 0.03vw;
   }
-  #subtitle .translation {
+  .subtitle-panel .translation {
     font-size: 1.04vw;
     color: #b2dfdb;
     font-style: italic;
     text-shadow: 0 0.05vw 0.2vw rgba(0, 0, 0, 0.5);
   }
-  #subtitle[data-speaker="student"] {
+  /* 生徒字幕: ピンク系 */
+  #subtitle-2 {
     border-color: rgba(255, 136, 170, 0.3);
   }
-  #subtitle[data-speaker="student"] .speech {
+  #subtitle-2 .speech {
     text-shadow: 0 0.1vw 0.4vw rgba(0, 0, 0, 0.7), 0 0 1vw rgba(255, 136, 170, 0.2);
+  }
+  /* 編集モード: 字幕パネルはホバー/選択時のみ薄く表示（通常は非表示を維持） */
+  .subtitle-panel[data-editable]:not(.visible):hover,
+  .subtitle-panel[data-editable]:not(.visible).editing,
+  .subtitle-panel[data-editable]:not(.visible).selected {
+    opacity: 0.3;
   }
 
   /* === TODOパネル（中央） === */

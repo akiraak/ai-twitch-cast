@@ -7,23 +7,41 @@ function stripLangTags(text) {
 }
 
 // === 字幕 ===
-function showSubtitle(data) {
-  clearTimeout(fadeTimer);
-  subtitleEl.classList.remove('fading');
-  subtitleEl.dataset.speaker = data.avatar_id;
-  subtitleEl.querySelector('.author').textContent = '';
-  subtitleEl.querySelector('.trigger-text').textContent = stripLangTags(data.trigger_text);
-  subtitleEl.querySelector('.speech').textContent = stripLangTags(data.speech);
-  subtitleEl.querySelector('.translation').textContent = stripLangTags(data.translation || '');
-  subtitleEl.classList.add('visible');
+function _getSubtitleEl(avatarId) {
+  return avatarId === 'student' ? subtitle2El : subtitleEl;
 }
 
-function fadeSubtitle() {
-  const duration = parseFloat(subtitleEl.dataset.fadeDuration || 3) * 1000;
-  fadeTimer = setTimeout(() => {
-    subtitleEl.classList.add('fading');
-    subtitleEl.classList.remove('visible');
+function showSubtitle(data) {
+  const el = _getSubtitleEl(data.avatar_id);
+  const isStudent = data.avatar_id === 'student';
+  const timer = isStudent ? fadeTimerStudent : fadeTimerTeacher;
+  clearTimeout(timer);
+  el.classList.remove('fading');
+  el.querySelector('.author').textContent = '';
+  el.querySelector('.trigger-text').textContent = stripLangTags(data.trigger_text);
+  el.querySelector('.speech').textContent = stripLangTags(data.speech);
+  el.querySelector('.translation').textContent = stripLangTags(data.translation || '');
+  el.classList.add('visible');
+}
+
+function fadeSubtitle(avatarId) {
+  // avatarId未指定時は両方フェード
+  if (!avatarId) {
+    fadeSubtitle('teacher');
+    fadeSubtitle('student');
+    return;
+  }
+  const el = _getSubtitleEl(avatarId);
+  const duration = parseFloat(el.dataset.fadeDuration || 3) * 1000;
+  const timerId = setTimeout(() => {
+    el.classList.add('fading');
+    el.classList.remove('visible');
   }, duration);
+  if (avatarId === 'student') {
+    fadeTimerStudent = timerId;
+  } else {
+    fadeTimerTeacher = timerId;
+  }
 }
 
 // テキスト変数展開は lib/text-variables.js の replaceTextVariables() を使用

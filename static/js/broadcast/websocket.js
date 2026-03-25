@@ -25,7 +25,7 @@ function connectWS() {
         }
         break;
       case 'speaking_end':
-        fadeSubtitle();
+        fadeSubtitle(data.avatar_id || _pendingSubtitle?.avatar_id);
         break;
       case 'settings_update':
         if (!_saving) {

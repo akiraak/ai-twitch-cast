@@ -200,21 +200,23 @@ async def broadcast_token():
 
 
 @router.post("/api/debug/subtitle")
-async def debug_subtitle():
+async def debug_subtitle(avatar_id: str = "teacher"):
     """デバッグ用：字幕を仮表示する"""
+    is_student = avatar_id == "student"
     await state.broadcast_overlay({
         "type": "comment",
-        "trigger_text": "こんにちは！テスト表示です",
-        "speech": "これはデバッグ用の字幕サンプルです。位置やサイズを調整してください！",
-        "translation": "This is a debug subtitle sample.",
+        "trigger_text": "テスト表示です",
+        "speech": "生徒の字幕サンプルです！" if is_student else "先生の字幕サンプルです！",
+        "translation": "Student subtitle sample." if is_student else "Teacher subtitle sample.",
+        "avatar_id": avatar_id,
     })
     return {"ok": True}
 
 
 @router.post("/api/debug/subtitle/hide")
-async def debug_subtitle_hide():
+async def debug_subtitle_hide(avatar_id: str | None = None):
     """デバッグ用：字幕をフェードアウトする"""
-    await state.broadcast_overlay({"type": "speaking_end"})
+    await state.broadcast_overlay({"type": "speaking_end", "avatar_id": avatar_id})
     return {"ok": True}
 
 
@@ -388,6 +390,10 @@ _OVERLAY_DEFAULTS = {
         "ambient": 0.75, "directional": 1.0, "lightX": 0.5, "lightY": 1.5, "lightZ": 2.0,
     },
     "subtitle": _make_item_defaults({
+        "bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3,
+        "bgOpacity": 0.85, "zIndex": 20, "borderRadius": 12, "padding": 16,
+    }),
+    "subtitle2": _make_item_defaults({
         "bottom": 7.4, "fontSize": 1.875, "maxWidth": 62, "fadeDuration": 3,
         "bgOpacity": 0.85, "zIndex": 20, "borderRadius": 12, "padding": 16,
     }),
@@ -680,7 +686,7 @@ async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
     logger.info("[overlay] save_settings: %s", {k: v for k, v in body.items() if k != "type"})
-    fixed_items = {"avatar", "avatar1", "avatar2", "subtitle", "todo", "lesson_text", "lesson_progress"}
+    fixed_items = {"avatar", "avatar1", "avatar2", "subtitle", "subtitle2", "todo", "lesson_text", "lesson_progress"}
     lighting_sections = {"lighting_teacher", "lighting_student"}
     for section, props in body.items():
         if not isinstance(props, dict):
