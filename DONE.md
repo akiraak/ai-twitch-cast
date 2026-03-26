@@ -1,5 +1,14 @@
 # DONE
 
+## 授業モード v3 Step 1: 監督プロンプト拡張
+
+- [x] 監督の出力形式を `{summary, has_question}` → `{display_text, dialogue_directions, question, answer}` に拡張
+- [x] `_build_structure_prompt()` の display_text ガイドライン（視聴者環境・具体的内容ルール）を監督プロンプトに統合
+- [x] `dialogue_directions` 設計指針を追加（speaker + direction + key_content）
+- [x] 英語版・日本語版の両プロンプトに具体的な出力例を含めて品質確保
+- [x] フィールド検証・デフォルト補完を新形式に対応
+- [x] 戻り値に `director_sections`（完全出力）を追加、`plan_sections`（互換用メタデータ）も維持
+
 ## 授業モード v3 Step 0: 役割別モデルヘルパー関数
 
 - [x] `_get_knowledge_model()`, `_get_entertainment_model()`, `_get_director_model()`, `_get_dialogue_model()` 追加

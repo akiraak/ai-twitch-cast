@@ -516,7 +516,7 @@ Output in the following structure:
 
     # --- 呼び出し3: 監督 / Director ---
     if en:
-        director_prompt = """You are the "Director". Integrate the Knowledge Expert's and Entertainment Expert's proposals to finalize the lesson plan.
+        director_prompt = """You are the "Director". Integrate the Knowledge Expert's and Entertainment Expert's proposals to design the complete lesson — section structure, on-screen content, and dialogue flow.
 
 ## Your role
 
@@ -544,16 +544,50 @@ Set appropriate **wait_seconds** (pause after each section) for pacing:
 - **Questions**: 8-15 seconds (time for viewers to think/chat)
 - **Final summary/payoff**: 2-3 seconds (closing pause)
 
+### Viewer environment (IMPORTANT)
+- **Viewers do NOT have the source material**. They can only see the stream screen
+- The only text viewers see is display_text shown on screen
+- NEVER use phrases like "look at the text" or "open page X"
+
+### display_text (VERY IMPORTANT)
+- display_text is the ONLY visual information viewers see on the stream screen
+- It must contain **actual content**, NOT just a title or section name
+- Good: "Formal: Good morning / Good afternoon\\nInformal: Hi / Hey / What's up?"
+- Bad: "Formal Greetings" (too short, just a title)
+- Include key vocabulary, example sentences, comparison tables, quiz choices, etc.
+- Use line breaks (\\n) to organize content clearly
+
+### dialogue_directions
+Design the dialogue flow for each section: who speaks, what they say, and what content to cover.
+The actual dialogue text will be generated separately by character AIs — you design the blueprint.
+
+- 2-6 turns per section
+- teacher and student speak in natural turns
+- Not every section needs the student (explanation-heavy sections can be teacher-only)
+- introduction and summary MUST include student (greetings/impressions)
+- question sections: teacher poses question → student answers → teacher explains
+
+Each entry has:
+- "speaker": "teacher" or "student"
+- "direction": Specific instruction for this turn (2-3 sentences). Include emotional tone and presentation style, not just content
+- "key_content": The specific material content this turn MUST mention (e.g. a vocabulary word, fact, or concept from the source material). Empty string if no specific content required
+
 ## Output format (JSON array)
 ```json
 [
   {
     "section_type": "introduction",
-    "title": "Short specific title (max 5 words, e.g.: Greetings, Quiz Time, Wrap-up)",
-    "summary": "Overview of what this section covers (2-3 sentences)",
+    "title": "Short specific title (max 5 words)",
+    "display_text": "Today's Topic: English Greetings\\n\\n'How are you?' — what does it really mean?\\n\\nIt's totally different from Japanese '元気？'!",
     "emotion": "excited",
-    "has_question": false,
-    "wait_seconds": 2
+    "wait_seconds": 2,
+    "question": "",
+    "answer": "",
+    "dialogue_directions": [
+      {"speaker": "teacher", "direction": "Greet viewers energetically. Introduce today's theme 'the real meaning of English greetings' and tease that 'How are you?' is deeper than it seems", "key_content": "How are you? — its real meaning"},
+      {"speaker": "student", "direction": "React confidently: 'How are you? is easy! You just say I'm fine, right?' Show overconfidence", "key_content": "I'm fine, thank you — the textbook answer"},
+      {"speaker": "teacher", "direction": "Smile and hint: 'Actually... natives almost never say that.' Announce that this lesson will reveal the secret", "key_content": "Natives rarely use 'I'm fine'"}
+    ]
   }
 ]
 ```
@@ -562,7 +596,7 @@ Set appropriate **wait_seconds** (pause after each section) for pacing:
 - introduction: Opening (Setup)
 - explanation: Teaching (Development)
 - example: Examples & analogies
-- question: Viewer interaction
+- question: Viewer interaction (set question and answer fields)
 - summary: Wrap-up (Resolution)
 
 ### emotion options
@@ -570,7 +604,7 @@ Set appropriate **wait_seconds** (pause after each section) for pacing:
 
 Output ONLY the JSON array."""
     else:
-        director_prompt = """あなたは「監督」です。知識先生とエンタメ先生の提案を統合し、最終的な授業プランを決定してください。
+        director_prompt = """あなたは「監督」です。知識先生とエンタメ先生の提案を統合し、授業の完全な設計（セクション構成・画面表示内容・対話フロー）を決定してください。
 
 ## あなたの役割
 
@@ -599,16 +633,50 @@ Output ONLY the JSON array."""
 - **問いかけ（question）**: 8〜15秒（視聴者が考える・チャットで答える時間）
 - **最後のまとめ・オチ**: 2〜3秒（締めの余韻）
 
+### 視聴者の環境（重要）
+- **視聴者は教材テキストを持っていない**。配信画面しか見えない
+- 視聴者が見られるのは配信画面に表示される display_text のみ
+- 「テキストを見てください」「教材の○ページを開いて」等の表現は**絶対に使わない**
+
+### display_text（非常に重要）
+- display_textは視聴者が配信画面で見る**唯一の視覚情報**
+- **実際の内容**を書くこと。タイトルやセクション名だけはNG
+- 良い例: "フォーマル: Good morning / Good afternoon\\nカジュアル: Hi / Hey / What's up?"
+- 悪い例: "フォーマルな挨拶"（短すぎ、タイトルだけ）
+- キーワード、例文、比較表、クイズの選択肢などを含める
+- 改行(\\n)で見やすく整理する
+
+### dialogue_directions（対話フロー設計）
+各セクションに dialogue_directions 配列を含めてください。
+「誰が・何を・どう話すか」の設計図です。実際のセリフはキャラクターAIが別途生成します。
+
+- 1セクションあたり2〜6ターン
+- teacher と student が自然な流れで交替
+- 全セクションで生徒が登場する必要はない（説明が続くところは先生だけでもOK）
+- introduction と summary には生徒を必ず入れる（挨拶・感想）
+- question セクションでは生徒が答える役（先生が出題→生徒が回答→先生が解説）
+
+各エントリ:
+- "speaker": "teacher" または "student"
+- "direction": このターンの具体的な演出指示（2〜3文）。感情や話し方も含める
+- "key_content": このターンで必ず言及すべき教材の具体的内容（単語・事実・概念など）。特にない場合は空文字
+
 ## 出力形式（JSON配列）
 ```json
 [
   {
     "section_type": "introduction",
-    "title": "10文字以内の具体的なタイトル（例: 基本の挨拶、クイズタイム、まとめ）",
-    "summary": "このセクションで扱う内容の概要（2〜3文）",
+    "title": "10文字以内の具体的なタイトル",
+    "display_text": "今日のテーマ: 英語の挨拶\\n\\n『How are you?』の本当の意味とは？\\n\\n日本語の『元気？』とは全然違う！",
     "emotion": "excited",
-    "has_question": false,
-    "wait_seconds": 2
+    "wait_seconds": 2,
+    "question": "",
+    "answer": "",
+    "dialogue_directions": [
+      {"speaker": "teacher", "direction": "視聴者に元気よく挨拶。今日のテーマ『英語の挨拶の本当の意味』を紹介し、「How are you?って実はすごく奥が深い」と興味を引く", "key_content": "How are you? の本当の意味"},
+      {"speaker": "student", "direction": "「え、How are you?なんて簡単じゃん！I'm fine って答えればいいんでしょ？」と自信満々に反応する", "key_content": "I'm fine, thank you の定型文"},
+      {"speaker": "teacher", "direction": "「ふふ、実はそれ…ネイティブはほぼ使わないんだよ」と意外な事実を予告。この授業で秘密を解き明かすと宣言", "key_content": "I'm fine はネイティブが使わない"}
+    ]
   }
 ]
 ```
@@ -617,7 +685,7 @@ Output ONLY the JSON array."""
 - introduction: 導入（起）
 - explanation: 説明（承）
 - example: 具体例・例え話
-- question: 視聴者への問いかけ
+- question: 視聴者への問いかけ（question と answer フィールドを設定）
 - summary: まとめ・締め（結）
 
 ### emotion の選択肢
@@ -649,33 +717,54 @@ JSON配列のみを出力してください。"""
 
     # JSONパース（壊れたJSONは自動修復）
     try:
-        plan_sections = _parse_json_response(resp3.text)
+        director_sections = _parse_json_response(resp3.text)
     except (json.JSONDecodeError, ValueError) as e:
         logger.error("監督のプランJSONパース失敗: %s (先頭500文字: %s)", e, resp3.text[:500])
         raise ValueError("プラン生成のJSONパースに失敗しました。再度お試しください。")
 
-    if not isinstance(plan_sections, list):
+    if not isinstance(director_sections, list):
         raise ValueError("プラン生成結果が配列ではありません")
 
-    # 必須フィールド補完
+    # 必須フィールド補完（v3形式）
     valid_types = {"introduction", "explanation", "example", "question", "summary"}
-    for s in plan_sections:
+    for s in director_sections:
         if s.get("section_type") not in valid_types:
             s["section_type"] = "explanation"
         s.setdefault("title", "")
-        s.setdefault("summary", "")
+        s.setdefault("display_text", "")
         s.setdefault("emotion", "neutral")
-        s.setdefault("has_question", s.get("section_type") == "question")
+        s.setdefault("question", "")
+        s.setdefault("answer", "")
         # 間のデフォルト: questionは10秒、それ以外は2秒
         default_wait = 10 if s.get("section_type") == "question" else 2
         s.setdefault("wait_seconds", default_wait)
+        # dialogue_directionsのデフォルト・補完
+        if "dialogue_directions" not in s:
+            s["dialogue_directions"] = []
+        for dd in s["dialogue_directions"]:
+            dd.setdefault("speaker", "teacher")
+            dd.setdefault("direction", "")
+            dd.setdefault("key_content", "")
 
-    logger.info("監督の最終プラン完了（%dセクション, model=%s）", len(plan_sections), director_model)
+    # 互換用: plan_sections（旧形式のメタデータ）を生成
+    plan_sections = []
+    for s in director_sections:
+        plan_sections.append({
+            "section_type": s["section_type"],
+            "title": s["title"],
+            "summary": s.get("display_text", "")[:200],  # display_textの先頭をsummaryとして流用
+            "emotion": s["emotion"],
+            "has_question": s["section_type"] == "question",
+            "wait_seconds": s["wait_seconds"],
+        })
+
+    logger.info("監督の最終プラン完了（%dセクション, model=%s）", len(director_sections), director_model)
 
     return {
         "knowledge": knowledge_text,
         "entertainment": entertainment_text,
         "plan_sections": plan_sections,
+        "director_sections": director_sections,
     }
 
 

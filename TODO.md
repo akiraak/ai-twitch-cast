@@ -3,7 +3,7 @@
 ## 機能追加
 
 ### 授業モード v3 — 監督主導アーキテクチャ → [plans/teacher-mode-v3.md](plans/teacher-mode-v3.md)
-- [ ] Step 1: 監督プロンプト拡張（display_text + dialogue_directions + key_content を出力）
+- [x] Step 1: 監督プロンプト拡張（display_text + dialogue_directions + key_content を出力）
 - [ ] Step 2: 全LLM呼び出しにgenerationメタデータ付与（JSハードコード廃止の前提）
 - [ ] Step 3: generate_lesson_script_v2() のPhase B-1除去（監督の設計を直接使用）
 - [ ] Step 4: セリフ個別生成のkey_content対応
