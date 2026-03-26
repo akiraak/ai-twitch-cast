@@ -1,5 +1,14 @@
 # DONE
 
+## 授業モード v3 Step 3: Phase B-1除去（監督の設計を直接使用）
+
+- [x] `generate_lesson_script_v2()` に `director_sections` パラメータを追加
+- [x] `director_sections` がある場合、Phase B-1（構造デザイナーLLM呼び出し）をスキップし監督の設計をそのまま使用
+- [x] `director_sections` がない場合は従来のPhase B-1にフォールバック（後方互換性維持）
+- [x] `_generate_section_dialogues()` が `dialogue_directions`（v3）を `dialogue_plan`（v2）より優先して使用
+- [x] Phase 2のターン数集計・section_workerも `dialogue_directions` に対応
+- [x] テスト追加: `dialogue_directions` での動作確認・優先度テスト
+
 ## 授業モード v3 Step 2: 全LLM呼び出しにgenerationメタデータ付与
 
 - [x] 知識先生・エンタメ先生・監督の3つのLLM呼び出しに generation メタデータ（system_prompt, user_prompt, raw_output, model, temperature）を記録

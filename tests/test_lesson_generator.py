@@ -472,3 +472,75 @@ class TestBuildSectionFromDialoguesWithGeneration:
         result = _build_section_from_dialogues(section)
         assert result["content"] == "こんにちは！よろしく！"
         assert result["emotion"] == "excited"
+
+
+class TestDialogueDirectionsCompat:
+    """dialogue_directions（v3）がdialogue_planと同等に扱われるテスト"""
+
+    def test_dialogue_directions_used(self):
+        """dialogue_directionsキーでもセリフ生成される"""
+        responses = [
+            json.dumps({"content": "先生発話", "tts_text": "先生発話", "emotion": "excited"}),
+            json.dumps({"content": "生徒発話", "tts_text": "生徒発話", "emotion": "joy"}),
+        ]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = [
+            MagicMock(text=r) for r in responses
+        ]
+
+        section = {
+            "section_type": "introduction",
+            "display_text": "テスト",
+            "dialogue_directions": [
+                {"speaker": "teacher", "direction": "挨拶する", "key_content": "本日のテーマ"},
+                {"speaker": "student", "direction": "リアクション", "key_content": ""},
+            ],
+        }
+
+        with patch("src.lesson_generator._get_model", return_value="m"):
+            dialogues = _generate_section_dialogues(
+                client=mock_client,
+                teacher_config=TEACHER_CFG,
+                student_config=STUDENT_CFG,
+                section=section,
+                extracted_text="テスト",
+                lesson_name="テスト",
+                en=False,
+            )
+
+        assert len(dialogues) == 2
+        assert dialogues[0]["speaker"] == "teacher"
+        assert dialogues[1]["speaker"] == "student"
+
+    def test_dialogue_directions_takes_priority(self):
+        """dialogue_directionsとdialogue_planが両方あるとdialogue_directionsが優先"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text='{"content":"x","tts_text":"x","emotion":"neutral"}'
+        )
+
+        section = {
+            "section_type": "explanation",
+            "display_text": "テスト",
+            "dialogue_directions": [
+                {"speaker": "teacher", "direction": "v3の指示"},
+            ],
+            "dialogue_plan": [
+                {"speaker": "teacher", "direction": "v2の指示"},
+                {"speaker": "student", "direction": "v2の指示2"},
+            ],
+        }
+
+        with patch("src.lesson_generator._get_model", return_value="m"):
+            dialogues = _generate_section_dialogues(
+                client=mock_client,
+                teacher_config=TEACHER_CFG,
+                student_config=STUDENT_CFG,
+                section=section,
+                extracted_text="",
+                lesson_name="",
+                en=False,
+            )
+
+        # dialogue_directionsの1ターンだけが使われる（dialogue_planの2ターンではなく）
+        assert len(dialogues) == 1

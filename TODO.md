@@ -3,7 +3,6 @@
 ## 機能追加
 
 ### 授業モード v3 — 監督主導アーキテクチャ → [plans/teacher-mode-v3.md](plans/teacher-mode-v3.md)
-- [ ] Step 3: generate_lesson_script_v2() のPhase B-1除去（監督の設計を直接使用）
 - [ ] Step 4: セリフ個別生成のkey_content対応
 - [ ] Step 5: teacher.pyルート対応（API戻り値にgenerations/director_sections追加）
 - [ ] Step 6: DBスキーマ調整（lesson_plans.director_json/plan_generations、lesson_sections.dialogue_directions）

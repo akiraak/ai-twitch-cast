@@ -1632,8 +1632,9 @@ def _generate_section_dialogues(
     en: bool,
     on_progress=None,
 ) -> list[dict]:
-    """1セクション分のdialogue_planを順次処理し、セリフを個別生成する"""
-    dialogue_plan = section.get("dialogue_plan", [])
+    """1セクション分のdialogue_plan/dialogue_directionsを順次処理し、セリフを個別生成する"""
+    # v3: dialogue_directions（監督の直接設計）を優先、なければ従来のdialogue_plan
+    dialogue_plan = section.get("dialogue_directions") or section.get("dialogue_plan", [])
     if not dialogue_plan:
         return []
 
@@ -1671,6 +1672,7 @@ def generate_lesson_script_v2(
     lesson_name: str,
     extracted_text: str,
     plan_sections: list[dict] | None = None,
+    director_sections: list[dict] | None = None,
     source_images: list[str] = None,
     on_progress=None,
     teacher_config: dict = None,
@@ -1679,6 +1681,7 @@ def generate_lesson_script_v2(
     """セリフをキャラごとに個別LLM呼び出しで生成する（v2）
 
     Phase 1: セクション構造 + dialogue_plan 生成（1回のLLM呼び出し）
+       → director_sections がある場合はスキップ（v3パス）
     Phase 2: 各セリフをキャラのペルソナで個別生成（セクション間並列）
     """
     def _progress(step, total, msg):
@@ -1688,68 +1691,81 @@ def generate_lesson_script_v2(
     en = _is_english_mode()
     client = get_client()
 
-    # --- Phase 1: セクション構造生成 ---
-    if en:
-        _progress(1, None, "Generating section structure...")
-    else:
-        _progress(1, None, "セクション構造を生成中...")
-
-    plan_text = None
-    if plan_sections:
+    if director_sections:
+        # --- v3パス: 監督の設計をそのまま使う（Phase B-1スキップ） ---
+        structure_sections = director_sections
         if en:
-            plan_text = "\n".join(
-                f"{i+1}. [{s.get('section_type', 'explanation')}] {s.get('title', '')} — {s.get('summary', '')} (emotion: {s.get('emotion', 'neutral')}, pause: {s.get('wait_seconds', 2)}s)"
-                + (" *has question" if s.get("has_question") else "")
-                for i, s in enumerate(plan_sections)
-            )
+            _progress(1, None, "Using director's section design (Phase B-1 skipped)")
         else:
-            plan_text = "\n".join(
-                f"{i+1}. [{s.get('section_type', 'explanation')}] {s.get('title', '')} — {s.get('summary', '')} (感情: {s.get('emotion', 'neutral')}, 間: {s.get('wait_seconds', 2)}秒)"
-                + (" ※問いかけあり" if s.get("has_question") else "")
-                for i, s in enumerate(plan_sections)
-            )
-
-    structure_prompt = _build_structure_prompt(en, plan_text)
-
-    parts = _build_image_parts(source_images)
-    if en:
-        user_text = f"# Lesson title: {lesson_name}\n\n# Source text:\n{extracted_text}"
+            _progress(1, None, "監督のセクション設計を使用（Phase B-1スキップ）")
+        logger.info("v3パス: director_sections使用、Phase B-1スキップ（%dセクション）", len(director_sections))
     else:
-        user_text = f"# 授業タイトル: {lesson_name}\n\n# 教材テキスト:\n{extracted_text}"
-    parts.append(types.Part(text=user_text))
+        # --- v2フォールバック: Phase 1 セクション構造生成 ---
+        if en:
+            _progress(1, None, "Generating section structure...")
+        else:
+            _progress(1, None, "セクション構造を生成中...")
 
-    max_retries = 3
-    last_error = None
-    structure_sections = None
-    for attempt in range(max_retries):
-        if attempt > 0:
+        plan_text = None
+        if plan_sections:
             if en:
-                _progress(1, None, f"Retrying structure generation ({attempt + 1}/{max_retries})...")
+                plan_text = "\n".join(
+                    f"{i+1}. [{s.get('section_type', 'explanation')}] {s.get('title', '')} — {s.get('summary', '')} (emotion: {s.get('emotion', 'neutral')}, pause: {s.get('wait_seconds', 2)}s)"
+                    + (" *has question" if s.get("has_question") else "")
+                    for i, s in enumerate(plan_sections)
+                )
             else:
-                _progress(1, None, f"セクション構造を再生成中（リトライ {attempt + 1}/{max_retries}）...")
-        response = client.models.generate_content(
-            model=_get_director_model(),
-            contents=[types.Content(parts=parts)],
-            config=types.GenerateContentConfig(
-                system_instruction=structure_prompt,
-                response_mime_type="application/json",
-                temperature=1.0,
-                max_output_tokens=8192,
-            ),
-        )
-        try:
-            structure_sections = _parse_json_response(response.text)
-            if not isinstance(structure_sections, list):
-                raise ValueError("セクション構造が配列ではありません")
-            break
-        except (json.JSONDecodeError, ValueError) as e:
-            last_error = e
-            logger.warning("セクション構造のJSONパース失敗 (attempt=%d): %s", attempt + 1, e)
-            continue
-    else:
-        raise ValueError(f"セクション構造の生成に{max_retries}回失敗: {last_error}")
+                plan_text = "\n".join(
+                    f"{i+1}. [{s.get('section_type', 'explanation')}] {s.get('title', '')} — {s.get('summary', '')} (感情: {s.get('emotion', 'neutral')}, 間: {s.get('wait_seconds', 2)}秒)"
+                    + (" ※問いかけあり" if s.get("has_question") else "")
+                    for i, s in enumerate(plan_sections)
+                )
 
-    total_turns = sum(len(s.get("dialogue_plan", [])) for s in structure_sections)
+        structure_prompt = _build_structure_prompt(en, plan_text)
+
+        parts = _build_image_parts(source_images)
+        if en:
+            user_text = f"# Lesson title: {lesson_name}\n\n# Source text:\n{extracted_text}"
+        else:
+            user_text = f"# 授業タイトル: {lesson_name}\n\n# 教材テキスト:\n{extracted_text}"
+        parts.append(types.Part(text=user_text))
+
+        max_retries = 3
+        last_error = None
+        structure_sections = None
+        for attempt in range(max_retries):
+            if attempt > 0:
+                if en:
+                    _progress(1, None, f"Retrying structure generation ({attempt + 1}/{max_retries})...")
+                else:
+                    _progress(1, None, f"セクション構造を再生成中（リトライ {attempt + 1}/{max_retries}）...")
+            response = client.models.generate_content(
+                model=_get_director_model(),
+                contents=[types.Content(parts=parts)],
+                config=types.GenerateContentConfig(
+                    system_instruction=structure_prompt,
+                    response_mime_type="application/json",
+                    temperature=1.0,
+                    max_output_tokens=8192,
+                ),
+            )
+            try:
+                structure_sections = _parse_json_response(response.text)
+                if not isinstance(structure_sections, list):
+                    raise ValueError("セクション構造が配列ではありません")
+                break
+            except (json.JSONDecodeError, ValueError) as e:
+                last_error = e
+                logger.warning("セクション構造のJSONパース失敗 (attempt=%d): %s", attempt + 1, e)
+                continue
+        else:
+            raise ValueError(f"セクション構造の生成に{max_retries}回失敗: {last_error}")
+
+    # dialogue_directions（v3）またはdialogue_plan（v2）のターン数を集計
+    total_turns = sum(
+        len(s.get("dialogue_directions") or s.get("dialogue_plan", []))
+        for s in structure_sections
+    )
     logger.info("Phase 1完了: %dセクション, %dターン", len(structure_sections), total_turns)
 
     if en:
@@ -1762,7 +1778,7 @@ def generate_lesson_script_v2(
     current_step = [1]
 
     def section_worker(sec_idx, section):
-        dialogue_plan = section.get("dialogue_plan", [])
+        dialogue_plan = section.get("dialogue_directions") or section.get("dialogue_plan", [])
         if not dialogue_plan:
             return sec_idx, []
 
@@ -1803,7 +1819,11 @@ def generate_lesson_script_v2(
     valid_types = {"introduction", "explanation", "example", "question", "summary"}
     result = []
     for i, s in enumerate(structure_sections):
-        plan_title = plan_sections[i].get("title", "") if plan_sections and i < len(plan_sections) else ""
+        # v3: director_sectionsにはtitleが含まれる。v2: plan_sectionsから取得
+        if director_sections:
+            plan_title = s.get("title", "")
+        else:
+            plan_title = plan_sections[i].get("title", "") if plan_sections and i < len(plan_sections) else ""
         dialogues = section_dialogues[i] or []
 
         section = {
