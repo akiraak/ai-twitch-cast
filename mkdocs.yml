@@ -38,6 +38,7 @@ nav:
   - Web UI:
     - デザイン改善提案: webui-design-proposal.md
   - キャラクター:
+    - 発話生成フロー: speech-generation-flow.md
     - 会話生成の仕組み: character-prompt.md
   - 運用:
     - リソース管理: resource-management.md

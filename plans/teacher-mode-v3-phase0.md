@@ -1,11 +1,16 @@
 # 授業モード v3 — Phase 0: 現状確認
 
-## ステータス: 未着手
+## ステータス: 進行中
 
 ## 目的
 
-既存の授業モードで短い授業を1本通して生成・再生し、**具体的な問題点をリストアップ**する。
+既存の授業モードで短い英語授業を1本通して生成・再生し、**具体的な問題点をリストアップ**する。
 Phase 1以降の優先度を実データに基づいて確定させる。
+
+**言語モード: `lang=en`（英語モード）を全ステップで使用する。**
+- 英語モードでは `_with_lang("en")` により配信言語が英語に切り替わる
+- TTS の `[lang:en]` / `[lang:ja]` タグの動作を検証
+- 普段の運用が英語授業中心のため、実運用に近い条件でテストする
 
 ---
 
@@ -29,26 +34,30 @@ curl -s http://localhost:$WEB_PORT/api/status | jq .
 curl -s http://localhost:$WEB_PORT/api/lessons | jq .
 
 # キャラクター設定確認（先生・生徒がDBにあるか）
-curl -s http://localhost:$WEB_PORT/api/characters | jq '.characters[] | {id, name, role}'
+curl -s http://localhost:$WEB_PORT/api/characters | python3 -c "
+import json, sys
+for c in json.load(sys.stdin):
+    print(f'  id={c[\"id\"]} name={c[\"name\"]} role={c[\"role\"]} voice={c.get(\"tts_voice\",\"?\")}')
+"
 ```
 
 **確認ポイント**:
 - [ ] サーバーが `ok` を返す
 - [ ] `/api/lessons` がリスト（空でもOK）を返す
-- [ ] 先生キャラ（role: teacher or main相当）が存在する
-- [ ] 生徒キャラ（role: student or sub相当）が存在する（対話モード検証用）
+- [ ] 先生キャラ（role: teacher）が存在する
+- [ ] 生徒キャラ（role: student）が存在する（対話モード検証用）
 
 ---
 
-### Step 2: テスト用コンテンツ作成
+### Step 2: テスト用コンテンツ作成（英語教材）
 
-短くて結果が確認しやすい教材を使う。英語授業で `[lang:en]` タグの挙動も同時に検証。
+英語の教科書的な素材を使う。実運用に近い英語学習コンテンツで検証。
 
 ```bash
 # コンテンツ作成
 curl -s -X POST "http://localhost:$WEB_PORT/api/lessons" \
   -H 'Content-Type: application/json' \
-  -d '{"name": "v3テスト: 簡単な英語挨拶"}' | jq .
+  -d '{"name": "v3 Test: Basic English Greetings"}' | jq .
 
 # → レスポンスの lesson.id を控える → 以降 LESSON_ID として使用
 LESSON_ID=<返ってきたID>
@@ -56,39 +65,28 @@ LESSON_ID=<返ってきたID>
 
 #### 教材テキストの設定
 
-URL追加でテキスト抽出を検証する。短いページを使用:
+英語の教材テキストを直接設定:
 
 ```bash
-# URL追加（短い英語学習ページなど）
-curl -s -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/add-url" \
-  -H 'Content-Type: application/json' \
-  -d '{"url": "https://example.com"}' | jq .
-```
-
-URL抽出がうまくいかない場合、直接DBに教材テキストを設定:
-
-```bash
-# extracted_textを直接設定
 curl -s -X PUT "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID" \
   -H 'Content-Type: application/json' \
   -d '{
-    "name": "v3テスト: 簡単な英語挨拶",
-    "extracted_text": "英語の基本挨拶を学びましょう。\n\n1. Hello - こんにちは（一番基本的な挨拶）\n2. Good morning - おはようございます\n3. Good afternoon - こんにちは（午後）\n4. Good evening - こんばんは\n5. How are you? - お元気ですか？\n6. Nice to meet you - はじめまして\n\nこれらの挨拶は日常会話でよく使います。発音のポイント: Helloの「H」は息を吐くように、Good morningの「r」は舌を巻きすぎないように注意しましょう。"
+    "name": "v3 Test: Basic English Greetings",
+    "extracted_text": "Basic English Greetings\n\nFormal Greetings:\n- Good morning / Good afternoon / Good evening\n- How do you do? (very formal, used when meeting someone for the first time)\n- It is a pleasure to meet you.\n\nInformal Greetings:\n- Hi / Hey / What'\''s up?\n- How'\''s it going? / How are you doing?\n- Long time no see!\n\nResponding to Greetings:\n- I'\''m fine, thank you. And you? (formal)\n- Pretty good! / Not bad! / Great, thanks! (informal)\n- Can'\''t complain! (casual)\n\nPronunciation Tips:\n- \"Good morning\" - stress on \"morn\", the \"g\" in \"-ing\" is soft\n- \"How are you?\" - often sounds like \"How-are-ya?\" in casual speech\n- \"What'\''s up?\" - often shortened to \"Wassup?\" among friends\n\nCultural Notes:\n- In English-speaking countries, \"How are you?\" is often just a greeting, not a real question about your health.\n- The expected response is usually positive: \"Good, thanks!\" even if you are not feeling great."
   }' | jq .
 ```
 
 **確認ポイント**:
 - [ ] コンテンツが作成されIDが返る
-- [ ] URL追加の場合: テキスト抽出が成功するか（`extracted_text` がセットされるか）
-- [ ] PUT更新の場合: `extracted_text` が正しく保存されるか
+- [ ] `extracted_text` が正しく保存されるか（英語テキスト）
 
 ---
 
-### Step 3: プラン生成
+### Step 3: プラン生成（`lang=en`）
 
 ```bash
-# プラン生成（SSE — リアルタイム進捗表示）
-curl -N -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/generate-plan?lang=ja"
+# プラン生成（SSE — リアルタイム進捗表示）— 英語モード
+curl -N -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/generate-plan?lang=en"
 ```
 
 SSE出力で以下のイベントが順に来ることを確認:
@@ -109,15 +107,16 @@ curl -s "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID" | jq '.plans'
 - [ ] 各セクションに `emotion` が設定されているか
 - [ ] `has_question` が true のセクションがあるか（問いかけ検証用）
 - [ ] SSE中にエラーが出ないか
+- [ ] 英語モードでの生成内容が英語学習に適しているか
 - [ ] 生成にかかった時間を記録（目安: 〜30秒）
 
 ---
 
-### Step 4: スクリプト + TTS生成
+### Step 4: スクリプト + TTS生成（`lang=en`）
 
 ```bash
-# スクリプト生成（SSE — TTS生成進捗も含む）
-curl -N -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/generate-script?lang=ja"
+# スクリプト生成（SSE — TTS生成進捗も含む）— 英語モード
+curl -N -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/generate-script?lang=en"
 ```
 
 SSE出力の確認:
@@ -126,18 +125,21 @@ SSE出力の確認:
 
 ```bash
 # 生成されたセクション一覧を確認
-curl -s "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID" | jq '.sections[] | {order_index, section_type, title, emotion, display_text, dialogues}'
+curl -s "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID" | \
+  jq '.sections[] | {order_index, section_type, title, emotion, display_text, tts_text, dialogues}'
 
-# TTS キャッシュ確認
-curl -s "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/tts-cache?lang=ja" | jq .
+# TTS キャッシュ確認（英語モード）
+curl -s "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/tts-cache?lang=en" | jq .
 ```
 
 **確認ポイント**:
 
 #### テキスト品質
-- [ ] 各セクションの `content` が自然な日本語か
+- [ ] `content` の日本語が自然か（英語モードでも先生の説明は日本語のはず）
 - [ ] `tts_text` に `[lang:en]` タグが英語部分に正しく付与されているか
-- [ ] `display_text` が適切な文字量か（長すぎ→パネルはみ出し、短すぎ→情報不足）
+- [ ] `[lang:en]` タグの範囲が適切か（単語単位？文単位？）
+- [ ] `display_text` に英語の例文・フレーズが表示されているか
+- [ ] `display_text` の文字量が適切か（長すぎ→パネルはみ出し、短すぎ→情報不足）
 - [ ] 導入（introduction）の挨拶が自然か
 - [ ] 締め（summary）の挨拶が自然か
 - [ ] セクション間の繋がりが自然か（唐突な話題転換がないか）
@@ -146,22 +148,23 @@ curl -s "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/tts-cache?lang=ja" | 
 - [ ] `dialogues` フィールドにJSON配列が入っているセクションがあるか
 - [ ] 対話内容で先生(teacher)と生徒(student)が交互に話しているか
 - [ ] 生徒の発話が不自然でないか
+- [ ] 英語の例文を先生・生徒が読み上げる場面があるか
 
 #### TTS生成
 - [ ] 全セクションのTTSが正常に生成されたか（`tts_generated` / `tts_errors`）
-- [ ] TTSキャッシュファイルが `resources/audio/lessons/{id}/ja/` に存在するか
+- [ ] TTSキャッシュファイルが `resources/audio/lessons/{id}/en/` に存在するか
 - [ ] 生成にかかった時間を記録（目安: 〜1-2分）
 
 ---
 
-### Step 5: 授業再生
+### Step 5: 授業再生（`lang=en`）
 
 ```bash
 # broadcast.html をブラウザで開く（配信画面の確認用）
 # URL: http://localhost:$WEB_PORT/broadcast
 
-# 授業開始
-curl -s -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/start?lang=ja" | jq .
+# 授業開始 — 英語モード
+curl -s -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/start?lang=en" | jq .
 ```
 
 再生中に broadcast.html を目視で確認:
@@ -173,12 +176,15 @@ curl -s -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/start?lang=ja
 - [ ] テキストがパネルからはみ出していないか
 - [ ] テキストが重なっていないか
 - [ ] フォントサイズが読みやすいか
+- [ ] 英語テキストの表示が崩れていないか（長い英単語の折り返し等）
 - [ ] `lesson-progress-panel` に進捗が表示される
 - [ ] セクション切替時にパネルが正しく更新される
 
-#### 音声
+#### 音声（英語発音が最重要チェック項目）
 - [ ] TTS音声が再生される
-- [ ] 英語部分の発音がカタカナ発音になっていないか
+- [ ] **英語部分の発音が正しい英語発音になっているか**（最重要）
+- [ ] カタカナ発音になっていないか
+- [ ] `[lang:en]` タグ付き部分と日本語部分の切り替えが自然か
 - [ ] 音量が適切か（他の音声要素とのバランス）
 - [ ] 対話モード時に先生・生徒の声が区別できるか
 
@@ -223,7 +229,7 @@ curl -s -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/start?lang=ja
 
 カテゴリ:
 - **パネル表示**: はみ出し、重なり、フォントサイズ
-- **英語発音**: カタカナ発音、[lang:en]タグ欠落
+- **英語発音**: カタカナ発音、[lang:en]タグ欠落、日英切り替え不自然
 - **テキスト品質**: 構成、繋がり、不自然さ
 - **対話品質**: 掛け合い、生徒発話の自然さ
 - **タイミング**: 待機時間、セクション間
@@ -234,9 +240,9 @@ curl -s -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/start?lang=ja
 
 ## 完了条件
 
-- [ ] 短い授業を1本、生成（プラン→スクリプト→TTS）→ 再生まで通すことができた
+- [ ] 短い英語授業を1本、生成（プラン→スクリプト→TTS）→ 再生まで通すことができた
 - [ ] broadcast.html での表示を目視確認した
-- [ ] 英語発音の現状を確認した
+- [ ] 英語発音の現状を確認した（`[lang:en]` タグの効果）
 - [ ] 対話モード（先生+生徒）の動作を確認した
 - [ ] 発見した問題を具体的にリストアップした
 - [ ] 各問題の対応Phaseを仮割り当てした

@@ -10,6 +10,9 @@
 - [ ] Phase 4: 品質改善（定型挨拶テンプレート、display_text読み上げ、構成プロンプト改善）
 - [ ] Phase 5: コンテンツパイプライン改善（URL抽出改善）
 
+### キャラクター発話生成フロー設計ドキュメント
+- [ ] 全モード（授業・雑談・イベント等）を横断したキャラクター発話生成フローの定義ドキュメントを作成 → [docs/speech-generation-flow.md](docs/speech-generation-flow.md)
+
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証
 
