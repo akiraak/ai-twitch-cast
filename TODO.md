@@ -3,8 +3,6 @@
 ## 機能追加
 
 ### 授業モード v3 — 監督主導アーキテクチャ → [plans/teacher-mode-v3.md](plans/teacher-mode-v3.md)
-- [ ] Step 5: teacher.pyルート対応（API戻り値にgenerations/director_sections追加）
-- [ ] Step 6: DBスキーマ調整（lesson_plans.director_json/plan_generations、lesson_sections.dialogue_directions）
 - [ ] Step 7: 管理画面 — 全LLM入出力の可視化（プロンプトをAPIから取得、データフロー表示）
 
 ### その他

@@ -352,6 +352,21 @@ def _create_tables(conn):
     except sqlite3.OperationalError:
         pass
 
+    # Migration: lesson_plans に director_json, plan_generations カラム追加（v3監督主導）
+    for col in ("director_json", "plan_generations"):
+        try:
+            conn.execute(f"ALTER TABLE lesson_plans ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+    # Migration: lesson_sections に dialogue_directions カラム追加（v3監督の演出指示）
+    try:
+        conn.execute("ALTER TABLE lesson_sections ADD COLUMN dialogue_directions TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # Migration: 既存の lessons.plan_* データを lesson_plans に移行
     try:
         rows = conn.execute(
@@ -1328,16 +1343,18 @@ def delete_lesson_source(source_id):
 
 def add_lesson_section(lesson_id, order_index, section_type, content, tts_text="",
                        display_text="", emotion="neutral", question="", answer="",
-                       wait_seconds=8, title="", lang="ja", dialogues=""):
+                       wait_seconds=8, title="", lang="ja", dialogues="",
+                       dialogue_directions=""):
     """授業セクションを追加する"""
     conn = get_connection()
     cur = conn.execute(
         "INSERT INTO lesson_sections "
         "(lesson_id, order_index, section_type, title, content, tts_text, display_text, "
-        "emotion, question, answer, wait_seconds, lang, dialogues, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "emotion, question, answer, wait_seconds, lang, dialogues, dialogue_directions, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (lesson_id, order_index, section_type, title, content, tts_text,
-         display_text, emotion, question, answer, wait_seconds, lang, dialogues, _now()),
+         display_text, emotion, question, answer, wait_seconds, lang, dialogues,
+         dialogue_directions, _now()),
     )
     conn.commit()
     return dict(conn.execute("SELECT * FROM lesson_sections WHERE id = ?", (cur.lastrowid,)).fetchone())
@@ -1364,7 +1381,7 @@ def update_lesson_section(section_id, **fields):
     conn = get_connection()
     allowed = {"order_index", "section_type", "title", "content", "tts_text",
                "display_text", "emotion", "question", "answer", "wait_seconds",
-               "dialogues"}
+               "dialogues", "dialogue_directions"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
@@ -1424,7 +1441,8 @@ def get_lesson_plans(lesson_id):
     return [dict(r) for r in rows]
 
 
-def upsert_lesson_plan(lesson_id, lang, knowledge="", entertainment="", plan_json=""):
+def upsert_lesson_plan(lesson_id, lang, knowledge="", entertainment="", plan_json="",
+                       director_json="", plan_generations=""):
     """プランを保存する（INSERT or UPDATE）"""
     conn = get_connection()
     now = _now()
@@ -1434,15 +1452,17 @@ def upsert_lesson_plan(lesson_id, lang, knowledge="", entertainment="", plan_jso
     ).fetchone()
     if existing:
         conn.execute(
-            "UPDATE lesson_plans SET knowledge = ?, entertainment = ?, plan_json = ?, updated_at = ? "
+            "UPDATE lesson_plans SET knowledge = ?, entertainment = ?, plan_json = ?, "
+            "director_json = ?, plan_generations = ?, updated_at = ? "
             "WHERE lesson_id = ? AND lang = ?",
-            (knowledge, entertainment, plan_json, now, lesson_id, lang),
+            (knowledge, entertainment, plan_json, director_json, plan_generations, now, lesson_id, lang),
         )
     else:
         conn.execute(
-            "INSERT INTO lesson_plans (lesson_id, lang, knowledge, entertainment, plan_json, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (lesson_id, lang, knowledge, entertainment, plan_json, now, now),
+            "INSERT INTO lesson_plans (lesson_id, lang, knowledge, entertainment, plan_json, "
+            "director_json, plan_generations, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (lesson_id, lang, knowledge, entertainment, plan_json, director_json, plan_generations, now, now),
         )
     conn.commit()
 

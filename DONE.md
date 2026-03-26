@@ -1,5 +1,16 @@
 # DONE
 
+## 授業モード v3 Step 5+6: teacher.pyルート対応 + DBスキーマ調整
+
+- [x] lesson_plansテーブルに `director_json`, `plan_generations` カラム追加（マイグレーション）
+- [x] lesson_sectionsテーブルに `dialogue_directions` カラム追加（マイグレーション）
+- [x] `upsert_lesson_plan()` が `director_json`, `plan_generations` を保存
+- [x] `add_lesson_section()` / `update_lesson_section()` が `dialogue_directions` に対応
+- [x] プラン生成API: `director_sections` → `director_json`、`generations` → `plan_generations` をDB保存、SSE返却
+- [x] スクリプト生成API: DBから `director_json` を取得し `generate_lesson_script_v2(director_sections=...)` に渡す
+- [x] スクリプト生成API: セクション保存時に `director_sections` から `dialogue_directions` を抽出して保存
+- [x] レッスン取得API: プランレスポンスに `director_json`, `plan_generations` を含める
+
 ## 授業モード v3 Step 4: セリフ個別生成のkey_content対応
 
 - [x] `_generate_single_dialogue()` で `dialogue_plan_entry` から `key_content` を取得

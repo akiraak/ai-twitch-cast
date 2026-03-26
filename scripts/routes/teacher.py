@@ -174,11 +174,17 @@ async def get_lesson(lesson_id: int):
     plans_list = db.get_lesson_plans(lesson_id)
     plans = {}
     for p in plans_list:
-        plans[p["lang"]] = {
+        plan_data = {
             "knowledge": p["knowledge"],
             "entertainment": p["entertainment"],
             "plan_json": p["plan_json"],
         }
+        # v3: 監督出力とメタデータ
+        if p.get("director_json"):
+            plan_data["director_json"] = p["director_json"]
+        if p.get("plan_generations"):
+            plan_data["plan_generations"] = p["plan_generations"]
+        plans[p["lang"]] = plan_data
     return {"ok": True, "lesson": lesson, "sources": sources, "sections": sections, "plans": plans}
 
 
@@ -424,11 +430,15 @@ async def generate_plan(lesson_id: int, lang: str = "ja"):
             plan = task.result()
             # DB保存（言語別テーブル）
             plan_json_str = _json.dumps(plan["plan_sections"], ensure_ascii=False)
+            director_json_str = _json.dumps(plan.get("director_sections", []), ensure_ascii=False)
+            generations_str = _json.dumps(plan.get("generations", {}), ensure_ascii=False)
             db.upsert_lesson_plan(
                 lesson_id, lang,
                 knowledge=plan["knowledge"],
                 entertainment=plan["entertainment"],
                 plan_json=plan_json_str,
+                director_json=director_json_str,
+                plan_generations=generations_str,
             )
             # 後方互換: lessons テーブルにも保存
             db.update_lesson(
@@ -443,6 +453,8 @@ async def generate_plan(lesson_id: int, lang: str = "ja"):
                 "knowledge": plan["knowledge"],
                 "entertainment": plan["entertainment"],
                 "plan_sections": plan["plan_sections"],
+                "director_sections": plan.get("director_sections", []),
+                "generations": plan.get("generations", {}),
             }
         except Exception as e:
             logger.error("プラン生成失敗: %s", e)
@@ -504,10 +516,16 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
 
     # 指定言語のプランがあればプランベースで生成
     plan_sections = None
+    director_sections = None
     lang_plan = db.get_lesson_plan(lesson_id, lang)
     if lang_plan and lang_plan.get("plan_json"):
         try:
             plan_sections = _json.loads(lang_plan["plan_json"])
+        except Exception:
+            pass
+    if lang_plan and lang_plan.get("director_json"):
+        try:
+            director_sections = _json.loads(lang_plan["director_json"])
         except Exception:
             pass
     # フォールバック: lessons テーブルのプラン
@@ -542,7 +560,9 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                 if teacher_config and student_config:
                     return await asyncio.to_thread(
                         generate_lesson_script_v2,
-                        lesson["name"], extracted_text, plan_sections, image_paths or None,
+                        lesson["name"], extracted_text, plan_sections,
+                        director_sections=director_sections,
+                        source_images=image_paths or None,
                         on_progress=on_progress,
                         teacher_config=teacher_config,
                         student_config=student_config,
@@ -582,6 +602,12 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
             sections = task.result()
             saved = []
             for i, s in enumerate(sections):
+                # v3: director_sectionsから該当セクションのdialogue_directionsを取得
+                dd_str = ""
+                if director_sections and i < len(director_sections):
+                    dd = director_sections[i].get("dialogue_directions", [])
+                    if dd:
+                        dd_str = _json.dumps(dd, ensure_ascii=False)
                 sec = db.add_lesson_section(
                     lesson_id, order_index=i,
                     section_type=s["section_type"],
@@ -595,6 +621,7 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                     wait_seconds=s.get("wait_seconds", 0),
                     lang=lang,
                     dialogues=s.get("dialogues", ""),
+                    dialogue_directions=dd_str,
                 )
                 saved.append(sec)
             logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))
