@@ -19,7 +19,7 @@ from src.lesson_generator import (
     generate_lesson_script_from_plan,
     get_lesson_characters,
 )
-from src.lesson_runner import LESSON_AUDIO_DIR, _cache_path, clear_tts_cache, get_tts_cache_info
+from src.lesson_runner import LESSON_AUDIO_DIR, _cache_path, _dlg_cache_path, clear_tts_cache, get_tts_cache_info
 from src.prompt_builder import get_stream_language, set_stream_language
 from src.speech_pipeline import SpeechPipeline
 from src.tts import synthesize
@@ -589,34 +589,69 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
             logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))
 
             # --- TTS音声の事前生成 ---
-            total_parts = 0
-            section_parts_list = []
-            for s in saved:
-                content = s["content"]
-                tts_text = s.get("tts_text") or content
-                c_parts = SpeechPipeline.split_sentences(content)
-                t_parts = SpeechPipeline.split_sentences(tts_text)
-                section_parts_list.append((s, c_parts, t_parts))
-                total_parts += len(c_parts)
+            # 対話モードのキャラ設定を取得
+            characters = get_lesson_characters()
+            teacher_cfg = characters.get("teacher") or {}
+            student_cfg = characters.get("student") or {}
+            teacher_voice = teacher_cfg.get("tts_voice")
+            student_voice = student_cfg.get("tts_voice")
+            teacher_style = teacher_cfg.get("tts_style")
+            student_style = student_cfg.get("tts_style")
 
+            # 各セクションのTTS生成単位を計算
+            tts_jobs = []  # (cached_path, tts_text, voice, style, label)
+            for s in saved:
+                oi = s["order_index"]
+                dlgs_raw = s.get("dialogues", "")
+                dlgs = []
+                if dlgs_raw:
+                    try:
+                        dlgs = _json.loads(dlgs_raw) if isinstance(dlgs_raw, str) else dlgs_raw
+                    except Exception:
+                        pass
+
+                if dlgs:
+                    # 対話モード: 各dialogue発話のTTSを個別生成
+                    for di, dlg in enumerate(dlgs):
+                        speaker = dlg.get("speaker", "teacher")
+                        voice = teacher_voice if speaker == "teacher" else student_voice
+                        style = teacher_style if speaker == "teacher" else student_style
+                        tts_text = dlg.get("tts_text", dlg.get("content", ""))
+                        cached = _dlg_cache_path(lesson_id, oi, di, lang=lang)
+                        tts_jobs.append((cached, tts_text, voice, style,
+                                         f"セクション{oi + 1} 発話{di + 1}"))
+                else:
+                    # 単話者モード: セクションを文分割してTTS生成
+                    content = s["content"]
+                    tts_text = s.get("tts_text") or content
+                    c_parts = SpeechPipeline.split_sentences(content)
+                    t_parts = SpeechPipeline.split_sentences(tts_text)
+                    for pi, _part in enumerate(c_parts):
+                        part_tts = t_parts[pi] if pi < len(t_parts) else _part
+                        cached = _cache_path(lesson_id, oi, pi, lang=lang)
+                        tts_jobs.append((cached, part_tts, None, None,
+                                         f"セクション{oi + 1} パート{pi + 1}"))
+
+            total_parts = len(tts_jobs)
             generated = 0
             tts_errors = 0
-            for s, c_parts, t_parts in section_parts_list:
-                oi = s["order_index"]
-                for pi, _part in enumerate(c_parts):
-                    generated += 1
-                    part_tts = t_parts[pi] if pi < len(t_parts) else _part
-                    progress_msg = f"TTS生成中: セクション{oi + 1} パート{pi + 1} ({generated}/{total_parts})"
-                    yield f"data: {_json.dumps({'step': generated, 'total': total_parts, 'message': progress_msg, 'phase': 'tts'}, ensure_ascii=False)}\n\n"
+            for cached, tts_text, voice, style, label in tts_jobs:
+                generated += 1
+                progress_msg = f"TTS生成中: {label} ({generated}/{total_parts})"
+                yield f"data: {_json.dumps({'step': generated, 'total': total_parts, 'message': progress_msg, 'phase': 'tts'}, ensure_ascii=False)}\n\n"
 
-                    cached = _cache_path(lesson_id, oi, pi, lang=lang)
-                    cached.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        await asyncio.to_thread(synthesize, part_tts, str(cached))
-                        logger.info("[tts-cache] 生成: %s", cached)
-                    except Exception as e:
-                        logger.warning("[tts-cache] 生成失敗 (section=%d, part=%d): %s", oi, pi, e)
-                        tts_errors += 1
+                cached.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    kwargs = {}
+                    if voice:
+                        kwargs["voice"] = voice
+                    if style:
+                        kwargs["style"] = style
+                    await asyncio.to_thread(synthesize, tts_text, str(cached), **kwargs)
+                    logger.info("[tts-cache] 生成: %s", cached)
+                except Exception as e:
+                    logger.warning("[tts-cache] 生成失敗 (%s): %s", label, e)
+                    tts_errors += 1
 
             logger.info("TTS事前生成完了: lesson=%d, %d/%d パート (エラー: %d)",
                         lesson_id, generated - tts_errors, total_parts, tts_errors)

@@ -352,8 +352,35 @@ class LessonRunner:
 
         self._speech.apply_emotion("neutral", avatar_id="teacher")
 
+    async def _generate_dlg_tts(self, dlg: dict, index: int, order_index: int) -> Path | None:
+        """1つのdialogue発話のTTSを生成（キャッシュ対応）"""
+        speaker = dlg.get("speaker", "teacher")
+        cfg = (self._teacher_cfg or {}) if speaker == "teacher" else (self._student_cfg or {})
+        voice = cfg.get("tts_voice")
+        style = cfg.get("tts_style")
+        tts_text = dlg.get("tts_text", dlg.get("content", ""))
+
+        cached = _dlg_cache_path(self._lesson_id, order_index, index, lang=self._lang)
+        if cached.exists():
+            return cached
+
+        logger.info("[lesson]   generating dlg[%d] speaker=%s tts=%s",
+                     index, speaker, repr(tts_text[:100]))
+        wav = await self._speech.generate_tts(tts_text, voice=voice, style=style,
+                                               tts_text=tts_text)
+        if wav and wav.exists():
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(wav, cached)
+            wav.unlink(missing_ok=True)
+            try:
+                wav.parent.rmdir()
+            except OSError:
+                pass
+            return cached
+        return wav
+
     async def _play_dialogues(self, section: dict, dialogues: list[dict]):
-        """対話再生 — dialogueエントリごとに話者別voice/style/avatar_idで再生"""
+        """対話再生 — 生成と再生をパイプライン化して初回の待ち時間を最小化"""
         section_type = section["section_type"]
         order_index = section.get("order_index", self._current_index)
         teacher_cfg = self._teacher_cfg or {}
@@ -363,46 +390,26 @@ class LessonRunner:
 
         logger.info("[lesson]   対話モード: %d発話", len(dialogues))
 
-        # 全dialogueのTTSを事前生成
-        wav_paths = []
-        cache_hits = 0
+        # パイプライン: 現在の発話を再生しながら次の発話のTTSを生成
+        next_wav_task = None
         for i, dlg in enumerate(dialogues):
             if self._state == LessonState.IDLE:
                 break
-            speaker = dlg.get("speaker", "teacher")
-            cfg = teacher_cfg if speaker == "teacher" else student_cfg
-            voice = cfg.get("tts_voice")
-            style = cfg.get("tts_style")
-            tts_text = dlg.get("tts_text", dlg.get("content", ""))
 
-            cached = _dlg_cache_path(self._lesson_id, order_index, i, lang=self._lang)
-            if cached.exists():
-                wav_paths.append(cached)
-                cache_hits += 1
-                continue
-
-            logger.info("[lesson]   generating dlg[%d] speaker=%s tts=%s",
-                         i, speaker, repr(tts_text[:100]))
-            wav = await self._speech.generate_tts(tts_text, voice=voice, style=style,
-                                                   tts_text=tts_text)
-            if wav and wav.exists():
-                cached.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(wav, cached)
-                wav.unlink(missing_ok=True)
-                try:
-                    wav.parent.rmdir()
-                except OSError:
-                    pass
-                wav_paths.append(cached)
+            # 現在の発話のwavを取得
+            if next_wav_task is not None:
+                wav_path = await next_wav_task
+                next_wav_task = None
             else:
-                wav_paths.append(wav)
-        logger.info("[lesson]   対話TTS事前生成完了: %d/%d (cache hit: %d)",
-                     len(wav_paths), len(dialogues), cache_hits)
+                wav_path = await self._generate_dlg_tts(dlg, i, order_index)
 
-        # 順次再生
-        for i, dlg in enumerate(dialogues):
-            if self._state == LessonState.IDLE:
-                break
+            # 次の発話のTTS生成をバックグラウンドで開始
+            if i + 1 < len(dialogues) and self._state != LessonState.IDLE:
+                next_wav_task = asyncio.create_task(
+                    self._generate_dlg_tts(dialogues[i + 1], i + 1, order_index)
+                )
+
+            # 現在の発話を再生
             speaker = dlg.get("speaker", "teacher")
             avatar_id = speaker
             cfg = teacher_cfg if speaker == "teacher" else student_cfg
@@ -417,7 +424,7 @@ class LessonRunner:
             await self._speech.speak(
                 content, voice=voice, style=style, avatar_id=avatar_id,
                 tts_text=tts_text,
-                wav_path=wav_paths[i] if i < len(wav_paths) else None,
+                wav_path=wav_path,
                 subtitle={
                     "author": name,
                     "trigger_text": f"[授業] {section_type}",

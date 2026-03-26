@@ -250,6 +250,23 @@ class SpeechPipeline:
             )
         except Exception as e:
             elapsed = (time.monotonic() - t0) * 1000
+            # クールダウン中の場合、リセットして1回リトライ
+            if "クールダウン中" in str(e):
+                logger.info("[tts] C#アプリ接続クールダウンをリセットしてリトライ")
+                try:
+                    from scripts.services import capture_client
+                    capture_client._ws_connect_cooldown_until = 0
+                    result = await ws_request("tts_audio", timeout=10.0, data=wav_b64, volume=volume)
+                    t3 = time.monotonic()
+                    logger.info(
+                        "[tts] C#アプリにTTS直接送信完了(リトライ): %d bytes, vol=%.2f, total=%.0fms",
+                        len(wav_data), volume, (t3 - t0) * 1000,
+                    )
+                    return
+                except Exception as e2:
+                    elapsed = (time.monotonic() - t0) * 1000
+                    logger.warning("[tts] C#アプリへのTTS送信失敗(リトライ後) (%.0fms): %s", elapsed, e2)
+                    return
             logger.warning("[tts] C#アプリへのTTS送信失敗 (%.0fms): %s", elapsed, e)
 
     async def send_se_to_native_app(self, se):

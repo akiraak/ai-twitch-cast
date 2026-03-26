@@ -713,6 +713,16 @@ Based on the source text (and images), generate a Twitch stream lesson script.
   - Example: content="Let's learn こんにちは today" → tts_text="Let's learn [lang:ja]こんにちは[/lang] today"
   - If English only, no tags needed (same as content)
 
+## display_text (very important)
+- display_text is the ONLY visual information viewers see on the stream screen
+- It must contain **actual content**, NOT just a title or section name
+- Good: "Formal: Good morning / Good afternoon\nInformal: Hi / Hey / What's up?"
+- Good: "Q: Your friend says 'What's up?' — what do you reply?\nA) Good morning  B) Not much!  C) How do you do?"
+- Bad: "Formal Greetings" (too short, just a title)
+- Bad: "Matching Your Responses" (meaningless without content)
+- Include key vocabulary, example sentences, comparison tables, quiz choices, etc.
+- Use line breaks (\n) to organize content clearly
+
 ## Output format (JSON array)
 ```json
 [
@@ -720,8 +730,18 @@ Based on the source text (and images), generate a Twitch stream lesson script.
     "section_type": "introduction",
     "content": "Speech text (what the host says. No tags)",
     "tts_text": "TTS text (with [lang:xx] tags for non-English parts)",
-    "display_text": "Text shown on screen (key points, examples, etc.)",
+    "display_text": "Today's Topic: English Greetings\n\nFormal vs Informal — when to use which?",
     "emotion": "excited",
+    "question": "",
+    "answer": "",
+    "wait_seconds": 0
+  },
+  {
+    "section_type": "explanation",
+    "content": "Speech explaining formal greetings",
+    "tts_text": "TTS text",
+    "display_text": "Formal Greetings:\n• Good morning / afternoon / evening\n• How do you do? (first meeting only)\n• It is a pleasure to meet you.",
+    "emotion": "neutral",
     "question": "",
     "answer": "",
     "wait_seconds": 0
@@ -730,7 +750,7 @@ Based on the source text (and images), generate a Twitch stream lesson script.
     "section_type": "question",
     "content": "Speech for posing the question",
     "tts_text": "TTS text",
-    "display_text": "Question shown on screen",
+    "display_text": "Q: You meet your new boss. What do you say?\nA) Hey!  B) What's up?  C) Good morning",
     "emotion": "thinking",
     "question": "Question for viewers",
     "answer": "Correct answer and explanation",
@@ -775,6 +795,16 @@ Output ONLY the JSON array. No other text."""
 - tts_textで英語部分を必ず [lang:en]...[/lang] で囲むことが最重要
 - 英語の例文を紹介するときは、contentでも自然な導入をする（「画面に出しますね」等）
 
+## display_text（非常に重要）
+- display_textは視聴者が配信画面で見る**唯一の視覚情報**
+- **実際の内容**を書くこと。タイトルやセクション名だけはNG
+- 良い例: "フォーマル: Good morning / Good afternoon\nカジュアル: Hi / Hey / What's up?"
+- 良い例: "Q: 上司に初めて会う場面。何と言う？\nA) Hey!  B) What's up?  C) Good morning"
+- 悪い例: "フォーマルな挨拶"（短すぎ、タイトルだけ）
+- 悪い例: "挨拶の使い分け"（内容がない）
+- キーワード、例文、比較表、クイズの選択肢などを含める
+- 改行(\n)で見やすく整理する
+
 ## 出力形式（JSON配列）
 ```json
 [
@@ -782,8 +812,18 @@ Output ONLY the JSON array. No other text."""
     "section_type": "introduction",
     "content": "発話テキスト（ちょビが話す内容。タグなし）",
     "tts_text": "TTS用テキスト（英語部分に[lang:en]タグ付き）",
-    "display_text": "画面に表示するテキスト（要点・例文など自由形式）",
+    "display_text": "今日のテーマ: 英語の挨拶\n\nフォーマル vs カジュアル — 使い分けを学ぼう！",
     "emotion": "excited",
+    "question": "",
+    "answer": "",
+    "wait_seconds": 0
+  },
+  {
+    "section_type": "explanation",
+    "content": "フォーマルな挨拶の説明",
+    "tts_text": "TTS用テキスト",
+    "display_text": "フォーマルな挨拶:\n• Good morning / afternoon / evening\n• How do you do?（初対面のみ）\n• It is a pleasure to meet you.",
+    "emotion": "neutral",
     "question": "",
     "answer": "",
     "wait_seconds": 0
@@ -792,7 +832,7 @@ Output ONLY the JSON array. No other text."""
     "section_type": "question",
     "content": "問題を出す発話テキスト",
     "tts_text": "TTS用テキスト",
-    "display_text": "画面に表示する問題文",
+    "display_text": "Q: 新しい上司に会う場面。何と言う？\nA) Hey!  B) What's up?  C) Good morning",
     "emotion": "thinking",
     "question": "視聴者への問いかけ",
     "answer": "正解と解説",
@@ -982,6 +1022,16 @@ Follow the lesson plan below **strictly** to generate a Twitch stream lesson scr
   - Example: content="Let's learn こんにちは today" → tts_text="Let's learn [lang:ja]こんにちは[/lang] today"
   - If English only, no tags needed (same as content)
 
+## display_text (very important)
+- display_text is the ONLY visual information viewers see on the stream screen
+- It must contain **actual content**, NOT just a title or section name
+- Good: "Formal: Good morning / Good afternoon\nInformal: Hi / Hey / What's up?"
+- Good: "Q: Your friend says 'What's up?' — what do you reply?\nA) Good morning  B) Not much!  C) How do you do?"
+- Bad: "Formal Greetings" (too short, just a title)
+- Bad: "Matching Your Responses" (meaningless without content)
+- Include key vocabulary, example sentences, comparison tables, quiz choices, etc.
+- Use line breaks (\\n) to organize content clearly
+
 ## Output format (JSON array)
 ```json
 [
@@ -989,7 +1039,7 @@ Follow the lesson plan below **strictly** to generate a Twitch stream lesson scr
     "section_type": "introduction",
     "content": "Speech text (what the host says. No tags)",
     "tts_text": "TTS text (with [lang:xx] tags for non-English parts)",
-    "display_text": "Text shown on screen",
+    "display_text": "Today's Topic: English Greetings\\n\\nFormal vs Informal — when to use which?",
     "emotion": "excited",
     "question": "",
     "answer": "",
@@ -1036,6 +1086,16 @@ Output ONLY the JSON array."""
 - tts_textで英語部分を必ず [lang:en]...[/lang] で囲むことが最重要
 - 英語の例文を紹介するときは、contentでも自然な導入をする（「画面に出しますね」等）
 
+## display_text（非常に重要）
+- display_textは視聴者が配信画面で見る**唯一の視覚情報**
+- **実際の内容**を書くこと。タイトルやセクション名だけはNG
+- 良い例: "フォーマル: Good morning / Good afternoon\nカジュアル: Hi / Hey / What's up?"
+- 良い例: "Q: 上司に初めて会う場面。何と言う？\nA) Hey!  B) What's up?  C) Good morning"
+- 悪い例: "フォーマルな挨拶"（短すぎ、タイトルだけ）
+- 悪い例: "挨拶の使い分け"（内容がない）
+- キーワード、例文、比較表、クイズの選択肢などを含める
+- 改行(\\n)で見やすく整理する
+
 ## 出力形式（JSON配列）
 ```json
 [
@@ -1043,7 +1103,7 @@ Output ONLY the JSON array."""
     "section_type": "introduction",
     "content": "発話テキスト（ちょビが話す内容。タグなし）",
     "tts_text": "TTS用テキスト（英語部分に[lang:en]タグ付き）",
-    "display_text": "画面に表示するテキスト（要点・例文など自由形式）",
+    "display_text": "今日のテーマ: 英語の挨拶\\n\\nフォーマル vs カジュアル — 使い分けを学ぼう！",
     "emotion": "excited",
     "question": "",
     "answer": "",
