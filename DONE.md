@@ -1,5 +1,12 @@
 # DONE
 
+## 授業モード v3 Step 2: 全LLM呼び出しにgenerationメタデータ付与
+
+- [x] 知識先生・エンタメ先生・監督の3つのLLM呼び出しに generation メタデータ（system_prompt, user_prompt, raw_output, model, temperature）を記録
+- [x] `generate_lesson_plan()` の戻り値に `generations` dict を追加
+- [x] 監督の `raw_output` はJSONパース前の生テキストを保持（デバッグ・管理画面表示用）
+- [x] セリフ個別生成（`_generate_single_dialogue()`）は既に同パターンで実装済みのため変更不要
+
 ## 授業モード v3 Step 1: 監督プロンプト拡張
 
 - [x] 監督の出力形式を `{summary, has_question}` → `{display_text, dialogue_directions, question, answer}` に拡張

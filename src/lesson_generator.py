@@ -314,8 +314,10 @@ def generate_lesson_plan(lesson_name: str, extracted_text: str, source_images: l
         on_progress: コールバック(step, total, message) で進捗を通知
 
     Returns:
-        dict: {knowledge: str, entertainment: str, plan_sections: list[dict]}
+        dict: {knowledge, entertainment, plan_sections, director_sections, generations}
             plan_sections: [{section_type, title, summary, emotion, has_question}, ...]
+            generations: {knowledge: {...}, entertainment: {...}, director: {...}}
+                各エントリ: {system_prompt, user_prompt, raw_output, model, temperature}
     """
     def _progress(step, total, msg):
         if on_progress:
@@ -395,6 +397,13 @@ Output in the following structure:
         ),
     )
     knowledge_text = resp1.text.strip()
+    knowledge_generation = {
+        "system_prompt": knowledge_prompt,
+        "user_prompt": user_text,
+        "raw_output": knowledge_text,
+        "model": knowledge_model,
+        "temperature": 1.0,
+    }
     logger.info("知識先生の分析完了（%d文字, model=%s）", len(knowledge_text), knowledge_model)
 
     if en:
@@ -507,6 +516,14 @@ Output in the following structure:
         ),
     )
     entertainment_text = resp2.text.strip()
+    entertainment_user_prompt = parts2[0].text
+    entertainment_generation = {
+        "system_prompt": entertainment_prompt,
+        "user_prompt": entertainment_user_prompt,
+        "raw_output": entertainment_text,
+        "model": entertainment_model,
+        "temperature": 1.0,
+    }
     logger.info("エンタメ先生の構成完了（%d文字, model=%s）", len(entertainment_text), entertainment_model)
 
     if en:
@@ -715,9 +732,12 @@ JSON配列のみを出力してください。"""
         ),
     )
 
+    # 監督の生出力を保存（パース前）
+    raw_director_output = resp3.text
+
     # JSONパース（壊れたJSONは自動修復）
     try:
-        director_sections = _parse_json_response(resp3.text)
+        director_sections = _parse_json_response(raw_director_output)
     except (json.JSONDecodeError, ValueError) as e:
         logger.error("監督のプランJSONパース失敗: %s (先頭500文字: %s)", e, resp3.text[:500])
         raise ValueError("プラン生成のJSONパースに失敗しました。再度お試しください。")
@@ -758,6 +778,15 @@ JSON配列のみを出力してください。"""
             "wait_seconds": s["wait_seconds"],
         })
 
+    director_user_prompt = parts3[0].text
+    director_generation = {
+        "system_prompt": director_prompt,
+        "user_prompt": director_user_prompt,
+        "raw_output": raw_director_output,
+        "model": director_model,
+        "temperature": 1.0,
+    }
+
     logger.info("監督の最終プラン完了（%dセクション, model=%s）", len(director_sections), director_model)
 
     return {
@@ -765,6 +794,11 @@ JSON配列のみを出力してください。"""
         "entertainment": entertainment_text,
         "plan_sections": plan_sections,
         "director_sections": director_sections,
+        "generations": {
+            "knowledge": knowledge_generation,
+            "entertainment": entertainment_generation,
+            "director": director_generation,
+        },
     }
 
 
