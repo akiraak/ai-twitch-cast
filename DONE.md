@@ -1,5 +1,15 @@
 # DONE
 
+## 授業モード v3 Step 7: 管理画面 — 全LLM入出力の可視化
+
+- [x] Phase A: JSハードコードプロンプト全廃止 → plan_generations（API）からsystem_prompt/user_prompt/raw_output/model/tempを表示
+- [x] 旧データ（plan_generationsなし）は出力のみ表示 + 「旧形式」注記でフォールバック
+- [x] データフロー矢印: ステップ間に「▼ 知識先生の出力が入力に含まれる」等を表示
+- [x] 監督セクション v3対応: display_text, dialogue_directions, key_contentを展開可能カードで表示
+- [x] Phase C: renderSectionsIntoで監督のdialogue_directionsを各セリフカードに「🎬 監督: (指示)」として表示
+- [x] Phase Cヘッダー「🎭 Phase C: セリフ個別生成」追加
+- [x] Step 2bメタデータ修正:「1回のLLM呼び出し」→「個別LLM呼び出し」、ハードコードtemp/model削除
+
 ## 授業モード v3 Step 5+6: teacher.pyルート対応 + DBスキーマ調整
 
 - [x] lesson_plansテーブルに `director_json`, `plan_generations` カラム追加（マイグレーション）

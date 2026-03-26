@@ -2,9 +2,6 @@
 
 ## 機能追加
 
-### 授業モード v3 — 監督主導アーキテクチャ → [plans/teacher-mode-v3.md](plans/teacher-mode-v3.md)
-- [ ] Step 7: 管理画面 — 全LLM入出力の可視化（プロンプトをAPIから取得、データフロー表示）
-
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証
 
