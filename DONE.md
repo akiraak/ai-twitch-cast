@@ -1,5 +1,13 @@
 # DONE
 
+## ブラウザテスト（Playwright）Step 1: 環境構築 + Smoke Test
+
+- [x] pytest-playwright / playwright を requirements.txt に追加
+- [x] pytest.ini に browser マーカー追加
+- [x] tests/browser/ ディレクトリ作成（conftest.py + test_smoke.py）
+- [x] テストサーバー自動起動フィクスチャ（session スコープ、ポート18080）
+- [x] Smoke Test 3件（管理画面読み込み・配信ページ読み込み・APIステータス）
+
 ## 授業モード v3 Step 7: 管理画面 — 全LLM入出力の可視化
 
 - [x] Phase A: JSハードコードプロンプト全廃止 → plan_generations（API）からsystem_prompt/user_prompt/raw_output/model/tempを表示
