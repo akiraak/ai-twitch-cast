@@ -767,12 +767,39 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
         const dlgCacheHtml = dlgCache
           ? `<button onclick="playAudioInline(this, '/${esc(dlgCache.path)}')" style="padding:0 4px; background:#1565c0; color:#fff; border:none; border-radius:2px; cursor:pointer; font-size:0.58rem; margin-left:4px;">\u25B6</button><span style="color:#558b2f; font-size:0.6rem; margin-left:2px;">${(dlgCache.size/1024).toFixed(0)}KB</span>`
           : '<span style="color:#c62828; font-size:0.6rem; margin-left:4px;">TTS未生成</span>';
+        let genHtml = '';
+        if (dlg.generation) {
+          const gen = dlg.generation;
+          const detBg = isT ? '#f0f4ff' : '#fff8f0';
+          const detBc = isT ? '#bbdefb' : '#ffe0b2';
+          const detColor = isT ? '#1565c0' : '#e65100';
+          genHtml = `<details style="margin-top:3px; margin-left:12px;">
+            <summary style="cursor:pointer; color:${detColor}; font-size:0.62rem;">
+              \u{1F50D} 生成プロンプト (model: ${esc(gen.model || '?')}, temp: ${gen.temperature || '?'})
+            </summary>
+            <div style="padding:4px 8px; background:${detBg}; border:1px solid ${detBc}; border-radius:4px; margin-top:2px;">
+              <details style="margin-bottom:4px;">
+                <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F9E0} System Prompt</summary>
+                <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(gen.system_prompt || '')}</pre>
+              </details>
+              <details style="margin-bottom:4px;">
+                <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F4AC} User Prompt</summary>
+                <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(gen.user_prompt || '')}</pre>
+              </details>
+              <details>
+                <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F4DD} Raw Output</summary>
+                <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(gen.raw_output || '')}</pre>
+              </details>
+            </div>
+          </details>`;
+        }
         html += `<div style="margin-bottom:3px; padding:4px 8px; background:${bg}; border-left:3px solid ${bc}; border-radius:3px; font-size:0.72rem;">
           <span style="font-weight:600; color:#555;">${spk}</span>
           <span style="font-size:0.65rem; color:#7b1fa2; margin-left:4px;">[${esc(dlg.emotion || '')}]</span>
           <span style="font-size:0.6rem; color:#888; margin-left:6px;">\u{1F50A}${esc(voice)}</span>
           ${dlgCacheHtml}
           <div style="margin-top:2px; color:#2a1f40;">${esc(dlg.content || '')}</div>
+          ${genHtml}
         </div>`;
       }
       html += `</div>`;

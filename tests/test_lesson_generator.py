@@ -1,6 +1,7 @@
 """lesson_generator の対話形式スクリプト生成テスト"""
 
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -8,7 +9,11 @@ from src.lesson_generator import (
     _build_dialogue_output_example,
     _build_dialogue_prompt,
     _build_section_from_dialogues,
+    _build_structure_prompt,
     _format_character_for_prompt,
+    _generate_single_dialogue,
+    _generate_section_dialogues,
+    _parse_json_response,
 )
 
 
@@ -186,3 +191,284 @@ class TestBuildDialogueOutputExample:
             assert isinstance(parsed, list)
             assert len(parsed) > 0
             assert "dialogues" in parsed[0]
+
+
+# --- v2: セリフ個別生成テスト ---
+
+
+class TestParseJsonResponse:
+    """_parse_json_response のテスト"""
+
+    def test_plain_json(self):
+        result = _parse_json_response('{"content": "hello"}')
+        assert result == {"content": "hello"}
+
+    def test_code_block(self):
+        result = _parse_json_response('```json\n{"content": "hello"}\n```')
+        assert result == {"content": "hello"}
+
+    def test_array(self):
+        result = _parse_json_response('[{"a": 1}]')
+        assert isinstance(result, list)
+
+    def test_invalid_json_repaired(self):
+        """不正なJSONはjson-repairで修復される"""
+        result = _parse_json_response("not json")
+        assert result is not None
+
+
+class TestBuildStructurePrompt:
+    """_build_structure_prompt のテスト"""
+
+    def test_japanese_no_plan(self):
+        prompt = _build_structure_prompt(en=False)
+        assert "dialogue_plan" in prompt
+        assert "セクション構造デザイナー" in prompt
+        assert "授業プラン" not in prompt
+
+    def test_japanese_with_plan(self):
+        prompt = _build_structure_prompt(en=False, plan_text="1. [introduction] テスト")
+        assert "dialogue_plan" in prompt
+        assert "授業プラン" in prompt
+        assert "テスト" in prompt
+
+    def test_english_no_plan(self):
+        prompt = _build_structure_prompt(en=True)
+        assert "dialogue_plan" in prompt
+        assert "structure designer" in prompt
+
+    def test_english_with_plan(self):
+        prompt = _build_structure_prompt(en=True, plan_text="1. [introduction] Test")
+        assert "Lesson plan" in prompt
+        assert "Test" in prompt
+
+    def test_json_example_parseable(self):
+        """プロンプト内のJSON例がパース可能"""
+        import re
+        for en in [True, False]:
+            prompt = _build_structure_prompt(en=en)
+            m = re.search(r'```json\s*\n(.*?)\n```', prompt, re.DOTALL)
+            assert m, f"JSON block not found (en={en})"
+            parsed = json.loads(m.group(1))
+            assert isinstance(parsed, list)
+            assert "dialogue_plan" in parsed[0]
+
+
+class TestGenerateSingleDialogue:
+    """_generate_single_dialogue のテスト"""
+
+    def test_basic_generation(self):
+        """基本的なセリフ生成とメタデータ付き返却"""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = json.dumps({
+            "content": "こんにちは！",
+            "tts_text": "こんにちは！",
+            "emotion": "excited",
+        })
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator._get_model", return_value="test-model"):
+            result = _generate_single_dialogue(
+                client=mock_client,
+                character_config=TEACHER_CFG,
+                role="teacher",
+                section_context={"section_type": "introduction", "display_text": "テスト"},
+                dialogue_plan_entry={"speaker": "teacher", "direction": "挨拶する"},
+                conversation_history=[],
+                extracted_text="テスト教材",
+                lesson_name="テスト授業",
+                en=False,
+            )
+
+        assert result["speaker"] == "teacher"
+        assert result["content"] == "こんにちは！"
+        assert result["emotion"] == "excited"
+        assert "generation" in result
+        gen = result["generation"]
+        assert "ちょビ" in gen["system_prompt"]
+        assert "明るく楽しい口調" in gen["system_prompt"]
+        assert "挨拶する" in gen["user_prompt"]
+        assert gen["model"] == "test-model"
+        assert gen["temperature"] == 0.7
+        assert gen["raw_output"] == mock_response.text
+
+    def test_conversation_history_in_prompt(self):
+        """会話履歴がuser_promptに含まれる"""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = json.dumps({
+            "content": "わかった！", "tts_text": "わかった！", "emotion": "joy",
+        })
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator._get_model", return_value="test-model"):
+            result = _generate_single_dialogue(
+                client=mock_client,
+                character_config=STUDENT_CFG,
+                role="student",
+                section_context={"section_type": "explanation"},
+                dialogue_plan_entry={"speaker": "student", "direction": "リアクション"},
+                conversation_history=[
+                    {"speaker": "teacher", "content": "今日は英語を学びます"},
+                ],
+                extracted_text="テスト",
+                lesson_name="テスト",
+                en=False,
+            )
+
+        assert "今日は英語を学びます" in result["generation"]["user_prompt"]
+        assert result["speaker"] == "student"
+
+    def test_system_prompt_uses_character_persona(self):
+        """system_promptにキャラのペルソナが使われる"""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = '{"content":"test","tts_text":"test","emotion":"neutral"}'
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator._get_model", return_value="m"):
+            result = _generate_single_dialogue(
+                client=mock_client,
+                character_config=STUDENT_CFG,
+                role="student",
+                section_context={"section_type": "introduction"},
+                dialogue_plan_entry={"speaker": "student", "direction": "test"},
+                conversation_history=[],
+                extracted_text="",
+                lesson_name="test",
+                en=False,
+            )
+
+        # system_instructionにキャラのsystem_promptが使われている
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "好奇心旺盛" in config.system_instruction
+        assert "なるこ" in config.system_instruction
+
+
+class TestGenerateSectionDialogues:
+    """_generate_section_dialogues のテスト"""
+
+    def test_sequential_generation(self):
+        """dialogue_planの各ターンが順次生成される"""
+        responses = [
+            json.dumps({"content": "先生の発話", "tts_text": "先生の発話", "emotion": "excited"}),
+            json.dumps({"content": "生徒の発話", "tts_text": "生徒の発話", "emotion": "joy"}),
+            json.dumps({"content": "先生の続き", "tts_text": "先生の続き", "emotion": "neutral"}),
+        ]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = [
+            MagicMock(text=r) for r in responses
+        ]
+
+        section = {
+            "section_type": "introduction",
+            "display_text": "テスト",
+            "dialogue_plan": [
+                {"speaker": "teacher", "direction": "挨拶"},
+                {"speaker": "student", "direction": "リアクション"},
+                {"speaker": "teacher", "direction": "続き"},
+            ],
+        }
+
+        with patch("src.lesson_generator._get_model", return_value="m"):
+            dialogues = _generate_section_dialogues(
+                client=mock_client,
+                teacher_config=TEACHER_CFG,
+                student_config=STUDENT_CFG,
+                section=section,
+                extracted_text="テスト",
+                lesson_name="テスト",
+                en=False,
+            )
+
+        assert len(dialogues) == 3
+        assert dialogues[0]["speaker"] == "teacher"
+        assert dialogues[1]["speaker"] == "student"
+        assert dialogues[2]["speaker"] == "teacher"
+        assert mock_client.models.generate_content.call_count == 3
+
+        # 3番目の呼び出しでは会話履歴に前2ターンが含まれる
+        assert "先生の発話" in dialogues[2]["generation"]["user_prompt"]
+        assert "生徒の発話" in dialogues[2]["generation"]["user_prompt"]
+
+    def test_empty_plan(self):
+        """dialogue_planが空なら空リストを返す"""
+        result = _generate_section_dialogues(
+            client=MagicMock(),
+            teacher_config=TEACHER_CFG,
+            student_config=STUDENT_CFG,
+            section={"dialogue_plan": []},
+            extracted_text="",
+            lesson_name="",
+            en=False,
+        )
+        assert result == []
+
+    def test_progress_callback(self):
+        """進捗コールバックが各ターンで呼ばれる"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text='{"content":"x","tts_text":"x","emotion":"neutral"}'
+        )
+
+        progress_calls = []
+
+        section = {
+            "section_type": "explanation",
+            "dialogue_plan": [
+                {"speaker": "teacher", "direction": "a"},
+                {"speaker": "student", "direction": "b"},
+            ],
+        }
+
+        with patch("src.lesson_generator._get_model", return_value="m"):
+            _generate_section_dialogues(
+                client=mock_client,
+                teacher_config=TEACHER_CFG,
+                student_config=STUDENT_CFG,
+                section=section,
+                extracted_text="",
+                lesson_name="",
+                en=False,
+                on_progress=lambda s, n, t: progress_calls.append((s, n, t)),
+            )
+
+        assert len(progress_calls) == 2
+        assert progress_calls[0] == ("teacher", 1, 2)
+        assert progress_calls[1] == ("student", 2, 2)
+
+
+class TestBuildSectionFromDialoguesWithGeneration:
+    """generation メタデータ付きdialoguesでも_build_section_from_dialoguesが動作するか"""
+
+    def test_with_generation_metadata(self):
+        section = {
+            "section_type": "introduction",
+            "dialogues": [
+                {
+                    "speaker": "teacher",
+                    "content": "こんにちは！",
+                    "tts_text": "こんにちは！",
+                    "emotion": "excited",
+                    "generation": {
+                        "system_prompt": "...",
+                        "user_prompt": "...",
+                        "raw_output": "...",
+                        "model": "m",
+                        "temperature": 0.7,
+                    },
+                },
+                {
+                    "speaker": "student",
+                    "content": "よろしく！",
+                    "tts_text": "よろしく！",
+                    "emotion": "joy",
+                    "generation": {"system_prompt": "...", "user_prompt": "...", "raw_output": "...", "model": "m", "temperature": 0.7},
+                },
+            ],
+        }
+        result = _build_section_from_dialogues(section)
+        assert result["content"] == "こんにちは！よろしく！"
+        assert result["emotion"] == "excited"

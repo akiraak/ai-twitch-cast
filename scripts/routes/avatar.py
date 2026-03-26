@@ -353,14 +353,10 @@ teacherから始めてください。
             yield _emit({"ok": False, "error": f"会話生成失敗: {e}"})
             return
 
-        text = response.text.strip()
-        m = re.search(r'```(?:json)?\s*\n?(.*?)\n?\s*```', text, re.DOTALL)
-        if m:
-            text = m.group(1).strip()
-
         try:
-            dialogues = _json.loads(text)
-        except _json.JSONDecodeError as e:
+            from src.json_utils import parse_llm_json
+            dialogues = parse_llm_json(response.text)
+        except (ValueError, _json.JSONDecodeError) as e:
             logger.error("会話デモJSONパース失敗: %s", e)
             yield _emit({"ok": False, "error": "会話生成のJSONパースに失敗"})
             return

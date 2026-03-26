@@ -315,8 +315,9 @@ class TestLessonPlan:
         assert lesson["plan_entertainment"] == "更新されたエンタメ構成"
 
     def test_generate_script_uses_plan(self, api_client, test_db, mock_gemini):
-        """プランがある場合、スクリプト生成がプランに基づく"""
+        """プランがある場合、スクリプト生成がプランに基づく（v2: キャラ個別LLM呼び出し）"""
         import json
+        from unittest.mock import MagicMock
         r = api_client.post("/api/lessons", json={"name": "PlanScript"})
         lid = r.json()["lesson"]["id"]
         test_db.update_lesson(
@@ -327,16 +328,38 @@ class TestLessonPlan:
             ]),
         )
 
-        mock_gemini.models.generate_content.return_value.text = """[
-            {"section_type": "introduction", "content": "プランベース導入", "tts_text": "TTS",
-             "display_text": "画面", "emotion": "excited", "question": "", "answer": "", "wait_seconds": 0}
-        ]"""
+        # v2: Phase 1（構造生成）→ Phase 2（セリフ個別生成）の順で呼ばれる
+        phase1_response = json.dumps([
+            {"section_type": "introduction", "display_text": "画面",
+             "emotion": "excited", "question": "", "answer": "", "wait_seconds": 0,
+             "dialogue_plan": [
+                 {"speaker": "teacher", "direction": "挨拶"},
+                 {"speaker": "student", "direction": "リアクション"},
+             ]}
+        ])
+        dlg1_response = json.dumps({"content": "プランベース導入", "tts_text": "TTS", "emotion": "excited"})
+        dlg2_response = json.dumps({"content": "リアクション！", "tts_text": "リアクション！", "emotion": "joy"})
+        v2_responses = [phase1_response, dlg1_response, dlg2_response]
+        call_idx = [0]
+        def v2_side_effect(*args, **kwargs):
+            idx = call_idx[0]
+            call_idx[0] += 1
+            text = v2_responses[idx] if idx < len(v2_responses) else '{"text":"dummy"}'
+            return MagicMock(text=text)
+        mock_gemini.models.generate_content.side_effect = v2_side_effect
 
         resp = api_client.post(f"/api/lessons/{lid}/generate-script")
         data = parse_sse_result(resp)
         assert data["ok"] is True
         assert len(data["sections"]) == 1
-        assert data["sections"][0]["content"] == "プランベース導入"
+        assert "プランベース導入" in data["sections"][0]["content"]
+        # dialoguesにgenerationメタデータが含まれる
+        dlgs = json.loads(data["sections"][0]["dialogues"])
+        assert len(dlgs) == 2
+        assert dlgs[0]["speaker"] == "teacher"
+        assert dlgs[1]["speaker"] == "student"
+        assert "generation" in dlgs[0]
+        assert "system_prompt" in dlgs[0]["generation"]
 
 
 class TestPaceScale:

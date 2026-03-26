@@ -1,5 +1,14 @@
 # DONE
 
+## セリフ個別LLM生成 + 管理画面プロンプト表示 + JSON修復
+
+- [x] セリフ生成を「全キャラ一括LLM呼び出し」から「キャラごとに個別LLM呼び出し（ターン制）」に変更
+- [x] 各セリフの生成に使われたプロンプト（System/User）と結果（Raw Output）を管理画面に全文表示
+- [x] Phase 1（セクション構造+dialogue_plan生成）→ Phase 2（キャラ個別セリフ生成）の2段階フロー
+- [x] セクション間並列化（ThreadPoolExecutor max_workers=3）
+- [x] `json-repair` 導入: LLM応答の壊れたJSON（途中切れ・末尾カンマ等）を自動修復
+- [x] 全13箇所のLLMレスポンスJSONパースを `parse_llm_json()` に統一
+
 ## 生徒キャラにも先生と同等のテキスト生成フローを追加
 
 - [x] CharacterContextパターンで先生・生徒共通のメモ更新フローを実装

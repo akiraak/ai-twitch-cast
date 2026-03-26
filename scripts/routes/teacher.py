@@ -17,6 +17,7 @@ from src.lesson_generator import (
     generate_lesson_plan,
     generate_lesson_script,
     generate_lesson_script_from_plan,
+    generate_lesson_script_v2,
     get_lesson_characters,
 )
 from src.lesson_runner import LESSON_AUDIO_DIR, _cache_path, _dlg_cache_path, clear_tts_cache, get_tts_cache_info
@@ -518,8 +519,9 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
             except Exception:
                 pass
 
-    # 生徒キャラ取得（存在すれば対話モード）
+    # キャラ取得（先生・生徒が揃えばv2対話モード）
     characters = get_lesson_characters()
+    teacher_config = characters.get("teacher")
     student_config = characters.get("student")
 
     async def event_stream():
@@ -536,7 +538,16 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
 
         async def run_generation():
             try:
-                if plan_sections:
+                # 先生・生徒が揃っている場合はv2（キャラ個別LLM呼び出し）
+                if teacher_config and student_config:
+                    return await asyncio.to_thread(
+                        generate_lesson_script_v2,
+                        lesson["name"], extracted_text, plan_sections, image_paths or None,
+                        on_progress=on_progress,
+                        teacher_config=teacher_config,
+                        student_config=student_config,
+                    )
+                elif plan_sections:
                     return await asyncio.to_thread(
                         generate_lesson_script_from_plan,
                         lesson["name"], extracted_text, plan_sections, image_paths or None,

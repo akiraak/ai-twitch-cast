@@ -8,6 +8,7 @@ from pathlib import Path
 from google.genai import types
 
 from src.gemini_client import get_client
+from src.json_utils import parse_llm_json
 from src.prompt_builder import build_language_rules, build_multi_system_prompt, build_system_prompt, get_stream_language
 
 logger = logging.getLogger(__name__)
@@ -357,8 +358,10 @@ def generate_response(author, message, comment_count=0, timeline=None, stream_co
     )
 
     try:
-        result = json.loads(response.text)
-    except (json.JSONDecodeError, AttributeError):
+        result = parse_llm_json(response.text)
+        if not isinstance(result, dict):
+            raise ValueError("not a dict")
+    except (json.JSONDecodeError, AttributeError, ValueError):
         result = {"speech": message, "emotion": "neutral", "translation": ""}
 
     result.setdefault("translation", "")
@@ -426,8 +429,9 @@ def generate_user_notes(users_with_comments):
     )
 
     try:
-        return json.loads(response.text)
-    except (json.JSONDecodeError, AttributeError):
+        result = parse_llm_json(response.text)
+        return result if isinstance(result, dict) else {}
+    except (json.JSONDecodeError, AttributeError, ValueError):
         return {}
 
 
@@ -497,7 +501,7 @@ def generate_self_note(timeline, current_note="", char_config=None):
     )
 
     try:
-        result = json.loads(response.text)
+        result = parse_llm_json(response.text)
         return result.get("note", current_note or "")
     except (json.JSONDecodeError, AttributeError):
         return current_note or ""
@@ -552,7 +556,7 @@ def generate_persona_from_prompt(char_config=None):
     )
 
     try:
-        result = json.loads(response.text)
+        result = parse_llm_json(response.text)
         return result.get("persona", "")
     except (json.JSONDecodeError, AttributeError):
         return ""
@@ -630,7 +634,7 @@ def generate_persona(avatar_comments, current_persona="", char_config=None):
     )
 
     try:
-        result = json.loads(response.text)
+        result = parse_llm_json(response.text)
         return result.get("persona", current_persona or "")
     except (json.JSONDecodeError, AttributeError):
         return current_persona or ""
@@ -734,8 +738,10 @@ def generate_event_response(event_type, detail, last_event_responses=None):
     )
 
     try:
-        result = json.loads(response.text)
-    except (json.JSONDecodeError, AttributeError):
+        result = parse_llm_json(response.text)
+        if not isinstance(result, dict):
+            raise ValueError("not a dict")
+    except (json.JSONDecodeError, AttributeError, ValueError):
         result = {"speech": detail, "emotion": "neutral", "translation": ""}
 
     result.setdefault("translation", "")
@@ -928,7 +934,7 @@ def generate_multi_response(author, message, characters, comment_count=0, timeli
     )
 
     try:
-        result = json.loads(response.text)
+        result = parse_llm_json(response.text)
     except (json.JSONDecodeError, AttributeError):
         return [{"speaker": "teacher", "speech": message, "emotion": "neutral", "translation": "", "se": None}]
 
@@ -1051,7 +1057,7 @@ def generate_multi_event_response(event_type, detail, characters, last_event_res
     )
 
     try:
-        result = json.loads(response.text)
+        result = parse_llm_json(response.text)
     except (json.JSONDecodeError, AttributeError):
         return [{"speaker": "teacher", "speech": detail, "emotion": "neutral", "translation": ""}]
 
