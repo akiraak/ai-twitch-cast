@@ -230,42 +230,99 @@ async function buildLessonItem(lessonId) {
       <span class="plan-status"></span>
     </div>`;
 
-  // 既存プランの表示
+  // 既存プランの表示（プロンプト+結果の可視化）
   if (hasPlan) {
+    const etLen = (lesson.extracted_text || '').length;
+    const imgCount = sources.filter(s => s.source_type === 'image').length;
+    const _preStyle = 'margin-top:4px; background:#fafafa; padding:6px; border:1px solid #ddd; border-radius:4px; font-size:0.65rem; max-height:250px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#333;';
+    const _outPreStyle = (bg, border, color) => `margin-top:4px; background:${bg}; padding:6px; border:1px solid ${border}; border-radius:4px; font-size:0.7rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:${color};`;
+
+    // 知識先生のユーザープロンプトを再構成（全文 — 切り詰めない）
+    const knowledgeUserPrompt = lang === 'en'
+      ? `# Lesson title: ${lesson.name || ''}\n\n# Source text:\n${lesson.extracted_text || ''}`
+      : `# 授業タイトル: ${lesson.name || ''}\n\n# 教材テキスト:\n${lesson.extracted_text || ''}`;
+    // エンタメ先生のユーザープロンプト（全文）
+    const entertainmentUserPrompt = knowledgeUserPrompt + (lang === 'en'
+      ? `\n\n---\n\n# Knowledge Expert's analysis:\n${langPlan.knowledge || ''}`
+      : `\n\n---\n\n# 知識先生の分析:\n${langPlan.knowledge || ''}`);
+    // 監督のユーザープロンプト（全文）
+    const directorUserPrompt = lang === 'en'
+      ? `# Knowledge Expert's analysis:\n${langPlan.knowledge || ''}\n\n---\n\n# Entertainment Expert's structure:\n${langPlan.entertainment || ''}`
+      : `# 知識先生の分析:\n${langPlan.knowledge || ''}\n\n---\n\n# エンタメ先生の構成:\n${langPlan.entertainment || ''}`;
+
+    // --- 2a-1: 知識先生 ---
+    planHtml += `<div style="margin-top:8px; border:1px solid #bbdefb; border-radius:6px; overflow:hidden;">`;
+    planHtml += `<div style="background:#e3f2fd; padding:6px 10px; font-size:0.78rem; font-weight:600; color:#1565c0;">\u{1F4DA} ${lang === 'en' ? 'Step 1: Knowledge Expert' : 'Step 1: 知識先生'} <span style="font-weight:400; font-size:0.68rem; color:#666;">temp=0.5</span></div>`;
+    planHtml += `<div style="padding:8px 10px; font-size:0.72rem;">`;
+    planHtml += `<div style="color:#666; margin-bottom:4px;">${lang === 'en' ? 'Input' : '入力'}: ${lang === 'en' ? 'extracted text' : '抽出テキスト'} (${etLen}${lang === 'en' ? ' chars' : '文字'})${imgCount ? ` + ${lang === 'en' ? 'images' : '画像'} (${imgCount})` : ''}</div>`;
+    planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E4} ${lang === 'en' ? 'System Prompt' : 'システムプロンプト'}</summary>
+      <pre style="${_preStyle}">${esc(lang === 'en'
+        ? 'You are the "Knowledge Expert". As the subject lead, analyze the source material and organize the key concepts to teach.\n\n## Your role\n- Accurately grasp the core of the material and identify key points to teach\n- Design the optimal learning sequence (prerequisites → core → application)\n- Point out common misconceptions and tricky areas\n- Don\'t miss important facts, numbers, or concepts in the material\n\n## Output format\n### Key points to teach\n### Recommended learning sequence\n### Common misconceptions & pitfalls\n### Recommended section structure'
+        : 'あなたは「知識先生」です。教科主任として、教材を分析し授業で教えるべき内容を整理してください。\n\n## あなたの役割\n- 教材の核心を正確に把握し、教えるべき要点を洗い出す\n- 学習者にとって最適な順序���前提知識→核心→応用）を設計する\n- よくある誤解や注意すべきポイントを指摘する\n- 教材に含まれる重要な事実・数値・概念を漏らさない\n\n## 出力形式\n### 教えるべ��要点\n### 推奨する学習順序\n### 注意すべき誤解・難所\n### 推奨セクション構成')}</pre></details>`;
+    planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E5} ${lang === 'en' ? 'User Prompt' : 'ユーザープロンプト'}</summary>
+      <pre style="${_preStyle}">${esc(knowledgeUserPrompt)}</pre></details>`;
     if (langPlan.knowledge) {
-      planHtml += `<details style="margin-top:8px; font-size:0.8rem;">
-        <summary style="cursor:pointer; color:#1565c0; font-weight:500;">📚 ${lang === 'en' ? 'Knowledge Expert' : '知識先生の分析'}</summary>
-        <pre style="margin-top:6px; background:#f0f4ff; padding:8px; border:1px solid #bbdefb; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#1a237e;">${esc(langPlan.knowledge)}</pre>
-      </details>`;
+      planHtml += `<details open><summary style="cursor:pointer; color:#1565c0; font-size:0.72rem; font-weight:600;">\u{1F4E4} ${lang === 'en' ? 'Output' : '出力'} (${langPlan.knowledge.length}${lang === 'en' ? ' chars' : '文字'})</summary>
+        <pre style="${_outPreStyle('#f0f4ff','#bbdefb','#1a237e')}">${esc(langPlan.knowledge)}</pre></details>`;
     }
+    planHtml += `</div></div>`;
+
+    // --- 矢印 ---
+    planHtml += `<div style="text-align:center; color:#999; font-size:0.9rem; margin:2px 0;">\u25BC</div>`;
+
+    // --- 2a-2: エンタメ先生 ---
+    planHtml += `<div style="border:1px solid #ffe0b2; border-radius:6px; overflow:hidden;">`;
+    planHtml += `<div style="background:#fff3e0; padding:6px 10px; font-size:0.78rem; font-weight:600; color:#e65100;">\u{1F3AD} ${lang === 'en' ? 'Step 2: Entertainment Expert' : 'Step 2: エンタメ先生'} <span style="font-weight:400; font-size:0.68rem; color:#666;">temp=0.8</span></div>`;
+    planHtml += `<div style="padding:8px 10px; font-size:0.72rem;">`;
+    planHtml += `<div style="color:#666; margin-bottom:4px;">${lang === 'en' ? 'Input' : '入力'}: ${lang === 'en' ? 'extracted text' : '抽出テキスト'} + <strong style="color:#1565c0;">${lang === 'en' ? 'Knowledge output' : '知識先生の出力'}</strong> \u2190 Step 1</div>`;
+    planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E4} ${lang === 'en' ? 'System Prompt' : 'システムプロンプト'}</summary>
+      <pre style="${_preStyle}">${esc(lang === 'en'
+        ? 'You are the "Entertainment Expert". As a popular Twitch instructor who keeps viewers entertained, structure the lesson using a compelling narrative arc.\n\n## Your role\n- Building on the Knowledge Expert\'s analysis, restructure using a 4-act narrative arc (Setup → Development → Twist → Resolution)\n- Design a structure that keeps viewers watching until the end\n\n## Narrative arc guidelines\n### [Setup] Hook & Introduction\n### [Development] Build-up\n### [Twist] Surprise & Reversal\n### [Resolution] Payoff & Conclusion\n\n## Output format\n### Narrative arc structure\n### Payoff design\n### Production notes'
+        : 'あなたは「エンタメ先生」です。Twitch配信で視聴者を楽しませる人気講師として、授業を起承転結で構成してください。\n\n## あなたの役割\n- 知識先生の分析を踏まえつつ、起承転結の物語構造で授業を再構成する\n- 視聴者が最後まで見たくなる構成を設計する\n\n## 起承転結の設計指針\n### 【起】導入・フック\n### 【承】展開・積み上げ\n### 【転】転換・驚き\n### 【結】オチ・締め\n\n## 出力形式\n### 起承転結の構成\n### オチの設計\n### 演出ポイント')}</pre></details>`;
+    planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E5} ${lang === 'en' ? 'User Prompt' : 'ユーザープロンプト'} (${lang === 'en' ? 'includes Knowledge output' : '知識先生の出力を含む'})</summary>
+      <pre style="${_preStyle}">${esc(entertainmentUserPrompt)}</pre></details>`;
     if (langPlan.entertainment) {
-      planHtml += `<details style="margin-top:6px; font-size:0.8rem;">
-        <summary style="cursor:pointer; color:#e65100; font-weight:500;">🎭 ${lang === 'en' ? 'Entertainment Expert' : 'エンタメ先生の構成'}</summary>
-        <pre style="margin-top:6px; background:#fff3e0; padding:8px; border:1px solid #ffe0b2; border-radius:4px; font-size:0.75rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#bf360c;">${esc(langPlan.entertainment)}</pre>
-      </details>`;
+      planHtml += `<details open><summary style="cursor:pointer; color:#e65100; font-size:0.72rem; font-weight:600;">\u{1F4E4} ${lang === 'en' ? 'Output' : '出力'} (${langPlan.entertainment.length}${lang === 'en' ? ' chars' : '文字'})</summary>
+        <pre style="${_outPreStyle('#fff3e0','#ffe0b2','#bf360c')}">${esc(langPlan.entertainment)}</pre></details>`;
     }
+    planHtml += `</div></div>`;
+
+    // --- 矢印 ---
+    planHtml += `<div style="text-align:center; color:#999; font-size:0.9rem; margin:2px 0;">\u25BC</div>`;
+
+    // --- 2a-3: 監督 ---
+    planHtml += `<div style="border:1px solid #a5d6a7; border-radius:6px; overflow:hidden;">`;
+    planHtml += `<div style="background:#e8f5e9; padding:6px 10px; font-size:0.78rem; font-weight:600; color:#2e7d32;">\u{1F3AC} ${lang === 'en' ? 'Step 3: Director' : 'Step 3: 監督'} <span style="font-weight:400; font-size:0.68rem; color:#666;">temp=0.5, JSON</span></div>`;
+    planHtml += `<div style="padding:8px 10px; font-size:0.72rem;">`;
+    planHtml += `<div style="color:#666; margin-bottom:4px;">${lang === 'en' ? 'Input' : '入力'}: <strong style="color:#1565c0;">${lang === 'en' ? 'Knowledge output' : '知識先生の出力'}</strong> + <strong style="color:#e65100;">${lang === 'en' ? 'Entertainment output' : 'エンタメ先生の出力'}</strong></div>`;
+    planHtml += `<div style="color:#c62828; margin-bottom:4px; font-size:0.68rem;">\u26A0 ${lang === 'en' ? 'Source text and images are NOT passed to Director' : '教材テキスト・画像は監督には渡されない'}</div>`;
+    planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E4} ${lang === 'en' ? 'System Prompt' : 'システムプロンプト'}</summary>
+      <pre style="${_preStyle}">${esc(lang === 'en'
+        ? 'You are the "Director". Integrate the Knowledge Expert\'s and Entertainment Expert\'s proposals to finalize the lesson plan.\n\n## Your role\n### Overall balance\n- Balance accuracy/coverage with narrative arc\n- Keep section count appropriate (3-15)\n\n### Writing titles\n- Max 5 words, specific nouns/verbs\n\n### Pacing ("wait_seconds")\n- Natural conversation: 1-2s\n- After key points: 3-4s\n- After surprising facts: 4-5s\n- Questions: 8-15s\n- Final summary: 2-3s\n\n## Output: JSON array\n[{section_type, title, summary, emotion, has_question, wait_seconds}]'
+        : 'あなたは「監督」です。知識先生とエンタメ先生の提案を統合し、最終的な授業プランを決定してください。\n\n## あなたの役割\n### 全体のバランス調整\n- 正確性・網羅性と起承転結・演出を両立\n- セクション数3〜15に調整\n\n### titleの書き方\n- 10文字以内、具体的な名詞・動詞\n\n### 「間」の設計 (wait_seconds)\n- 自然な説明: 1〜2秒\n- 重要ポイント後: 3〜4秒\n- 驚きの事実後: 4〜5秒\n- 問いかけ: 8〜15秒\n- まとめ: 2〜3秒\n\n## 出力: JSON配列\n[{section_type, title, summary, emotion, has_question, wait_seconds}]')}</pre></details>`;
+    planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E5} ${lang === 'en' ? 'User Prompt' : 'ユーザープロンプト'} (${lang === 'en' ? 'NO source text — only expert outputs' : '教材テキストなし — エキスパート出力のみ'})</summary>
+      <pre style="${_preStyle}">${esc(directorUserPrompt)}</pre></details>`;
+
     try {
       const planSections = JSON.parse(langPlan.plan_json);
       if (planSections.length) {
-        planHtml += `<details style="margin-top:6px; font-size:0.8rem;" open>
-          <summary style="cursor:pointer; color:#2e7d32; font-weight:500;">🎬 監督の最終プラン（${planSections.length}セクション）</summary>
-          <div style="margin-top:6px;">`;
+        planHtml += `<div style="margin-top:4px; font-size:0.72rem; color:#2e7d32; font-weight:600;">\u{1F4E4} ${lang === 'en' ? 'Output' : '出力'}: ${planSections.length} ${lang === 'en' ? 'sections' : 'セクション'}</div>`;
         for (let i = 0; i < planSections.length; i++) {
           const ps = planSections[i];
-          const icon = SECTION_ICONS[ps.section_type] || '📖';
-          const waitInfo = ps.wait_seconds ? `${ps.wait_seconds}秒` : '';
-          planHtml += `<div style="padding:4px 8px; margin-bottom:4px; background:#e8f5e9; border-radius:4px; font-size:0.75rem;">
+          const icon = SECTION_ICONS[ps.section_type] || '\u{1F4D6}';
+          const waitInfo = ps.wait_seconds ? `${ps.wait_seconds}${lang === 'en' ? 's' : '秒'}` : '';
+          planHtml += `<div style="padding:4px 8px; margin-bottom:3px; background:#f1f8e9; border-radius:4px; font-size:0.72rem;">
             <span>${icon}</span>
             <strong>${i + 1}. ${esc(ps.title || ps.section_type)}</strong>
             <span style="color:#558b2f; margin-left:6px;">[${esc(ps.emotion || 'neutral')}]</span>
-            ${waitInfo ? `<span style="color:#795548; margin-left:4px;">⏱${waitInfo}</span>` : ''}
-            ${ps.has_question ? '<span style="color:#e65100; margin-left:4px;">❓</span>' : ''}
+            ${waitInfo ? `<span style="color:#795548; margin-left:4px;">\u23F1${waitInfo}</span>` : ''}
+            ${ps.has_question ? '<span style="color:#e65100; margin-left:4px;">\u2753</span>' : ''}
             <div style="color:#33691e; margin-top:2px;">${esc(ps.summary || '')}</div>
           </div>`;
         }
-        planHtml += `</div></details>`;
       }
     } catch(e) {}
+    planHtml += `</div></div>`;
   }
 
   step2aBody.innerHTML = planHtml;
@@ -273,7 +330,13 @@ async function buildLessonItem(lessonId) {
   step2a.appendChild(step2aBody);
   body.appendChild(step2a);
 
-  // === STEP 2b: スクリプト生成 ===
+  // === STEP 2b: スクリプ��生成 ===
+  // キャラ設定取得
+  const charsRes = await api('GET', '/api/characters');
+  const charList = Array.isArray(charsRes) ? charsRes : [];
+  const teacherChar = charList.find(c => c.role === 'teacher');
+  const studentChar = charList.find(c => c.role === 'student');
+
   const step2b = document.createElement('div');
   step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasPlan || hasExtractedText ? ' step-active' : ' step-disabled');
   const step2bBody = document.createElement('div');
@@ -281,11 +344,47 @@ async function buildLessonItem(lessonId) {
   const scriptLabel = hasPlan
     ? (lang === 'en' ? 'Generate Script+Audio from Plan' : 'プランからスクリプト+音声生成')
     : (lang === 'en' ? 'Generate Script+Audio' : 'スクリプト+音声生成');
-  step2bBody.innerHTML = `<div class="lesson-step-title">${lang === 'en' ? 'Script+Audio' : 'スクリプト+音声生成'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ')' : ''}</div>
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+
+  // 入力情報
+  const etLen = (lesson.extracted_text || '').length;
+  const planSecCount = hasPlan ? (() => { try { return JSON.parse(langPlan.plan_json).length; } catch(e) { return '?'; } })() : 0;
+  let totalDlgs = 0;
+  for (const s of sections) {
+    try { totalDlgs += JSON.parse(s.dialogues || '[]').length; } catch(e) {}
+  }
+
+  let step2bHtml = `<div class="lesson-step-title">${lang === 'en' ? 'Script Generation' : 'スクリプト生成'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ', ' + totalDlgs + (lang === 'en' ? ' utterances' : '発話') + ')' : ''}</div>`;
+
+  // 入力データ表示
+  step2bHtml += `<div style="margin-bottom:8px; padding:6px 10px; background:#f5f0ff; border:1px solid #d0c0e8; border-radius:4px; font-size:0.72rem; color:#555;">`;
+  step2bHtml += `<div style="font-weight:600; color:#7b1fa2; margin-bottom:4px;">${lang === 'en' ? 'Input' : '入力'}:</div>`;
+  if (hasPlan) {
+    step2bHtml += `<div>\u{1F3AC} ${lang === 'en' ? 'Director plan' : '監督プラン'} (${planSecCount} ${lang === 'en' ? 'sections' : 'セクション'}) \u2190 Step 2a</div>`;
+  }
+  step2bHtml += `<div>\u{1F4DD} ${lang === 'en' ? 'Extracted text' : '抽出テキスト'} (${etLen}${lang === 'en' ? ' chars' : '文字'}) \u2190 Step 1</div>`;
+
+  // キャラ設定サマリー
+  if (teacherChar || studentChar) {
+    step2bHtml += `<div style="margin-top:4px; font-weight:600; color:#7b1fa2;">${lang === 'en' ? 'Characters' : 'キャ���設定'} (${lang === 'en' ? 'used in prompt' : 'プロンプトに使用'}):</div>`;
+    if (teacherChar) {
+      const tPrompt = (teacherChar.system_prompt || '').substring(0, 60);
+      step2bHtml += `<div>\u{1F393} ${esc(teacherChar.name || 'teacher')} &mdash; voice: ${esc(teacherChar.tts_voice || '?')} / style: ${esc((teacherChar.tts_style || '').substring(0, 20))}...</div>`;
+      step2bHtml += `<details style="margin-left:20px;"><summary style="cursor:pointer; color:#1565c0; font-size:0.68rem;">system_prompt</summary><pre style="font-size:0.65rem; max-height:100px; overflow-y:auto; white-space:pre-wrap; background:#fff; padding:4px; border:1px solid #ddd; border-radius:3px;">${esc(teacherChar.system_prompt || '')}</pre></details>`;
+    }
+    if (studentChar) {
+      step2bHtml += `<div>\u{1F64B} ${esc(studentChar.name || 'student')} &mdash; voice: ${esc(studentChar.tts_voice || '?')} / style: ${esc((studentChar.tts_style || '').substring(0, 20))}...</div>`;
+      step2bHtml += `<details style="margin-left:20px;"><summary style="cursor:pointer; color:#e65100; font-size:0.68rem;">system_prompt</summary><pre style="font-size:0.65rem; max-height:100px; overflow-y:auto; white-space:pre-wrap; background:#fff; padding:4px; border:1px solid #ddd; border-radius:3px;">${esc(studentChar.system_prompt || '')}</pre></details>`;
+    }
+  }
+  step2bHtml += `<div style="margin-top:4px; color:#888; font-size:0.68rem;">${lang === 'en' ? 'Method: Single LLM call generates all sections and all character lines at once' : '生成方法: 1回のLLM呼び出しで全セ��ション・全キャラのセリフを一括生成'}</div>`;
+  step2bHtml += `<div style="color:#888; font-size:0.68rem;">LLM: temperature=0.7, max_tokens=8192, response=JSON</div>`;
+  step2bHtml += `</div>`;
+
+  step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
       <button onclick="generateScript(${lessonId}, '${lang}')" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? (lang === 'en' ? 'Regenerate' : '再生成') : esc(scriptLabel)}</button>
       <span class="script-status"></span>
     </div>`;
+  step2bBody.innerHTML = step2bHtml;
 
   // TTSキャッシュ情報取得
   let ttsCacheMap = {};
@@ -300,7 +399,7 @@ async function buildLessonItem(lessonId) {
 
   // セクション一覧
   const secContainer = document.createElement('div');
-  renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap);
+  renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap, {teacher: teacherChar, student: studentChar});
   step2bBody.appendChild(secContainer);
 
   step2b.innerHTML = '<div class="lesson-step-num">2b</div>';
@@ -618,7 +717,7 @@ async function generateScript(lessonId, lang) {
   await loadLessons();
 }
 
-function renderSectionsInto(container, sections, lessonId, ttsCacheMap) {
+function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo) {
   container.innerHTML = '';
   if (!sections || !sections.length) {
     container.innerHTML = '<div style="color:#8a7a9a; font-size:0.8rem; padding:8px;">スクリプトがありません。「スクリプト生成」を押してください。</div>';
@@ -651,16 +750,28 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap) {
     // 対話モード: dialoguesがあれば発話一覧を表示
     let _dlgs = [];
     try { _dlgs = typeof s.dialogues === 'string' ? JSON.parse(s.dialogues) : (s.dialogues || []); } catch(e) {}
+    const _ci = charInfo || {};
     if (_dlgs.length > 0) {
       html += `<div style="margin-bottom:6px; padding:6px 8px; background:#f0ecf5; border-radius:4px; border:1px solid #e0d4f0;">`;
-      for (const dlg of _dlgs) {
+      for (let di = 0; di < _dlgs.length; di++) {
+        const dlg = _dlgs[di];
         const isT = dlg.speaker === 'teacher';
-        const spk = isT ? '\u{1F393}先生' : '\u{1F64B}生徒';
+        const ch = isT ? _ci.teacher : _ci.student;
+        const spk = isT ? '\u{1F393}' + (ch ? ch.name : '先生') : '\u{1F64B}' + (ch ? ch.name : '生徒');
+        const voice = ch ? (ch.tts_voice || '?') : '?';
         const bg = isT ? '#e3f2fd' : '#fff3e0';
         const bc = isT ? '#90caf9' : '#ffcc80';
+        // dlgキャッシュ: section_XX_dlg_YY.wav
+        const dlgCacheKey = `section_${String(s.order_index).padStart(2,'0')}_dlg_${String(di).padStart(2,'0')}`;
+        const dlgCache = (cacheParts || []).find(p => p.path && p.path.includes(dlgCacheKey));
+        const dlgCacheHtml = dlgCache
+          ? `<button onclick="playAudioInline(this, '/${esc(dlgCache.path)}')" style="padding:0 4px; background:#1565c0; color:#fff; border:none; border-radius:2px; cursor:pointer; font-size:0.58rem; margin-left:4px;">\u25B6</button><span style="color:#558b2f; font-size:0.6rem; margin-left:2px;">${(dlgCache.size/1024).toFixed(0)}KB</span>`
+          : '<span style="color:#c62828; font-size:0.6rem; margin-left:4px;">TTS未生成</span>';
         html += `<div style="margin-bottom:3px; padding:4px 8px; background:${bg}; border-left:3px solid ${bc}; border-radius:3px; font-size:0.72rem;">
           <span style="font-weight:600; color:#555;">${spk}</span>
           <span style="font-size:0.65rem; color:#7b1fa2; margin-left:4px;">[${esc(dlg.emotion || '')}]</span>
+          <span style="font-size:0.6rem; color:#888; margin-left:6px;">\u{1F50A}${esc(voice)}</span>
+          ${dlgCacheHtml}
           <div style="margin-top:2px; color:#2a1f40;">${esc(dlg.content || '')}</div>
         </div>`;
       }

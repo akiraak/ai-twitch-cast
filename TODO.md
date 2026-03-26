@@ -10,8 +10,16 @@
 - [ ] Phase 4: 品質改善（定型挨拶テンプレート、display_text読み上げ、構成プロンプト改善）
 - [ ] Phase 5: コンテンツパイプライン改善（URL抽出改善）
 
+### 教師モード管理画面フロー可視化 → [plans/teacher-ui-flow-visibility.md](plans/teacher-ui-flow-visibility.md)
+- [x] Step 2a: 3エキスパートのプロンプト・入出力・データフロー表示
+- [x] Step 2b: スクリプト生成の入力（キャラ設定・生成方法）表示
+- [x] Step 2b: 各発話にvoice/style・TTS再生ボタン表示
+- [x] TTSキャッシュAPIがdlg形式ファイルも返すよう修正
+- [x] LLM入出力を切り詰めず全文表示
+- [ ] Step 3: 再生中セクションのハイライト
+
 ### キャラクター発話生成フロー設計ドキュメント
-- [ ] 全モード（授業・雑談・イベント等）を横断したキャラクター発話生成フローの定義ドキュメントを作成 → [docs/speech-generation-flow.md](docs/speech-generation-flow.md)
+- [x] 全モード（授業・雑談・イベント等）を横断したキャラクター発話生成フローの定義ドキュメントを作成 → [docs/speech-generation-flow.md](docs/speech-generation-flow.md)
 
 ### その他
 - [ ] ブラウザテスト（Playwright等）導入の検証

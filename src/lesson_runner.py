@@ -55,16 +55,27 @@ def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | 
 
 
 def get_tts_cache_info(lesson_id: int, lang: str = "ja") -> list[dict]:
-    """TTSキャッシュの状況を返す"""
+    """TTSキャッシュの状況を返す（part形式 + dlg形式の両方を検索）"""
     lesson_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
     sections_map: dict[int, list[dict]] = {}
     if lesson_dir.exists():
+        # part形式: section_00_part_00.wav
         for f in sorted(lesson_dir.glob("section_*_part_*.wav")):
             parts = f.stem.split("_")  # section_00_part_00
             oi = int(parts[1])
             pi = int(parts[3])
             sections_map.setdefault(oi, []).append({
                 "part_index": pi,
+                "path": str(f.relative_to(PROJECT_DIR)),
+                "size": f.stat().st_size,
+            })
+        # dlg形式: section_00_dlg_00.wav
+        for f in sorted(lesson_dir.glob("section_*_dlg_*.wav")):
+            parts = f.stem.split("_")  # section_00_dlg_00
+            oi = int(parts[1])
+            di = int(parts[3])
+            sections_map.setdefault(oi, []).append({
+                "part_index": di,
                 "path": str(f.relative_to(PROJECT_DIR)),
                 "size": f.stat().st_size,
             })
