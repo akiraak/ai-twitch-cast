@@ -13,7 +13,6 @@
 
 ### その他
 - [ ] ブラウザテスト（Playwright）導入の検証 → [plans/playwright-browser-testing.md](plans/playwright-browser-testing.md)
-  - [ ] Step 2: 基本ページ表示テスト（タブ・パネル・JSエラー検出・WebSocket接続）
   - [ ] Step 3: 授業モード ワークフローテスト（CRUD・プラン生成・管理画面UI）
   - [ ] Step 4: WebSocket / リアルタイムテスト（字幕・TODO更新・授業テキスト）
 

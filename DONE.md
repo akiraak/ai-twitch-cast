@@ -1,5 +1,13 @@
 # DONE
 
+## ブラウザテスト（Playwright）Step 2: 基本ページ表示テスト
+
+- [x] 管理画面テスト: 全8タブ表示・教師モードサブタブ遷移・初期タブ確認・JSエラー検出
+- [x] 配信ページテスト: TODOパネル・字幕・アバターエリア・授業パネル存在確認
+- [x] WebSocket接続確立テスト（window._ws.readyState === OPEN）
+- [x] JSエラー自動検出（VRM関連は除外）
+- [x] 全10テスト通過（13秒）
+
 ## ブラウザテスト（Playwright）Step 1: 環境構築 + Smoke Test
 
 - [x] pytest-playwright / playwright を requirements.txt に追加
