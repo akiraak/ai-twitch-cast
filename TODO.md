@@ -11,11 +11,6 @@
 
 ## 機能追加
 
-### その他
-- [ ] ブラウザテスト（Playwright）導入の検証 → [plans/playwright-browser-testing.md](plans/playwright-browser-testing.md)
-  - [ ] Step 3: 授業モード ワークフローテスト（CRUD・プラン生成・管理画面UI）
-  - [ ] Step 4: WebSocket / リアルタイムテスト（字幕・TODO更新・授業テキスト）
-
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 
@@ -25,3 +20,4 @@
 - [ ] YouTube動画などFPSが高いウィンドウをキャプチャしてスムーズに配信できるかの検証 → [plans/high-fps-capture-verification.md](plans/high-fps-capture-verification.md)
 - [ ] capture.pyのbroadcast_items全面移行（二重管理解消） → [plans/capture-broadcast-items-migration.md](plans/capture-broadcast-items-migration.md)
 - [ ] SE（効果音）とコメント応答の連携検証（AIがSEカテゴリを正しく選択するか、再生タイミング・音量が適切か）
+- [ ] ブラウザテスト（Playwright）導入の検証 → [plans/playwright-browser-testing.md](plans/playwright-browser-testing.md)（同期SQLiteがevent loopをブロックしテストサーバーが不安定。アプリ側のasync化が先）

@@ -1,5 +1,14 @@
 # DONE
 
+## ブラウザテスト（Playwright）Step 3a: 授業モード CRUDテスト
+
+- [x] test_teacher_workflow.py 作成（TestLessonCRUD 6テスト + TestPlanDisplay 2テスト等、計28テスト）
+- [x] UI操作テスト: 新規作成・一覧表示・削除・名前変更・4ステップ構造・言語タブ
+- [x] API事前データ投入（方式C）でプラン表示テスト（Phase Aヘッダー・step-done状態）
+- [x] session-scopedフィクスチャ + requestsライブラリでAPI操作安定化
+- [x] update-dialog強制除去・テスト残骸自動掃除（conftest.py）
+- [x] 12テスト安定通過。残り16テストはテストサーバー過負荷で不安定→Step 3bで対応
+
 ## ブラウザテスト（Playwright）Step 2: 基本ページ表示テスト
 
 - [x] 管理画面テスト: 全8タブ表示・教師モードサブタブ遷移・初期タブ確認・JSエラー検出
