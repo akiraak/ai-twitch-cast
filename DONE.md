@@ -1,5 +1,13 @@
 # DONE
 
+## 授業モード v3 Step 4: セリフ個別生成のkey_content対応
+
+- [x] `_generate_single_dialogue()` で `dialogue_plan_entry` から `key_content` を取得
+- [x] 日本語プロンプトに「このターンで触れるべき内容」として追加
+- [x] 英語プロンプトに「Key content to mention in this turn」として追加
+- [x] 空文字の場合はプロンプトに含めない
+- [x] テスト3件追加（日本語・空文字スキップ・英語モード）
+
 ## 授業モード v3 Step 3: Phase B-1除去（監督の設計を直接使用）
 
 - [x] `generate_lesson_script_v2()` に `director_sections` パラメータを追加

@@ -544,3 +544,93 @@ class TestDialogueDirectionsCompat:
 
         # dialogue_directionsの1ターンだけが使われる（dialogue_planの2ターンではなく）
         assert len(dialogues) == 1
+
+    def test_key_content_included_in_prompt(self):
+        """key_contentがユーザープロンプトに含まれる"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text='{"content":"先生発話","tts_text":"先生発話","emotion":"excited"}'
+        )
+
+        section = {
+            "section_type": "introduction",
+            "display_text": "テスト",
+            "dialogue_directions": [
+                {"speaker": "teacher", "direction": "挨拶する", "key_content": "How are you?の本当の意味"},
+            ],
+        }
+
+        with patch("src.lesson_generator._get_model", return_value="m"):
+            dialogues = _generate_section_dialogues(
+                client=mock_client,
+                teacher_config=TEACHER_CFG,
+                student_config=STUDENT_CFG,
+                section=section,
+                extracted_text="",
+                lesson_name="テスト授業",
+                en=False,
+            )
+
+        # generationのuser_promptにkey_contentが含まれる
+        user_prompt = dialogues[0]["generation"]["user_prompt"]
+        assert "How are you?の本当の意味" in user_prompt
+        assert "このターンで触れるべき内容" in user_prompt
+
+    def test_key_content_empty_not_included(self):
+        """key_contentが空文字の場合はプロンプトに含めない"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text='{"content":"発話","tts_text":"発話","emotion":"neutral"}'
+        )
+
+        section = {
+            "section_type": "explanation",
+            "display_text": "テスト",
+            "dialogue_directions": [
+                {"speaker": "teacher", "direction": "説明する", "key_content": ""},
+            ],
+        }
+
+        with patch("src.lesson_generator._get_model", return_value="m"):
+            dialogues = _generate_section_dialogues(
+                client=mock_client,
+                teacher_config=TEACHER_CFG,
+                student_config=STUDENT_CFG,
+                section=section,
+                extracted_text="",
+                lesson_name="テスト",
+                en=False,
+            )
+
+        user_prompt = dialogues[0]["generation"]["user_prompt"]
+        assert "このターンで触れるべき内容" not in user_prompt
+
+    def test_key_content_english_mode(self):
+        """英語モードでkey_contentがプロンプトに含まれる"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text='{"content":"Hello","tts_text":"Hello","emotion":"excited"}'
+        )
+
+        section = {
+            "section_type": "introduction",
+            "display_text": "Test",
+            "dialogue_directions": [
+                {"speaker": "teacher", "direction": "Greet viewers", "key_content": "The real meaning of How are you?"},
+            ],
+        }
+
+        with patch("src.lesson_generator._get_model", return_value="m"):
+            dialogues = _generate_section_dialogues(
+                client=mock_client,
+                teacher_config=TEACHER_CFG,
+                student_config=STUDENT_CFG,
+                section=section,
+                extracted_text="",
+                lesson_name="Test lesson",
+                en=True,
+            )
+
+        user_prompt = dialogues[0]["generation"]["user_prompt"]
+        assert "The real meaning of How are you?" in user_prompt
+        assert "Key content to mention" in user_prompt

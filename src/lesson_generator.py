@@ -1538,6 +1538,7 @@ Rules:
 - 以下のJSONオブジェクトのみを出力: {{"content": "...", "tts_text": "...", "emotion": "..."}}"""
 
     direction = dialogue_plan_entry.get("direction", "")
+    key_content = dialogue_plan_entry.get("key_content", "")
     section_type = section_context.get("section_type", "explanation")
     display_text = section_context.get("display_text", "")
     question = section_context.get("question", "")
@@ -1551,6 +1552,8 @@ Rules:
             user_parts.append(f"# Question: {question}")
         if answer:
             user_parts.append(f"# Answer: {answer}")
+        if key_content:
+            user_parts.append(f"# Key content to mention in this turn: {key_content}")
         user_parts.append(f"\n## Your direction for this turn\n{direction}")
         if conversation_history:
             user_parts.append("\n## Conversation so far")
@@ -1566,6 +1569,8 @@ Rules:
             user_parts.append(f"# 問題: {question}")
         if answer:
             user_parts.append(f"# 回答: {answer}")
+        if key_content:
+            user_parts.append(f"# このターンで触れるべき内容: {key_content}")
         user_parts.append(f"\n## このターンの演出指示\n{direction}")
         if conversation_history:
             user_parts.append("\n## ここまでの会話")
