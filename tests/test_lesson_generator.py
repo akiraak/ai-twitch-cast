@@ -268,7 +268,7 @@ class TestGenerateSingleDialogue:
         })
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator._get_model", return_value="test-model"):
+        with patch("src.lesson_generator._get_dialogue_model", return_value="test-model"):
             result = _generate_single_dialogue(
                 client=mock_client,
                 character_config=TEACHER_CFG,
@@ -290,7 +290,7 @@ class TestGenerateSingleDialogue:
         assert "明るく楽しい口調" in gen["system_prompt"]
         assert "挨拶する" in gen["user_prompt"]
         assert gen["model"] == "test-model"
-        assert gen["temperature"] == 0.7
+        assert gen["temperature"] == 1.0
         assert gen["raw_output"] == mock_response.text
 
     def test_conversation_history_in_prompt(self):
@@ -302,7 +302,7 @@ class TestGenerateSingleDialogue:
         })
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator._get_model", return_value="test-model"):
+        with patch("src.lesson_generator._get_dialogue_model", return_value="test-model"):
             result = _generate_single_dialogue(
                 client=mock_client,
                 character_config=STUDENT_CFG,

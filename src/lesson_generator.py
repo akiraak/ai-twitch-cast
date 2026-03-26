@@ -202,6 +202,30 @@ def _get_model():
     return _CHAT_MODEL
 
 
+def _get_knowledge_model():
+    """知識先生のモデル"""
+    return os.environ.get("GEMINI_KNOWLEDGE_MODEL",
+           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
+
+
+def _get_entertainment_model():
+    """エンタメ先生のモデル"""
+    return os.environ.get("GEMINI_ENTERTAINMENT_MODEL",
+           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
+
+
+def _get_director_model():
+    """監督のモデル（最高推論力）"""
+    return os.environ.get("GEMINI_DIRECTOR_MODEL",
+           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3.1-pro-preview"))
+
+
+def _get_dialogue_model():
+    """セリフ個別生成のモデル"""
+    return os.environ.get("GEMINI_DIALOGUE_MODEL",
+           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
+
+
 # --- 画像解析 ---
 
 def extract_text_from_image(image_path: str) -> str:
@@ -360,17 +384,18 @@ Output in the following structure:
 （各セクションで扱うべき内容の概要）"""
 
     parts1 = image_parts + [types.Part(text=user_text)]
+    knowledge_model = _get_knowledge_model()
     resp1 = client.models.generate_content(
-        model=_get_model(),
+        model=knowledge_model,
         contents=[types.Content(parts=parts1)],
         config=types.GenerateContentConfig(
             system_instruction=knowledge_prompt,
-            temperature=0.5,
+            temperature=1.0,
             max_output_tokens=4096,
         ),
     )
     knowledge_text = resp1.text.strip()
-    logger.info("知識先生の分析完了（%d文字）", len(knowledge_text))
+    logger.info("知識先生の分析完了（%d文字, model=%s）", len(knowledge_text), knowledge_model)
 
     if en:
         _progress(2, 3, "Entertainment Expert designing story arc...")
@@ -471,17 +496,18 @@ Output in the following structure:
         parts2 = [types.Part(text=f"{user_text}\n\n---\n\n# Knowledge Expert's analysis:\n{knowledge_text}")]
     else:
         parts2 = [types.Part(text=f"{user_text}\n\n---\n\n# 知識先生の分析:\n{knowledge_text}")]
+    entertainment_model = _get_entertainment_model()
     resp2 = client.models.generate_content(
-        model=_get_model(),
+        model=entertainment_model,
         contents=[types.Content(parts=parts2)],
         config=types.GenerateContentConfig(
             system_instruction=entertainment_prompt,
-            temperature=0.8,
+            temperature=1.0,
             max_output_tokens=4096,
         ),
     )
     entertainment_text = resp2.text.strip()
-    logger.info("エンタメ先生の構成完了（%d文字）", len(entertainment_text))
+    logger.info("エンタメ先生の構成完了（%d文字, model=%s）", len(entertainment_text), entertainment_model)
 
     if en:
         _progress(3, 3, "Director integrating the plan...")
@@ -609,14 +635,15 @@ JSON配列のみを出力してください。"""
             f"# 知識先生の分析:\n{knowledge_text}\n\n"
             f"---\n\n# エンタメ先生の構成:\n{entertainment_text}"
         ))]
+    director_model = _get_director_model()
     resp3 = client.models.generate_content(
-        model=_get_model(),
+        model=director_model,
         contents=[types.Content(parts=parts3)],
         config=types.GenerateContentConfig(
             system_instruction=director_prompt,
             response_mime_type="application/json",
-            temperature=0.5,
-            max_output_tokens=4096,
+            temperature=1.0,
+            max_output_tokens=8192,
         ),
     )
 
@@ -643,7 +670,7 @@ JSON配列のみを出力してください。"""
         default_wait = 10 if s.get("section_type") == "question" else 2
         s.setdefault("wait_seconds", default_wait)
 
-    logger.info("監督の最終プラン完了（%dセクション）", len(plan_sections))
+    logger.info("監督の最終プラン完了（%dセクション, model=%s）", len(plan_sections), director_model)
 
     return {
         "knowledge": knowledge_text,
@@ -1425,8 +1452,8 @@ Rules:
             user_parts.append(f"\n## 教材テキスト（参考）\n{extracted_text[:2000]}")
 
     user_prompt = "\n".join(user_parts)
-    model = _get_model()
-    temperature = 0.7
+    model = _get_dialogue_model()
+    temperature = 1.0
 
     max_retries = 3
     last_error = None
@@ -1578,12 +1605,12 @@ def generate_lesson_script_v2(
             else:
                 _progress(1, None, f"セクション構造を再生成中（リトライ {attempt + 1}/{max_retries}）...")
         response = client.models.generate_content(
-            model=_get_model(),
+            model=_get_director_model(),
             contents=[types.Content(parts=parts)],
             config=types.GenerateContentConfig(
                 system_instruction=structure_prompt,
                 response_mime_type="application/json",
-                temperature=0.7,
+                temperature=1.0,
                 max_output_tokens=8192,
             ),
         )

@@ -1,369 +1,758 @@
-# 授業モード v3 — 高速イテレーション改善
+# 授業モード v3 — 監督主導のセクション生成アーキテクチャ
 
 ## ステータス: 未着手
 
 ## 背景
 
-v1〜v2で授業生成・再生の基盤は完成したが、**品質改善のイテレーションが遅い**のが最大のボトルネック。
+現在の授業生成パイプライン（v2）は以下の4段階で構成されている:
 
-現状のワークフロー:
-1. ソース追加 → プラン生成（LLM×3、〜30秒）
-2. スクリプト生成（LLM×1、〜15秒）+ TTS全件生成（〜2分）
-3. 授業開始して最初から最後まで聞いて品質確認
-4. 問題があればスクリプト全体を再生成 → またTTS全件生成 → 最初から再確認
+```
+Phase A: プラン生成（3人のエキスパート）
+  知識先生 → 教材分析
+  エンタメ先生 → 起承転結設計
+  監督 → 統合して plan_sections を出力
+    → [{section_type, title, summary, emotion, wait_seconds}]  ← メタデータのみ
 
-**→ 1回の改善サイクルに3〜5分かかり、特定セクションだけ直したくても全体を作り直すしかない**
+Phase B-1: セクション構造生成（匿名の「構造デザイナー」LLM）
+  → 各セクションの display_text + dialogue_plan を生成
+
+Phase B-2: セリフ個別生成
+  → dialogue_plan の各エントリごとに teacher/student のペルソナでLLM呼び出し
+
+Phase C: TTS事前生成
+Phase D: 授業再生
+```
+
+### 問題点
+
+1. **監督とB-1が分断されている**: 監督はメタデータ（title, summary, emotion）しか出力しない。display_textとdialogue_planは別の「構造デザイナー」が独自に生成するため、監督の意図が完全には反映されない
+2. **display_textの質が不安定**: 構造デザイナーはプランのsummary文から推測してdisplay_textを作るため、監督が意図した具体的な教材内容が欠落しがち
+3. **dialogue_planが浅い**: 構造デザイナーの`direction`は「挨拶して」「リアクションして」レベルの抽象的な指示で、授業の流れを十分に制御できていない
 
 ## v3のゴール
 
-**「生成→確認→修正→再確認」のサイクルを最短にする仕組みを作る**
+**監督AIがセクションの完全な設計（display_text + dialogue流れ）まで責任を持ち、teacher/studentはそれに基づいてペルソナで肉付けするだけ、という明確な責任分離**
 
-具体的には:
-- 特定セクションだけをすぐ聞ける（全体再生不要）
-- 特定セクションだけ再生成できる（全体再生成不要）
-- テキストだけで素早くプレビューできる（TTS生成待ち不要）
-- 既知の問題（表示崩れ、英語発音、定型挨拶）を同時に修正
+```
+現行（v2）:
+  監督 → メタデータ → 構造デザイナー → display_text + dialogue_plan → キャラ別セリフ生成
 
-## 既存TODOからの取り込み
+v3:
+  監督 → display_text + dialogue_directions（セクション完全設計）→ キャラ別セリフ生成
+```
 
-| TODO項目 | v3での対応 | Phase |
-|---------|-----------|-------|
-| 全体の構成が悪いところがある | セクション個別再生成 + プロンプト改善 | 2 |
-| 授業パネルの内容が大きすぎて表示がおかしい | パネル表示修正 | 1 |
-| 英語授業なのに英語の発音が悪すぎる | プロンプト + TTSスタイル改善 | 1 |
-| 授業パネルの英文を読み上げた方が自然 | display_text読み上げオプション | 3 |
-| 最初の挨拶と終わりの挨拶を定型的に | テンプレート導入 | 3 |
-| v2未着手: URLテキスト抽出改善 | BeautifulSoup前処理 | 4 |
-| v2未着手: チャット割り込み改善 | スコープ外（v3後に別途） |
+## 新アーキテクチャ概要
 
----
+```
+教材テキスト + 画像
+  │
+  ▼
+[Phase A: 教材分析]  ← 現行と同じ（知識 + エンタメの2人）
+  知識先生 → 教材の要点・学習順序・注意点
+  エンタメ先生 → 起承転結・オチ・演出設計
+  │
+  ▼
+[Phase B: 監督によるセクション設計]  ← ★ここが変わる
+  入力: 知識先生 + エンタメ先生の分析 + 教材テキスト + 画像
+  出力: セクションごとに以下を決定
+    - section_type, title, emotion, wait_seconds（現行通り）
+    - display_text（配信画面に表示する具体的な教材内容）
+    - dialogue_directions（各ターンの詳細な演出指示）
+  → [{section_type, title, display_text, emotion, wait_seconds,
+      dialogue_directions: [{speaker, direction, key_content}, ...]
+     }]
+  │
+  ▼
+[Phase C: セリフ個別生成]  ← 現行Phase B-2と同じ構造
+  dialogue_directions の各エントリごとに:
+    teacher/student のペルソナ + 監督の演出指示 → セリフ生成
+  セクション間は並列、セクション内は順次（会話履歴蓄積）
+  │
+  ▼
+[Phase D: TTS事前生成]  ← 現行Phase Cと同じ
+[Phase E: 授業再生]    ← 現行Phase Dと同じ
+```
 
-## Phase 0: 現状確認（既存の仕組みで短い授業を生成・再生）
+## 各AIのモデル選定
 
-改善の前にまず現状を把握する。短い教材で授業を1本通して生成・再生し、問題点を具体的に洗い出す。
+### 現状の問題
 
-### 手順
+現行は全ステップで同一モデル（`gemini-3-flash-preview`、環境変数 `GEMINI_CHAT_MODEL`）を使用。temperatureだけ変えているが、各AIの役割の複雑さとコスト/速度のバランスが考慮されていない。
 
-1. **サーバーが起動していることを確認**
-   ```bash
-   curl -s http://localhost:$WEB_PORT/api/status
-   ```
+### 選定方針
 
-2. **テスト用コンテンツを作成**
-   - 管理画面（会話モード → 教師モード）で新規コンテンツ作成
-   - 名前: 「v3テスト: 簡単な英語挨拶」（短いテーマにする）
-   - またはAPI:
-   ```bash
-   curl -s -X POST http://localhost:$WEB_PORT/api/lessons \
-     -H 'Content-Type: application/json' \
-     -d '{"name": "v3テスト: 簡単な英語挨拶"}'
-   ```
+- **品質が下流に伝搬するステップ**: 上位モデルを使う。監督の出力品質はセリフ生成→TTS→再生まで全てに影響するため、ここに投資する価値が最も高い
+- **呼び出し回数が多いステップ**: 高速・低コストモデルを使う。セリフ個別生成は1授業あたり10〜60回呼ばれるため、速度が重要
+- **創造性 vs 正確性**: 創造性はtemperatureで制御できるため、モデル選定は主に推論力・構造化出力の信頼性で判断
+- **廃止タイムライン**: Gemini 2.5 Pro / Flash は **2026/6/17 に廃止予定**。3ヶ月以内に3系への移行が必要になる
 
-3. **教材テキストを直接設定**（画像/URL不要、最小構成で検証）
-   - 抽出テキストを手動で設定（短い素材で十分）:
-   ```bash
-   LESSON_ID=<上で作成したID>
-   curl -s -X PUT "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID" \
-     -H 'Content-Type: application/json' \
-     -d '{"name": "v3テスト: 簡単な英語挨拶"}'
-   ```
-   - ※ `extracted_text` はDBに直接入れるか、短いURLを `add-url` で追加
+### 利用可能なモデル一覧（2026年3月時点）
 
-4. **プラン生成**（3エキスパート、〜30秒）
-   ```bash
-   curl -N "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/generate-plan?lang=ja"
-   ```
-   - SSEで進捗確認。最終行のJSONに `ok: true` + `plan_sections` が返ること
-   - セクション数が3〜5程度になるよう短い教材にする
+| モデル | ステータス | 入力$/1M | 出力$/1M | 特徴 |
+|--------|----------|---------|---------|------|
+| `gemini-2.5-flash` | GA（6/17廃止） | $0.30 | $2.50 | 安定、高速、安い |
+| `gemini-2.5-pro` | GA（6/17廃止） | $1.25 | $10.00 | 安定、高い推論力 |
+| `gemini-3-flash-preview` | Preview | $0.50 | $3.00 | 現行デフォルト。Pro級の知性をFlash価格で |
+| `gemini-3.1-flash-lite-preview` | Preview | $0.25 | $1.50 | 最安。単純タスク向け |
+| `gemini-3.1-pro-preview` | Preview | $2.00 | $12.00 | 最高推論力（ARC-AGI-2: 77.1%、2.5 Proの31.1%から大幅向上） |
 
-5. **スクリプト+TTS生成**（〜1-2分）
-   ```bash
-   curl -N "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/generate-script?lang=ja"
-   ```
-   - SSEで進捗確認。スクリプト生成→TTS生成の順で進む
-   - 最終行の `sections` と `tts_generated` / `tts_errors` を確認
+※ `gemini-3-pro-preview` は 2026/3/9 に廃止済み。後継が `gemini-3.1-pro-preview`
 
-6. **生成結果の確認**（テキストレベル）
-   ```bash
-   curl -s "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID" | python3 -m json.tool
-   ```
-   - 各セクションの `content`, `tts_text`, `display_text` を目視確認
-   - `[lang:en]` タグが英語部分に正しく付いているか
-   - `display_text` の文字量は適切か
-   - 導入と締めの挨拶の自然さ
+### 監督モデルの候補比較
 
-7. **授業再生**
-   ```bash
-   curl -s -X POST "http://localhost:$WEB_PORT/api/lessons/$LESSON_ID/start?lang=ja"
-   ```
-   - broadcast.html で実際の表示を確認
-   - 確認ポイント:
-     - [ ] 授業テキストパネルの表示（はみ出し・重なりがないか）
-     - [ ] 英語の発音（カタカナ発音になっていないか）
-     - [ ] display_text の内容と読み上げ内容の関係
-     - [ ] 導入・締めの挨拶の印象
-     - [ ] セクション間の繋がり（唐突でないか）
-     - [ ] 対話モード（生徒がいる場合）の掛け合い自然さ
-     - [ ] 進捗パネルの表示
+監督はパイプラインの要であり、モデル選択の影響が最も大きい。3つの候補を比較する。
 
-8. **問題の記録**
-   - 発見した問題を具体的にメモ（どのセクション、何が悪いか）
-   - Phase 1以降の優先度調整に使う
+| 項目 | `gemini-2.5-pro` | `gemini-3-flash-preview` | `gemini-3.1-pro-preview` |
+|------|-----------------|-------------------------|-------------------------|
+| **推論力** | 高い（GA品質） | Flash級だがPro級に近い | 最高（ARC-AGI-2: 77.1%） |
+| **構造化JSON信頼性** | ★★★★★ 最も安定 | ★★★☆☆ 200回に1回程度の不具合報告 | ★★★★☆ 改善されたがpreview |
+| **安定性** | GA（本番SLAあり） | Preview（SLAなし） | Preview（SLAなし） |
+| **コスト（1回8K入力/4K出力）** | ~$0.05 | ~$0.016 | ~$0.064 |
+| **温度パラメータ** | 0.5で安定動作 | ⚠ 低温度でループの可能性。デフォルト1.0推奨 | ⚠ 同上。`thinking_level`パラメータ推奨 |
+| **廃止リスク** | ⚠ 2026/6/17廃止 | 不明（previewは予告なく変更の可能性） | 不明（同上） |
+| **プロンプト互換性** | 現行プロンプトがそのまま使える | 簡潔な指示を好む傾向。要調整 | 同上 |
 
-### 完了条件
+### 推奨: 段階的移行戦略
 
-- 短い授業を1本、生成→再生まで通せること
-- 現状の問題点が具体的にリストアップされていること
-- どのPhaseで何を直すか、優先度が確定していること
+**初期デフォルト: `gemini-3.1-pro-preview`、フォールバック: `gemini-2.5-pro`**
 
----
+#### 理由
 
-## Phase 1: クイックフィックス（既存バグ修正）
+1. **推論力の圧倒的差**: 3.1 Proの推論力は2.5 Proを大幅に上回る（ARC-AGI-2: 77.1% vs 31.1%）。監督の仕事は「知識分析+エンタメ構成+教材を統合して最適なセクション設計を出す」複雑な推論タスクであり、この差が効く
+2. **2.5系の廃止が迫っている**: 3ヶ月後にはどのみち3系に移行が必要。今から3.1 Proで検証を始めておく方が合理的
+3. **コスト影響は軽微**: 監督は1授業1回しか呼ばない。$0.064/回。月100授業でも$6.4
+4. **品質が悪ければ即フォールバック可能**: 環境変数で `GEMINI_DIRECTOR_MODEL=gemini-2.5-pro` に切り替えるだけ
 
-既存の目に見える問題をまず直す。検証基盤を作る前提条件。
+#### 注意が必要な点
 
-### 1-1. 授業パネル表示修正
+- **温度パラメータ**: Gemini 3系はtemperature低値(0.5等)でループする可能性がある。監督のtemperatureは **デフォルト(1.0)のまま** にし、代わりに `thinking_level: "medium"` で制御する
+- **構造化JSON**: 3系のJSON出力は稀に壊れるため、既存の `_parse_json_response()` による自動修復 + リトライ（max_retries=3）を維持
+- **プロンプト調整**: 3系は簡潔な指示を好む。監督プロンプトが冗長すぎると逆効果の可能性あり。v2のプロンプトをベースに、重複する制約を整理して簡潔化する
 
-**問題**: `display_text` の内容が長いとパネルが画面を覆い尽くす。保存済みのCSS値が固定レイアウトを上書きしている。
+### モデル一覧（推奨）
 
-**対策**:
-- `lesson-text-panel` に `max-height` + `overflow-y: auto` を確実に適用
-- `applyCommonStyle` で `lesson_text` / `lesson_progress` の `width/height` を除外
-- DB上の不正な保存値（`positionX/Y`, `width/height`）をクリーンアップ
-- テキスト量に応じた `font-size` 自動調整（文字数閾値で段階的に縮小）
+| AI | 役割 | 推奨モデル | temperature | 選定理由 |
+|----|------|-----------|-------------|---------|
+| 知識先生 | 教材分析・要点抽出 | `gemini-3-flash-preview` | 0.5 → **1.0** | 抽出・整理タスク。現行デフォルトのまま。3系ではtemp 1.0が推奨 |
+| エンタメ先生 | 起承転結・演出設計 | `gemini-3-flash-preview` | 0.8 → **1.0** | 創造性タスク。3系のデフォルト1.0が最適 |
+| **監督** | **セクション完全設計** | **`gemini-3.1-pro-preview`** | **1.0** | **最高の推論力でパイプライン全体の品質を底上げ。1回しか呼ばないのでコスト影響は軽微。`thinking_level: "medium"` で安定性確保** |
+| セリフ個別生成 | キャラペルソナで発話生成 | `gemini-3-flash-preview` | 0.7 → **1.0** | N回呼ばれるため速度優先。監督の具体的指示があるためFlashで十分 |
+| TTS | 音声合成 | `gemini-2.5-flash-preview-tts` | — | 専用モデル（変更なし） |
 
-**変更対象**:
-- `static/js/broadcast/settings.js` — applyCommonStyle除外リスト追加
-- `static/broadcast.html` — lesson-text-panel のCSS強化
-- `scripts/routes/overlay.py` — `_OVERLAY_DEFAULTS` からlesson系の位置・サイズ削除
+※ temperature: Gemini 3系ではデフォルト1.0が推奨されており、低い値はループや品質低下のリスクがある。既存の0.5/0.7/0.8を一律1.0に変更する。thinking_levelで出力の安定性を制御
 
-### 1-2. 英語発音改善
+### 監督に 3.1 Pro を使う根拠
 
-**問題**: 英語授業なのに英語がカタカナ発音になる。`[lang:en]` タグがLLMに正しく付与されない。
+1. **出力の複雑さ**: セクション数×(display_text + dialogue_directions配列)のネストされたJSON。最高の推論力で構造の正確性を確保
+2. **品質の伝搬効果**: 監督の出力品質が低い → セリフの質が下がる → 授業全体が悪化。逆に監督が良ければ下流は簡単な指示で高品質なセリフを生成できる
+3. **コスト効率**: 1授業あたり1回の呼び出し。$0.064/回。全体コストの5%未満
+4. **教材理解の深さ**: 知識先生 + エンタメ先生の分析 + 教材テキスト + 画像を統合して判断。ARC-AGI-2 77.1%の新規問題解決力が活きるタスク
+5. **廃止リスク回避**: 2.5 Proは3ヶ月後に廃止。今から3.1 Proで検証しておくことで移行リスクを軽減
 
-**対策** ([plans/teacher-mode-v2/06-english-pronunciation.md](teacher-mode-v2/06-english-pronunciation.md) の内容を実行):
-- スクリプト生成プロンプトに `[lang:en]` タグの詳細説明を追加（※v2プラン作成後に実装済みのため、実際の動作を確認し不足があれば追加修正）
-- `tts.py` の `synthesize()` に `style` オプション引数を追加
-- 授業再生時に英語発音強調スタイルを適用
+### セリフ生成に Flash を使う根拠
 
-**変更対象**:
-- `src/lesson_generator.py` — プロンプト確認・必要に応じて追加
-- `src/tts.py` — `style` 引数追加
-- `src/speech_pipeline.py` — `style` パラメータ伝搬
-- `src/lesson_runner.py` — 授業用TTSスタイル指定
+1. **呼び出し回数**: 10セクション × 平均4ターン = 40回。速度とコストが直接影響
+2. **制約の明確さ**: v3では監督が `direction`（2〜3文の具体的指示）+ `key_content`（言及すべき内容）を提供するため、モデルは「指示に従ってキャラらしく話す」だけでよい
+3. **出力の単純さ**: `{content, tts_text, emotion}` の3フィールドのみ。構造化出力の失敗リスクが低い
+4. **並列実行**: セクション間は最大3並列で実行するため、レイテンシの低いFlashが有利
 
----
+### 実装方法
 
-## Phase 2: 高速プレビュー（v3のコア機能）
+各AIのモデルを個別の環境変数で制御する:
 
-**目標**: 生成されたスクリプトを**TTS生成を待たずに**素早く確認できる仕組み。
+```bash
+# .env
+GEMINI_KNOWLEDGE_MODEL=gemini-3-flash-preview         # 知識先生
+GEMINI_ENTERTAINMENT_MODEL=gemini-3-flash-preview      # エンタメ先生
+GEMINI_DIRECTOR_MODEL=gemini-3.1-pro-preview           # 監督（★ 3.1 Pro）
+GEMINI_DIALOGUE_MODEL=gemini-3-flash-preview           # セリフ個別生成
+GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts          # TTS（既存）
+```
 
-### 2-1. セクション単体再生
+フォールバック: 個別環境変数が未設定の場合は `GEMINI_CHAT_MODEL`（現行のデフォルト）を使用。既存の動作を壊さない。
 
-管理画面のセクション一覧から、特定のセクションだけを即座に再生できるボタンを追加。
-
-**API**: `POST /api/lessons/{lesson_id}/sections/{section_id}/play`
-- 指定セクションのみをLessonRunnerで再生
-- TTSキャッシュがあれば即座に再生、なければその場で生成
-- 全体の授業を開始せず、単一セクションのみ
-
-**LessonRunner変更**:
-- `play_single(section_id)` メソッド追加
-- 既存の `_play_section()` を流用
-- 状態は `RUNNING` にせず、一時的な再生として扱う
-
-**UI変更** (`static/js/admin/teacher.js`):
-- 各セクション行に ▶ 再生ボタン追加
-- 再生中はボタンがスピナーに変化
-- 再生完了で元に戻る
-
-### 2-2. セクション個別TTS生成
-
-スクリプト生成時のTTS一括生成とは別に、個別セクションのTTSを生成/再生成できる。
-
-**API**: `POST /api/lessons/{lesson_id}/sections/{section_id}/generate-tts`
-- 指定セクションのTTSのみ生成（既存キャッシュは削除して再生成）
-- レスポンスで生成状況を返す
-
-**用途**: セクションのテキストを編集した後、そのセクションだけTTSを再生成して確認。
-
-### 2-3. テキストプレビューモード
-
-TTS音声なしで、テキストだけを順次表示して構成を確認するモード。
-
-**API**: `POST /api/lessons/{lesson_id}/preview`
-- 各セクションの `content` と `display_text` を一定間隔で配信画面に表示
-- 音声なし、アバター動作なし
-- 1セクション2〜3秒で自動進行（実際の授業の1/3〜1/5の速度）
-- スキップ/次へ/前へ の操作が可能
-
-**LessonRunner変更**:
-- `preview_mode` フラグ追加
-- `start(lesson_id, lang, preview=False)` — preview時はTTSスキップ
-- `_play_section()` のpreview分岐: display_text表示 + 字幕表示のみ
-
-**UI変更**:
-- 「プレビュー」ボタン追加（授業開始ボタンの横）
-- プレビュー中は簡易進捗バー表示
-
----
-
-## Phase 3: ターゲット再生成
-
-**目標**: 問題のあるセクションだけをピンポイントで再生成。全体を作り直す必要をなくす。
-
-### 3-1. セクション個別再生成
-
-特定セクションの `content` / `tts_text` / `display_text` をLLMで再生成する。
-
-**API**: `POST /api/lessons/{lesson_id}/sections/{section_id}/regenerate`
-- リクエストボディにオプションで `instruction`（追加指示）を含められる
-  - 例: 「もっと短く」「英語の例文を増やして」「もっと面白く」
-- 現在のセクション内容 + 前後セクションのコンテキスト + 教材テキストをLLMに渡す
-- 該当セクションのTTSキャッシュを自動削除
-
-**lesson_generator.py に追加**:
 ```python
-def regenerate_section(
-    lesson_name: str,
-    extracted_text: str,
-    current_section: dict,
-    prev_section: dict | None,
-    next_section: dict | None,
-    instruction: str = "",
-    student_config: dict | None = None,
-) -> dict:
+def _get_director_model():
+    return os.environ.get("GEMINI_DIRECTOR_MODEL",
+           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3.1-pro-preview"))
+
+def _get_dialogue_model():
+    return os.environ.get("GEMINI_DIALOGUE_MODEL",
+           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
 ```
 
-**プロンプト設計**:
-- システム: 「授業の1セクションを改善してください」
-- コンテキスト: 教材テキスト + 前後セクション + 現在のセクション
-- 追加指示があればそれも含める
-- 出力: 同じJSON形式で1セクション分のみ
+### Gemini 3系への移行で必要な変更
 
-**UI変更**:
-- 各セクション行に 🔄 再生成ボタン追加
-- クリック → テキストボックスで追加指示（任意、空でもOK）→ 実行
-- 再生成中はローディング表示
-- 完了後、セクション内容が更新される
+| 変更項目 | 内容 | 影響範囲 |
+|---------|------|---------|
+| temperature | 0.5 / 0.7 / 0.8 → **1.0**（3系デフォルト） | 全LLM呼び出し |
+| thinking制御 | 監督: `thinking_level: "medium"` 追加 | 監督の `GenerateContentConfig` |
+| プロンプト簡潔化 | 冗長な制約を整理。3系は簡潔な指示を好む | 監督プロンプト |
+| JSONリトライ | 3系の構造化出力バグ対策として `max_retries=3` 維持 | 既存のまま（変更不要） |
 
-### 3-2. プラン↔スクリプトの部分同期
+### コスト試算（1授業あたり）
 
-プランを編集した後、変更されたセクションだけスクリプトを再生成する。
+前提: 10セクション、平均4ターン/セクション = 40セリフ
 
-**判定ロジック**:
-- プランの `title` / `summary` / `section_type` / `emotion` が変わったセクションを検出
-- 変更セクションだけ `regenerate_section()` で再生成
+| ステップ | 回数 | モデル | 入力$/1M | 出力$/1M | 1授業あたりコスト |
+|---------|------|--------|---------|---------|----------------|
+| 知識先生 | 1 | 3 Flash | $0.50 | $3.00 | ~$0.006 |
+| エンタメ先生 | 1 | 3 Flash | $0.50 | $3.00 | ~$0.009 |
+| 監督 | 1 | **3.1 Pro** | $2.00 | $12.00 | ~$0.064 |
+| セリフ生成 | 40 | 3 Flash | $0.50 | $3.00 | ~$0.054 |
+| **合計** | 43 | — | — | — | **~$0.133** |
 
-**UI変更**:
-- プラン編集後に「変更セクションを再生成」ボタン表示
-- どのセクションが変更されたかハイライト表示
+監督のPro呼び出し($0.064)は全体の約48%を占めるが、1授業$0.13は十分に許容範囲。2.5 Proに下げれば$0.05で全体$0.12程度になるが、品質差を考えると3.1 Proが妥当。
 
 ---
 
-## Phase 4: 品質改善
+## 詳細設計
 
-### 4-1. 定型挨拶テンプレート
+### Phase A: 教材分析（変更なし）
 
-TV番組のように、授業の開始と終了に決まった形式の挨拶を入れる。
+知識先生とエンタメ先生は現行のまま。2回のLLM呼び出し。
 
-**仕組み**:
-- DB設定 (`settings` テーブル) に `lesson.intro_template` / `lesson.outro_template` を保存
-- デフォルトテンプレート例:
-  - 導入: 「みなさんこんにちは！ちょビです！今日の授業は「{lesson_name}」！一緒に楽しく学んでいこう！」
-  - 締め: 「というわけで今日の授業はここまで！楽しかったかな？次の授業もお楽しみに！ちょビでした、バイバーイ！」
-- スクリプト生成時に、`introduction` の最初と `summary` の最後にテンプレートを挿入
-- テンプレートはプロンプトに含めてLLMに自然に馴染ませる（丸ごと挿入ではなくLLMが調整）
-- 管理画面でテンプレート編集可能
+- 知識先生: 要点抽出、学習順序、誤解ポイント
+- エンタメ先生: 起承転結、オチ、演出ポイント
 
-**変更対象**:
-- `src/lesson_generator.py` — プロンプトにテンプレート情報を追加
-- `scripts/routes/teacher.py` — テンプレートCRUD API
-- `static/js/admin/teacher.js` — テンプレート編集UI（設定領域）
+### Phase B: 監督によるセクション設計（★主要変更）
 
-### 4-2. display_text読み上げオプション
+現行のPhase A-監督とPhase B-1を統合。1回のLLM呼び出しで以下を全て決定する。
 
-授業パネルに表示されている英文などを、先生が「画面の内容を読みますね」と読み上げるオプション。
+#### 監督への入力
 
-**方針**: プロンプト改善で対応（コード変更最小限）
-- スクリプト生成プロンプトに「display_textに英文や例文を表示する場合、contentでもその内容を自然に読み上げること」を追加
-- 「画面を見てください」ではなく「画面にも出しますが、読みますね」という導入を促す
+```
+システムプロンプト: 監督の役割定義（下記参照）
+ユーザープロンプト:
+  - 知識先生の分析
+  - エンタメ先生の構成
+  - 教材テキスト
+  - 画像（あれば）
+```
 
-**変更対象**:
-- `src/lesson_generator.py` — プロンプト追加のみ
+#### 監督の出力
 
-### 4-3. 構成品質のプロンプト改善
+```json
+[
+  {
+    "section_type": "introduction",
+    "title": "挨拶の常識？",
+    "display_text": "今日のテーマ: 英語の挨拶\n\n『How are you?』の本当の意味とは？\n\n日本語の『元気？』とは全然違う！",
+    "emotion": "excited",
+    "wait_seconds": 2,
+    "question": "",
+    "answer": "",
+    "dialogue_directions": [
+      {
+        "speaker": "teacher",
+        "direction": "視聴者に元気よく挨拶。今日のテーマ『英語の挨拶の本当の意味』を紹介し、「How are you?って実はすごく奥が深い」と興味を引く",
+        "key_content": "How are you? の本当の意味"
+      },
+      {
+        "speaker": "student",
+        "direction": "「え、How are you?なんて簡単じゃん！I'm fine って答えればいいんでしょ？」と自信満々に反応する",
+        "key_content": "I'm fine, thank you の定型文"
+      },
+      {
+        "speaker": "teacher",
+        "direction": "「ふふ、実はそれ…ネイティブはほぼ使わないんだよ」と意外な事実を予告。この授業で秘密を解き明かすと宣言",
+        "key_content": "I'm fine はネイティブが使わない"
+      }
+    ]
+  }
+]
+```
 
-**問題**: 「全体の構成が悪いところがある」
+#### 監督プロンプトの設計方針
 
-**対策**: スクリプト生成プロンプトに構成品質ガイドラインを追加
-- セクション間の繋がり（前セクションの内容を自然に受けて話す）
-- 同じ表現の繰り返しを避ける
-- 各セクションの長さのバランス（長すぎ/短すぎを防ぐ）
-- display_textの情報量コントロール（多すぎない、少なすぎない）
+現行の監督プロンプト（`director_prompt`）を拡張し、以下の責任を追加:
 
-**変更対象**:
-- `src/lesson_generator.py` — プロンプト改善
+1. **display_text設計**: 単なるタイトルではなく、視聴者が配信画面で見る具体的な教材コンテンツ（例文・比較表・クイズ選択肢）を含める。現行B-1の制約をそのまま監督に移行
+2. **dialogue_directions設計**: 「誰が何を話すか」だけでなく「どう話すか」「何の教材内容に触れるか」まで具体的に指示。`key_content`フィールドで、そのターンで必ず言及すべき教材内容を指定
+3. **セクション間の繋がり**: 前セクションの内容を受けて次セクションが自然に始まるよう、流れを意識した設計
+
+#### dialogue_directions の direction フィールドの粒度
+
+現行B-1の `dialogue_plan[].direction` との違い:
+
+| 項目 | 現行 B-1（構造デザイナー） | v3（監督） |
+|------|--------------------------|-----------|
+| 粒度 | 「挨拶して」「リアクションして」 | 「元気よく挨拶し、How are you?の本当の意味がテーマだと紹介」 |
+| 教材との紐付け | なし | `key_content` で教材のどの部分に触れるか明示 |
+| 感情の指定 | セクション全体で1つ | ターンごとの感情の起伏をdirectionに含める |
+| 視聴者への効果 | 考慮なし | 「興味を引く」「驚かせる」等の演出意図を含む |
+
+### Phase C: セリフ個別生成（軽微な変更）
+
+現行Phase B-2と同じ構造だが、入力が改善される:
+
+- `dialogue_directions[].direction` がより具体的になるため、セリフの質が向上
+- `dialogue_directions[].key_content` をユーザープロンプトに含め、教材内容への言及を確実にする
+
+```python
+# ユーザープロンプト（v3での変更箇所）
+user_parts = [
+    f"# 授業: {lesson_name}",
+    f"# セクション: {section_type}",
+    f"# 画面表示: {display_text[:200]}",
+]
+# ★追加: key_content
+if key_content:
+    user_parts.append(f"# このターンで触れるべき内容: {key_content}")
+user_parts.append(f"\n## このターンの演出指示\n{direction}")
+# ... 以下は現行通り（会話履歴、教材テキスト）
+```
+
+### Phase D / E: TTS事前生成・授業再生（変更なし）
+
+現行のPhase C / Phase Dをそのまま使用。
 
 ---
 
-## Phase 5: コンテンツパイプライン改善
+## 実装ステップ
 
-### 5-1. URLテキスト抽出の改善
+### Step 0: モデルヘルパー関数の追加
 
-**問題**: 生HTMLをGeminiに丸投げしており、ノイズが多くトークンを浪費。
+**対象ファイル**: `src/lesson_generator.py`
 
-**対策** ([plans/teacher-mode-v2/01-url-text-extraction.md](teacher-mode-v2/01-url-text-extraction.md)):
-- BeautifulSoup（requirements.txtに既存）でHTML前処理
-- `<script>`, `<style>`, `<nav>`, `<footer>`, `<iframe>`, `<aside>` 等を除去
-- `<article>`, `<main>`, `.entry-content` 等のセマンティック要素を優先抽出
-- フォールバック: BeautifulSoup失敗時は従来のGemini直接抽出
+**変更内容**:
+- 既存の `_get_model()` に加え、役割別のモデル取得関数を追加:
+  ```python
+  def _get_knowledge_model():
+      return os.environ.get("GEMINI_KNOWLEDGE_MODEL",
+             os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
 
-**変更対象**:
-- `src/lesson_generator.py` の `extract_text_from_url()` のみ
+  def _get_entertainment_model():
+      return os.environ.get("GEMINI_ENTERTAINMENT_MODEL",
+             os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
+
+  def _get_director_model():
+      return os.environ.get("GEMINI_DIRECTOR_MODEL",
+             os.environ.get("GEMINI_CHAT_MODEL", "gemini-3.1-pro-preview"))
+
+  def _get_dialogue_model():
+      return os.environ.get("GEMINI_DIALOGUE_MODEL",
+             os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
+  ```
+- 知識先生の呼び出し（行364）を `_get_knowledge_model()` に変更
+- エンタメ先生の呼び出し（行475）を `_get_entertainment_model()` に変更
+- 監督の呼び出し（行613）を `_get_director_model()` に変更
+- セリフ個別生成の呼び出し（行1428）を `_get_dialogue_model()` に変更
+- `.env.example` にも新しい環境変数を追記
+
+### Step 1: 監督プロンプトの拡張
+
+**対象ファイル**: `src/lesson_generator.py`
+
+**変更内容**:
+- `generate_lesson_plan()` 内の監督（Director）ステップを拡張
+- 現行の出力 `[{section_type, title, summary, emotion, has_question, wait_seconds}]` を以下に変更:
+  ```
+  [{section_type, title, display_text, emotion, wait_seconds, question, answer,
+    dialogue_directions: [{speaker, direction, key_content}]
+  }]
+  ```
+- 監督プロンプト（`director_prompt`）に以下を追加:
+  - display_textの詳細ガイドライン（現行 `_build_structure_prompt()` からの移植）
+  - dialogue_directionsの設計ガイドライン
+  - `key_content` フィールドの説明
+- 出力MIMEは `application/json` のまま（現行通り）
+
+**モデル**: `gemini-3.1-pro-preview`（`_get_director_model()`）。最高の推論力で複雑な構造化JSON出力の品質を確保
+**温度**: Gemini 3系ではtemperature 1.0（デフォルト）を使用。`thinking_level: "medium"` で安定性を確保
+
+### Step 2: 全LLM呼び出しに generation メタデータを付与
+
+**対象ファイル**: `src/lesson_generator.py`
+
+**現状の問題**:
+- Phase A（知識先生・エンタメ先生・監督）はプロンプトや生出力を保存していない
+- 管理画面（teacher.js）はプロンプトをJSにハードコードして表示 → Python側と乖離するリスク
+- Phase B-2のセリフ個別生成だけが `generation` メタデータを返している
+
+**変更内容**:
+
+すべてのLLM呼び出しで、以下の `generation` メタデータを記録して戻り値に含める:
+
+```python
+generation = {
+    "system_prompt": system_prompt,    # 実際に使ったシステムプロンプト全文
+    "user_prompt": user_prompt,        # 実際に使ったユーザープロンプト全文
+    "raw_output": response.text,       # LLMの生出力（パース前）
+    "model": model_name,              # 使用モデル名
+    "temperature": temperature,        # 使用temperature
+}
+```
+
+`generate_lesson_plan()` の戻り値を拡張:
+
+```python
+return {
+    "knowledge": knowledge_text,
+    "entertainment": entertainment_text,
+    "director_sections": director_sections,
+    "plan_sections": plan_sections,         # 互換性維持
+    # ★追加: 各ステップの generation メタデータ
+    "generations": {
+        "knowledge": {
+            "system_prompt": knowledge_prompt,
+            "user_prompt": user_text,
+            "raw_output": knowledge_text,
+            "model": knowledge_model,
+            "temperature": 1.0,
+        },
+        "entertainment": {
+            "system_prompt": entertainment_prompt,
+            "user_prompt": user_text + knowledge_text,
+            "raw_output": entertainment_text,
+            "model": entertainment_model,
+            "temperature": 1.0,
+        },
+        "director": {
+            "system_prompt": director_prompt,
+            "user_prompt": knowledge_text + entertainment_text,
+            "raw_output": raw_director_output,  # パース前の生JSON文字列
+            "model": director_model,
+            "temperature": 1.0,
+        },
+    },
+}
+```
+
+**注**: セリフ個別生成（Phase C）は既に `generation` メタデータを返しており変更不要
+
+### Step 3: generate_lesson_script_v2() の Phase B-1 除去
+
+**対象ファイル**: `src/lesson_generator.py`
+
+**変更内容**:
+- `generate_lesson_script_v2()` が `director_sections` を受け取る場合、Phase B-1（`_build_structure_prompt()` + LLM呼び出し）をスキップ
+- 代わりに `director_sections` の `dialogue_directions` を直接 Phase C（セリフ個別生成）に渡す
+- `director_sections` がない場合（旧プランからの移行）は現行のPhase B-1にフォールバック
+
+```python
+def generate_lesson_script_v2(
+    lesson_name, extracted_text,
+    plan_sections=None,
+    director_sections=None,  # ★追加
+    source_images=None,
+    on_progress=None,
+    teacher_config=None,
+    student_config=None,
+) -> list[dict]:
+    if director_sections:
+        # v3パス: 監督の設計をそのまま使う（Phase B-1スキップ）
+        structure_sections = director_sections
+    else:
+        # v2フォールバック: 従来のPhase B-1
+        structure_sections = _generate_structure(...)
+
+    # Phase C: セリフ個別生成（共通）
+    ...
+```
+
+### Step 4: _generate_single_dialogue() のkey_content対応
+
+**対象ファイル**: `src/lesson_generator.py`
+
+**変更内容**:
+- `dialogue_plan_entry` に `key_content` があればユーザープロンプトに含める
+- フィールド名は `dialogue_plan` → `dialogue_directions` に変更（ただし旧名も互換対応）
+
+### Step 5: teacher.py ルートの対応
+
+**対象ファイル**: `scripts/routes/teacher.py`
+
+**変更内容**:
+
+#### 5-1. プラン生成API（`/generate-plan`）
+
+- `generate_lesson_plan()` の戻り値に含まれる `director_sections` と `generations` をDBに保存
+- SSE最終イベントに `generations` を含める:
+  ```python
+  result = {
+      "ok": True,
+      "plan_sections": plan["plan_sections"],
+      "director_sections": plan["director_sections"],
+      "generations": plan["generations"],  # ★追加
+  }
+  ```
+
+#### 5-2. スクリプト生成API（`/generate-script`）
+
+- DBから `director_sections` を取得して `generate_lesson_script_v2()` に渡す
+- v3パス（director_sectionsあり）ではPhase B-1がスキップされるため、SSE進捗もそれに合わせて更新
+
+#### 5-3. レッスン取得API（`GET /api/lessons/{id}`）
+
+- レスポンスに `generations`（プラン生成時のメタデータ）を含める
+- 管理画面がリロードしても全プロンプトを表示できるようにする
+
+### Step 6: DBスキーマの調整 — 監督の出力の保存先
+
+**対象ファイル**: `src/db.py`
+
+監督が生成するデータは3つのレベルに分かれて保存される:
+
+#### 保存先の全体像
+
+```
+lesson_plans テーブル（言語別、1レコード/言語）
+  ├── knowledge TEXT         — 知識先生の分析（現行通り）
+  ├── entertainment TEXT     — エンタメ先生の構成（現行通り）
+  ├── plan_json TEXT         — 互換用メタデータ（現行通り）
+  ├── director_json TEXT     — ★追加: 監督の完全出力（JSON配列全体）
+  └── plan_generations TEXT  — ★追加: 全LLM呼び出しのメタデータ
+                               {knowledge: {system_prompt, user_prompt, raw_output, model, temperature},
+                                entertainment: {...},
+                                director: {...}}
+
+lesson_sections テーブル（セクション別、1レコード/セクション）
+  ├── display_text TEXT      — 監督が設計 → そのまま保存（現行カラム流用）
+  ├── dialogue_directions TEXT — ★追加: 監督のそのセクションの演出指示
+  │                              [{speaker, direction, key_content}, ...]
+  ├── dialogues TEXT         — Phase Cで生成されたセリフ（現行カラム流用）
+  │                            各エントリに generation メタデータ含む
+  │                            [{speaker, content, tts_text, emotion,
+  │                              direction_index: 0,  ← ★追加: dialogue_directionsの何番目か
+  │                              generation: {system_prompt, user_prompt, raw_output, ...}
+  │                            }, ...]
+  └── (他の既存カラム: section_type, title, content, tts_text, emotion, ...)
+```
+
+#### なぜ2箇所に保存するか
+
+| 保存先 | 内容 | 用途 |
+|--------|------|------|
+| `lesson_plans.director_json` | 監督の出力JSON全体 | 管理画面Phase Aの表示（監督の生出力確認）、再生成時の比較 |
+| `lesson_sections.dialogue_directions` | セクション単位の演出指示 | 管理画面Phase Cの表示（指示↔セリフの対応確認）、セクション単体再生成時の入力 |
+
+`director_json` はレッスン全体の一枚のスナップショット。`dialogue_directions` はセクション単位に分解したもの。同じデータの2つのビュー。
+
+#### 変更内容
+
+**`lesson_plans` テーブル**（Migration追加）:
+```sql
+ALTER TABLE lesson_plans ADD COLUMN director_json TEXT NOT NULL DEFAULT '';
+ALTER TABLE lesson_plans ADD COLUMN plan_generations TEXT NOT NULL DEFAULT '';
+```
+
+**`lesson_sections` テーブル**（Migration追加）:
+```sql
+ALTER TABLE lesson_sections ADD COLUMN dialogue_directions TEXT NOT NULL DEFAULT '';
+```
+
+**`dialogues` JSON内の各エントリに `direction_index` を追加**:
+- Phase Cのセリフ生成時に、何番目の `dialogue_directions` エントリから生成されたかを記録
+- 管理画面で「監督の指示 → 実際のセリフ」の対応を表示するために使用
+- 既存のdialoguesスキーマに1フィールド追加するだけなのでDB Migration不要（JSON内）
+
+#### データの流れ
+
+```
+プラン生成時:
+  generate_lesson_plan()
+    → director_sections（監督の完全出力）
+    → lesson_plans.director_json に全体を保存
+    → lesson_plans.plan_generations にメタデータを保存
+
+スクリプト生成時:
+  generate_lesson_script_v2(director_sections=...)
+    → 各セクションの dialogue_directions を lesson_sections.dialogue_directions に保存
+    → 各セクションの display_text を lesson_sections.display_text に保存
+    → Phase Cで生成された dialogues を lesson_sections.dialogues に保存
+      （各エントリに direction_index + generation メタデータ付き）
+
+管理画面表示時:
+  GET /api/lessons/{id}
+    → lesson_plans から plan_generations を取得（Phase A表示用）
+    → lesson_sections から dialogue_directions + dialogues を取得（Phase C表示用）
+    → dialogue_directions[i] と dialogues[direction_index==i] を紐付けて表示
+```
+
+### Step 7: 管理画面 — 全LLM入出力の可視化
+
+**対象ファイル**: `static/js/admin/teacher.js`
+
+#### 現状の問題
+
+| 問題 | 影響 |
+|------|------|
+| プロンプトがJSにハードコード | Python側を変更してもUIに反映されない。二重管理のメンテコスト |
+| Phase B-1（構造生成）のプロンプトが非表示 | v2で構造デザイナーが何をしたか確認不可能 |
+| 非v2パスではメタデータが一切ない | 品質問題の原因特定が困難 |
+| 生成方式の説明文が不正確 | 「1回のLLM呼び出し」と書いてあるがv2では個別呼び出し |
+
+#### v3での方針: **全プロンプトをAPIから取得、JSのハードコードを廃止**
+
+管理画面は `plan_generations`（DB保存）と各dialogueの `generation` フィールド（既存）からデータを取得し、JSにプロンプトを一切ハードコードしない。
+
+#### UI設計: LLMデータフロー全体表示
+
+授業コンテンツの詳細画面で、生成パイプライン全体を以下のカード形式で表示する:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 📘 Phase A: 教材分析                                      │
+│                                                          │
+│ ┌─ Step 1: 知識先生 ──────────────────────────────────┐  │
+│ │ モデル: gemini-3-flash-preview  温度: 1.0           │  │
+│ │                                                     │  │
+│ │ ▶ システムプロンプト（クリックで展開）                  │  │
+│ │   ┌───────────────────────────────────────────┐    │  │
+│ │   │ あなたは「知識先生」です。教科主任として... │    │  │
+│ │   └───────────────────────────────────────────┘    │  │
+│ │                                                     │  │
+│ │ ▶ ユーザープロンプト（クリックで展開）                  │  │
+│ │   ┌───────────────────────────────────────────┐    │  │
+│ │   │ # 授業タイトル: ...                         │    │  │
+│ │   │ # 教材テキスト: ...                         │    │  │
+│ │   └───────────────────────────────────────────┘    │  │
+│ │                                                     │  │
+│ │ ▶ 出力（クリックで展開、デフォルト展開）               │  │
+│ │   ┌───────────────────────────────────────────┐    │  │
+│ │   │ ### 教えるべき要点                          │    │  │
+│ │   │ 1. How are you? の社会的機能...             │    │  │
+│ │   └───────────────────────────────────────────┘    │  │
+│ └─────────────────────────────────────────────────────┘  │
+│                                                          │
+│        ↓ 知識先生の出力が入力に含まれる                     │
+│                                                          │
+│ ┌─ Step 2: エンタメ先生 ──────────────────────────────┐  │
+│ │ （同じ構造: プロンプト + 出力）                       │  │
+│ └─────────────────────────────────────────────────────┘  │
+│                                                          │
+│        ↓ 知識 + エンタメの出力が入力に含まれる              │
+│                                                          │
+│ ┌─ Step 3: 監督 ──────────────────── gemini-3.1-pro ──┐  │
+│ │ ▶ システムプロンプト                                  │  │
+│ │ ▶ ユーザープロンプト                                  │  │
+│ │ ▶ 生出力（JSON）                                     │  │
+│ │                                                     │  │
+│ │ 📋 パース結果: 8セクション                            │  │
+│ │ ┌ セクション1 [introduction] 挨拶の常識？ ──────────┐ │  │
+│ │ │ display_text: 今日のテーマ: 英語の挨拶...         │ │  │
+│ │ │ dialogue_directions:                              │ │  │
+│ │ │   [1] teacher: 視聴者に挨拶し...                  │ │  │
+│ │ │       key_content: How are you?の本当の意味       │ │  │
+│ │ │   [2] student: 自信満々にI'm fineと...            │ │  │
+│ │ │       key_content: I'm fine の定型文              │ │  │
+│ │ └──────────────────────────────────────────────────┘ │  │
+│ │ ┌ セクション2 [explanation] ... ────────────────────┐ │  │
+│ │ │ ...                                               │ │  │
+│ │ └──────────────────────────────────────────────────┘ │  │
+│ └─────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ 🎭 Phase C: セリフ個別生成                                │
+│                                                          │
+│ ┌ セクション1 [introduction] ─────────────────────────┐  │
+│ │                                                     │  │
+│ │ [1] 🎤 teacher（ちょビ）                             │  │
+│ │   監督の指示: 視聴者に挨拶し、テーマを紹介...          │  │
+│ │   key_content: How are you?の本当の意味              │  │
+│ │                                                     │  │
+│ │   ▶ システムプロンプト                                │  │
+│ │   ▶ ユーザープロンプト                                │  │
+│ │   ▶ 生出力（JSON）                                   │  │
+│ │                                                     │  │
+│ │   結果: 「みんな、いらっしゃい！...」                  │  │
+│ │   感情: excited  🔊 TTS: section_00_dlg_00.wav       │  │
+│ │                                                     │  │
+│ │ [2] 🎤 student（なるこ）                              │  │
+│ │   監督の指示: I'm fineと自信満々に...                  │  │
+│ │   ...                                               │  │
+│ └─────────────────────────────────────────────────────┘  │
+│                                                          │
+│ ┌ セクション2 ... ────────────────────────────────────┐  │
+│ └─────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ 🔊 Phase D: TTS生成状況                                  │
+│  セクション1: 3/3 生成済み (▶再生ボタン各発話)             │
+│  セクション2: 2/4 生成済み                                │
+│  ...                                                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 実装詳細
+
+**データソース（JSハードコード廃止）**:
+
+| 表示項目 | 現行のデータソース | v3のデータソース |
+|---------|-----------------|----------------|
+| 知識先生のプロンプト | JSにハードコード | `plan_generations.knowledge.system_prompt` (API) |
+| 知識先生の出力 | `langPlan.knowledge` (API) | `plan_generations.knowledge.raw_output` (API) |
+| エンタメ先生のプロンプト | JSにハードコード | `plan_generations.entertainment.system_prompt` (API) |
+| エンタメ先生の出力 | `langPlan.entertainment` (API) | `plan_generations.entertainment.raw_output` (API) |
+| 監督のプロンプト | JSにハードコード | `plan_generations.director.system_prompt` (API) |
+| 監督の生出力 | なし（パース後のみ） | `plan_generations.director.raw_output` (API) |
+| セリフのプロンプト | `dialogue.generation.*` (API) ✓ | 同左（変更なし）|
+| 使用モデル名 | 表示なし | `generation.model` (API) |
+
+**折りたたみルール**:
+
+| 項目 | デフォルト状態 | 理由 |
+|------|-------------|------|
+| システムプロンプト | 折りたたみ | 長い。確認時のみ展開 |
+| ユーザープロンプト | 折りたたみ | 同上 |
+| 生出力 | **展開** | 最も頻繁に確認する情報 |
+| パース結果（セクション一覧） | **展開** | 監督の設計意図を一目で確認 |
+| 各セリフの generation | 折りたたみ | 必要時のみ展開 |
+
+**データフローの可視化**:
+- 各ステップ間に「↓ 前ステップの出力が入力に含まれる」の矢印を表示
+- 監督のdialogue_directionsの各エントリが、Phase Cのどのセリフに対応するか、番号で紐付けを表示
+
+**変更対象ファイル**:
+- `static/js/admin/teacher.js` — `buildLessonItem()` の Phase A 表示を `plan_generations` ベースに書き換え。JS内のハードコードプロンプトを全て削除
+- `scripts/routes/teacher.py` — `GET /api/lessons/{id}` のレスポンスに `plan_generations` を含める
 
 ---
 
-## 実装優先順序
+## LLM呼び出し回数の比較
 
-```
-Phase 1（クイックフィックス）
-  ├─ 1-1. パネル表示修正          → すぐ直せる、視覚的効果大
-  └─ 1-2. 英語発音改善            → プロンプト中心、効果検証しやすい
+| フェーズ | 現行（v2） | v3 |
+|---------|-----------|-----|
+| 知識先生 | 1回 | 1回 |
+| エンタメ先生 | 1回 | 1回 |
+| 監督 | 1回（メタデータのみ） | 1回（display_text + dialogue_directions含む）|
+| 構造デザイナー（B-1）| 1回 | **削除** |
+| セリフ個別生成 | N回（ターン数分） | N回（ターン数分） |
+| **合計** | **4 + N 回** | **3 + N 回** |
 
-Phase 2（高速プレビュー）⭐ v3の核心
-  ├─ 2-1. セクション単体再生      → 最も重要、これだけで検証速度が大幅向上
-  ├─ 2-2. セクション個別TTS生成   → 2-1と組み合わせて即効性あり
-  └─ 2-3. テキストプレビューモード → TTS待ちを完全に排除
-
-Phase 3（ターゲット再生成）
-  ├─ 3-1. セクション個別再生成    → 全体再生成の無駄を排除
-  └─ 3-2. プラン↔スクリプト部分同期 → プラン調整後の再生成を効率化
-
-Phase 4（品質改善）
-  ├─ 4-1. 定型挨拶テンプレート    → プロンプト追加
-  ├─ 4-2. display_text読み上げ    → プロンプト追加
-  └─ 4-3. 構成品質プロンプト改善  → プロンプト追加
-
-Phase 5（パイプライン改善）
-  └─ 5-1. URL抽出改善            → 独立、いつでも実装可能
-```
+LLM呼び出し回数が1回削減される。かつ、監督の出力がそのままセリフ生成の入力になるため、中間変換でのロスがなくなる。
 
 ## リスク
 
 | リスク | 対策 |
 |--------|------|
-| セクション個別再生成で前後の文脈が崩れる | 前後セクションをコンテキストとしてLLMに渡す |
-| プレビューモードと通常再生の状態管理が複雑化 | LessonRunnerに `preview` フラグで分岐、状態遷移は共通 |
-| プロンプト改善の効果が不安定 | Phase 2の高速検証基盤で素早くA/B確認できる |
-| テンプレート挨拶が不自然になる | LLMにテンプレートを「参考」として渡し、自然に馴染ませる |
+| 監督プロンプトが長くなり出力品質が下がる | display_textとdialogue_directionsの具体例を豊富にプロンプトに含める。temperatureは0.5で安定性優先 |
+| 監督の出力JSONが巨大になりパース失敗が増える | `max_output_tokens` を 8192 に増やす。既存の `_parse_json_response()` で自動修復 |
+| 既存プランとの互換性が崩れる | `director_sections` がない場合は現行B-1にフォールバック。段階的移行 |
+| 監督が教材内容を正確にdisplay_textに反映しない | 教材テキスト + 画像を監督に直接渡す（現行の構造デザイナーと同じ）|
+| dialogue_directionsの粒度が粗い/細かすぎる | プロンプトで「2〜3文の具体的な指示」と明記。生成結果を管理画面で確認できる体制を維持 |
+| Gemini 3系のJSON出力バグ（200回に1回） | 既存の `_parse_json_response()` 自動修復 + `max_retries=3` で吸収。リトライ機構は現行のまま維持 |
+| Gemini 3系のtemperature動作変更 | 全LLM呼び出しをtemperature 1.0に統一。監督は `thinking_level: "medium"` で安定性確保 |
+| `gemini-3.1-pro-preview` がpreviewで突然変更/廃止される | 環境変数で即座に `gemini-2.5-pro` にフォールバック可能。2.5 Pro廃止(6/17)までに3系GAが出なければ再検討 |
 
 ## 検証方法
 
-各Phaseの完了時:
 1. `python3 -m pytest tests/ -q` — 全テスト通過
-2. Phase 1: 授業パネルが正常表示、英語TTS音声が改善
-3. Phase 2: セクション▶ボタンで即再生、プレビューモードで全体確認
-4. Phase 3: セクション🔄再生成でそのセクションだけ更新
-5. Phase 4: 授業の導入/締めが安定した形式になる
-6. Phase 5: URL入力からの抽出品質が向上
+2. 短い教材でプラン生成 → `director_sections` の内容確認
+   - `display_text` が具体的な教材内容を含んでいるか
+   - `dialogue_directions` が十分に具体的か
+   - `key_content` が教材の要点を網羅しているか
+3. スクリプト生成 → セリフが監督の指示通りになっているか
+4. TTS + 授業再生 → 全体の流れが自然か
+5. **管理画面の全データフロー検証**:
+   - [ ] Phase A の3ステップ全てで、システムプロンプト・ユーザープロンプト・生出力が折りたたみで全文表示される
+   - [ ] プロンプトがJSハードコードではなくAPIから取得されている（Python側を変更→管理画面に即反映）
+   - [ ] 各ステップの使用モデル名とtemperatureが表示される
+   - [ ] ステップ間のデータフロー（前ステップの出力→次ステップの入力）が矢印で表示される
+   - [ ] 監督のパース結果がセクション一覧で展開表示される（display_text + dialogue_directions + key_content）
+   - [ ] Phase C の各セリフで generation メタデータ（プロンプト全文・生出力）が折りたたみで確認できる
+   - [ ] 監督の dialogue_directions と Phase C の各セリフの紐付けが番号で分かる
+   - [ ] ページリロード後も全データが保持されている（DB保存が正しく動いている）

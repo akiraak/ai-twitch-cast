@@ -2,16 +2,14 @@
 
 ## 機能追加
 
-### 授業モード v3 → [plans/teacher-mode-v3.md](plans/teacher-mode-v3.md)
-- [ ] Phase 0: 現状確認（既存の仕組みで短い授業を生成・再生して問題を洗い出す）
-- [ ] Phase 1: クイックフィックス（パネル表示修正、英語発音改善）
-- [ ] Phase 2: 高速プレビュー（セクション単体再生、個別TTS生成、テキストプレビュー）
-- [ ] Phase 3: ターゲット再生成（セクション個別再生成、プラン↔スクリプト部分同期）
-- [ ] Phase 4: 品質改善（定型挨拶テンプレート、display_text読み上げ、構成プロンプト改善）
-- [ ] Phase 5: コンテンツパイプライン改善（URL抽出改善）
-
-### 教師モード管理画面フロー可視化 → [plans/teacher-ui-flow-visibility.md](plans/teacher-ui-flow-visibility.md)
-- [ ] Step 3: 再生中セクションのハイライト
+### 授業モード v3 — 監督主導アーキテクチャ → [plans/teacher-mode-v3.md](plans/teacher-mode-v3.md)
+- [ ] Step 1: 監督プロンプト拡張（display_text + dialogue_directions + key_content を出力）
+- [ ] Step 2: 全LLM呼び出しにgenerationメタデータ付与（JSハードコード廃止の前提）
+- [ ] Step 3: generate_lesson_script_v2() のPhase B-1除去（監督の設計を直接使用）
+- [ ] Step 4: セリフ個別生成のkey_content対応
+- [ ] Step 5: teacher.pyルート対応（API戻り値にgenerations/director_sections追加）
+- [ ] Step 6: DBスキーマ調整（lesson_plans.director_json/plan_generations、lesson_sections.dialogue_directions）
+- [ ] Step 7: 管理画面 — 全LLM入出力の可視化（プロンプトをAPIから取得、データフロー表示）
 
 ### キャラクター発話生成フロー設計ドキュメント
 - [x] 全モード（授業・雑談・イベント等）を横断したキャラクター発話生成フローの定義ドキュメントを作成 → [docs/speech-generation-flow.md](docs/speech-generation-flow.md)

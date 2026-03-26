@@ -1,5 +1,13 @@
 # DONE
 
+## 授業モード v3 Step 0: 役割別モデルヘルパー関数
+
+- [x] `_get_knowledge_model()`, `_get_entertainment_model()`, `_get_director_model()`, `_get_dialogue_model()` 追加
+- [x] 知識先生・エンタメ先生・監督・セリフ生成・Phase B-1の各LLM呼び出しを役割別関数に切り替え
+- [x] temperature を Gemini 3系推奨の 1.0 に統一
+- [x] 監督の `max_output_tokens` を 4096 → 8192 に増加
+- [x] `.env.example` に `GEMINI_KNOWLEDGE_MODEL` / `GEMINI_ENTERTAINMENT_MODEL` / `GEMINI_DIRECTOR_MODEL` / `GEMINI_DIALOGUE_MODEL` 追記
+
 ## セリフ個別LLM生成 + 管理画面プロンプト表示 + JSON修復
 
 - [x] セリフ生成を「全キャラ一括LLM呼び出し」から「キャラごとに個別LLM呼び出し（ターン制）」に変更
