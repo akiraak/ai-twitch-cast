@@ -134,6 +134,7 @@ async function buildLessonItem(lessonId) {
   const summary = document.createElement('summary');
   summary.style.cssText = 'cursor:pointer; font-weight:600; font-size:0.9rem; color:#2a1f40; list-style:none; display:flex; align-items:center; gap:8px;';
   summary.innerHTML = `<span class="lesson-arrow" style="color:#7b1fa2; font-size:0.75rem;">&#9660;</span>`
+    + `<span style="font-size:0.65rem; color:#aaa; min-width:28px;">#${lessonId}</span>`
     + `<span>${esc(lesson.name)}</span>`
     + `<span style="font-size:0.7rem; color:#8a7a9a;">${esc(badgeText)}</span>`;
   details.appendChild(summary);
@@ -316,12 +317,13 @@ async function buildLessonItem(lessonId) {
   step3Body.className = 'lesson-step-body';
   const progressInfo = isActive ? `${statusRes.status.current_index + 1} / ${statusRes.status.total_sections} セクション` : '';
   step3Body.innerHTML = `<div class="lesson-step-title">授業${isActive ? '（実行中）' : ''}</div>
-    <div style="display:flex; gap:6px; align-items:center;">
+    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
       <button onclick="startLesson(${lessonId}, '${lang}')" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">${lang === 'en' ? 'Start Lesson' : '授業開始'}</button>
       <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isRunning ? '' : ' display:none;'}">一時停止</button>
       <button onclick="resumeLesson()" class="btn-lesson-resume" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isPaused ? '' : ' display:none;'}">再開</button>
       <button onclick="stopLesson()" class="btn-lesson-stop" style="padding:5px 14px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? '' : ' display:none;'}">終了</button>
       <span class="lesson-state" style="font-size:0.8rem; color:#8a7a9a;">${isRunning ? '再生中' : isPaused ? '一時停止中' : ''}</span>
+      <button onclick="window.open('/broadcast', '_blank', 'width=1920,height=1080')" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">配信プレビュー</button>
     </div>
     <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:#8a7a9a;">${progressInfo}</div>`;
 
@@ -637,6 +639,7 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap) {
         <span style="font-weight:600; font-size:0.8rem; margin-left:4px; color:#2a1f40;">${i + 1}. ${esc(s.section_type)}</span>
         <span style="font-size:0.7rem; color:#7b1fa2; margin-left:8px;">[${esc(s.emotion)}]</span>
         ${hasCacheFlag ? '<span style="font-size:0.65rem; color:#2e7d32; margin-left:6px; background:#e8f5e9; padding:1px 5px; border-radius:3px;">TTS cached</span>' : ''}
+        ${hasCacheFlag ? `<button onclick="playSectionAudio(this, ${s.order_index}, ${lessonId})" style="width:26px; height:26px; background:#1565c0; color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.75rem; line-height:26px; text-align:center;" title="セクション再生">\u25B6</button>` : ''}
       </div>
       <div style="display:flex; gap:4px;">
         <button onclick="moveSectionUp(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#f0ecf5; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.7rem;" ${i === 0 ? 'disabled' : ''}>\u25B2</button>
@@ -645,7 +648,26 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap) {
       </div>
     </div>`;
 
-    html += sectionField('発話', 'content', lessonId, s.id, s.content);
+    // 対話モード: dialoguesがあれば発話一覧を表示
+    let _dlgs = [];
+    try { _dlgs = typeof s.dialogues === 'string' ? JSON.parse(s.dialogues) : (s.dialogues || []); } catch(e) {}
+    if (_dlgs.length > 0) {
+      html += `<div style="margin-bottom:6px; padding:6px 8px; background:#f0ecf5; border-radius:4px; border:1px solid #e0d4f0;">`;
+      for (const dlg of _dlgs) {
+        const isT = dlg.speaker === 'teacher';
+        const spk = isT ? '\u{1F393}先生' : '\u{1F64B}生徒';
+        const bg = isT ? '#e3f2fd' : '#fff3e0';
+        const bc = isT ? '#90caf9' : '#ffcc80';
+        html += `<div style="margin-bottom:3px; padding:4px 8px; background:${bg}; border-left:3px solid ${bc}; border-radius:3px; font-size:0.72rem;">
+          <span style="font-weight:600; color:#555;">${spk}</span>
+          <span style="font-size:0.65rem; color:#7b1fa2; margin-left:4px;">[${esc(dlg.emotion || '')}]</span>
+          <div style="margin-top:2px; color:#2a1f40;">${esc(dlg.content || '')}</div>
+        </div>`;
+      }
+      html += `</div>`;
+    } else {
+      html += sectionField('発話', 'content', lessonId, s.id, s.content);
+    }
     html += sectionField('TTS', 'tts_text', lessonId, s.id, s.tts_text);
     html += sectionField('画面', 'display_text', lessonId, s.id, s.display_text);
 
@@ -660,13 +682,13 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap) {
       </div>`;
     }
 
-    // TTSキャッシュ — 再生リンク
+    // TTSキャッシュ — インライン再生ボタン
     if (cacheParts.length) {
       html += `<div style="margin-top:6px; padding:4px 8px; background:#e8f5e9; border-radius:4px; font-size:0.65rem; color:#2e7d32; display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center;">`;
       for (const cp of cacheParts) {
         const sizeKB = (cp.size / 1024).toFixed(0);
         const url = '/' + cp.path;
-        html += `<a href="${esc(url)}" target="_blank" style="color:#1565c0; text-decoration:underline; cursor:pointer;">part${cp.part_index}</a><span style="color:#558b2f;">(${sizeKB}KB)</span>`;
+        html += `<button onclick="playAudioInline(this, '${esc(url)}')" style="padding:1px 6px; background:#1565c0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.6rem;">\u25B6 part${cp.part_index}</button><span style="color:#558b2f;">(${sizeKB}KB)</span>`;
       }
       html += `</div>`;
     }
@@ -733,6 +755,10 @@ async function startLesson(lessonId, lang) {
   if (res && res.ok) {
     showToast(lang === 'en' ? 'Lesson started' : '授業開始', 'success');
     await loadLessons();
+  } else if (res && res.error) {
+    showToast('Error: ' + res.error, 'error');
+  } else {
+    showToast('授業開始に失敗しました', 'error');
   }
 }
 
@@ -752,6 +778,79 @@ async function stopLesson() {
     showToast('授業停止', 'success');
     await loadLessons();
   }
+}
+
+// --- インライン音声再生 ---
+
+let _currentAudio = null;
+let _currentPlayBtn = null;
+
+function _stopCurrentAudio() {
+  if (_currentAudio) {
+    _currentAudio.pause();
+    _currentAudio.currentTime = 0;
+    _currentAudio = null;
+  }
+  if (_currentPlayBtn) {
+    _currentPlayBtn.textContent = '\u25B6';
+    _currentPlayBtn.style.background = '#1565c0';
+    _currentPlayBtn = null;
+  }
+}
+
+function playAudioInline(btn, url) {
+  // 同じボタンを押したら停止
+  if (_currentPlayBtn === btn && _currentAudio && !_currentAudio.paused) {
+    _stopCurrentAudio();
+    return;
+  }
+  _stopCurrentAudio();
+  const audio = new Audio(url);
+  _currentAudio = audio;
+  _currentPlayBtn = btn;
+  btn.textContent = '\u25A0';
+  btn.style.background = '#c62828';
+  audio.play();
+  audio.onended = () => {
+    btn.textContent = '\u25B6';
+    btn.style.background = '#1565c0';
+    _currentAudio = null;
+    _currentPlayBtn = null;
+  };
+}
+
+async function playSectionAudio(btn, orderIndex, lessonId) {
+  // セクション全パートを連続再生
+  _stopCurrentAudio();
+  const lang = _getLessonLang(lessonId);
+  const cacheRes = await api('GET', `/api/lessons/${lessonId}/tts-cache?lang=${lang}`);
+  if (!cacheRes || !cacheRes.ok) return;
+  const section = (cacheRes.sections || []).find(s => s.order_index === orderIndex);
+  if (!section || !section.parts || !section.parts.length) { showToast('TTSキャッシュなし', 'error'); return; }
+
+  const urls = section.parts.map(p => '/' + p.path);
+  if (!urls.length) { showToast('TTSファイルなし', 'error'); return; }
+
+  const origText = btn.textContent;
+  btn.textContent = '\u25A0';
+  btn.style.background = '#c62828';
+  _currentPlayBtn = btn;
+
+  let idx = 0;
+  function playNext() {
+    if (idx >= urls.length) {
+      btn.textContent = origText;
+      btn.style.background = '#1565c0';
+      _currentAudio = null;
+      _currentPlayBtn = null;
+      return;
+    }
+    const audio = new Audio(urls[idx++]);
+    _currentAudio = audio;
+    audio.onended = playNext;
+    audio.play();
+  }
+  playNext();
 }
 
 // ステータスポーリング不要（loadLessonsで全更新）
