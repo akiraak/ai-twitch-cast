@@ -1,6 +1,6 @@
 # プラン: 英語モードのセリフを英語にする
 
-ステータス: 未着手
+ステータス: Step 1 完了
 
 ## Context
 
@@ -235,9 +235,9 @@ system_prompt = build_lesson_dialogue_prompt(
 
 ## 5. TTS スタイルの言語対応
 
-### 変更ファイル: `src/tts.py`
+### 変更ファイル: `src/ai_responder.py`
 
-`get_tts_config()` 関数で、キャラ config から言語モードに応じた `tts_style` を選択:
+`get_tts_config()` 関数（`ai_responder.py` L315-328）で、キャラ config から言語モードに応じた `tts_style` を選択:
 
 ```python
 from src.prompt_builder import get_localized_field
@@ -259,7 +259,7 @@ style = get_localized_field(config, "tts_style")
 | `src/ai_responder.py` | DEFAULT_CHARACTER / DEFAULT_STUDENT_CHARACTER に英語/バイリンガル版追加 |
 | `src/prompt_builder.py` | `get_localized_field()`, `build_lesson_dialogue_prompt()` 追加 |
 | `src/lesson_generator.py` | `get_lesson_characters()` 改修、`_generate_single_dialogue()` プロンプト差し替え |
-| `src/tts.py` | `get_tts_config()` 言語対応 |
+| `src/ai_responder.py` | `get_tts_config()` 言語対応 |
 | `scripts/routes/character.py` | `CharacterUpdate` スキーマ拡張 |
 | `static/index.html` | 言語タブUI追加 |
 | `static/js/admin/character.js` | 言語タブ切替 + 保存/読込対応 |
