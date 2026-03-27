@@ -1,5 +1,10 @@
 # DONE
 
+## キャラのライト設定が反映されないバグ修正
+
+- [x] 原因: `applySettings` で旧 `lighting` セクションが `lighting_teacher`/`lighting_student` を上書きしていた
+- [x] 修正: `lighting_teacher`/`lighting_student` が存在する場合は旧 `lighting` をスキップ
+
 ## 授業パネルのデザイン編集機能
 
 - [x] 授業タイトル・テキスト・進捗パネルのデザインを管理画面から変更可能に（背景・文字・枠線等）

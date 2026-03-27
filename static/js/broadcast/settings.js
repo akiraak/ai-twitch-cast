@@ -90,7 +90,7 @@ function applySettings(s) {
       window._pendingLightingPerChar.student = s.lighting_student;
     }
   }
-  if (s.lighting) {
+  if (s.lighting && !s.lighting_teacher && !s.lighting_student) {
     if (window.avatarLighting) {
       _applyLighting(s.lighting, 'teacher');
       _applyLighting(s.lighting, 'student');
