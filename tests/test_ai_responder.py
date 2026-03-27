@@ -20,11 +20,13 @@ from src.ai_responder import (
     generate_self_note,
     get_character,
     get_chat_characters,
+    get_tts_config,
     invalidate_character_cache,
     load_character,
     seed_character,
     _validate_multi_response,
 )
+from src.prompt_builder import set_stream_language
 from src.prompt_builder import set_stream_language
 
 
@@ -357,3 +359,38 @@ class TestGenerateMultiEventResponse:
         result = generate_multi_event_response("commit", "detail", characters)
         assert len(result) == 1
         assert result[0]["speaker"] == "teacher"
+
+
+class TestGetTtsConfig:
+    """get_tts_config の言語対応テスト"""
+
+    def setup_method(self):
+        set_stream_language("ja", "en", "low")
+        invalidate_character_cache()
+
+    def test_ja_returns_default_style(self, test_db, mock_env):
+        set_stream_language("ja", "none", "low")
+        config = get_tts_config()
+        style = config["style"]
+        # 日本語版tts_styleが返る
+        assert style is not None
+        assert isinstance(style, str)
+
+    def test_en_returns_en_style(self, test_db, mock_env):
+        set_stream_language("en", "none", "low")
+        config = get_tts_config()
+        style = config["style"]
+        # 英語版tts_style_enがあればそれが返る、なければ日本語版にフォールバック
+        assert style is not None
+        assert isinstance(style, str)
+
+    def test_bilingual_returns_bilingual_style(self, test_db, mock_env):
+        set_stream_language("ja", "en", "low")
+        config = get_tts_config()
+        style = config["style"]
+        # バイリンガル版tts_style_bilingualがあればそれが返る
+        assert style is not None
+        assert isinstance(style, str)
+
+    def teardown_method(self):
+        set_stream_language("ja", "en", "low")

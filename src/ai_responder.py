@@ -322,9 +322,10 @@ def get_tts_config(character_id=None):
             config = json.loads(row["config"])
     if not config:
         config = get_character()
+    from src.prompt_builder import get_localized_field
     return {
         "voice": config.get("tts_voice"),
-        "style": config.get("tts_style"),
+        "style": get_localized_field(config, "tts_style"),
     }
 
 

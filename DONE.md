@@ -1,5 +1,10 @@
 # DONE
 
+## 英語モードのセリフを英語にする Step 5
+
+- [x] `get_tts_config()` で `get_localized_field(config, "tts_style")` を使い言語モード対応
+- [x] テスト3件追加（`TestGetTtsConfig`）
+
 ## 英語モードのセリフを英語にする Step 4
 
 - [x] `build_lesson_dialogue_prompt()` を `prompt_builder.py` に新設（8セクション構成、言語モード対応）

@@ -6,7 +6,6 @@
 - [ ] コンテンツを生成し不自然なところがないかAIで検証する
 - [ ] コンテンツに出てくるメインコンテンツの文章や会話を読み上げるようにする
 - [>] 英語モードのセリフを英語にする → [plans/lesson-language-mode.md](plans/lesson-language-mode.md)
-  - [ ] Step 5: TTS スタイルの言語対応
   - [ ] Step 6: ドキュメント更新
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] セリフを生成したあとに監督に監修してもらいダメ出しを出してもらう。そのあとにもう一度セリフの生成をする。そのあとにTTSの生成
