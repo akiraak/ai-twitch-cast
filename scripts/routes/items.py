@@ -107,8 +107,21 @@ _ITEM_SPECIFIC_SCHEMA = {
     "lesson_progress": [
         {"title": "固有設定", "fields": [
             {"key": "maxHeight", "label": "最大高さ (%)", "type": "slider", "min": 20, "max": 90, "step": 1, "default": 80},
-            {"key": "titleFontSize", "label": "タイトル文字 (vw)", "type": "slider", "min": 0.8, "max": 2, "step": 0.05, "default": 1.1},
             {"key": "itemFontSize", "label": "項目文字 (vw)", "type": "slider", "min": 0.8, "max": 2, "step": 0.05, "default": 0.95},
+        ]},
+        {"title": "タイトル文字", "fields": [
+            {"key": "titleFontSize", "label": "サイズ (vw)", "type": "slider", "min": 0.5, "max": 3, "step": 0.05, "default": 1.1},
+            {"key": "titleColor", "label": "色", "type": "color", "default": "#7c4dff"},
+            {"key": "titleStrokeSize", "label": "縁取りサイズ", "type": "slider", "min": 0, "max": 10, "step": 0.5, "default": 0},
+            {"key": "titleStrokeColor", "label": "縁取り色", "type": "color", "default": "#000000"},
+            {"key": "titleStrokeOpacity", "label": "縁取り透明度", "type": "slider", "min": 0, "max": 1, "step": 0.05, "default": 0.8},
+        ]},
+        {"title": "カウント文字", "fields": [
+            {"key": "countFontSize", "label": "サイズ (vw)", "type": "slider", "min": 0.5, "max": 2, "step": 0.05, "default": 0.85},
+            {"key": "countColor", "label": "色", "type": "color", "default": "#c8b4ff"},
+            {"key": "countStrokeSize", "label": "縁取りサイズ", "type": "slider", "min": 0, "max": 10, "step": 0.5, "default": 0},
+            {"key": "countStrokeColor", "label": "縁取り色", "type": "color", "default": "#000000"},
+            {"key": "countStrokeOpacity", "label": "縁取り透明度", "type": "slider", "min": 0, "max": 1, "step": 0.05, "default": 0.8},
         ]},
     ],
 }

@@ -1,5 +1,23 @@
 // 設定適用（applySettings, _applyLighting）
 
+// === 縁取り適用ヘルパー ===
+function _applyStroke(el, size, color, opacity) {
+  const sz = size != null ? Number(size) : null;
+  if (sz == null) return;
+  if (sz > 0) {
+    let c = color || '#000000';
+    const a = opacity != null ? parseFloat(opacity) : 0.8;
+    if (c.startsWith('#')) {
+      const r = parseInt(c.slice(1,3),16)||0, g = parseInt(c.slice(3,5),16)||0, b = parseInt(c.slice(5,7),16)||0;
+      c = `rgba(${r},${g},${b},${a})`;
+    }
+    el.style.webkitTextStroke = sz + 'px ' + c;
+    el.style.paintOrder = 'stroke fill';
+  } else {
+    el.style.webkitTextStroke = '';
+  }
+}
+
 // === ライティング適用（applySettings・pending両方から呼ばれる） ===
 function _applyLighting(lighting, avatarId) {
   const L = window.avatarLighting;
@@ -158,6 +176,27 @@ function applySettings(s) {
           el.style.fontSize = itemFs + 'vw'
         );
         lpp.dataset.itemFontSize = itemFs;
+      }
+      // タイトル文字スタイル
+      const titleTextEl = lpp.querySelector('.lp-title-text');
+      if (titleTextEl) {
+        const lp = s.lesson_progress;
+        if (lp.titleColor != null) titleTextEl.style.color = lp.titleColor;
+        _applyStroke(titleTextEl, lp.titleStrokeSize, lp.titleStrokeColor, lp.titleStrokeOpacity);
+      }
+      // カウント文字スタイル
+      const countEl = lpp.querySelector('.lp-title-count');
+      if (countEl) {
+        const lp = s.lesson_progress;
+        if (lp.countFontSize != null) countEl.style.fontSize = lp.countFontSize + 'vw';
+        if (lp.countColor != null) countEl.style.color = lp.countColor;
+        _applyStroke(countEl, lp.countStrokeSize, lp.countStrokeColor, lp.countStrokeOpacity);
+      }
+      // dataset に保存（動的要素再生成時に復元用）
+      const lp = s.lesson_progress;
+      for (const k of ['titleColor','titleStrokeSize','titleStrokeColor','titleStrokeOpacity',
+                        'countFontSize','countColor','countStrokeSize','countStrokeColor','countStrokeOpacity']) {
+        if (lp[k] != null) lpp.dataset[k] = lp[k];
       }
     }
   }

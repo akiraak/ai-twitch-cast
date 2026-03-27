@@ -176,7 +176,7 @@ function _scheduleSpSave(key, value) {
   // DOM要素に即座に適用（WebSocket応答を待たない）
   if (_selectedEditable) {
     applyCommonStyle(_selectedEditable, {[key]: value});
-    // lesson_progress: fontSize系は子要素にも直接適用
+    // lesson_progress: 固有プロパティを子要素にも直接適用
     if (_spItemId === 'lesson_progress') {
       if (key === 'fontSize' || key === 'titleFontSize') {
         const title = document.getElementById('lesson-progress-title');
@@ -188,6 +188,29 @@ function _scheduleSpSave(key, value) {
           el.style.fontSize = value + 'vw'
         );
         if (key === 'itemFontSize') _selectedEditable.dataset.itemFontSize = value;
+      }
+      // タイトル文字スタイル
+      const _titleKeys = ['titleColor','titleStrokeSize','titleStrokeColor','titleStrokeOpacity'];
+      const _countKeys = ['countFontSize','countColor','countStrokeSize','countStrokeColor','countStrokeOpacity'];
+      if (_titleKeys.includes(key) || _countKeys.includes(key)) {
+        _selectedEditable.dataset[key] = value;
+      }
+      if (_titleKeys.includes(key)) {
+        const textEl = _selectedEditable.querySelector('.lp-title-text');
+        if (textEl) {
+          const d = _selectedEditable.dataset;
+          if (key === 'titleColor') textEl.style.color = value;
+          if (key.startsWith('titleStroke')) _applyStroke(textEl, d.titleStrokeSize, d.titleStrokeColor, d.titleStrokeOpacity);
+        }
+      }
+      if (_countKeys.includes(key)) {
+        const countEl = _selectedEditable.querySelector('.lp-title-count');
+        if (countEl) {
+          const d = _selectedEditable.dataset;
+          if (key === 'countFontSize') countEl.style.fontSize = value + 'vw';
+          if (key === 'countColor') countEl.style.color = value;
+          if (key.startsWith('countStroke')) _applyStroke(countEl, d.countStrokeSize, d.countStrokeColor, d.countStrokeOpacity);
+        }
       }
     }
   }

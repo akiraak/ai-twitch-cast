@@ -1,5 +1,13 @@
 # DONE
 
+## 授業パネルのデザイン編集機能
+
+- [x] 授業タイトル・テキスト・進捗パネルのデザインを管理画面から変更可能に（背景・文字・枠線等）
+- [x] C#プレビューからドラッグ・右クリックで位置・デザイン編集可能に
+- [x] C#コントロールパネルにDesignタブ追加（スキーマ駆動UI）
+- [x] 進捗パネルのタイトル文字・カウント文字に個別デザイン調整（サイズ・色・縁取り）
+- 関連プラン: [plans/lesson-panel-design-editor.md](plans/lesson-panel-design-editor.md), [plans/lesson-panel-csharp-preview.md](plans/lesson-panel-csharp-preview.md), [plans/lesson-progress-title-count-design.md](plans/lesson-progress-title-count-design.md)
+
 ## 進捗パネルの位置変更（キャラクター被り解消）
 
 - [x] `broadcast.css`: 進捗パネルを左中央（top:50%）から左上（top:2%）に移動

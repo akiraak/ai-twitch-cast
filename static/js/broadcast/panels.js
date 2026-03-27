@@ -152,6 +152,21 @@ function _updateProgressTitle(currentIndex, total) {
   const titleEl = document.getElementById('lesson-progress-title');
   if (!titleEl) return;
   titleEl.innerHTML = `<span class="lp-title-text">授業の流れ</span><span class="lp-title-count">${currentIndex + 1}/${total}</span>`;
+  // datasetから保存済みスタイルを復元（innerHTMLで再生成されるため）
+  const panel = document.getElementById('lesson-progress-panel');
+  if (!panel) return;
+  const d = panel.dataset;
+  const textEl = titleEl.querySelector('.lp-title-text');
+  const countEl = titleEl.querySelector('.lp-title-count');
+  if (textEl) {
+    if (d.titleColor) textEl.style.color = d.titleColor;
+    if (typeof _applyStroke === 'function') _applyStroke(textEl, d.titleStrokeSize, d.titleStrokeColor, d.titleStrokeOpacity);
+  }
+  if (countEl) {
+    if (d.countFontSize) countEl.style.fontSize = d.countFontSize + 'vw';
+    if (d.countColor) countEl.style.color = d.countColor;
+    if (typeof _applyStroke === 'function') _applyStroke(countEl, d.countStrokeSize, d.countStrokeColor, d.countStrokeOpacity);
+  }
 }
 
 function showLessonProgress(sections, currentIndex) {
