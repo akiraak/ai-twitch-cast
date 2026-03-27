@@ -1,5 +1,12 @@
 # DONE
 
+## 英語モードのセリフを英語にする Step 4
+
+- [x] `build_lesson_dialogue_prompt()` を `prompt_builder.py` に新設（8セクション構成、言語モード対応）
+- [x] `get_lesson_characters()` に self_note/persona 取得を追加
+- [x] `_generate_single_dialogue()` の手動プロンプトを `build_lesson_dialogue_prompt()` に差し替え
+- [x] テスト9件追加（`TestBuildLessonDialoguePrompt`）
+
 ## 英語モードのセリフを英語にする Step 3
 
 - [x] 管理画面に言語タブ（日本語/English/バイリンガル）追加

@@ -6,6 +6,7 @@ from src.prompt_builder import (
     SUPPORTED_LANGUAGES,
     MIX_LEVELS,
     build_language_rules,
+    build_lesson_dialogue_prompt,
     build_multi_system_prompt,
     build_system_prompt,
     build_tts_style,
@@ -504,3 +505,60 @@ class TestBuildMultiSystemPrompt:
             DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER, stream_context=ctx,
         )
         assert "テスト配信" in prompt
+
+
+class TestBuildLessonDialoguePrompt:
+    """授業セリフ生成用プロンプトのテスト"""
+
+    def setup_method(self):
+        set_stream_language("ja", "en", "low")
+
+    def test_ja_mode_basic(self):
+        prompt = build_lesson_dialogue_prompt(DEFAULT_CHARACTER, "teacher")
+        assert "ちょビ" in prompt
+        assert "出力形式" in prompt
+        assert "content" in prompt
+        assert "tts_text" in prompt
+
+    def test_en_mode_basic(self):
+        set_stream_language("en", "none", "low")
+        prompt = build_lesson_dialogue_prompt(DEFAULT_CHARACTER, "teacher")
+        assert "You are" in prompt
+        assert "Output format" in prompt
+
+    def test_includes_localized_system_prompt_en(self):
+        set_stream_language("en", "none", "low")
+        prompt = build_lesson_dialogue_prompt(DEFAULT_CHARACTER, "teacher")
+        # 英語版system_promptがあるので英語版が使われる
+        assert "Chobi" in prompt or "Twitch" in prompt
+
+    def test_includes_rules(self):
+        prompt = build_lesson_dialogue_prompt(DEFAULT_CHARACTER, "teacher")
+        assert "ルール" in prompt
+
+    def test_includes_self_note(self):
+        prompt = build_lesson_dialogue_prompt(
+            DEFAULT_CHARACTER, "teacher", self_note="テスト記憶メモ",
+        )
+        assert "テスト記憶メモ" in prompt
+        assert "記憶メモ" in prompt
+
+    def test_includes_persona(self):
+        prompt = build_lesson_dialogue_prompt(
+            DEFAULT_CHARACTER, "teacher", persona="テストペルソナ",
+        )
+        assert "テストペルソナ" in prompt
+
+    def test_includes_emotions(self):
+        prompt = build_lesson_dialogue_prompt(DEFAULT_CHARACTER, "teacher")
+        for emo in DEFAULT_CHARACTER["emotions"]:
+            assert emo in prompt
+
+    def test_bilingual_includes_language_rules(self):
+        set_stream_language("ja", "en", "medium")
+        prompt = build_lesson_dialogue_prompt(DEFAULT_CHARACTER, "teacher")
+        assert "言語ルール" in prompt
+
+    def test_student_character(self):
+        prompt = build_lesson_dialogue_prompt(DEFAULT_STUDENT_CHARACTER, "student")
+        assert "なるこ" in prompt

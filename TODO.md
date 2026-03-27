@@ -6,7 +6,6 @@
 - [ ] コンテンツを生成し不自然なところがないかAIで検証する
 - [ ] コンテンツに出てくるメインコンテンツの文章や会話を読み上げるようにする
 - [>] 英語モードのセリフを英語にする → [plans/lesson-language-mode.md](plans/lesson-language-mode.md)
-  - [ ] Step 4: セリフ生成プロンプト刷新（`build_lesson_dialogue_prompt()` 新設）
   - [ ] Step 5: TTS スタイルの言語対応
   - [ ] Step 6: ドキュメント更新
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
@@ -15,6 +14,7 @@
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）
+- [ ] C#プレビューで「配信合成ページは配信アプリで表示されます。Web UIからプレビューや編集を行ってください。」が頻繁に出るリロードも大変なので自動で直してほしい
 
 ## 検討
 - [ ] 遅延が大きく発生した場合にスキップしてでも最新の配信内容に追いつく機能の検証 → [plans/latency-skip-catchup.md](plans/latency-skip-catchup.md)

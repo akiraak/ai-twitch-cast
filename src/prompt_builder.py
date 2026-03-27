@@ -162,6 +162,108 @@ def build_tts_style():
     return " ".join(parts)
 
 
+def build_lesson_dialogue_prompt(
+    char: dict,
+    role: str,
+    self_note: str = None,
+    persona: str = None,
+) -> str:
+    """授業セリフ生成用のシステムプロンプトを構築する
+
+    言語モードに応じて全セクション（性格・ルール・self_note・persona・
+    言語ルール・感情・出力形式）を適切な言語で生成。
+    """
+    primary = _stream_lang["primary"]
+    en = primary != "ja"
+    p_name = _lang_name(primary)
+
+    char_name = char.get("name", role)
+    system_prompt = get_localized_field(char, "system_prompt")
+    rules = get_localized_field(char, "rules")
+    emotions = char.get("emotions", {})
+    emotion_list = ", ".join(emotions.keys()) if emotions else "neutral"
+
+    # 1. キャラ紹介
+    if en:
+        parts = [f"You are {char_name}, a character in a Twitch educational stream.",
+                 "Stay in character and speak naturally.", ""]
+    else:
+        parts = [f"あなたは「{char_name}」です。Twitch教育配信のキャラクターとして自然に話してください。", ""]
+
+    # 2. キャラ system_prompt
+    if system_prompt:
+        parts.extend([system_prompt, ""])
+
+    # 3. ルール
+    if rules:
+        parts.append("## Rules" if en else "## ルール")
+        for rule in rules:
+            parts.append(f"- {rule}")
+        parts.append("")
+
+    # 4. 自分の記憶メモ
+    if self_note:
+        parts.append("## Your memory notes" if en else "## あなたの記憶メモ")
+        parts.extend([self_note, ""])
+
+    # 5. ペルソナ
+    if persona:
+        parts.append("## Your personality" if en else "## あなたの性格")
+        parts.extend([persona, ""])
+
+    # 6. 言語ルール
+    lang_rules = build_language_rules()
+    if lang_rules:
+        parts.append("## Language rules" if en else "## 言語ルール")
+        for rule in lang_rules:
+            parts.append(rule)
+        parts.append("")
+
+    # 7. 感情ガイド
+    if en:
+        parts.extend([
+            "## Emotion usage",
+            f"Available emotions: {emotion_list}",
+            "- Choose the emotion that best fits your line",
+            "- Use neutral for most responses; joy/excited only when genuinely appropriate",
+            "",
+        ])
+    else:
+        parts.extend([
+            "## 感情の使い分け",
+            f"使用可能な感情: {emotion_list}",
+            "- セリフの内容に最も合う感情を選ぶ",
+            "- 普段はneutralを使い、joy/excitedは本当にふさわしい場面でのみ",
+            "",
+        ])
+
+    # 8. 出力形式
+    if en:
+        parts.extend([
+            "## Output format",
+            "Output ONLY a JSON object:",
+            '{"content": "...", "tts_text": "...", "emotion": "..."}',
+            "- content: subtitle text (no tags or markup)",
+            f"- tts_text: same as content, but add [lang:xx]...[/lang] tags for non-{p_name} parts",
+            f'  - Example: content="Let\'s learn こんにちは today" → tts_text="Let\'s learn [lang:ja]こんにちは[/lang] today"',
+            f"  - If {p_name} only, tts_text = content",
+            f"- emotion: one of {emotion_list}",
+        ])
+    else:
+        parts.extend([
+            "## 出力形式",
+            "以下のJSONオブジェクトのみを出力:",
+            '{"content": "...", "tts_text": "...", "emotion": "..."}',
+            "- content: 字幕に表示するテキスト（タグやマークアップは絶対に含めない）",
+            "- tts_text: contentと同じ内容だが、日本語以外の言語部分に [lang:xx]...[/lang] タグを付ける",
+            '  - 例: content="Helloは挨拶だよ" → tts_text="[lang:en]Hello[/lang]は挨拶だよ"',
+            "  - 日本語のみの場合はcontentと同じ内容にする",
+            f"- emotion: {emotion_list} のいずれか",
+        ])
+
+    return "\n".join(parts)
+
+
 def build_system_prompt(char, stream_context=None, self_note=None, persona=None):
     """キャラクター設定からシステムプロンプトを構築する
 

@@ -38,11 +38,17 @@ def get_lesson_characters() -> dict:
     if teacher_row:
         teacher = json.loads(teacher_row["config"])
         teacher["name"] = teacher_row["name"]
+        memory = db.get_character_memory(teacher_row["id"])
+        teacher["self_note"] = memory.get("self_note", "")
+        teacher["persona"] = memory.get("persona", "")
     else:
         teacher = None
     if student_row:
         student = json.loads(student_row["config"])
         student["name"] = student_row["name"]
+        memory = db.get_character_memory(student_row["id"])
+        student["self_note"] = memory.get("self_note", "")
+        student["persona"] = memory.get("persona", "")
     else:
         student = None
     return {"teacher": teacher, "student": student}
@@ -1499,46 +1505,14 @@ def _generate_single_dialogue(
     en: bool,
 ) -> dict:
     """1セリフをキャラのペルソナで生成し、generationメタデータ付きで返す"""
-    char_system = character_config.get("system_prompt", "")
-    char_name = character_config.get("name", role)
-    char_rules = character_config.get("rules", "")
-    emotions = character_config.get("emotions", {})
-    emotion_list = ", ".join(emotions.keys()) if emotions else "neutral"
+    from src.prompt_builder import build_lesson_dialogue_prompt
 
-    if en:
-        rules_block = f"\n\nCharacter rules:\n{char_rules}" if char_rules else ""
-        system_prompt = f"""You are {char_name}, a character in a Twitch educational stream.
-Stay in character and speak naturally.
-
-{char_system}{rules_block}
-
-Available emotions: {emotion_list}
-
-Rules:
-- Speak naturally as this character would
-- content: subtitle text (no tags or markup)
-- tts_text: same as content, but add [lang:xx]...[/lang] tags for non-primary-language parts
-  - Example: content="Let's learn こんにちは today" → tts_text="Let's learn [lang:ja]こんにちは[/lang] today"
-  - If English only, tts_text = content
-- emotion: choose from your available emotions
-- Output ONLY a JSON object: {{"content": "...", "tts_text": "...", "emotion": "..."}}"""
-    else:
-        rules_block = f"\n\nキャラクタールール:\n{char_rules}" if char_rules else ""
-        system_prompt = f"""あなたは「{char_name}」です。Twitch教育配信のキャラクターとして自然に話してください。
-
-{char_system}{rules_block}
-
-使用可能な感情: {emotion_list}
-
-ルール:
-- このキャラクターとして自然に話す
-- content: 字幕に表示するテキスト（タグやマークアップは絶対に含めない）
-- tts_text: contentと同じ内容だが、日本語以外の言語部分に [lang:xx]...[/lang] タグを付ける
-  - 例: content="Helloは挨拶だよ" → tts_text="[lang:en]Hello[/lang]は挨拶だよ"
-  - 英語の単語1つでも必ずタグを付ける
-  - 日本語のみの場合はcontentと同じ内容にする
-- emotion: 使用可能な感情から選ぶ
-- 以下のJSONオブジェクトのみを出力: {{"content": "...", "tts_text": "...", "emotion": "..."}}"""
+    system_prompt = build_lesson_dialogue_prompt(
+        char=character_config,
+        role=role,
+        self_note=character_config.get("self_note"),
+        persona=character_config.get("persona"),
+    )
 
     direction = dialogue_plan_entry.get("direction", "")
     key_content = dialogue_plan_entry.get("key_content", "")
