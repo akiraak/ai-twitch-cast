@@ -44,6 +44,25 @@ def set_stream_language(primary, sub="none", mix="low"):
     _stream_lang = {"primary": primary, "sub": sub, "mix": mix}
 
 
+def get_localized_field(config: dict, field: str) -> str | list:
+    """言語モードに応じたキャラ設定フィールド値を返す（フォールバック付き）
+
+    - primary=ja, sub=none → field（日本語版）
+    - primary!=ja, sub=none → field_en（英語版）
+    - sub!=none（バイリンガル）→ field_bilingual
+    - 該当キーが未設定の場合は日本語版にフォールバック
+    """
+    lang = get_stream_language()
+    if lang["sub"] != "none":
+        key = f"{field}_bilingual"
+    elif lang["primary"] != "ja":
+        key = f"{field}_en"
+    else:
+        key = field
+    default = "" if isinstance(config.get(field, ""), str) else []
+    return config.get(key) or config.get(field, default)
+
+
 def _lang_name(code):
     """言語コードから言語名を返す"""
     return SUPPORTED_LANGUAGES.get(code, code)

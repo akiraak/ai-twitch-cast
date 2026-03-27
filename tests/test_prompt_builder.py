@@ -9,6 +9,7 @@ from src.prompt_builder import (
     build_multi_system_prompt,
     build_system_prompt,
     build_tts_style,
+    get_localized_field,
     get_stream_language,
     set_stream_language,
 )
@@ -74,6 +75,91 @@ class TestStreamLanguage:
         lang = get_stream_language()
         lang["primary"] = "xx"
         assert get_stream_language()["primary"] != "xx"
+
+
+# =====================================================
+# get_localized_field
+# =====================================================
+
+
+class TestGetLocalizedField:
+    """言語モードに応じたキャラ設定フィールド選択のテスト"""
+
+    SAMPLE_CONFIG = {
+        "system_prompt": "日本語プロンプト",
+        "system_prompt_en": "English prompt",
+        "system_prompt_bilingual": "Both languages",
+        "rules": ["日本語ルール"],
+        "rules_en": ["English rule"],
+        "rules_bilingual": ["Bilingual rule"],
+        "tts_style": "日本語スタイル",
+        "tts_style_en": "English style",
+        "tts_style_bilingual": "Bilingual style",
+    }
+
+    def setup_method(self):
+        set_stream_language("ja", "none", "low")
+
+    def test_japanese_mode_returns_base_field(self):
+        set_stream_language("ja", "none", "low")
+        assert get_localized_field(self.SAMPLE_CONFIG, "system_prompt") == "日本語プロンプト"
+        assert get_localized_field(self.SAMPLE_CONFIG, "rules") == ["日本語ルール"]
+        assert get_localized_field(self.SAMPLE_CONFIG, "tts_style") == "日本語スタイル"
+
+    def test_english_mode_returns_en_field(self):
+        set_stream_language("en", "none", "low")
+        assert get_localized_field(self.SAMPLE_CONFIG, "system_prompt") == "English prompt"
+        assert get_localized_field(self.SAMPLE_CONFIG, "rules") == ["English rule"]
+        assert get_localized_field(self.SAMPLE_CONFIG, "tts_style") == "English style"
+
+    def test_bilingual_mode_returns_bilingual_field(self):
+        set_stream_language("ja", "en", "low")
+        assert get_localized_field(self.SAMPLE_CONFIG, "system_prompt") == "Both languages"
+        assert get_localized_field(self.SAMPLE_CONFIG, "rules") == ["Bilingual rule"]
+        assert get_localized_field(self.SAMPLE_CONFIG, "tts_style") == "Bilingual style"
+
+    def test_en_bilingual_returns_bilingual_field(self):
+        """英語primary + サブ言語ありもバイリンガル扱い"""
+        set_stream_language("en", "ja", "medium")
+        assert get_localized_field(self.SAMPLE_CONFIG, "system_prompt") == "Both languages"
+
+    def test_fallback_to_japanese_when_en_missing(self):
+        """英語版が未設定の場合、日本語版にフォールバック"""
+        config = {"system_prompt": "日本語のみ"}
+        set_stream_language("en", "none", "low")
+        assert get_localized_field(config, "system_prompt") == "日本語のみ"
+
+    def test_fallback_to_japanese_when_bilingual_missing(self):
+        """バイリンガル版が未設定の場合、日本語版にフォールバック"""
+        config = {"rules": ["日本語ルール"]}
+        set_stream_language("ja", "en", "low")
+        assert get_localized_field(config, "rules") == ["日本語ルール"]
+
+    def test_fallback_returns_empty_string_for_missing_str(self):
+        """フィールド自体が存在しない場合、文字列は空文字を返す"""
+        set_stream_language("en", "none", "low")
+        assert get_localized_field({}, "system_prompt") == ""
+
+    def test_fallback_returns_empty_list_for_missing_list(self):
+        """フィールド自体が存在しない場合、リストは空リストを返す"""
+        config = {"rules": []}
+        set_stream_language("en", "none", "low")
+        assert get_localized_field(config, "rules") == []
+
+    def test_non_ja_primary_uses_en(self):
+        """日本語以外のprimary（韓国語等）でも_enを使う"""
+        set_stream_language("ko", "none", "low")
+        assert get_localized_field(self.SAMPLE_CONFIG, "system_prompt") == "English prompt"
+
+    def test_default_characters_have_en_fields(self):
+        """DEFAULT_CHARACTERに英語/バイリンガル版が存在する"""
+        for config in (DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER):
+            assert "system_prompt_en" in config
+            assert "system_prompt_bilingual" in config
+            assert "rules_en" in config
+            assert "rules_bilingual" in config
+            assert "tts_style_en" in config
+            assert "tts_style_bilingual" in config
 
 
 # =====================================================

@@ -1,5 +1,12 @@
 # DONE
 
+## 英語モードのセリフを英語にする Step 1
+
+- [x] キャラ設定に3言語パターン追加（`system_prompt_en/bilingual`, `rules_en/bilingual`, `tts_style_en/bilingual`）
+- [x] `get_localized_field()` ヘルパーを `prompt_builder.py` に追加
+- [x] DEFAULT_CHARACTER（ちょビ）・DEFAULT_STUDENT_CHARACTER（なるこ）に英語/バイリンガル版追加
+- [x] テスト12件追加
+
 ## 機能ごとのREADME検討 → 不要と結論
 
 - [x] 現行の3層構造（CLAUDE.md + メモリ + 個別docs）で十分と判断
