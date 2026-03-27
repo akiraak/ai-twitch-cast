@@ -429,18 +429,21 @@ _OVERLAY_DEFAULTS = {
         "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20,
     }),
     "lesson_title": _make_item_defaults({
+        "positionX": 35, "positionY": 2,
         "bgOpacity": 0.7, "backdropBlur": 10,
         "fontSize": 1.6,
         "bgColor": "#0a0a1e", "borderColor": "#7c4dff", "borderOpacity": 0.4,
         "textColor": "#ffffff",
     }),
     "lesson_text": _make_item_defaults({
+        "positionX": 22.5, "positionY": 15, "width": 55,
         "bgOpacity": 0.65, "backdropBlur": 12,
         "fontSize": 1.4, "lineHeight": 1.7, "maxHeight": 70,
         "bgColor": "#0a0a1e", "borderColor": "#7c4dff", "borderOpacity": 0.3,
         "textColor": "#ffffff",
     }),
     "lesson_progress": _make_item_defaults({
+        "positionX": 1, "positionY": 2, "width": 18,
         "bgOpacity": 0.6, "backdropBlur": 10,
         "titleFontSize": 1.1, "itemFontSize": 0.95,
         "bgColor": "#0a0a1e", "borderColor": "#7c4dff", "borderOpacity": 0.3,

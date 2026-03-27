@@ -95,7 +95,7 @@
     </div>
     <div class="card lesson-card">
       <h2>授業パネル</h2>
-      <div class="lesson-subgroup panel-item" data-section="lesson_title" data-skip-groups="表示,配置">
+      <div class="lesson-subgroup panel-item" data-section="lesson_title" data-skip-groups="表示">
         <div class="lesson-subgroup-title">タイトルパネル（画面上部）</div>
         <div class="panel-body">
           <!-- 共通プロパティ（背景/文字）は _injectCommonProps() で自動注入 -->
@@ -105,7 +105,7 @@
           </div>
         </div>
       </div>
-      <div class="lesson-subgroup panel-item" data-section="lesson_text" data-skip-groups="表示,配置">
+      <div class="lesson-subgroup panel-item" data-section="lesson_text" data-skip-groups="表示">
         <div class="lesson-subgroup-title">テキストパネル（画面中央）</div>
         <div class="panel-body">
           <div class="layout-row"><span class="layout-label">最大高さ (%)</span><input type="range" class="vol-slider layout-slider" min="20" max="90" step="1" data-key="lesson_text.maxHeight" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lesson_text-maxHeight" min="20" max="90" step="1" data-key="lesson_text.maxHeight" oninput="onLayoutNum(this)"></div>
@@ -116,7 +116,7 @@
           </div>
         </div>
       </div>
-      <div class="lesson-subgroup panel-item" data-section="lesson_progress" data-skip-groups="表示,配置">
+      <div class="lesson-subgroup panel-item" data-section="lesson_progress" data-skip-groups="表示">
         <div class="lesson-subgroup-title">進捗パネル（画面左）</div>
         <div class="panel-body">
           <div class="layout-row"><span class="layout-label">最大高さ (%)</span><input type="range" class="vol-slider layout-slider" min="20" max="90" step="1" data-key="lesson_progress.maxHeight" oninput="onLayoutSlider(this)"><input type="number" class="layout-num" id="lv-lesson_progress-maxHeight" min="20" max="90" step="1" data-key="lesson_progress.maxHeight" oninput="onLayoutNum(this)"></div>

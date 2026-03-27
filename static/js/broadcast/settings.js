@@ -111,7 +111,7 @@ function applySettings(s) {
     if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'vw';
     loadTodo();
   }
-  // === lesson_title（data-fixed-layoutでレイアウトはCSS固定） ===
+  // === lesson_title ===
   if (s.lesson_title) {
     const ltpanel = document.getElementById('lesson-title-panel');
     if (ltpanel) {
@@ -122,12 +122,13 @@ function applySettings(s) {
       }
     }
   }
-  // === lesson_text（data-fixed-layoutでレイアウトはCSS固定） ===
+  // === lesson_text ===
   if (s.lesson_text) {
     const ltp = document.getElementById('lesson-text-panel');
     if (ltp) {
       applyCommonStyle(ltp, s.lesson_text);
-      // 固有プロパティ
+      if (s.lesson_text.width != null) ltp.style.width = s.lesson_text.width + '%';
+      if (s.lesson_text.height != null) ltp.style.height = s.lesson_text.height + '%';
       if (s.lesson_text.maxHeight != null) ltp.style.maxHeight = s.lesson_text.maxHeight + '%';
       const ltc = document.getElementById('lesson-text-content');
       if (ltc) {
@@ -136,11 +137,12 @@ function applySettings(s) {
       }
     }
   }
-  // === lesson_progress（data-fixed-layoutでレイアウトはCSS固定） ===
+  // === lesson_progress ===
   if (s.lesson_progress) {
     const lpp = document.getElementById('lesson-progress-panel');
     if (lpp) {
       applyCommonStyle(lpp, s.lesson_progress);
+      if (s.lesson_progress.width != null) lpp.style.width = s.lesson_progress.width + '%';
       if (s.lesson_progress.maxHeight != null) lpp.style.maxHeight = s.lesson_progress.maxHeight + '%';
       // 文字サイズ: fontSize（共通）→ 全子要素に適用、titleFontSize/itemFontSize（固有）→ 個別に上書き
       const fs = s.lesson_progress.fontSize;

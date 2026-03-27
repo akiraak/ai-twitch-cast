@@ -29,9 +29,11 @@ function _loadGoogleFont(name) {
 function applyCommonStyle(el, props) {
   if (!el || !props) return;
   const fixedLayout = el.hasAttribute('data-fixed-layout');
+  const managedVis = el.hasAttribute('data-managed-visibility');
   // レイアウト系（data-fixed-layout要素はスキップ — CSSで位置固定）
   if (!fixedLayout) {
-    if (props.visible != null) {
+    // data-managed-visibility: 表示/非表示は授業モード等が制御するためスキップ
+    if (!managedVis && props.visible != null) {
       el.style.display = Number(props.visible) ? 'block' : 'none';
     }
     if (props.positionX != null) el.style.left = props.positionX + '%';

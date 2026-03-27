@@ -52,6 +52,9 @@ const ITEM_REGISTRY = [
   { id: 'subtitle', prefix: 'subtitle', hasSize: false, defaultZ: 20 },
   { id: 'subtitle-2', prefix: 'subtitle2', hasSize: false, defaultZ: 20 },
   { id: 'todo-panel', prefix: 'todo', hasSize: true, defaultZ: 20 },
+  { id: 'lesson-title-panel', prefix: 'lesson_title', hasSize: false, defaultZ: 12, skipVisible: true },
+  { id: 'lesson-text-panel', prefix: 'lesson_text', hasSize: true, defaultZ: 12, skipVisible: true },
+  { id: 'lesson-progress-panel', prefix: 'lesson_progress', hasSize: true, defaultZ: 12, skipVisible: true },
 ];
 
 // === アバターストリーム ===

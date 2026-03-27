@@ -510,8 +510,7 @@
   /* === 授業テキストパネル === */
   #lesson-text-panel {
     position: absolute;
-    top: 35%; left: 50%;
-    transform: translate(-50%, -50%);
+    top: 15%; left: 22.5%;
     z-index: 12;
     width: 55%;
     max-height: 60%;
@@ -525,7 +524,6 @@
     padding: 1.5vw 2vw;
     backdrop-filter: blur(calc(var(--item-backdrop-blur, 12) * 1px));
     -webkit-backdrop-filter: blur(calc(var(--item-backdrop-blur, 12) * 1px));
-    pointer-events: none;
     opacity: 0;
     transition: opacity 0.5s ease;
   }
@@ -543,8 +541,7 @@
   /* === 授業タイトルパネル === */
   #lesson-title-panel {
     position: absolute;
-    top: 2%; left: 50%;
-    transform: translateX(-50%);
+    top: 2%; left: 35%;
     z-index: 12;
     --bg-opacity: 0.7;
     background: rgba(10, 10, 30, var(--bg-opacity));
@@ -553,7 +550,6 @@
     padding: 0.4vw 1.5vw;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    pointer-events: none;
     opacity: 0;
     transition: opacity 0.5s ease;
   }
@@ -588,7 +584,6 @@
     padding: 0.6vw 0.8vw;
     backdrop-filter: blur(calc(var(--item-backdrop-blur, 10) * 1px));
     -webkit-backdrop-filter: blur(calc(var(--item-backdrop-blur, 10) * 1px));
-    pointer-events: none;
     opacity: 0;
     transition: opacity 0.5s ease;
   }

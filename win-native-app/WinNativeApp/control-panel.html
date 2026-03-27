@@ -332,6 +332,28 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
 }
 #chatSendBtn:hover { background: var(--accent-hover); }
 #chatSendBtn:disabled { opacity: 0.35; cursor: default; }
+
+/* Design tab */
+.design-panel { border-bottom: 1px solid var(--border); }
+.design-panel summary {
+  padding: 6px 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--text); list-style: none; display: flex; align-items: center; gap: 4px;
+}
+.design-panel summary::before { content: '▸'; font-size: 10px; transition: transform 0.15s; display: inline-block; width: 12px; }
+.design-panel[open] summary::before { transform: rotate(90deg); }
+.design-panel .dp-body { padding: 0 8px 8px; }
+.design-group-title {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--text-dim); margin: 8px 0 4px; padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.design-row { display: flex; align-items: center; margin-bottom: 3px; gap: 4px; }
+.design-label { width: 56px; font-size: 11px; color: var(--text-dim); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.design-val { width: 36px; text-align: right; font-size: 10px; color: var(--text-dim); flex-shrink: 0; }
+.design-row input[type="color"] { width: 28px; height: 20px; border: 1px solid var(--border); border-radius: 3px; padding: 0; cursor: pointer; background: var(--bg-input); }
+.design-row select { flex: 1; min-width: 0; padding: 2px 4px; font-size: 11px; background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); }
+.design-test-row { display: flex; gap: 4px; margin-bottom: 6px; }
+.design-test-row .btn { flex: 1; font-size: 11px; padding: 3px 6px; }
 </style>
 </head>
 <body>
@@ -340,6 +362,7 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   <button class="tab active" data-tab="stream">Stream</button>
   <button class="tab" data-tab="sound">Sound</button>
   <button class="tab" data-tab="chat">Chat</button>
+  <button class="tab" data-tab="design">Design</button>
 </div>
 
 <div class="tab-content active" id="tab-stream">
@@ -444,6 +467,13 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
              onkeydown="if(event.key==='Enter'&&!this.disabled)sendChat()">
       <button class="btn" id="chatSendBtn" onclick="sendChat()">送信</button>
     </div>
+  </div>
+</div>
+
+<div class="tab-content" id="tab-design">
+  <div class="section" style="flex:1; overflow-y:auto;">
+    <div class="section-title">授業パネル</div>
+    <div id="designPanels"></div>
   </div>
 </div>
 
@@ -793,10 +823,142 @@ async function updateTwitchTitle() {
   setTimeout(() => { msg.textContent = ''; }, 3000);
 }
 
+// === Design tab ===
+const DESIGN_PANELS = [
+  { id: 'lesson_title', label: 'タイトル（画面上部）', testShow: '/api/debug/lesson-title', testHide: '/api/debug/lesson-title/hide' },
+  { id: 'lesson_text', label: 'テキスト（画面中央）', testShow: '/api/debug/lesson-text', testHide: '/api/debug/lesson-text/hide' },
+  { id: 'lesson_progress', label: '進捗（画面左）', testShow: '/api/debug/lesson-title', testHide: '/api/debug/lesson-title/hide' },
+];
+const DESIGN_SKIP_GROUPS = ['表示', '配置'];
+
+let _designSettings = {};
+let _designTimer = null;
+let _designPending = {};
+
+function _designSave(section, key, val) {
+  if (!_designPending[section]) _designPending[section] = {};
+  _designPending[section][key] = val;
+  clearTimeout(_designTimer);
+  _designTimer = setTimeout(async () => {
+    const body = _designPending;
+    _designPending = {};
+    try {
+      await fetch(serverUrl + '/api/overlay/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {}
+  }, 200);
+}
+
+function _designSlider(section, field, curVal) {
+  const id = `ds-${section}-${field.key}`;
+  const val = curVal ?? field.default ?? field.min ?? 0;
+  return `<div class="design-row">
+    <span class="design-label" title="${esc(field.label)}">${esc(field.label)}</span>
+    <input type="range" min="${field.min}" max="${field.max}" step="${field.step}" value="${val}" id="${id}"
+      oninput="$('${id}-v').textContent=this.value; _designSave('${section}','${field.key}',parseFloat(this.value))">
+    <span class="design-val" id="${id}-v">${val}</span>
+  </div>`;
+}
+
+function _designColor(section, field, curVal) {
+  const id = `ds-${section}-${field.key}`;
+  const val = _toHex(curVal || field.default || '#000000');
+  return `<div class="design-row">
+    <span class="design-label" title="${esc(field.label)}">${esc(field.label)}</span>
+    <input type="color" value="${val}" id="${id}"
+      oninput="_designSave('${section}','${field.key}',this.value)">
+  </div>`;
+}
+
+function _designToggle(section, field, curVal) {
+  const id = `ds-${section}-${field.key}`;
+  const checked = (curVal ?? field.default ?? 1) ? 'checked' : '';
+  return `<div class="design-row">
+    <span class="design-label" title="${esc(field.label)}">${esc(field.label)}</span>
+    <input type="checkbox" id="${id}" ${checked}
+      onchange="_designSave('${section}','${field.key}',this.checked?1:0)">
+  </div>`;
+}
+
+function _designSelect(section, field, curVal) {
+  const id = `ds-${section}-${field.key}`;
+  const val = curVal ?? field.default ?? '';
+  const opts = (field.options || []).map(([v, l]) =>
+    `<option value="${v}"${v === val ? ' selected' : ''}>${esc(l)}</option>`
+  ).join('');
+  return `<div class="design-row">
+    <span class="design-label" title="${esc(field.label)}">${esc(field.label)}</span>
+    <select id="${id}" onchange="_designSave('${section}','${field.key}',this.value)">${opts}</select>
+  </div>`;
+}
+
+function _renderField(section, field, curVal) {
+  switch (field.type) {
+    case 'slider': return _designSlider(section, field, curVal);
+    case 'color': return _designColor(section, field, curVal);
+    case 'toggle': return _designToggle(section, field, curVal);
+    case 'select': return _designSelect(section, field, curVal);
+    default: return '';
+  }
+}
+
+function _toHex(color) {
+  if (!color) return '#000000';
+  if (color.startsWith('#')) return color.substring(0, 7);
+  const m = color.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/);
+  if (m) return '#' + [m[1],m[2],m[3]].map(v => parseInt(v).toString(16).padStart(2,'0')).join('');
+  return '#000000';
+}
+
+async function initDesignTab() {
+  const container = $('designPanels');
+  if (!container) return;
+
+  // 設定値とスキーマを並行取得
+  let settings = {};
+  try { settings = await (await fetch(serverUrl + '/api/overlay/settings')).json(); } catch(e) {}
+  _designSettings = settings;
+
+  const schemas = {};
+  await Promise.all(DESIGN_PANELS.map(async p => {
+    try { schemas[p.id] = await (await fetch(serverUrl + '/api/items/schema?item_id=' + p.id)).json(); } catch(e) {}
+  }));
+
+  let html = '';
+  for (const panel of DESIGN_PANELS) {
+    const schema = schemas[panel.id];
+    if (!schema) continue;
+    const sectionVals = settings[panel.id] || {};
+
+    let body = `<div class="design-test-row">
+      <button class="btn" onclick="fetch(serverUrl+'${panel.testShow}',{method:'POST'})">テスト表示</button>
+      <button class="btn" onclick="fetch(serverUrl+'${panel.testHide}',{method:'POST'})">非表示</button>
+    </div>`;
+
+    for (const group of schema.groups || []) {
+      if (DESIGN_SKIP_GROUPS.includes(group.title)) continue;
+      body += `<div class="design-group-title">${esc(group.title)}</div>`;
+      for (const field of group.fields || []) {
+        body += _renderField(panel.id, field, sectionVals[field.key]);
+      }
+    }
+
+    html += `<details class="design-panel">
+      <summary>${esc(panel.label)}</summary>
+      <div class="dp-body">${body}</div>
+    </details>`;
+  }
+  container.innerHTML = html;
+}
+
 // Init
 send({action:'init'});
 appendLog('Panel started', 'info');
 loadTwitchInfo();
+initDesignTab();
 </script>
 </body>
 </html>
