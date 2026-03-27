@@ -1,5 +1,13 @@
 # DONE
 
+## Playwrightブラウザテストを削除
+
+- [x] `tests/browser/` ディレクトリ削除（conftest.py, test_smoke.py, test_pages.py, __init__.py）
+- [x] `requirements.txt` から pytest-playwright, playwright を削除
+- [x] `pytest.ini` から browser マーカー定義を削除
+- [x] `plans/playwright-browser-testing.md` のステータスを「中止」に更新
+- 理由: pytest-playwrightのpageフィクスチャが動作せず13件全ERR。同期SQLiteによるテストサーバー不安定も未解決
+
 ## 授業の流れパネルに進捗表示を追加
 
 - [x] `panels.js`: `_updateProgressTitle()` でタイトル行に「1/10」形式の進捗を右寄せ表示
