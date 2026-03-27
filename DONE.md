@@ -1,5 +1,11 @@
 # DONE
 
+## 進捗パネルの位置変更（キャラクター被り解消）
+
+- [x] `broadcast.css`: 進捗パネルを左中央（top:50%）から左上（top:2%）に移動
+- [x] `broadcast.css`: max-heightを80%→26%に縮小し生徒アバターと被らないよう制限
+- [x] `broadcast.css`: スクロールバーを非表示に（scrollbar-width: none）
+
 ## Playwrightブラウザテストを削除
 
 - [x] `tests/browser/` ディレクトリ削除（conftest.py, test_smoke.py, test_pages.py, __init__.py）

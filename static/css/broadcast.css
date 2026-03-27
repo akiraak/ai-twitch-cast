@@ -572,12 +572,13 @@
   /* === 授業進捗パネル（左サイドバー） === */
   #lesson-progress-panel {
     position: absolute;
-    top: 50%; left: 1%;
-    transform: translateY(-50%);
+    top: 2%; left: 1%;
     z-index: 12;
     width: 18%;
-    max-height: 80%;
+    max-height: 26%;
     overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     --bg-opacity: 0.6;
     --item-bg-color: #0a0a1e;
     --item-backdrop-blur: 10;
