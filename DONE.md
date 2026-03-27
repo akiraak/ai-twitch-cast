@@ -1,5 +1,12 @@
 # DONE
 
+## 授業の流れパネルに進捗表示を追加
+
+- [x] `panels.js`: `_updateProgressTitle()` でタイトル行に「1/10」形式の進捗を右寄せ表示
+- [x] `panels.js`: `showLessonProgress()` / `updateLessonProgress()` でセクション切替時に進捗更新
+- [x] `panels.js`: `hideLessonProgress()` でパネル非表示時にタイトルリセット
+- [x] `broadcast.css`: タイトル行をflex配置、進捗数値を小さめ・薄紫で右寄せ
+
 ## 授業タイトルを配信画面に表示
 
 - [x] `lesson_runner.py`: `_notify_status()` の `lesson_status` イベントに `lesson_name` フィールドを追加

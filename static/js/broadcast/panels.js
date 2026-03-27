@@ -148,10 +148,17 @@ const PROGRESS_ICONS = {
   summary: '\u{1F3C1}',
 };
 
+function _updateProgressTitle(currentIndex, total) {
+  const titleEl = document.getElementById('lesson-progress-title');
+  if (!titleEl) return;
+  titleEl.innerHTML = `<span class="lp-title-text">授業の流れ</span><span class="lp-title-count">${currentIndex + 1}/${total}</span>`;
+}
+
 function showLessonProgress(sections, currentIndex) {
   const panel = document.getElementById('lesson-progress-panel');
   const list = document.getElementById('lesson-progress-list');
   if (!panel || !list) return;
+  _updateProgressTitle(currentIndex, sections.length);
   const itemFs = panel.dataset.itemFontSize;
   list.innerHTML = '';
   for (let i = 0; i < sections.length; i++) {
@@ -172,6 +179,7 @@ function showLessonProgress(sections, currentIndex) {
 
 function updateLessonProgress(currentIndex) {
   const items = document.querySelectorAll('.lesson-progress-item');
+  _updateProgressTitle(currentIndex, items.length);
   items.forEach((el, i) => {
     el.classList.remove('done', 'current');
     if (i < currentIndex) el.classList.add('done');
@@ -187,7 +195,11 @@ function hideLessonProgress() {
   if (!panel) return;
   panel.classList.remove('visible');
   setTimeout(() => {
-    if (!panel.classList.contains('visible')) panel.style.display = 'none';
+    if (!panel.classList.contains('visible')) {
+      panel.style.display = 'none';
+      const titleEl = document.getElementById('lesson-progress-title');
+      if (titleEl) titleEl.textContent = '授業の流れ';
+    }
   }, 600);
 }
 
