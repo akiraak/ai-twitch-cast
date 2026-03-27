@@ -159,16 +159,66 @@
       </div>
       <div class="card">
         <h2><span class="layer-badge">第1層</span> ベース設定 <span style="font-size:0.7rem; font-weight:normal; color:#9a88b5;">DB保存・WebUIで編集</span></h2>
+        <!-- 言語タブ -->
+        <div class="lang-tabs" style="display:flex; gap:4px; margin-bottom:12px;">
+          <button class="lang-tab active" data-lang="" onclick="switchLangTab('', this)">日本語</button>
+          <button class="lang-tab" data-lang="_en" onclick="switchLangTab('_en', this)">English</button>
+          <button class="lang-tab" data-lang="_bilingual" onclick="switchLangTab('_bilingual', this)">バイリンガル</button>
+        </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-          <div style="grid-column: 1 / -1;">
-            <label class="field-label">システムプロンプト</label>
-            <textarea id="char-prompt" rows="16" class="text-input"></textarea>
+          <!-- 日本語（デフォルト） -->
+          <div class="lang-pane lang-pane-active" data-lang-pane="" style="grid-column: 1 / -1; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div style="grid-column: 1 / -1;">
+              <label class="field-label">システムプロンプト</label>
+              <textarea id="char-prompt" rows="16" class="text-input"></textarea>
+            </div>
+            <div>
+              <label class="field-label">ルール</label>
+              <div id="char-rules"></div>
+              <button class="secondary" style="margin-top:6px; font-size:0.75rem;" onclick="addRule()">+ ルール追加</button>
+            </div>
+            <div>
+              <label class="field-label">話し方スタイル（TTS Style）</label>
+              <textarea id="char-tts-style" rows="2" class="text-input" placeholder="例: 元気で明るい声で、好奇心いっぱいに読み上げてください"></textarea>
+            </div>
           </div>
-          <div>
-            <label class="field-label">ルール</label>
-            <div id="char-rules"></div>
-            <button class="secondary" style="margin-top:6px; font-size:0.75rem;" onclick="addRule()">+ ルール追加</button>
+          <!-- English -->
+          <div class="lang-pane" data-lang-pane="_en" style="grid-column: 1 / -1; display:none;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+              <div style="grid-column: 1 / -1;">
+                <label class="field-label">System Prompt (English)</label>
+                <textarea id="char-prompt-en" rows="16" class="text-input" placeholder="English personality and speaking style"></textarea>
+              </div>
+              <div>
+                <label class="field-label">Rules (English)</label>
+                <div id="char-rules-en"></div>
+                <button class="secondary" style="margin-top:6px; font-size:0.75rem;" onclick="addRule('_en')">+ Add Rule</button>
+              </div>
+              <div>
+                <label class="field-label">TTS Style (English)</label>
+                <textarea id="char-tts-style-en" rows="2" class="text-input" placeholder="e.g. Read in a warm, cheerful tone"></textarea>
+              </div>
+            </div>
           </div>
+          <!-- バイリンガル -->
+          <div class="lang-pane" data-lang-pane="_bilingual" style="grid-column: 1 / -1; display:none;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+              <div style="grid-column: 1 / -1;">
+                <label class="field-label">システムプロンプト（バイリンガル）</label>
+                <textarea id="char-prompt-bilingual" rows="16" class="text-input" placeholder="日本語と英語を混ぜた性格設定"></textarea>
+              </div>
+              <div>
+                <label class="field-label">ルール（バイリンガル）</label>
+                <div id="char-rules-bilingual"></div>
+                <button class="secondary" style="margin-top:6px; font-size:0.75rem;" onclick="addRule('_bilingual')">+ ルール追加</button>
+              </div>
+              <div>
+                <label class="field-label">TTSスタイル（バイリンガル）</label>
+                <textarea id="char-tts-style-bilingual" rows="2" class="text-input" placeholder="例: 日本語と英語を自然に切り替えて読み上げてください"></textarea>
+              </div>
+            </div>
+          </div>
+          <!-- 共通フィールド（言語タブに依存しない） -->
           <div>
             <label class="field-label">感情</label>
             <div id="char-emotions"></div>
@@ -209,10 +259,6 @@
               <option value="Sadaltager">Sadaltager</option>
               <option value="Sulafat">Sulafat</option>
             </select>
-          </div>
-          <div>
-            <label class="field-label">話し方スタイル（TTS Style）</label>
-            <textarea id="char-tts-style" rows="2" class="text-input" placeholder="例: 元気で明るい声で、好奇心いっぱいに読み上げてください"></textarea>
           </div>
           <div>
             <button id="btn-voice-sample" onclick="voiceSample()" style="font-size:0.8rem;">&#9654; サンプル再生</button>

@@ -148,6 +148,18 @@ async function _uploadCharVrm(input) {
   _loadCharVrmFiles();
 }
 
+// --- 言語タブ切替 ---
+let _currentLangSuffix = '';  // '', '_en', '_bilingual'
+
+function switchLangTab(suffix, btn) {
+  _currentLangSuffix = suffix;
+  document.querySelectorAll('.lang-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.lang-pane').forEach(p => {
+    p.style.display = p.dataset.langPane === suffix ? '' : 'none';
+  });
+}
+
 // --- キャラクター設定 ---
 let _charEmotions = {};
 let _charBlendshapes = {};
@@ -177,14 +189,26 @@ async function _loadCharacterFromApi(url) {
     }
     _currentCharId = data.id;
     document.getElementById('char-name').value = data.name || '';
+    // 日本語版
     document.getElementById('char-prompt').value = data.system_prompt || '';
     renderRules(data.rules || []);
+    document.getElementById('char-tts-style').value = data.tts_style || '';
+    // 英語版
+    document.getElementById('char-prompt-en').value = data.system_prompt_en || '';
+    renderRules(data.rules_en || [], '_en');
+    document.getElementById('char-tts-style-en').value = data.tts_style_en || '';
+    // バイリンガル版
+    document.getElementById('char-prompt-bilingual').value = data.system_prompt_bilingual || '';
+    renderRules(data.rules_bilingual || [], '_bilingual');
+    document.getElementById('char-tts-style-bilingual').value = data.tts_style_bilingual || '';
+    // 共通
     _charEmotions = data.emotions || {};
     _charBlendshapes = data.emotion_blendshapes || {};
     document.getElementById('char-tts-voice').value = data.tts_voice || '';
-    document.getElementById('char-tts-style').value = data.tts_style || '';
     renderEmotions();
     renderBlendshapes();
+    // 言語タブを日本語に戻す
+    switchLangTab('', document.querySelector('.lang-tab[data-lang=""]'));
     document.getElementById('char-status').textContent = '';
     // バナー更新（先生のみ）
     if (_currentChar === 'teacher') {
@@ -246,29 +270,32 @@ function updateCharacterBanner(charData, langData) {
   }
 }
 
-function renderRules(rules) {
-  const el = document.getElementById('char-rules');
+function renderRules(rules, suffix = '') {
+  const el = document.getElementById('char-rules' + suffix);
   el.innerHTML = '';
+  const cls = 'char-rule' + suffix.replace(/_/g, '-');
   rules.forEach((rule) => {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-    row.innerHTML = `<input type="text" class="char-rule text-input" value="${escHtml(rule)}" style="flex:1; padding:2px 6px; font-size:0.8rem;">
+    row.innerHTML = `<input type="text" class="${cls} text-input" value="${escHtml(rule)}" style="flex:1; padding:2px 6px; font-size:0.8rem;">
       <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove(); _scheduleAutoSave()">×</button>`;
     el.appendChild(row);
   });
 }
 
-function addRule() {
-  const el = document.getElementById('char-rules');
+function addRule(suffix = '') {
+  const el = document.getElementById('char-rules' + suffix);
+  const cls = 'char-rule' + suffix.replace(/_/g, '-');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
-  row.innerHTML = `<input type="text" class="char-rule text-input" value="" style="flex:1; padding:2px 6px; font-size:0.8rem;">
+  row.innerHTML = `<input type="text" class="${cls} text-input" value="" style="flex:1; padding:2px 6px; font-size:0.8rem;">
     <button class="danger" style="font-size:0.7rem; padding:2px 6px;" onclick="this.parentElement.remove(); _scheduleAutoSave()">×</button>`;
   el.appendChild(row);
 }
 
-function collectRules() {
-  return [...document.querySelectorAll('.char-rule')].map(el => el.value).filter(v => v.trim());
+function collectRules(suffix = '') {
+  const cls = 'char-rule' + suffix.replace(/_/g, '-');
+  return [...document.querySelectorAll('.' + cls)].map(el => el.value).filter(v => v.trim());
 }
 
 function renderEmotions() {
@@ -369,6 +396,14 @@ async function saveCharacter() {
       emotion_blendshapes: collectBlendshapes(),
       tts_voice: document.getElementById('char-tts-voice').value || null,
       tts_style: document.getElementById('char-tts-style').value || null,
+      // 英語版
+      system_prompt_en: document.getElementById('char-prompt-en').value || null,
+      rules_en: collectRules('_en').length > 0 ? collectRules('_en') : null,
+      tts_style_en: document.getElementById('char-tts-style-en').value || null,
+      // バイリンガル版
+      system_prompt_bilingual: document.getElementById('char-prompt-bilingual').value || null,
+      rules_bilingual: collectRules('_bilingual').length > 0 ? collectRules('_bilingual') : null,
+      tts_style_bilingual: document.getElementById('char-tts-style-bilingual').value || null,
     };
     const url = _currentCharId ? '/api/character/' + _currentCharId : '/api/character';
     const res = await api('PUT', url, body);
@@ -384,13 +419,16 @@ async function saveCharacter() {
 }
 
 // 静的フィールドの自動保存リスナー
-['char-name', 'char-prompt', 'char-tts-style'].forEach(id => {
+['char-name', 'char-prompt', 'char-tts-style',
+ 'char-prompt-en', 'char-tts-style-en',
+ 'char-prompt-bilingual', 'char-tts-style-bilingual'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', _scheduleAutoSave);
 });
 document.getElementById('char-tts-voice')?.addEventListener('change', _scheduleAutoSave);
 
 // 動的フィールド（ルール・感情・BlendShape）のイベント委譲
-['char-rules', 'char-emotions', 'char-blendshapes'].forEach(id => {
+['char-rules', 'char-rules-en', 'char-rules-bilingual',
+ 'char-emotions', 'char-blendshapes'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', _scheduleAutoSave);
   document.getElementById(id)?.addEventListener('change', _scheduleAutoSave);
 });

@@ -105,6 +105,10 @@
   .char-subcontent { display: none; }
   .char-subcontent.active { display: block; }
 
+  .lang-tab { padding: 5px 14px; cursor: pointer; font-size: 0.8rem; color: #9a88b5; background: #f5f0fa; border: 1px solid #e0d0f0; border-radius: 6px; }
+  .lang-tab:hover { color: #6a5590; background: #ece5fa; }
+  .lang-tab.active { color: #fff; background: #7b1fa2; border-color: #7b1fa2; font-weight: 600; }
+
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
   .card { background: #ffffff; border-radius: 8px; padding: 16px; border: 1px solid #d0c0e8; }
   .card h2 { font-size: 0.95rem; margin-bottom: 12px; color: #7b1fa2; display: flex; align-items: center; gap: 8px; font-weight: 600; }

@@ -1,5 +1,12 @@
 # DONE
 
+## 英語モードのセリフを英語にする Step 3
+
+- [x] 管理画面に言語タブ（日本語/English/バイリンガル）追加
+- [x] 各タブにシステムプロンプト・ルール・TTSスタイルの入力欄を配置
+- [x] renderRules/addRule/collectRulesを言語サフィックス対応に拡張
+- [x] saveCharacter/loadCharacterで全言語フィールドの読み書き対応
+
 ## 英語モードのセリフを英語にする Step 2
 
 - [x] `CharacterUpdate` スキーマに英語/バイリンガル版6フィールド追加（`system_prompt_en`, `rules_en`, `tts_style_en`, `*_bilingual`）

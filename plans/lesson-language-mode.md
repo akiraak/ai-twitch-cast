@@ -1,6 +1,6 @@
 # プラン: 英語モードのセリフを英語にする
 
-ステータス: Step 1 完了
+ステータス: Step 3 完了
 
 ## Context
 
@@ -147,7 +147,7 @@ GET `/api/character/{id}` のレスポンスにも新フィールドを含める
 
 ## 3. 管理画面UI の拡張
 
-### 変更ファイル: `static/index.html`, `static/js/admin/character.js`
+### 変更ファイル: `static/index.html`, `static/css/index.css`, `static/js/admin/character.js`
 
 キャラクター編集画面に言語タブを追加:
 

@@ -6,7 +6,6 @@
 - [ ] コンテンツを生成し不自然なところがないかAIで検証する
 - [ ] コンテンツに出てくるメインコンテンツの文章や会話を読み上げるようにする
 - [>] 英語モードのセリフを英語にする → [plans/lesson-language-mode.md](plans/lesson-language-mode.md)
-  - [ ] Step 3: 管理画面UIに言語タブ追加（日本語/English/バイリンガル）
   - [ ] Step 4: セリフ生成プロンプト刷新（`build_lesson_dialogue_prompt()` 新設）
   - [ ] Step 5: TTS スタイルの言語対応
   - [ ] Step 6: ドキュメント更新
