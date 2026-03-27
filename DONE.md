@@ -1,5 +1,11 @@
 # DONE
 
+## 授業モード: セリフ生成にキャラのrulesを適用
+
+- [x] `_generate_single_dialogue()` のシステムプロンプトに `char.rules`（文字数制限等）を追加
+- [x] コメント応答と同じキャラ固有の応答ルールが授業セリフにも適用されるように修正
+- [x] 日本語・英語両方のプロンプトに対応
+
 ## ブラウザテスト（Playwright）Step 3a: 授業モード CRUDテスト
 
 - [x] test_teacher_workflow.py 作成（TestLessonCRUD 6テスト + TestPlanDisplay 2テスト等、計28テスト）

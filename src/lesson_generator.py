@@ -1501,14 +1501,16 @@ def _generate_single_dialogue(
     """1セリフをキャラのペルソナで生成し、generationメタデータ付きで返す"""
     char_system = character_config.get("system_prompt", "")
     char_name = character_config.get("name", role)
+    char_rules = character_config.get("rules", "")
     emotions = character_config.get("emotions", {})
     emotion_list = ", ".join(emotions.keys()) if emotions else "neutral"
 
     if en:
+        rules_block = f"\n\nCharacter rules:\n{char_rules}" if char_rules else ""
         system_prompt = f"""You are {char_name}, a character in a Twitch educational stream.
 Stay in character and speak naturally.
 
-{char_system}
+{char_system}{rules_block}
 
 Available emotions: {emotion_list}
 
@@ -1521,9 +1523,10 @@ Rules:
 - emotion: choose from your available emotions
 - Output ONLY a JSON object: {{"content": "...", "tts_text": "...", "emotion": "..."}}"""
     else:
+        rules_block = f"\n\nキャラクタールール:\n{char_rules}" if char_rules else ""
         system_prompt = f"""あなたは「{char_name}」です。Twitch教育配信のキャラクターとして自然に話してください。
 
-{char_system}
+{char_system}{rules_block}
 
 使用可能な感情: {emotion_list}
 
