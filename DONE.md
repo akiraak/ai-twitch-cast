@@ -1,5 +1,10 @@
 # DONE
 
+## 機能ごとのREADME検討 → 不要と結論
+
+- [x] 現行の3層構造（CLAUDE.md + メモリ + 個別docs）で十分と判断
+- [x] 分析結果を [docs/feature-documentation-analysis.md](docs/feature-documentation-analysis.md) に記録
+
 ## キャラのライト設定が反映されないバグ修正
 
 - [x] 原因: `applySettings` で旧 `lighting` セクションが `lighting_teacher`/`lighting_student` を上書きしていた
