@@ -1,5 +1,11 @@
 # DONE
 
+## 英語モードのセリフを英語にする Step 2
+
+- [x] `CharacterUpdate` スキーマに英語/バイリンガル版6フィールド追加（`system_prompt_en`, `rules_en`, `tts_style_en`, `*_bilingual`）
+- [x] `model_dump(exclude_none=True)` でNone値が既存フィールドを上書きしないよう修正
+- [x] テスト4件追加（英語版保存/取得、バイリンガル版、後方互換、None非上書き）
+
 ## 英語モードのセリフを英語にする Step 1
 
 - [x] キャラ設定に3言語パターン追加（`system_prompt_en/bilingual`, `rules_en/bilingual`, `tts_style_en/bilingual`）

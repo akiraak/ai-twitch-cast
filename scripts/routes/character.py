@@ -33,6 +33,14 @@ class CharacterUpdate(BaseModel):
     emotion_blendshapes: dict[str, dict[str, float]]
     tts_voice: str | None = None
     tts_style: str | None = None
+    # --- 英語版 ---
+    system_prompt_en: str | None = None
+    rules_en: list[str] | None = None
+    tts_style_en: str | None = None
+    # --- バイリンガル版 ---
+    system_prompt_bilingual: str | None = None
+    rules_bilingual: list[str] | None = None
+    tts_style_bilingual: str | None = None
 
 
 class MemoryUpdate(BaseModel):
@@ -67,7 +75,7 @@ async def update_character_api(body: CharacterUpdate):
     # 既存のconfigを読み込んで role 等の既存フィールドを保持
     existing = db.get_character_by_id(char_id)
     existing_config = json.loads(existing["config"]) if existing else {}
-    new_config = {**existing_config, **body.model_dump()}
+    new_config = {**existing_config, **body.model_dump(exclude_none=True)}
     config = json.dumps(new_config, ensure_ascii=False)
     db.update_character(char_id, name=body.name, config=config)
     invalidate_character_cache()
@@ -175,7 +183,7 @@ async def update_character_by_id_api(character_id: int, body: CharacterUpdate):
         return {"ok": False, "error": "キャラクターが見つかりません"}
     # 既存の config を読み込んで role 等の追加フィールドを保持
     existing_config = json.loads(existing["config"])
-    new_config = {**existing_config, **body.model_dump()}
+    new_config = {**existing_config, **body.model_dump(exclude_none=True)}
     logger.info("[char-save] id=%s tts_voice=%r tts_style=%r", character_id, new_config.get("tts_voice"), new_config.get("tts_style"))
     config = json.dumps(new_config, ensure_ascii=False)
     db.update_character(character_id, name=body.name, config=config)

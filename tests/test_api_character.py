@@ -104,6 +104,92 @@ class TestUpdateCharacterById:
         assert data.get("role") == "student"  # role が保持されている
 
 
+class TestCharacterLanguageFields:
+    """英語/バイリンガル版フィールドの保存・取得テスト"""
+
+    def test_save_and_load_en_fields(self, api_client):
+        """英語版フィールドが保存・取得できる"""
+        chars = api_client.get("/api/characters").json()
+        char = chars[0]
+        body = {
+            "name": char["name"],
+            "system_prompt": "日本語プロンプト",
+            "rules": ["ルール1"],
+            "emotions": {"neutral": "通常"},
+            "emotion_blendshapes": {"neutral": {}},
+            "system_prompt_en": "English prompt",
+            "rules_en": ["Rule 1", "Rule 2"],
+            "tts_style_en": "Read cheerfully",
+        }
+        resp = api_client.put(f"/api/character/{char['id']}", json=body)
+        assert resp.json()["ok"] is True
+        data = api_client.get(f"/api/character/{char['id']}").json()
+        assert data["system_prompt_en"] == "English prompt"
+        assert data["rules_en"] == ["Rule 1", "Rule 2"]
+        assert data["tts_style_en"] == "Read cheerfully"
+
+    def test_save_and_load_bilingual_fields(self, api_client):
+        """バイリンガル版フィールドが保存・取得できる"""
+        chars = api_client.get("/api/characters").json()
+        char = chars[0]
+        body = {
+            "name": char["name"],
+            "system_prompt": "日本語プロンプト",
+            "rules": ["ルール1"],
+            "emotions": {"neutral": "通常"},
+            "emotion_blendshapes": {"neutral": {}},
+            "system_prompt_bilingual": "日英混合プロンプト",
+            "rules_bilingual": ["日英ルール"],
+            "tts_style_bilingual": "日本語と英語を混ぜて読む",
+        }
+        resp = api_client.put(f"/api/character/{char['id']}", json=body)
+        assert resp.json()["ok"] is True
+        data = api_client.get(f"/api/character/{char['id']}").json()
+        assert data["system_prompt_bilingual"] == "日英混合プロンプト"
+        assert data["rules_bilingual"] == ["日英ルール"]
+        assert data["tts_style_bilingual"] == "日本語と英語を混ぜて読む"
+
+    def test_en_fields_optional(self, api_client):
+        """英語/バイリンガル版フィールドなしでも更新できる（後方互換）"""
+        body = {
+            "name": "テスト",
+            "system_prompt": "prompt",
+            "rules": [],
+            "emotions": {"neutral": "通常"},
+            "emotion_blendshapes": {"neutral": {}},
+        }
+        resp = api_client.put("/api/character", json=body)
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+
+    def test_null_fields_not_overwrite_existing(self, api_client):
+        """None値のフィールドは既存値を上書きしない"""
+        chars = api_client.get("/api/characters").json()
+        char = chars[0]
+        # まず英語版を保存
+        body1 = {
+            "name": char["name"],
+            "system_prompt": "jp",
+            "rules": [],
+            "emotions": {"neutral": "通常"},
+            "emotion_blendshapes": {"neutral": {}},
+            "system_prompt_en": "English",
+        }
+        api_client.put(f"/api/character/{char['id']}", json=body1)
+        # 英語版フィールドなしで更新
+        body2 = {
+            "name": char["name"],
+            "system_prompt": "jp updated",
+            "rules": [],
+            "emotions": {"neutral": "通常"},
+            "emotion_blendshapes": {"neutral": {}},
+        }
+        api_client.put(f"/api/character/{char['id']}", json=body2)
+        data = api_client.get(f"/api/character/{char['id']}").json()
+        # existing_config とマージされるので英語版は残る
+        assert data.get("system_prompt_en") == "English"
+
+
 class TestGetCharacterLayers:
     def setup_method(self):
         invalidate_character_cache()
