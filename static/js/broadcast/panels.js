@@ -195,6 +195,28 @@ function _escHtml(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// --- 授業タイトルパネル ---
+
+function showLessonTitle(name) {
+  const panel = document.getElementById('lesson-title-panel');
+  const text = document.getElementById('lesson-title-text');
+  if (!panel || !text) return;
+  text.textContent = name;
+  panel.style.display = 'block';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { panel.classList.add('visible'); });
+  });
+}
+
+function hideLessonTitle() {
+  const panel = document.getElementById('lesson-title-panel');
+  if (!panel) return;
+  panel.classList.remove('visible');
+  setTimeout(() => {
+    if (!panel.classList.contains('visible')) panel.style.display = 'none';
+  }, 600);
+}
+
 // --- 授業モード（パネル表示切替） ---
 
 let _lessonMode = false;
@@ -209,10 +231,11 @@ function setLessonMode(active) {
     if (todo) todo.style.display = 'none';
     if (customTexts) customTexts.style.display = 'none';
   } else {
-    // パネル復帰 + 授業テキスト・進捗非表示
+    // パネル復帰 + 授業テキスト・進捗・タイトル非表示
     if (todo) todo.style.display = '';
     if (customTexts) customTexts.style.display = '';
     hideLessonText();
     hideLessonProgress();
+    hideLessonTitle();
   }
 }

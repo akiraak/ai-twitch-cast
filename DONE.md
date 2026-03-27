@@ -1,5 +1,13 @@
 # DONE
 
+## 授業タイトルを配信画面に表示
+
+- [x] `lesson_runner.py`: `_notify_status()` の `lesson_status` イベントに `lesson_name` フィールドを追加
+- [x] `broadcast.html`: 授業タイトル専用パネル（`lesson-title-panel`）を新規追加
+- [x] `broadcast.css`: 画面上部中央に表示、紫枠・半透明背景のスタイル
+- [x] `panels.js`: `showLessonTitle()` / `hideLessonTitle()` 追加、授業終了時に自動非表示
+- [x] `websocket.js`: `lesson_status` イベントでタイトルパネルに表示
+
 ## 授業モード: セリフ生成にキャラのrulesを適用
 
 - [x] `_generate_single_dialogue()` のシステムプロンプトに `char.rules`（文字数制限等）を追加

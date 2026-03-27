@@ -103,6 +103,7 @@ class LessonRunner:
         self._on_overlay = on_overlay
         self._state = LessonState.IDLE
         self._lesson_id: int | None = None
+        self._lesson_name: str = ""
         self._lang: str = "ja"
         self._sections: list[dict] = []
         self._current_index: int = 0
@@ -146,6 +147,7 @@ class LessonRunner:
             raise ValueError("スクリプトがありません。先にスクリプトを生成してください。")
 
         self._lesson_id = lesson_id
+        self._lesson_name = lesson["name"]
         self._lang = lang
         self._sections = sections
         self._current_index = 0
@@ -513,6 +515,7 @@ class LessonRunner:
                 "type": "lesson_status",
                 "state": self._state.value,
                 "lesson_id": self._lesson_id,
+                "lesson_name": self._lesson_name,
                 "current_index": self._current_index,
                 "total_sections": len(self._sections),
             }
