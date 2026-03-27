@@ -111,6 +111,17 @@ function applySettings(s) {
     if (s.todo.titleFontSize != null) todoPanelEl.querySelector('.todo-title').style.fontSize = s.todo.titleFontSize + 'vw';
     loadTodo();
   }
+  // === lesson_title（data-fixed-layoutでレイアウトはCSS固定） ===
+  if (s.lesson_title) {
+    const ltpanel = document.getElementById('lesson-title-panel');
+    if (ltpanel) {
+      applyCommonStyle(ltpanel, s.lesson_title);
+      const lttext = document.getElementById('lesson-title-text');
+      if (lttext && s.lesson_title.fontSize != null) {
+        lttext.style.fontSize = s.lesson_title.fontSize + 'vw';
+      }
+    }
+  }
   // === lesson_text（data-fixed-layoutでレイアウトはCSS固定） ===
   if (s.lesson_text) {
     const ltp = document.getElementById('lesson-text-panel');
@@ -130,6 +141,7 @@ function applySettings(s) {
     const lpp = document.getElementById('lesson-progress-panel');
     if (lpp) {
       applyCommonStyle(lpp, s.lesson_progress);
+      if (s.lesson_progress.maxHeight != null) lpp.style.maxHeight = s.lesson_progress.maxHeight + '%';
       // 文字サイズ: fontSize（共通）→ 全子要素に適用、titleFontSize/itemFontSize（固有）→ 個別に上書き
       const fs = s.lesson_progress.fontSize;
       const titleFs = s.lesson_progress.titleFontSize ?? (fs != null ? fs : null);

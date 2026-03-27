@@ -97,6 +97,7 @@ _ITEM_SPECIFIC_SCHEMA = {
             {"key": "content", "label": "テキスト", "type": "text"},
         ]},
     ],
+    "lesson_title": [],
     "lesson_text": [
         {"title": "固有設定", "fields": [
             {"key": "maxHeight", "label": "最大高さ (%)", "type": "slider", "min": 20, "max": 90, "step": 1, "default": 70},
@@ -118,6 +119,7 @@ _SCHEMA_ITEM_LABELS = {
     "subtitle": "字幕（メイン）",
     "subtitle2": "字幕（サブ）",
     "todo": "TODO",
+    "lesson_title": "授業タイトル",
     "lesson_text": "授業テキスト",
     "lesson_progress": "授業進捗",
     "custom_text": "カスタムテキスト",

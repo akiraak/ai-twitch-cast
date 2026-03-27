@@ -220,6 +220,33 @@ async def debug_subtitle_hide(avatar_id: str | None = None):
     return {"ok": True}
 
 
+@router.post("/api/debug/lesson-title")
+async def debug_lesson_title():
+    """デバッグ用：授業タイトルを仮表示する"""
+    await state.broadcast_overlay({
+        "type": "lesson_status",
+        "state": "running",
+        "lesson_name": "タイトルプレビュー — デザイン確認用",
+        "current_index": 0,
+        "sections": [
+            {"type": "introduction", "summary": "はじめに"},
+            {"type": "explanation", "summary": "本題"},
+            {"type": "summary", "summary": "まとめ"},
+        ],
+    })
+    return {"ok": True}
+
+
+@router.post("/api/debug/lesson-title/hide")
+async def debug_lesson_title_hide():
+    """デバッグ用：授業タイトルを非表示にする"""
+    await state.broadcast_overlay({
+        "type": "lesson_status",
+        "state": "idle",
+    })
+    return {"ok": True}
+
+
 @router.post("/api/debug/lesson-text")
 async def debug_lesson_text():
     """デバッグ用：授業テキストを仮表示する"""
@@ -400,6 +427,12 @@ _OVERLAY_DEFAULTS = {
     "todo": _make_item_defaults({
         "positionX": 36, "positionY": 2, "width": 28, "height": 70,
         "fontSize": 1.25, "titleFontSize": 1.46, "bgOpacity": 0.95, "zIndex": 20,
+    }),
+    "lesson_title": _make_item_defaults({
+        "bgOpacity": 0.7, "backdropBlur": 10,
+        "fontSize": 1.6,
+        "bgColor": "#0a0a1e", "borderColor": "#7c4dff", "borderOpacity": 0.4,
+        "textColor": "#ffffff",
     }),
     "lesson_text": _make_item_defaults({
         "bgOpacity": 0.65, "backdropBlur": 12,
@@ -686,7 +719,7 @@ async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
     logger.info("[overlay] save_settings: %s", {k: v for k, v in body.items() if k != "type"})
-    fixed_items = {"avatar", "avatar1", "avatar2", "subtitle", "subtitle2", "todo", "lesson_text", "lesson_progress"}
+    fixed_items = {"avatar", "avatar1", "avatar2", "subtitle", "subtitle2", "todo", "lesson_title", "lesson_text", "lesson_progress"}
     lighting_sections = {"lighting_teacher", "lighting_student"}
     for section, props in body.items():
         if not isinstance(props, dict):
