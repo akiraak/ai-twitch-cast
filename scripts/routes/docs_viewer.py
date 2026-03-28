@@ -34,7 +34,6 @@ async def list_doc_files(dir: str = "plans"):
             "modified": stat.st_mtime,
         })
 
-    files.sort(key=lambda f: f["modified"], reverse=True)
     return {"ok": True, "files": files}
 
 

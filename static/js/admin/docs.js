@@ -15,6 +15,7 @@ async function loadDocFiles() {
   try {
     const res = await fetch(`/api/docs/files?dir=${_docsCurrentDir}`);
     const data = await res.json();
+    data.files.sort((a, b) => a.name.localeCompare(b.name));
     const el = document.getElementById('docs-file-list');
     el.innerHTML = data.files.map(f =>
       `<button class="db-tab${f.name === _docsCurrentFile ? ' active' : ''}"
