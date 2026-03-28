@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src import db
+from src.content_analyzer import analyze_content, analyze_content_full
 from src.lesson_generator import (
     extract_main_content,
     extract_text_from_image,
@@ -808,6 +809,33 @@ async def get_tts_cache(lesson_id: int, lang: str = "ja"):
         return {"ok": False, "error": "コンテンツが見つかりません"}
     sections = get_tts_cache_info(lesson_id, lang=lang)
     return {"ok": True, "sections": sections}
+
+
+@router.post("/api/lessons/{lesson_id}/analyze")
+async def analyze_lesson(lesson_id: int, lang: str = "ja", include_llm: bool = True):
+    """コンテンツ品質分析（アルゴリズム指標 + LLM評価）"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    sections = db.get_lesson_sections(lesson_id, lang=lang)
+    if not sections:
+        return {"ok": False, "error": "セクションがありません。先にスクリプトを生成してください"}
+
+    section_dicts = [dict(s) for s in sections]
+
+    if include_llm:
+        result = await analyze_content_full(
+            section_dicts,
+            lesson_name=lesson["name"],
+            extracted_text=lesson.get("extracted_text", ""),
+            lang=lang,
+        )
+    else:
+        result = analyze_content(section_dicts, lang=lang)
+
+    result.lesson_id = lesson_id
+    return {"ok": True, "analysis": result.to_dict()}
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache")

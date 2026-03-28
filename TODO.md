@@ -1,7 +1,6 @@
 # TODO
 
 ## 教師モード
-- [ ] バグ教師モードコンテンツを客観的に分析しイケてるコンテンツかAIで検証するモードの追加
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] メインコンテンツ読み上げ方式改善: 手動テストで会話文コンテンツの先生・生徒役割分担を確認
 

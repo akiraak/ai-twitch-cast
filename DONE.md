@@ -1,5 +1,14 @@
 # DONE
 
+## コンテンツ品質分析モード（数値化）
+
+- [x] アルゴリズム指標エンジン（`src/content_analyzer.py` 新規: カバー率・対話バランス・構成多様性・クイズ充実度・ペーシング、50点満点）
+- [x] LLM評価エンジン（エンタメ性・教育効果・キャラ活用・構成力を1コールで評価、50点満点）
+- [x] APIエンドポイント（`POST /api/lessons/{id}/analyze` を `scripts/routes/teacher.py` に追加）
+- [x] 管理画面UI（`static/js/admin/teacher.js` に品質分析QAステップ・プログレスバー・ランク表示追加）
+- [x] テスト38件（`tests/test_content_analyzer.py` 新規）、全668テスト通過
+- [x] プラン → [plans/content-quality-analyzer.md](plans/content-quality-analyzer.md)（完了）
+
 ## speech-generation-flow.md 全面改訂
 
 - [x] 現状コードとの乖離20箇所を調査・特定 → [plans/speech-generation-flow-audit.md](plans/speech-generation-flow-audit.md)

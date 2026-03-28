@@ -476,6 +476,24 @@ async function buildLessonItem(lessonId) {
   step2b.appendChild(step2bBody);
   body.appendChild(step2b);
 
+  // === 品質分析 ===
+  if (hasSections) {
+    const qaDiv = document.createElement('div');
+    qaDiv.className = 'lesson-step step-active';
+    qaDiv.innerHTML = `<div class="lesson-step-num" style="background:#1565c0;">QA</div>`;
+    const qaBody = document.createElement('div');
+    qaBody.className = 'lesson-step-body';
+    qaBody.innerHTML = `<div class="lesson-step-title">品質分析</div>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+        <button onclick="analyzeLesson(${lessonId}, '${lang}', false)" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">アルゴリズム分析</button>
+        <button onclick="analyzeLesson(${lessonId}, '${lang}', true)" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">＋ LLM評価</button>
+        <span class="qa-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
+      </div>
+      <div class="qa-result" id="qa-result-${lessonId}"></div>`;
+    qaDiv.appendChild(qaBody);
+    body.appendChild(qaDiv);
+  }
+
   // === STEP 3: 授業開始 ===
   const isRunning = runningThisLesson && lState === 'running';
   const isPaused = runningThisLesson && lState === 'paused';
@@ -1076,6 +1094,87 @@ async function _reorderSection(lessonId, sectionId, direction) {
   await api('PUT', '/api/lessons/' + lessonId + '/sections/reorder', { section_ids: ids });
   _openLessonIds.add(lessonId);
   await loadLessons();
+}
+
+// --- 品質分析 ---
+
+const RANK_COLORS = { S: '#d4af37', A: '#2e7d32', B: '#1565c0', C: '#e65100', D: '#c62828' };
+
+async function analyzeLesson(lessonId, lang, includeLlm) {
+  const statusEl = document.querySelector(`#qa-result-${lessonId}`)?.closest('.lesson-step-body')?.querySelector('.qa-status');
+  const resultEl = document.getElementById('qa-result-' + lessonId);
+  if (!resultEl) return;
+  if (statusEl) statusEl.textContent = includeLlm ? '分析中（LLM評価含む）...' : '分析中...';
+  resultEl.innerHTML = '';
+
+  const res = await api('POST', '/api/lessons/' + lessonId + '/analyze?lang=' + lang + '&include_llm=' + includeLlm);
+  if (statusEl) statusEl.textContent = '';
+  if (!res || !res.ok) {
+    resultEl.innerHTML = `<div style="color:#c62828; font-size:0.8rem;">${res?.error || 'エラーが発生しました'}</div>`;
+    return;
+  }
+  const a = res.analysis;
+  const rankColor = RANK_COLORS[a.rank] || '#888';
+
+  let html = `<div style="display:flex; align-items:center; gap:12px; margin-bottom:10px; padding:8px 12px; background:#faf7ff; border:2px solid ${rankColor}; border-radius:8px;">
+    <div style="font-size:2rem; font-weight:700; color:${rankColor};">${a.rank}</div>
+    <div>
+      <div style="font-size:1.1rem; font-weight:600;">${a.total_score} / ${a.max_score}</div>
+      <div style="font-size:0.7rem; color:#8a7a9a;">総合スコア</div>
+    </div>
+  </div>`;
+
+  // アルゴリズム指標
+  html += `<div style="font-size:0.8rem; font-weight:600; margin-bottom:4px;">アルゴリズム指標</div>`;
+  const algoLabels = {
+    display_text_coverage: 'カバー率',
+    dialogue_balance: '対話バランス',
+    section_diversity: '構成多様性',
+    question_richness: 'クイズ充実度',
+    pacing: 'ペーシング',
+  };
+  for (const [key, sd] of Object.entries(a.algorithmic_scores)) {
+    html += _renderScoreBar(algoLabels[key] || key, sd);
+  }
+
+  // LLM評価
+  if (a.llm_scores) {
+    html += `<div style="font-size:0.8rem; font-weight:600; margin:8px 0 4px;">LLM評価</div>`;
+    const llmLabels = { entertainment: 'エンタメ性', education: '教育効果', character: 'キャラ活用', structure: '構成力' };
+    for (const [key, sd] of Object.entries(a.llm_scores)) {
+      html += _renderScoreBar(llmLabels[key] || key, sd);
+    }
+  }
+
+  // 改善提案
+  if (a.suggestions && a.suggestions.length > 0) {
+    html += `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:0.75rem; color:#1565c0; font-weight:600;">改善提案（${a.suggestions.length}件）</summary>
+      <ul style="font-size:0.72rem; margin:4px 0 0 16px; color:#2a1f40;">`;
+    for (const s of a.suggestions) {
+      html += `<li style="margin-bottom:2px;">${esc(s)}</li>`;
+    }
+    html += `</ul></details>`;
+  }
+
+  resultEl.innerHTML = html;
+}
+
+function _renderScoreBar(label, sd) {
+  const pct = sd.max_score > 0 ? Math.round(sd.score / sd.max_score * 100) : 0;
+  const barColor = pct >= 80 ? '#2e7d32' : pct >= 60 ? '#1565c0' : pct >= 40 ? '#e65100' : '#c62828';
+  let html = `<div style="margin-bottom:6px;">
+    <div style="display:flex; justify-content:space-between; font-size:0.72rem; margin-bottom:1px;">
+      <span>${esc(label)}</span>
+      <span style="font-weight:600;">${sd.score} / ${sd.max_score}</span>
+    </div>
+    <div style="background:#e8e0f0; border-radius:3px; height:8px; overflow:hidden;">
+      <div style="background:${barColor}; height:100%; width:${pct}%; border-radius:3px; transition:width 0.3s;"></div>
+    </div>`;
+  if (sd.details) {
+    html += `<div style="font-size:0.65rem; color:#8a7a9a; margin-top:1px;">${esc(sd.details)}</div>`;
+  }
+  html += `</div>`;
+  return html;
 }
 
 // --- 授業制御 ---
