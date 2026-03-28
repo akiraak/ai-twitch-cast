@@ -206,6 +206,30 @@ async function buildLessonItem(lessonId) {
     </details>`;
   }
 
+  // メインコンテンツ（Step 1 の中に折りたたみ表示）
+  if (lesson.main_content) {
+    try {
+      const mainContent = JSON.parse(lesson.main_content);
+      if (Array.isArray(mainContent) && mainContent.length > 0) {
+        const typeIcons = { conversation: '💬', passage: '📄', word_list: '📝', table: '📊' };
+        const typeColors = { conversation: '#1565c0', passage: '#2e7d32', word_list: '#e65100', table: '#6a1b9a' };
+        const itemsHtml = mainContent.map((item, idx) => {
+          const ct = item.content_type || 'passage';
+          const icon = typeIcons[ct] || '📄';
+          const color = typeColors[ct] || '#333';
+          return `<div style="margin-bottom:8px; padding:6px 8px; border-left:3px solid ${color}; background:#fafafa; border-radius:0 4px 4px 0;">
+            <div style="font-weight:500; color:${color};">${icon} ${idx + 1}. [${esc(ct)}] ${esc(item.label || '')}</div>
+            <pre style="margin:4px 0 0; white-space:pre-wrap; word-break:break-word; font-size:0.72rem; color:#444;">${esc(item.content || '')}</pre>
+          </div>`;
+        }).join('');
+        step1Html += `<details style="margin-top:10px; font-size:0.8rem;">
+          <summary style="cursor:pointer; color:#7b1fa2; font-weight:500;">メインコンテンツ（${mainContent.length}件）</summary>
+          <div style="margin-top:6px; max-height:300px; overflow-y:auto;">${itemsHtml}</div>
+        </details>`;
+      }
+    } catch (e) { /* main_content JSONパース失敗は無視 */ }
+  }
+
   step1Body.innerHTML = step1Html;
   step1.innerHTML = '<div class="lesson-step-num">1</div>';
   step1.appendChild(step1Body);
