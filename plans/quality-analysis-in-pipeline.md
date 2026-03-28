@@ -98,7 +98,7 @@ Phase B-5 の step/total は `1 + total_turns + 1 + regen_turns + 1`（常に最
 
 ## Phase 2: LLM評価の自動実行
 
-### ステータス: 未着手
+### ステータス: 完了
 
 ### 背景
 
@@ -140,7 +140,7 @@ analysis = await analyze_content_full(
 )
 ```
 
-#### Step 7: テスト
+#### Step 7: テスト ✅ 完了
 
 - 既存テスト: `analyze_content_full` をモックして戻り値形式が維持されることを確認
 - 新規テスト: Phase B-5で `analyze_content_full` が呼ばれ、`llm_scores` が含まれることを確認

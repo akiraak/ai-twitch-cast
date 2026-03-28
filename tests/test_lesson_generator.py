@@ -960,10 +960,11 @@ class TestDirectorReviewMainContent:
 class TestGenerateLessonScriptV2ReturnFormat:
     """generate_lesson_script_v2 が dict（sections + analysis）を返すことを確認"""
 
-    def test_returns_dict_with_sections_and_analysis(self):
-        """v2パイプラインの戻り値がsectionsとanalysisを含むdictである"""
+    def _run_v2_pipeline(self, mock_analysis=None):
+        """v2パイプラインを実行するヘルパー。mock_analysisでanalyze_content_fullの戻り値を差し替え可能"""
         import json as _json
         from src.lesson_generator import generate_lesson_script_v2
+        from src.content_analyzer import AnalysisResult, ScoreDetail
 
         # Phase B-1: 構造生成レスポンス
         structure_resp = _json.dumps([
@@ -989,14 +990,33 @@ class TestGenerateLessonScriptV2ReturnFormat:
             return MagicMock(text=text)
         mock_client.models.generate_content.side_effect = _side_effect
 
+        if mock_analysis is None:
+            mock_analysis = AnalysisResult(
+                lesson_id=0, lang="ja",
+                algorithmic_scores={"test": ScoreDetail(score=10.0, max_score=10.0, details="ok")},
+                llm_scores={"entertainment": ScoreDetail(score=12.0, max_score=15.0, details="good")},
+                total_score=22.0, max_score=25.0, rank="C",
+                suggestions=[], analyzed_at="2026-01-01T00:00:00+00:00",
+            )
+
+        async def _fake_analyze_full(*args, **kwargs):
+            return mock_analysis
+
         with patch("src.lesson_generator.get_client", return_value=mock_client), \
              patch("src.lesson_generator._get_model", return_value="test-model"), \
-             patch("src.lesson_generator._get_dialogue_model", return_value="test-model"):
+             patch("src.lesson_generator._get_dialogue_model", return_value="test-model"), \
+             patch("src.lesson_generator.analyze_content_full", side_effect=_fake_analyze_full) as mock_acf:
             result = generate_lesson_script_v2(
                 "テスト授業", "テスト教材",
                 teacher_config=TEACHER_CFG,
                 student_config=STUDENT_CFG,
             )
+
+        return result, mock_acf
+
+    def test_returns_dict_with_sections_and_analysis(self):
+        """v2パイプラインの戻り値がsectionsとanalysisを含むdictである"""
+        result, _ = self._run_v2_pipeline()
 
         # 戻り値がdict形式であること
         assert isinstance(result, dict)
@@ -1010,3 +1030,24 @@ class TestGenerateLessonScriptV2ReturnFormat:
         assert isinstance(result["analysis"], dict)
         assert "total_score" in result["analysis"]
         assert "rank" in result["analysis"]
+
+    def test_analyze_content_full_called_with_correct_args(self):
+        """Phase B-5でanalyze_content_fullが正しい引数で呼ばれる"""
+        result, mock_acf = self._run_v2_pipeline()
+
+        mock_acf.assert_called_once()
+        call_args = mock_acf.call_args
+        # 第1引数はsectionsリスト
+        assert isinstance(call_args[0][0], list)
+        # キーワード引数
+        assert call_args[1]["lesson_name"] == "テスト授業"
+        assert call_args[1]["extracted_text"] == "テスト教材"
+        assert call_args[1]["lang"] == "ja"
+
+    def test_analysis_includes_llm_scores(self):
+        """分析結果にllm_scoresが含まれる"""
+        result, _ = self._run_v2_pipeline()
+
+        analysis = result["analysis"]
+        assert analysis["llm_scores"] is not None
+        assert "entertainment" in analysis["llm_scores"]

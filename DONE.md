@@ -1,9 +1,10 @@
 # DONE
 
-## Phase B-5でLLM評価を自動実行（Phase 2 Steps 5-6完了）
+## Phase B-5でLLM評価を自動実行（Phase 2 完了）
 
 - [x] Step 5: `analyze_content` → `asyncio.run(analyze_content_full(...))` に切り替え（lesson_generator.py）
 - [x] Step 6: teacher.py フォールバックも `analyze_content_full` に統一
+- [x] Step 7: テスト更新（analyze_content_fullモック化、引数検証、llm_scores確認）、全671テスト通過
 
 ## 品質分析をパイプライン内に完全統合（2c完了）
 
