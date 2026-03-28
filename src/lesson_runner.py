@@ -278,7 +278,12 @@ class LessonRunner:
         dialogues = None
         if dialogues_raw and self._student_cfg:
             try:
-                dialogues = _json.loads(dialogues_raw) if isinstance(dialogues_raw, str) else dialogues_raw
+                parsed = _json.loads(dialogues_raw) if isinstance(dialogues_raw, str) else dialogues_raw
+                # v4: {dialogues: [...], review: {...}} 形式に対応
+                if isinstance(parsed, dict) and "dialogues" in parsed:
+                    dialogues = parsed["dialogues"]
+                else:
+                    dialogues = parsed
                 if not isinstance(dialogues, list) or len(dialogues) == 0:
                     dialogues = None
             except (_json.JSONDecodeError, TypeError):

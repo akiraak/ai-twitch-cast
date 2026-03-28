@@ -1,5 +1,16 @@
 # DONE
 
+## 監督レビュー + display_text 読み上げ強化 Step 2〜7
+
+- [x] Step 2: display_text[:200] 切り詰め撤廃（全文をキャラクターAIに渡す）
+- [x] Step 3: `_director_review()` 新設（Phase B-3: 監督レビュー）
+- [x] Step 4: Phase B-4 再生成ロジック（不合格セクションのみ再生成、1回のみ）
+- [x] Step 5: `generate_lesson_script_v2()` に Phase B-3/B-4 統合
+- [x] Step 6: レビュー結果の保存（dialogues JSON内review埋め込み）・管理画面表示（teacher.js）
+- [x] Step 7: SSE 進捗表示更新（レビュー中・再生成中のメッセージ追加）
+- [x] lesson_runner/teacher.pyのdialoguesパース互換対応（新旧JSON形式の両方をサポート）
+- [x] テスト更新（レビューレスポンスのモック追加、dialogues新形式の検証）
+
 ## 監督レビュー + display_text 読み上げ強化 Step 1
 
 - [x] 監督プロンプト（英語・日本語）に display_text 読み上げルール追加（key_content 分配ルール）

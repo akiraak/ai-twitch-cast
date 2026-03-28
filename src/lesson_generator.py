@@ -1552,7 +1552,7 @@ def _generate_single_dialogue(
     if en:
         user_parts = [f"# Lesson: {lesson_name}", f"# Section: {section_type}"]
         if display_text:
-            user_parts.append(f"# Screen display: {display_text[:200]}")
+            user_parts.append(f"# Screen display (text visible to viewers — read this content aloud):\n{display_text}")
         if question:
             user_parts.append(f"# Question: {question}")
         if answer:
@@ -1569,7 +1569,7 @@ def _generate_single_dialogue(
     else:
         user_parts = [f"# 授業: {lesson_name}", f"# セクション: {section_type}"]
         if display_text:
-            user_parts.append(f"# 画面表示: {display_text[:200]}")
+            user_parts.append(f"# 画面表示（視聴者に見えるテキスト — この内容を読み上げること）:\n{display_text}")
         if question:
             user_parts.append(f"# 問題: {question}")
         if answer:
@@ -1676,6 +1676,231 @@ def _generate_section_dialogues(
         })
 
     return dialogues
+
+
+def _director_review(
+    client,
+    sections_with_dialogues: list[dict],
+    extracted_text: str,
+    lesson_name: str,
+    en: bool,
+) -> dict:
+    """監督が生成済みセリフをレビューし、改善フィードバックを返す（Phase B-3）
+
+    Returns:
+        {
+            "reviews": [
+                {
+                    "section_index": 0,
+                    "approved": true/false,
+                    "feedback": "改善点の具体的な指摘",
+                    "revised_directions": [...]  # approved=falseの場合のみ
+                },
+                ...
+            ],
+            "overall_feedback": "全体を通してのコメント",
+            "generation": { system_prompt, user_prompt, raw_output, model, temperature }
+        }
+    """
+    if en:
+        system_prompt = """You are the "Director" reviewing generated dialogue for a Twitch educational stream.
+Review the character AI's generated lines and provide feedback.
+
+## Review criteria
+
+### 1. display_text coverage (MOST IMPORTANT)
+- Check that the main content in each section's display_text (example sentences, conversation lines, key phrases) is actually read aloud in the dialogue
+- If there is "content shown on screen but never spoken", mark as NOT approved
+- Check that important items from tables and lists are mentioned in the dialogue
+
+### 2. Naturalness & character consistency
+- Do the teacher and student speak in character?
+- Are there awkward or unnatural expressions?
+
+### 3. Flow between sections
+- Is there context continuity between sections?
+- Does information flow naturally?
+
+### 4. Accuracy & coverage
+- Are key points from the source material covered?
+- Are there factual errors?
+
+## Output format (JSON)
+```json
+{
+  "reviews": [
+    {
+      "section_index": 0,
+      "approved": true,
+      "feedback": "Good coverage of display_text content."
+    },
+    {
+      "section_index": 1,
+      "approved": false,
+      "feedback": "The example sentence 'Good morning' from display_text is not read aloud.",
+      "revised_directions": [
+        {"speaker": "teacher", "direction": "...", "key_content": "..."},
+        {"speaker": "student", "direction": "...", "key_content": "..."}
+      ]
+    }
+  ],
+  "overall_feedback": "Overall comment about the lesson quality"
+}
+```
+
+### Rules for revised_directions
+- Only include revised_directions when approved is false
+- revised_directions replaces the original dialogue_directions entirely
+- Each entry: speaker, direction (2-3 sentence instruction), key_content (specific content to mention)
+- Fix the issues identified in feedback
+- Keep the same general flow but ensure display_text content is covered
+
+Output ONLY the JSON object."""
+    else:
+        system_prompt = """あなたは「監督」です。キャラクターAIが生成したセリフを監修し、ダメ出しを行ってください。
+
+## レビュー観点
+
+### 1. display_text カバー率（最重要）
+- 各セクションの display_text に含まれるメインコンテンツ（例文・会話文・キーフレーズ）が
+  セリフの中で実際に読み上げられているか確認する
+- 「画面に表示されているのに読まれていない内容」があれば不合格
+- 表・リストの重要項目もセリフ内で言及されているか
+
+### 2. 自然さ・キャラらしさ
+- 先生と生徒の口調がそれぞれのキャラクターに合っているか
+- 不自然な言い回しやぎこちない表現がないか
+
+### 3. セクション間の繋がり
+- 前後のセクションとの文脈が途切れていないか
+- 情報の流れが自然か
+
+### 4. 情報の正確性・網羅性
+- 教材の重要ポイントが漏れていないか
+- 事実関係に誤りがないか
+
+## 出力形式（JSON）
+```json
+{
+  "reviews": [
+    {
+      "section_index": 0,
+      "approved": true,
+      "feedback": "display_text の内容が適切にカバーされています。"
+    },
+    {
+      "section_index": 1,
+      "approved": false,
+      "feedback": "display_text の例文「Good morning」が読み上げられていません。",
+      "revised_directions": [
+        {"speaker": "teacher", "direction": "...", "key_content": "..."},
+        {"speaker": "student", "direction": "...", "key_content": "..."}
+      ]
+    }
+  ],
+  "overall_feedback": "全体を通してのコメント"
+}
+```
+
+### revised_directions のルール
+- approved が false の場合のみ含める
+- revised_directions は元の dialogue_directions を完全に置き換える
+- 各エントリ: speaker, direction（2〜3文の演出指示）, key_content（必ず言及する内容）
+- feedback で指摘した問題を修正する内容にする
+- 全体の流れは維持しつつ、display_text の内容カバーを確保する
+
+JSONオブジェクトのみを出力してください。"""
+
+    # ユーザープロンプト: セクション一覧（display_text + 生成済みセリフ）
+    if en:
+        user_parts = [f"# Lesson: {lesson_name}\n"]
+    else:
+        user_parts = [f"# 授業: {lesson_name}\n"]
+
+    for i, s in enumerate(sections_with_dialogues):
+        display_text = s.get("display_text", "")
+        dialogues = s.get("dialogues", [])
+
+        if en:
+            user_parts.append(f"## Section {i}: {s.get('section_type', '')} — {s.get('title', '')}")
+            if display_text:
+                user_parts.append(f"### display_text (shown on screen):\n{display_text}")
+            user_parts.append("### Generated dialogue:")
+        else:
+            user_parts.append(f"## セクション {i}: {s.get('section_type', '')} — {s.get('title', '')}")
+            if display_text:
+                user_parts.append(f"### display_text（画面表示）:\n{display_text}")
+            user_parts.append("### 生成されたセリフ:")
+
+        for dlg in dialogues:
+            speaker = dlg.get("speaker", "?")
+            content = dlg.get("content", "")
+            user_parts.append(f"  {speaker}: {content}")
+        user_parts.append("")
+
+    if extracted_text:
+        if en:
+            user_parts.append(f"# Source material (reference)\n{extracted_text[:3000]}")
+        else:
+            user_parts.append(f"# 教材テキスト（参考）\n{extracted_text[:3000]}")
+
+    user_prompt = "\n".join(user_parts)
+    model = _get_director_model()
+    temperature = 1.0
+
+    max_retries = 3
+    last_error = None
+    raw_output = ""
+    for attempt in range(max_retries):
+        response = client.models.generate_content(
+            model=model,
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type="application/json",
+                temperature=temperature,
+                max_output_tokens=8192,
+            ),
+        )
+        raw_output = response.text.strip()
+        try:
+            parsed = _parse_json_response(raw_output)
+            if not isinstance(parsed, dict) or "reviews" not in parsed:
+                raise ValueError("レビュー結果にreviews配列がありません")
+            break
+        except (json.JSONDecodeError, ValueError) as e:
+            last_error = e
+            logger.warning("監督レビューJSONパース失敗 (attempt=%d): %s", attempt + 1, e)
+            continue
+    else:
+        raise ValueError(f"監督レビューのJSONパースに失敗: {last_error}")
+
+    # 補完
+    for r in parsed["reviews"]:
+        r.setdefault("section_index", 0)
+        r.setdefault("approved", True)
+        r.setdefault("feedback", "")
+        if not r["approved"]:
+            r.setdefault("revised_directions", [])
+            for dd in r.get("revised_directions", []):
+                dd.setdefault("speaker", "teacher")
+                dd.setdefault("direction", "")
+                dd.setdefault("key_content", "")
+    parsed.setdefault("overall_feedback", "")
+
+    parsed["generation"] = {
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+        "raw_output": raw_output,
+        "model": model,
+        "temperature": temperature,
+    }
+
+    approved_count = sum(1 for r in parsed["reviews"] if r["approved"])
+    total_count = len(parsed["reviews"])
+    logger.info("監督レビュー完了: %d/%dセクション合格 (model=%s)", approved_count, total_count, model)
+
+    return parsed
 
 
 def generate_lesson_script_v2(
@@ -1825,6 +2050,82 @@ def generate_lesson_script_v2(
             sec_idx, dialogues = future.result()
             section_dialogues[sec_idx] = dialogues
 
+    # --- Phase B-3: 監督レビュー ---
+    if en:
+        _progress(1 + total_turns, 1 + total_turns + 1, "Director reviewing dialogue...")
+    else:
+        _progress(1 + total_turns, 1 + total_turns + 1, "監督がセリフをレビュー中...")
+
+    sections_for_review = []
+    for i, s in enumerate(structure_sections):
+        sections_for_review.append({
+            **s,
+            "dialogues": section_dialogues[i] or [],
+        })
+
+    review_result = _director_review(
+        client, sections_for_review, extracted_text, lesson_name, en,
+    )
+
+    # --- Phase B-4: 再生成（不合格セクションのみ、1回のみ） ---
+    rejected = [r for r in review_result["reviews"] if not r.get("approved")]
+    review_map = {r["section_index"]: r for r in review_result["reviews"]}
+
+    if rejected:
+        regen_turns = sum(len(r.get("revised_directions", [])) for r in rejected)
+        if en:
+            _progress(1 + total_turns, 1 + total_turns + 1 + regen_turns,
+                      f"Director feedback: {len(rejected)} section(s) need revision")
+        else:
+            _progress(1 + total_turns, 1 + total_turns + 1 + regen_turns,
+                      f"監督のフィードバック: {len(rejected)}セクションが不合格")
+
+        regen_step = [0]
+        regen_step_lock = threading.Lock()
+
+        def regen_worker(r):
+            idx = r["section_index"]
+            revised = r.get("revised_directions", [])
+            if not revised or idx >= len(structure_sections):
+                return idx, section_dialogues[idx]
+
+            # dialogue_directions を差し替えて再生成
+            section_copy = {**structure_sections[idx], "dialogue_directions": revised}
+
+            def regen_progress(speaker, turn_num, turn_total):
+                with regen_step_lock:
+                    regen_step[0] += 1
+                    step = regen_step[0]
+                t_name = teacher_config.get("name", "先生") if speaker == "teacher" else student_config.get("name", "生徒")
+                if en:
+                    msg = f"Revising section {idx + 1}: {t_name} ({turn_num}/{turn_total})"
+                else:
+                    msg = f"セクション{idx + 1}を再生成中: {t_name} ({turn_num}/{turn_total})"
+                _progress(1 + total_turns + 1 + step, 1 + total_turns + 1 + regen_turns, msg)
+
+            new_dialogues = _generate_section_dialogues(
+                client=client,
+                teacher_config=teacher_config,
+                student_config=student_config,
+                section=section_copy,
+                extracted_text=extracted_text,
+                lesson_name=lesson_name,
+                en=en,
+                on_progress=regen_progress,
+            )
+            return idx, new_dialogues
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            regen_futures = [executor.submit(regen_worker, r) for r in rejected]
+            for future in regen_futures:
+                idx, new_dialogues = future.result()
+                # 再生成フラグを立てる
+                if idx in review_map:
+                    review_map[idx]["is_regenerated"] = True
+                section_dialogues[idx] = new_dialogues
+
+        logger.info("Phase B-4完了: %dセクションを再生成", len(rejected))
+
     # --- 結果の組み立て ---
     valid_types = {"introduction", "explanation", "example", "question", "summary"}
     result = []
@@ -1835,6 +2136,16 @@ def generate_lesson_script_v2(
         else:
             plan_title = plan_sections[i].get("title", "") if plan_sections and i < len(plan_sections) else ""
         dialogues = section_dialogues[i] or []
+
+        # レビュー結果をdialoguesデータに埋め込む
+        review_info = review_map.get(i)
+        review_data = None
+        if review_info:
+            review_data = {
+                "approved": review_info.get("approved", True),
+                "feedback": review_info.get("feedback", ""),
+                "is_regenerated": review_info.get("is_regenerated", False),
+            }
 
         section = {
             "section_type": s.get("section_type", "explanation"),
@@ -1849,9 +2160,20 @@ def generate_lesson_script_v2(
         }
 
         if dialogues:
+            # dialoguesにreview情報を含めたJSONを構築
+            dialogues_with_meta = {
+                "dialogues": dialogues,
+            }
+            if review_data:
+                dialogues_with_meta["review"] = review_data
+            # 監督レビューのgeneration情報も保存
+            if review_result.get("generation"):
+                dialogues_with_meta["review_generation"] = review_result["generation"]
+                dialogues_with_meta["review_overall_feedback"] = review_result.get("overall_feedback", "")
+
             section["dialogues"] = dialogues
             section = _build_section_from_dialogues(section)
-            section["dialogues"] = json.dumps(dialogues, ensure_ascii=False)
+            section["dialogues"] = json.dumps(dialogues_with_meta, ensure_ascii=False)
         else:
             section["dialogues"] = ""
 

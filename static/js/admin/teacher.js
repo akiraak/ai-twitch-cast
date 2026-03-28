@@ -802,8 +802,58 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
 
     // 対話モード: dialoguesがあれば発話一覧を表示
     let _dlgs = [];
-    try { _dlgs = typeof s.dialogues === 'string' ? JSON.parse(s.dialogues) : (s.dialogues || []); } catch(e) {}
+    let _reviewData = null;
+    let _reviewGeneration = null;
+    let _reviewOverallFeedback = '';
+    try {
+      let _parsed = typeof s.dialogues === 'string' ? JSON.parse(s.dialogues) : (s.dialogues || []);
+      // v4: {dialogues: [...], review: {...}} 形式に対応
+      if (_parsed && !Array.isArray(_parsed) && _parsed.dialogues) {
+        _dlgs = _parsed.dialogues || [];
+        _reviewData = _parsed.review || null;
+        _reviewGeneration = _parsed.review_generation || null;
+        _reviewOverallFeedback = _parsed.review_overall_feedback || '';
+      } else {
+        _dlgs = Array.isArray(_parsed) ? _parsed : [];
+      }
+    } catch(e) {}
     const _ci = charInfo || {};
+
+    // 監督レビュー結果の表示
+    if (_reviewData) {
+      const rvApproved = _reviewData.approved;
+      const rvIcon = rvApproved ? '\u2705' : '\u274C';
+      const rvLabel = rvApproved ? '合格' : '不合格';
+      const rvBg = rvApproved ? '#e8f5e9' : '#fbe9e7';
+      const rvBc = rvApproved ? '#a5d6a7' : '#ffab91';
+      let rvHtml = `<div style="margin-bottom:6px; padding:6px 8px; background:${rvBg}; border:1px solid ${rvBc}; border-radius:4px;">
+        <div style="font-size:0.72rem; font-weight:600;">${rvIcon} 監督レビュー: ${rvLabel}${_reviewData.is_regenerated ? ' (再生成済み)' : ''}</div>`;
+      if (_reviewData.feedback) {
+        rvHtml += `<div style="font-size:0.68rem; color:#555; margin-top:2px;">${esc(_reviewData.feedback)}</div>`;
+      }
+      if (_reviewGeneration) {
+        rvHtml += `<details style="margin-top:4px;">
+          <summary style="cursor:pointer; color:#6a1b9a; font-size:0.62rem;">\u{1F50D} レビュープロンプト (model: ${esc(_reviewGeneration.model || '?')})</summary>
+          <div style="padding:4px 8px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; margin-top:2px;">
+            <details style="margin-bottom:4px;">
+              <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F9E0} System Prompt</summary>
+              <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(_reviewGeneration.system_prompt || '')}</pre>
+            </details>
+            <details style="margin-bottom:4px;">
+              <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F4AC} User Prompt</summary>
+              <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(_reviewGeneration.user_prompt || '')}</pre>
+            </details>
+            <details>
+              <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F4DD} Raw Output</summary>
+              <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(_reviewGeneration.raw_output || '')}</pre>
+            </details>
+          </div>
+        </details>`;
+      }
+      rvHtml += `</div>`;
+      html += rvHtml;
+    }
+
     if (_dlgs.length > 0) {
       html += `<div style="margin-bottom:6px; padding:6px 8px; background:#f0ecf5; border-radius:4px; border:1px solid #e0d4f0;">`;
       for (let di = 0; di < _dlgs.length; di++) {

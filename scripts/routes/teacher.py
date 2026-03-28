@@ -644,7 +644,12 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                 dlgs = []
                 if dlgs_raw:
                     try:
-                        dlgs = _json.loads(dlgs_raw) if isinstance(dlgs_raw, str) else dlgs_raw
+                        parsed = _json.loads(dlgs_raw) if isinstance(dlgs_raw, str) else dlgs_raw
+                        # v4: {dialogues: [...], review: {...}} 形式に対応
+                        if isinstance(parsed, dict) and "dialogues" in parsed:
+                            dlgs = parsed["dialogues"]
+                        else:
+                            dlgs = parsed
                     except Exception:
                         pass
 

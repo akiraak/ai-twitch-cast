@@ -223,18 +223,38 @@ class TestLessonSections:
 
     def test_generate_script(self, api_client, test_db, mock_gemini):
         """スクリプト生成（Gemini APIモック、SSEレスポンス）"""
+        import json as _json
+        from unittest.mock import MagicMock as _MagicMock
         r = api_client.post("/api/lessons", json={"name": "GenTest"})
         lid = r.json()["lesson"]["id"]
         # 抽出テキストを設定
         test_db.update_lesson(lid, extracted_text="Present tense: He goes to school.")
 
-        # Geminiの応答をモック
-        mock_gemini.models.generate_content.return_value.text = """[
-            {"section_type": "introduction", "content": "導入", "tts_text": "導入TTS",
-             "display_text": "導入画面", "emotion": "excited", "question": "", "answer": "", "wait_seconds": 0},
-            {"section_type": "explanation", "content": "説明", "tts_text": "説明TTS",
-             "display_text": "説明画面", "emotion": "neutral", "question": "", "answer": "", "wait_seconds": 0}
-        ]"""
+        # v2パス: Phase B-1(構造) → Phase B-2(セリフ×N) → Phase B-3(レビュー)
+        structure_resp = _json.dumps([
+            {"section_type": "introduction", "display_text": "導入画面",
+             "emotion": "excited", "question": "", "answer": "", "wait_seconds": 0,
+             "dialogue_plan": [{"speaker": "teacher", "direction": "挨拶"}]},
+            {"section_type": "explanation", "display_text": "説明画面",
+             "emotion": "neutral", "question": "", "answer": "", "wait_seconds": 0,
+             "dialogue_plan": [{"speaker": "teacher", "direction": "説明"}]},
+        ])
+        dlg_resp = _json.dumps({"content": "導入", "tts_text": "導入TTS", "emotion": "excited"})
+        review_resp = _json.dumps({
+            "reviews": [
+                {"section_index": 0, "approved": True, "feedback": "OK"},
+                {"section_index": 1, "approved": True, "feedback": "OK"},
+            ],
+            "overall_feedback": "良い授業です",
+        })
+        responses = [structure_resp, dlg_resp, dlg_resp, review_resp]
+        call_idx = [0]
+        def _side_effect(*args, **kwargs):
+            idx = call_idx[0]
+            call_idx[0] += 1
+            text = responses[idx] if idx < len(responses) else dlg_resp
+            return _MagicMock(text=text)
+        mock_gemini.models.generate_content.side_effect = _side_effect
 
         resp = api_client.post(f"/api/lessons/{lid}/generate-script")
         data = parse_sse_result(resp)
@@ -339,7 +359,11 @@ class TestLessonPlan:
         ])
         dlg1_response = json.dumps({"content": "プランベース導入", "tts_text": "TTS", "emotion": "excited"})
         dlg2_response = json.dumps({"content": "リアクション！", "tts_text": "リアクション！", "emotion": "joy"})
-        v2_responses = [phase1_response, dlg1_response, dlg2_response]
+        review_response = json.dumps({
+            "reviews": [{"section_index": 0, "approved": True, "feedback": "OK"}],
+            "overall_feedback": "合格",
+        })
+        v2_responses = [phase1_response, dlg1_response, dlg2_response, review_response]
         call_idx = [0]
         def v2_side_effect(*args, **kwargs):
             idx = call_idx[0]
@@ -353,8 +377,14 @@ class TestLessonPlan:
         assert data["ok"] is True
         assert len(data["sections"]) == 1
         assert "プランベース導入" in data["sections"][0]["content"]
-        # dialoguesにgenerationメタデータが含まれる
-        dlgs = json.loads(data["sections"][0]["dialogues"])
+        # dialoguesにgenerationメタデータとレビュー結果が含まれる
+        dlgs_data = json.loads(data["sections"][0]["dialogues"])
+        # v4: {dialogues: [...], review: {...}} 形式
+        if isinstance(dlgs_data, dict) and "dialogues" in dlgs_data:
+            dlgs = dlgs_data["dialogues"]
+            assert "review" in dlgs_data
+        else:
+            dlgs = dlgs_data
         assert len(dlgs) == 2
         assert dlgs[0]["speaker"] == "teacher"
         assert dlgs[1]["speaker"] == "student"
