@@ -732,7 +732,16 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
             logger.info("TTS事前生成完了: lesson=%d, %d/%d パート (エラー: %d)",
                         lesson_id, generated - tts_errors, total_parts, tts_errors)
 
-            result = {"ok": True, "sections": saved, "tts_generated": generated - tts_errors, "tts_errors": tts_errors}
+            # 品質分析（アルゴリズムのみ、APIコスト0）
+            section_dicts = [dict(s) for s in saved]
+            analysis = analyze_content(section_dicts, lang)
+            analysis.lesson_id = lesson_id
+            analysis_dict = analysis.to_dict()
+            db.update_lesson(lesson_id, analysis_json=_json.dumps(analysis_dict, ensure_ascii=False))
+            logger.info("品質分析完了: lesson=%d, score=%.1f/%s, rank=%s",
+                        lesson_id, analysis.total_score, analysis.max_score, analysis.rank)
+
+            result = {"ok": True, "sections": saved, "tts_generated": generated - tts_errors, "tts_errors": tts_errors, "analysis": analysis_dict}
         except Exception as e:
             logger.error("スクリプト生成失敗: %s", e)
             result = {"ok": False, "error": str(e)}
@@ -835,7 +844,9 @@ async def analyze_lesson(lesson_id: int, lang: str = "ja", include_llm: bool = T
         result = analyze_content(section_dicts, lang=lang)
 
     result.lesson_id = lesson_id
-    return {"ok": True, "analysis": result.to_dict()}
+    analysis_dict = result.to_dict()
+    db.update_lesson(lesson_id, analysis_json=_json.dumps(analysis_dict, ensure_ascii=False))
+    return {"ok": True, "analysis": analysis_dict}
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache")

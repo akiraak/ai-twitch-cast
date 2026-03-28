@@ -492,6 +492,14 @@ async function buildLessonItem(lessonId) {
       <div class="qa-result" id="qa-result-${lessonId}"></div>`;
     qaDiv.appendChild(qaBody);
     body.appendChild(qaDiv);
+    // DB保存済み分析結果があれば自動表示
+    if (lesson.analysis_json) {
+      try {
+        const saved = JSON.parse(lesson.analysis_json);
+        const el = qaBody.querySelector('.qa-result');
+        if (el) _renderAnalysisResult(el, saved);
+      } catch(e) {}
+    }
   }
 
   // === STEP 3: 授業開始 ===
@@ -1100,20 +1108,7 @@ async function _reorderSection(lessonId, sectionId, direction) {
 
 const RANK_COLORS = { S: '#d4af37', A: '#2e7d32', B: '#1565c0', C: '#e65100', D: '#c62828' };
 
-async function analyzeLesson(lessonId, lang, includeLlm) {
-  const statusEl = document.querySelector(`#qa-result-${lessonId}`)?.closest('.lesson-step-body')?.querySelector('.qa-status');
-  const resultEl = document.getElementById('qa-result-' + lessonId);
-  if (!resultEl) return;
-  if (statusEl) statusEl.textContent = includeLlm ? '分析中（LLM評価含む）...' : '分析中...';
-  resultEl.innerHTML = '';
-
-  const res = await api('POST', '/api/lessons/' + lessonId + '/analyze?lang=' + lang + '&include_llm=' + includeLlm);
-  if (statusEl) statusEl.textContent = '';
-  if (!res || !res.ok) {
-    resultEl.innerHTML = `<div style="color:#c62828; font-size:0.8rem;">${res?.error || 'エラーが発生しました'}</div>`;
-    return;
-  }
-  const a = res.analysis;
+function _renderAnalysisResult(resultEl, a) {
   const rankColor = RANK_COLORS[a.rank] || '#888';
 
   let html = `<div style="display:flex; align-items:center; gap:12px; margin-bottom:10px; padding:8px 12px; background:#faf7ff; border:2px solid ${rankColor}; border-radius:8px;">
@@ -1157,6 +1152,22 @@ async function analyzeLesson(lessonId, lang, includeLlm) {
   }
 
   resultEl.innerHTML = html;
+}
+
+async function analyzeLesson(lessonId, lang, includeLlm) {
+  const statusEl = document.querySelector(`#qa-result-${lessonId}`)?.closest('.lesson-step-body')?.querySelector('.qa-status');
+  const resultEl = document.getElementById('qa-result-' + lessonId);
+  if (!resultEl) return;
+  if (statusEl) statusEl.textContent = includeLlm ? '分析中（LLM評価含む）...' : '分析中...';
+  resultEl.innerHTML = '';
+
+  const res = await api('POST', '/api/lessons/' + lessonId + '/analyze?lang=' + lang + '&include_llm=' + includeLlm);
+  if (statusEl) statusEl.textContent = '';
+  if (!res || !res.ok) {
+    resultEl.innerHTML = `<div style="color:#c62828; font-size:0.8rem;">${res?.error || 'エラーが発生しました'}</div>`;
+    return;
+  }
+  _renderAnalysisResult(resultEl, res.analysis);
 }
 
 function _renderScoreBar(label, sd) {

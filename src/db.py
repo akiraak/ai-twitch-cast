@@ -397,6 +397,13 @@ def _create_tables(conn):
     except Exception:
         pass
 
+    # Migration: lessons テーブルに analysis_json カラム追加（品質分析結果保存）
+    try:
+        conn.execute("ALTER TABLE lessons ADD COLUMN analysis_json TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # Migration: VRM設定を settings → characters.config.vrm に移行
     try:
         _migrate_vrm_to_character_config(conn)
@@ -1293,7 +1300,7 @@ def get_all_lessons():
 def update_lesson(lesson_id, **fields):
     """授業コンテンツを更新する"""
     conn = get_connection()
-    allowed = {"name", "extracted_text", "main_content", "plan_knowledge", "plan_entertainment", "plan_json"}
+    allowed = {"name", "extracted_text", "main_content", "plan_knowledge", "plan_entertainment", "plan_json", "analysis_json"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
