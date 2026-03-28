@@ -1,6 +1,12 @@
 # DONE
 
-## メインコンテンツ読み上げ方式改善 Step 6（自動テスト完了）
+## speech-generation-flow.md 全面改訂
+
+- [x] 現状コードとの乖離20箇所を調査・特定 → [plans/speech-generation-flow-audit.md](plans/speech-generation-flow-audit.md)
+- [x] docs/speech-generation-flow.md を全面改訂（520行→約450行、行番号参照を全削除し関数名のみで参照）
+- [x] 主な修正: Phase B-3/B-4（監督レビュー・再生成）追加、content_type対応追加、感情BlendShapeの適用タイミング修正、LLMモデル名更新、直接発話APIの仕様修正、戻り値にtts_text/se追加、generate_response()関数名修正
+
+## メインコンテ��ツ読み上げ方式改善 Step 6（自動テスト完了）
 
 - [x] 全自動テスト630件通過確認
 - [x] 本機能で追加したテスト計32件（クリーニング18 + コンテンツ識別5 + API 3 + 構造プロンプト3 + 監督レビュー3）
