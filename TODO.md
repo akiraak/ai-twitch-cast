@@ -4,7 +4,6 @@
 - [ ] バグ教師モードコンテンツを客観的に分析しイケてるコンテンツかAIで検証するモードの追加
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] メインコンテンツの読み上げ方式改善（文章→先生読み上げ、会話→二人で演じる） → [plans/read-main-content-aloud.md](plans/read-main-content-aloud.md)
-  - [ ] Step 3: 構造生成プロンプトに種別ごとの読み上げルール追加
   - [ ] Step 4: 監督レビューに種別考慮のレビュー観点追加
   - [ ] Step 5: 管理画面にメインコンテンツ表示
   - [ ] Step 6: テスト

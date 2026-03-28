@@ -255,6 +255,44 @@ class TestBuildStructurePrompt:
             assert isinstance(parsed, list)
             assert "dialogue_plan" in parsed[0]
 
+    def test_english_with_main_content(self):
+        """英語版: main_contentありで種別ルールとコンテンツが含まれる"""
+        mc = [
+            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Greeting"},
+            {"content_type": "passage", "content": "Some explanation text.", "label": "Explanation"},
+        ]
+        prompt = _build_structure_prompt(en=True, main_content=mc)
+        assert "How to handle main content by type" in prompt
+        assert "conversation" in prompt
+        assert "passage" in prompt
+        assert "word_list" in prompt
+        assert "Pre-analyzed main content" in prompt
+        assert "[conversation]" in prompt
+        assert "Greeting" in prompt
+        assert "A: Hi" in prompt
+
+    def test_japanese_with_main_content(self):
+        """日本語版: main_contentありで種別ルールとコンテンツが含まれる"""
+        mc = [
+            {"content_type": "word_list", "content": "apple: りんご\ndog: 犬", "label": "単語リスト"},
+        ]
+        prompt = _build_structure_prompt(en=False, main_content=mc)
+        assert "メインコンテンツの種別ごとの読み上げ方" in prompt
+        assert "conversation（会話文）" in prompt
+        assert "word_list（単語・フレーズ集）" in prompt
+        assert "事前分析済み" in prompt
+        assert "[word_list]" in prompt
+        assert "単語リスト" in prompt
+        assert "apple: りんご" in prompt
+
+    def test_no_main_content_no_rules(self):
+        """main_contentがNone/空の場合はルール追加なし"""
+        for mc in [None, []]:
+            prompt = _build_structure_prompt(en=True, main_content=mc)
+            assert "How to handle main content" not in prompt
+            prompt_ja = _build_structure_prompt(en=False, main_content=mc)
+            assert "メインコンテンツの種別" not in prompt_ja
+
 
 class TestGenerateSingleDialogue:
     """_generate_single_dialogue のテスト"""

@@ -559,6 +559,15 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
             except Exception:
                 pass
 
+    # メインコンテンツ取得
+    main_content = None
+    mc_str = lesson.get("main_content", "")
+    if mc_str:
+        try:
+            main_content = _json.loads(mc_str)
+        except Exception:
+            pass
+
     # キャラ取得（先生・生徒が揃えばv2対話モード）
     characters = get_lesson_characters()
     teacher_config = characters.get("teacher")
@@ -588,6 +597,7 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                         on_progress=on_progress,
                         teacher_config=teacher_config,
                         student_config=student_config,
+                        main_content=main_content,
                     )
                 elif plan_sections:
                     return await asyncio.to_thread(

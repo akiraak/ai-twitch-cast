@@ -1467,7 +1467,25 @@ def _parse_json_response(text: str):
     return parse_llm_json(text)
 
 
-def _build_structure_prompt(en: bool, plan_text: str | None = None) -> str:
+def _format_main_content_for_prompt(main_content: list[dict], en: bool) -> str:
+    """main_content リストをプロンプト用テキストに整形する"""
+    if not main_content:
+        return ""
+    lines = []
+    for i, mc in enumerate(main_content, 1):
+        ct = mc.get("content_type", "passage")
+        label = mc.get("label", "")
+        content = mc.get("content", "")
+        lines.append(f"{i}. [{ct}] \"{label}\"")
+        # コンテンツは先頭200文字まで（プロンプト肥大化防止）
+        preview = content[:200] + ("..." if len(content) > 200 else "")
+        for line in preview.split("\n"):
+            lines.append(f"   {line}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _build_structure_prompt(en: bool, plan_text: str | None = None, main_content: list[dict] | None = None) -> str:
     """Phase 1: セクション構造 + dialogue_plan 生成用のsystem_promptを構築する"""
     if en:
         base = """You are a lesson structure designer for Twitch educational streams.
@@ -1545,6 +1563,37 @@ Each entry:
 ```
 
 Output ONLY the JSON array."""
+
+        # メインコンテンツ種別ルール追加
+        if main_content:
+            base += """
+
+## How to handle main content by type
+
+### conversation (会話文)
+- Split roles: teacher plays one speaker, student plays the other
+- After performing, teacher explains vocabulary or grammar points
+- direction example: "Play Speaker A in the conversation" / "Play Speaker B and respond"
+
+### passage (文章・説明文)
+- Teacher reads the text aloud, then explains or paraphrases
+- Student reacts, asks questions, or confirms understanding
+
+### word_list (単語・フレーズ集)
+- Teacher reads each item with explanation
+- Student repeats or asks about usage
+- Split long lists across multiple turns
+
+### table (表・比較データ)
+- Teacher walks through rows/columns
+- Student comments on differences or asks about entries
+
+## Pre-analyzed main content
+Design dialogue_plan according to each content_type's reading method above.
+
+"""
+            base += _format_main_content_for_prompt(main_content, en=True)
+
     else:
         base = """あなたはTwitch教育配信のセクション構造デザイナーです。
 授業のセクション構成と対話フロー（dialogue_plan）を設計してください。"""
@@ -1621,6 +1670,36 @@ Output ONLY the JSON array."""
 ```
 
 JSON配列のみを出力してください。"""
+
+        # メインコンテンツ種別ルール追加
+        if main_content:
+            base += """
+
+## メインコンテンツの種別ごとの読み上げ方
+
+### conversation（会話文）
+- 役割を分担する: 先生が一方の話者、生徒がもう一方の話者を演じる
+- 演じた後、先生が語彙や文法のポイントを解説する
+- direction例: 「会話のAさん役を演じる」「Bさん役として応答する」
+
+### passage（文章・説明文）
+- 先生がテキストを読み上げ、解説やパラフレーズする
+- 生徒はリアクション、質問、理解確認をする
+
+### word_list（単語・フレーズ集）
+- 先生が各項目を読み上げ、説明する
+- 生徒がリピートするか、使い方を質問する
+- 長いリストは複数ターンに分ける
+
+### table（表・比較データ）
+- 先生が行/列を順に解説する
+- 生徒が違いについてコメントしたり、質問する
+
+## メインコンテンツ（事前分析済み）
+上記の content_type ごとの読み上げ方に従って dialogue_plan を設計してください。
+
+"""
+            base += _format_main_content_for_prompt(main_content, en=False)
 
     return base
 
@@ -2016,6 +2095,7 @@ def generate_lesson_script_v2(
     on_progress=None,
     teacher_config: dict = None,
     student_config: dict = None,
+    main_content: list[dict] | None = None,
 ) -> list[dict]:
     """セリフをキャラごとに個別LLM呼び出しで生成する（v2）
 
@@ -2060,7 +2140,7 @@ def generate_lesson_script_v2(
                     for i, s in enumerate(plan_sections)
                 )
 
-        structure_prompt = _build_structure_prompt(en, plan_text)
+        structure_prompt = _build_structure_prompt(en, plan_text, main_content=main_content)
 
         parts = _build_image_parts(source_images)
         if en:

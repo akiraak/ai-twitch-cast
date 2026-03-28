@@ -1,5 +1,11 @@
 # DONE
 
+## メインコンテンツ読み上げ方式改善 Step 3
+
+- [x] `_build_structure_prompt()` に `main_content` パラメータ追加、種別ルール（EN/JA）をシステムプロンプトに統合
+- [x] `generate_lesson_script_v2()` → teacher.py の呼び出しチェーンで `main_content` を DB から渡す
+- [x] テスト3件追加（main_content あり/なし、英語/日本語）
+
 ## メインコンテンツ読み上げ方式改善 Step 2
 
 - [x] `extract_main_content()` を `src/lesson_generator.py` に追加（LLMでcontent_type判定）
