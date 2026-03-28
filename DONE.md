@@ -1,5 +1,12 @@
 # DONE
 
+## メインコンテンツ読み上げ方式改善 Step 2
+
+- [x] `extract_main_content()` を `src/lesson_generator.py` に追加（LLMでcontent_type判定）
+- [x] `lessons` テーブルに `main_content` TEXT カラム追加（マイグレーション）
+- [x] `extract-text` / `add-url` APIでテキスト抽出後に自動識別・DB保存
+- [x] テスト8件追加（`TestExtractMainContent` 5件 + API 3件）
+
 ## メインコンテンツ読み上げ方式改善 Step 1
 
 - [x] `clean_extracted_text()` を `src/lesson_generator.py` に追加（正規表現ベース、LLM不要）

@@ -170,6 +170,84 @@ class TestLessonSources:
         r = api_client.get(f"/api/lessons/{lid}")
         assert len(r.json()["sources"]) == 3
 
+    def test_extract_text_saves_main_content(self, api_client, test_db, mock_gemini, tmp_path):
+        """extract-text が main_content も保存する"""
+        r1 = api_client.post("/api/lessons", json={"name": "MainContent"})
+        lid = r1.json()["lesson"]["id"]
+
+        # 画像ソース追加
+        img = tmp_path / "test.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+        api_client.post(
+            f"/api/lessons/{lid}/upload-image",
+            files={"file": ("test.png", img.read_bytes(), "image/png")},
+        )
+
+        # Geminiモック: 1回目=テキスト抽出, 2回目=メインコンテンツ識別
+        mc_json = json.dumps([
+            {"content_type": "passage", "content": "Hello world", "label": "Greeting"}
+        ])
+        mock_gemini.models.generate_content.side_effect = [
+            MagicMock(text="Hello world text"),
+            MagicMock(text=mc_json),
+        ]
+
+        resp = api_client.post(f"/api/lessons/{lid}/extract-text")
+        data = resp.json()
+        assert data["ok"] is True
+        assert len(data["main_content"]) == 1
+        assert data["main_content"][0]["content_type"] == "passage"
+
+        # DBにも保存されているか
+        lesson = test_db.get_lesson(lid)
+        assert lesson["main_content"] != ""
+        saved = json.loads(lesson["main_content"])
+        assert saved[0]["content_type"] == "passage"
+
+    def test_add_url_saves_main_content(self, api_client, test_db, mock_gemini):
+        """add-url が main_content も保存する"""
+        r1 = api_client.post("/api/lessons", json={"name": "UrlMC"})
+        lid = r1.json()["lesson"]["id"]
+
+        mc_json = json.dumps([
+            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Dialog"}
+        ])
+        mock_gemini.models.generate_content.side_effect = [
+            MagicMock(text="A: Hi\nB: Hello"),  # URL抽出
+            MagicMock(text=mc_json),             # メインコンテンツ識別
+        ]
+
+        with patch("src.lesson_generator.httpx.AsyncClient") as mock_http:
+            mock_resp = AsyncMock()
+            mock_resp.text = "<html><body>A: Hi B: Hello</body></html>"
+            mock_resp.raise_for_status = MagicMock()
+            mock_http.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
+                get=AsyncMock(return_value=mock_resp)
+            ))
+            mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            resp = api_client.post(
+                f"/api/lessons/{lid}/add-url",
+                json={"url": "https://example.com/lesson"},
+            )
+
+        data = resp.json()
+        assert data["ok"] is True
+        assert len(data["main_content"]) == 1
+        assert data["main_content"][0]["content_type"] == "conversation"
+
+    def test_main_content_in_get_response(self, api_client, test_db):
+        """GET /api/lessons/{id} に main_content が含まれる"""
+        r1 = api_client.post("/api/lessons", json={"name": "MCGet"})
+        lid = r1.json()["lesson"]["id"]
+
+        mc = json.dumps([{"content_type": "passage", "content": "text", "label": "L"}])
+        test_db.update_lesson(lid, main_content=mc)
+
+        resp = api_client.get(f"/api/lessons/{lid}")
+        data = resp.json()
+        assert data["lesson"]["main_content"] == mc
+
 
 class TestLessonSections:
     def _create_lesson_with_sections(self, api_client, test_db):

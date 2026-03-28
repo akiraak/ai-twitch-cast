@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from src import db
 from src.lesson_generator import (
+    extract_main_content,
     extract_text_from_image,
     extract_text_from_url,
     generate_lesson_plan,
@@ -321,12 +322,23 @@ async def extract_lesson_text(lesson_id: int):
                 logger.warning("画像テキスト抽出失敗 (%s): %s", src["file_path"], e)
 
     extracted = "\n\n---\n\n".join(texts) if texts else ""
-    db.update_lesson(lesson_id, extracted_text=extracted)
+
+    # メインコンテンツ識別
+    main_content = []
+    if extracted:
+        try:
+            main_content = await asyncio.to_thread(extract_main_content, extracted)
+        except Exception as e:
+            logger.warning("メインコンテンツ識別失敗: %s", e)
+
+    main_content_json = _json.dumps(main_content, ensure_ascii=False) if main_content else ""
+    db.update_lesson(lesson_id, extracted_text=extracted, main_content=main_content_json)
     # テキスト変更でセクションを無効化
     db.delete_lesson_sections(lesson_id)
 
-    logger.info("テキスト抽出完了: lesson=%d, %d件, %d文字", lesson_id, len(texts), len(extracted))
-    return {"ok": True, "extracted_text": extracted}
+    logger.info("テキスト抽出完了: lesson=%d, %d件, %d文字, main_content=%d件",
+                lesson_id, len(texts), len(extracted), len(main_content))
+    return {"ok": True, "extracted_text": extracted, "main_content": main_content}
 
 
 @router.post("/api/lessons/{lesson_id}/add-url")
@@ -348,10 +360,20 @@ async def add_lesson_url(lesson_id: int, body: UrlAdd):
     source = db.add_lesson_source(
         lesson_id, source_type="url", url=body.url,
     )
-    db.update_lesson(lesson_id, extracted_text=extracted)
 
-    logger.info("URL追加: %s → lesson %d", body.url, lesson_id)
-    return {"ok": True, "source": source, "extracted_text": extracted}
+    # メインコンテンツ識別
+    main_content = []
+    if extracted:
+        try:
+            main_content = await asyncio.to_thread(extract_main_content, extracted)
+        except Exception as e:
+            logger.warning("メインコンテンツ識別失敗: %s", e)
+
+    main_content_json = _json.dumps(main_content, ensure_ascii=False) if main_content else ""
+    db.update_lesson(lesson_id, extracted_text=extracted, main_content=main_content_json)
+
+    logger.info("URL追加: %s → lesson %d, main_content=%d件", body.url, lesson_id, len(main_content))
+    return {"ok": True, "source": source, "extracted_text": extracted, "main_content": main_content}
 
 
 @router.delete("/api/lessons/{lesson_id}/sources/{source_id}")

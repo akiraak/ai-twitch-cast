@@ -275,6 +275,67 @@ def clean_extracted_text(text: str) -> str:
     return text
 
 
+# --- メインコンテンツ識別 ---
+
+_EXTRACT_MAIN_CONTENT_PROMPT = """\
+以下のテキストから、教材のメインコンテンツを識別して分類してください。
+
+テキスト中の各コンテンツブロックについて、以下の種別で分類してください:
+- conversation: 会話文（A: / B: のような対話形式）
+- passage: 文章・説明文（段落テキスト）
+- word_list: 単語リスト・フレーズ集
+- table: 表・比較データ
+
+以下のJSON配列のみを出力してください（説明不要）:
+```json
+[
+  {
+    "content_type": "conversation",
+    "content": "A: Good morning!\\nB: Good morning! How are you?",
+    "label": "Morning Greeting Conversation"
+  },
+  {
+    "content_type": "passage",
+    "content": "Formal greetings are used in business...",
+    "label": "Explanation of formal greetings"
+  }
+]
+```
+
+ルール:
+- content にはテキストの該当部分をそのまま含める（要約しない）
+- label は内容を簡潔に説明する短いラベル（日本語でも英語でも可）
+- メインコンテンツでない部分（ヘッダ・フッタ・ナビゲーション等）は除外する
+- コンテンツが1種類しかなければ要素1つの配列でよい
+
+テキスト:
+"""
+
+
+def extract_main_content(extracted_text: str) -> list[dict]:
+    """抽出テキストからメインコンテンツを識別・分類する"""
+    if not extracted_text or not extracted_text.strip():
+        return []
+
+    client = get_client()
+    response = client.models.generate_content(
+        model=_get_model(),
+        contents=_EXTRACT_MAIN_CONTENT_PROMPT + extracted_text,
+        config=types.GenerateContentConfig(
+            temperature=0.1,
+            max_output_tokens=8192,
+        ),
+    )
+    try:
+        result = _parse_json_response(response.text)
+        if isinstance(result, list):
+            return result
+        return [result] if isinstance(result, dict) else []
+    except Exception:
+        logger.warning("メインコンテンツ解析失敗: %s", response.text[:200])
+        return []
+
+
 # --- 画像解析 ---
 
 def extract_text_from_image(image_path: str) -> str:

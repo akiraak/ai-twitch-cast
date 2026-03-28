@@ -15,6 +15,7 @@ from src.lesson_generator import (
     _generate_section_dialogues,
     _parse_json_response,
     clean_extracted_text,
+    extract_main_content,
 )
 
 
@@ -766,3 +767,78 @@ class TestCleanExtractedText:
         assert "本文テキスト" in result
         assert "スペース付き" in result
         assert "最後の行" in result
+
+
+# --- メインコンテンツ識別 ---
+
+
+class TestExtractMainContent:
+    """extract_main_content のテスト"""
+
+    def test_empty_text(self):
+        """空テキストなら空リスト"""
+        assert extract_main_content("") == []
+        assert extract_main_content("   ") == []
+        assert extract_main_content(None) == []
+
+    def test_valid_json_response(self):
+        """LLMが正しいJSON配列を返す場合"""
+        mock_response = MagicMock()
+        mock_response.text = json.dumps([
+            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Greeting"},
+            {"content_type": "passage", "content": "Text here.", "label": "Explanation"},
+        ])
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator.get_client", return_value=mock_client):
+            result = extract_main_content("Some text")
+
+        assert len(result) == 2
+        assert result[0]["content_type"] == "conversation"
+        assert result[1]["content_type"] == "passage"
+
+    def test_single_dict_response(self):
+        """LLMがdict(配列でなく)を返した場合、1要素のリストにラップ"""
+        mock_response = MagicMock()
+        mock_response.text = json.dumps(
+            {"content_type": "passage", "content": "Text", "label": "Label"}
+        )
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator.get_client", return_value=mock_client):
+            result = extract_main_content("Some text")
+
+        assert len(result) == 1
+        assert result[0]["content_type"] == "passage"
+
+    def test_invalid_response_returns_empty(self):
+        """LLMがパース不能な応答を返した場合、空リスト"""
+        mock_response = MagicMock()
+        mock_response.text = "This is not JSON at all and cannot be repaired"
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator.get_client", return_value=mock_client), \
+             patch("src.lesson_generator._parse_json_response", side_effect=Exception("parse error")):
+            result = extract_main_content("Some text")
+
+        assert result == []
+
+    def test_prompt_contains_text(self):
+        """プロンプトに入力テキストが含まれる"""
+        mock_response = MagicMock()
+        mock_response.text = "[]"
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator.get_client", return_value=mock_client):
+            extract_main_content("教材テキストの内容")
+
+        call_args = mock_client.models.generate_content.call_args
+        contents = call_args[1]["contents"] if "contents" in call_args[1] else call_args.kwargs.get("contents", call_args[0][0] if not call_args[0] else "")
+        # positional or keyword
+        if not contents:
+            contents = call_args[1].get("contents", "")
+        assert "教材テキストの内容" in str(contents)
