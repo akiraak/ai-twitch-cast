@@ -1,5 +1,12 @@
 # DONE
 
+## /broadcast トークン認証廃止
+
+- [x] `overlay.py`: `BROADCAST_TOKEN`・トークンチェック・`/api/broadcast/token`エンドポイント削除
+- [x] `stream.sh`: トークン取得ロジック削除、URLを`/broadcast`に単純化
+- [x] `MainForm.cs`: 403ハンドリング・`RefreshBroadcastTokenAsync()`削除
+- [x] 不要プランファイル `plans/broadcast-token-auto-recovery.md` 削除
+
 ## 英語モードのセリフを英語にする Step 6
 
 - [x] `docs/speech-generation-flow.md` を更新: キャラ設定に言語版フィールド追記、Phase B-2のプロンプト構築説明を `build_lesson_dialogue_prompt()` に更新、self_note/persona対応、TTS言語対応、個性度★★★★★に更新

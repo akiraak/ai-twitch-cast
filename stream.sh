@@ -77,12 +77,6 @@ if ! curl -sf "${SERVER_URL}/api/status" > /dev/null 2>&1; then
     exit 1
 fi
 
-# broadcast.htmlのトークンを取得
-TOKEN=$(curl -sf "${SERVER_URL}/api/broadcast/token" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])" 2>/dev/null)
-if [ -z "$TOKEN" ]; then
-    echo "エラー: broadcastトークンを取得できません"
-    exit 1
-fi
 
 # ソースをWindows FSにコピー（ビルド高速化）
 echo "ソースを同期中..."
@@ -114,8 +108,8 @@ EXE_PATH="$BUILD_DIR/bin/Release/net8.0-windows10.0.22621.0/${APP_NAME}.exe"
 # ネイティブアプリのresources/ffmpeg/ffmpeg.exeはビルド時に自動コピーされるため
 # 通常は--ffmpeg-pathの指定は不要（FindFfmpeg()が自動検出する）
 
-# broadcast.html URL（トークン付き）
-URL="${SERVER_URL}/broadcast?token=${TOKEN}"
+# broadcast.html URL
+URL="${SERVER_URL}/broadcast"
 
 # コマンドライン引数を構築
 NATIVE_ARGS="$URL"

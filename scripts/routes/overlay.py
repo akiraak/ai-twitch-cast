@@ -8,7 +8,7 @@ import secrets
 from pathlib import Path
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse
 
 from scripts import state
 from src import db
@@ -16,9 +16,6 @@ from src.scene_config import load_config_value, load_config_json
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# broadcast.htmlアクセス用トークン（配信アプリ+プレビュー用）
-BROADCAST_TOKEN = secrets.token_urlsafe(16)
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
@@ -181,21 +178,8 @@ async def broadcast_ws(websocket: WebSocket):
 
 @router.get("/broadcast")
 async def broadcast_page(request: Request):
-    """broadcast.htmlを返す（トークン認証必須、配信アプリレンダリング用）"""
-    token = request.query_params.get("token")
-    if token != BROADCAST_TOKEN:
-        return PlainTextResponse(
-            "配信合成ページは配信アプリで表示されます。Web UIからプレビューや編集を行ってください。",
-            status_code=403,
-        )
+    """broadcast.htmlを返す（配信アプリレンダリング用）"""
     return HTMLResponse((STATIC_DIR / "broadcast.html").read_text(encoding="utf-8"))
-
-
-
-@router.get("/api/broadcast/token")
-async def broadcast_token():
-    """broadcast.htmlアクセス用トークンを返す（レイアウト編集用）"""
-    return {"token": BROADCAST_TOKEN}
 
 
 

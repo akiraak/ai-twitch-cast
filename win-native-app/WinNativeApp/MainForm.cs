@@ -1169,15 +1169,6 @@ public class MainForm : Form
         Log.Information("[MainForm] Navigation completed, success={Success}, status={Status}",
             e.IsSuccess, e.HttpStatusCode);
 
-        // 403 = トークン失効（サーバー再起動時）→ 新トークン取得してリロード
-        // ※ HTTP 4xxはIsSuccess=falseになるため、IsSuccessチェックの前に判定する
-        if (e.HttpStatusCode == 403)
-        {
-            Log.Warning("[MainForm] Got 403 (token expired), fetching new token...");
-            _ = RefreshBroadcastTokenAsync();
-            return;
-        }
-
         if (!e.IsSuccess) return;
 
         Text = "AI Twitch Cast - 待機中";
@@ -1208,45 +1199,6 @@ public class MainForm : Form
             await Task.Delay(1000);
             await StartStreamingAsync();
         }
-    }
-
-    /// <summary>
-    /// サーバーから新しいbroadcastトークンを取得してWebView2をリロードする
-    /// </summary>
-    private async Task RefreshBroadcastTokenAsync()
-    {
-        const int maxRetries = 10;
-        const int retryDelayMs = 3000;
-
-        for (var attempt = 1; attempt <= maxRetries; attempt++)
-        {
-            try
-            {
-                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-                var resp = await http.GetAsync($"{_serverBaseUrl}/api/broadcast/token");
-                if (resp.IsSuccessStatusCode)
-                {
-                    var json = await resp.Content.ReadAsStringAsync();
-                    var doc = JsonSerializer.Deserialize<JsonElement>(json);
-                    var token = doc.GetProperty("token").GetString();
-                    var newUrl = $"{_serverBaseUrl}/broadcast?token={token}";
-                    Log.Information("[MainForm] New broadcast token acquired (attempt {Attempt}), navigating to new URL", attempt);
-                    _webView.CoreWebView2.Navigate(newUrl);
-                    return;
-                }
-                Log.Warning("[MainForm] Token fetch failed: HTTP {Status} (attempt {Attempt}/{Max})",
-                    (int)resp.StatusCode, attempt, maxRetries);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning("[MainForm] Token fetch error (attempt {Attempt}/{Max}): {Error}",
-                    attempt, maxRetries, ex.Message);
-            }
-
-            if (attempt < maxRetries)
-                await Task.Delay(retryDelayMs);
-        }
-        Log.Error("[MainForm] Failed to refresh broadcast token after {Max} attempts", maxRetries);
     }
 
     private void StartCapture()
