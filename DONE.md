@@ -1,11 +1,12 @@
 # DONE
 
-## 管理画面Docs閲覧機能（Steps 1-3.5完了）
+## 管理画面Docs閲覧機能（完了）
 
 - [x] Step 1: バックエンドAPI（docs_viewer.py 新規: ファイル一覧 + 内容取得、パストラバーサル対策）
 - [x] Step 2: ルート登録（web.py に docs_viewer_router 追加）
 - [x] Step 3: フロントエンドUI（Docsタブ + docs.js + utils.js TAB_NAMES追加）
 - [x] Step 3.5: UIレイアウト改善（サイドバー化 + スクロール委譲）
+- [x] Step 4: テスト（test_api_docs_viewer.py 新規: 9テスト）、全680テスト通過
 
 ## Phase B-5でLLM評価を自動実行（Phase 2 完了）
 
