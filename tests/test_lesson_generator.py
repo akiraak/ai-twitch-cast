@@ -14,6 +14,7 @@ from src.lesson_generator import (
     _generate_single_dialogue,
     _generate_section_dialogues,
     _parse_json_response,
+    clean_extracted_text,
 )
 
 
@@ -634,3 +635,134 @@ class TestDialogueDirectionsCompat:
         user_prompt = dialogues[0]["generation"]["user_prompt"]
         assert "The real meaning of How are you?" in user_prompt
         assert "Key content to mention" in user_prompt
+
+
+# --- テキストクリーニング ---
+
+
+class TestCleanExtractedText:
+    """clean_extracted_text のテスト"""
+
+    def test_empty_string(self):
+        assert clean_extracted_text("") == ""
+
+    def test_none_returns_none(self):
+        assert clean_extracted_text(None) is None
+
+    def test_normal_text_unchanged(self):
+        text = "Hello, world!\nThis is a test."
+        assert clean_extracted_text(text) == text
+
+    def test_consecutive_hyphens(self):
+        """連続ハイフン(3つ以上)が空行に置換される"""
+        text = "Title\n---\nContent\n----------\nMore"
+        result = clean_extracted_text(text)
+        assert "---" not in result
+        assert "----------" not in result
+        assert "Title" in result
+        assert "Content" in result
+        assert "More" in result
+
+    def test_consecutive_equals(self):
+        """連続等号(3つ以上)が除去される"""
+        text = "Title\n===\nContent\n======\nMore"
+        result = clean_extracted_text(text)
+        assert "===" not in result
+        assert "Title" in result
+        assert "Content" in result
+
+    def test_consecutive_asterisks(self):
+        """連続アスタリスク(3つ以上)が除去される"""
+        text = "Before ***separator*** After"
+        result = clean_extracted_text(text)
+        assert "***" not in result
+        assert "Before" in result
+        assert "After" in result
+
+    def test_consecutive_tildes(self):
+        """連続チルダ(3つ以上)が除去される"""
+        text = "Before ~~~ After"
+        result = clean_extracted_text(text)
+        assert "~~~" not in result
+
+    def test_consecutive_underscores(self):
+        """連続アンダースコア(3つ以上)が除去される"""
+        text = "Before ___ After"
+        result = clean_extracted_text(text)
+        assert "___" not in result
+
+    def test_decorative_symbols(self):
+        """装飾記号の連続(3つ以上)が除去される"""
+        text = "★☆★☆★ タイトル ★☆★☆★"
+        result = clean_extracted_text(text)
+        assert "★☆★" not in result
+        assert "タイトル" in result
+
+    def test_decorative_symbols_various(self):
+        """各種装飾記号の連続が除去される"""
+        text = "●○●テスト■□■□■□テスト◆◇◆◇◆"
+        result = clean_extracted_text(text)
+        assert "●○●" not in result
+        assert "■□■□■□" not in result
+        assert "◆◇◆◇◆" not in result
+        assert "テスト" in result
+
+    def test_two_symbols_kept(self):
+        """2つ以下の装飾記号は保持される"""
+        text = "★☆ タイトル"
+        result = clean_extracted_text(text)
+        assert "★☆" in result
+
+    def test_html_entities(self):
+        """HTMLエンティティが対応文字に置換される"""
+        text = "A &amp; B &lt;tag&gt; C&nbsp;D &quot;E&quot; F&#39;s"
+        result = clean_extracted_text(text)
+        assert "A & B" in result
+        assert "<tag>" in result
+        assert "C D" in result
+        assert '"E"' in result
+        assert "F's" in result
+
+    def test_excessive_blank_lines(self):
+        """3行以上の空行が2行に圧縮される"""
+        text = "Line1\n\n\n\n\nLine2\n\n\n\n\n\nLine3"
+        result = clean_extracted_text(text)
+        # 最大で空行2つ（= 改行3つ）
+        assert "\n\n\n\n" not in result
+        assert "Line1" in result
+        assert "Line2" in result
+        assert "Line3" in result
+
+    def test_two_blank_lines_kept(self):
+        """空行2つはそのまま保持される"""
+        text = "Line1\n\n\nLine2"
+        result = clean_extracted_text(text)
+        assert result == "Line1\n\n\nLine2"
+
+    def test_leading_trailing_whitespace(self):
+        """先頭・末尾の空白行がstripされる"""
+        text = "\n\n  Hello  \n\n"
+        result = clean_extracted_text(text)
+        assert result == "Hello"
+
+    def test_combined_noise(self):
+        """複数のノイズが同時に除去される"""
+        text = (
+            "★☆★☆★\n"
+            "タイトル\n"
+            "===============\n"
+            "本文テキスト\n"
+            "---------------\n"
+            "&nbsp;&nbsp;スペース付き\n"
+            "\n\n\n\n\n"
+            "最後の行"
+        )
+        result = clean_extracted_text(text)
+        assert "★☆★" not in result
+        assert "===" not in result
+        assert "---" not in result
+        assert "&nbsp;" not in result
+        assert "タイトル" in result
+        assert "本文テキスト" in result
+        assert "スペース付き" in result
+        assert "最後の行" in result

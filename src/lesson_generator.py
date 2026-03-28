@@ -232,6 +232,49 @@ def _get_dialogue_model():
            os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
 
 
+# --- テキストクリーニング ---
+
+def clean_extracted_text(text: str) -> str:
+    """抽出テキストから無駄な記号・装飾を除去する"""
+    if not text:
+        return text
+
+    # HTMLエンティティ残骸 → 対応文字に置換
+    html_entities = {
+        "&nbsp;": " ",
+        "&amp;": "&",
+        "&lt;": "<",
+        "&gt;": ">",
+        "&quot;": '"',
+        "&#39;": "'",
+        "&apos;": "'",
+    }
+    for entity, char in html_entities.items():
+        text = text.replace(entity, char)
+
+    # 連続するハイフン・ダッシュ (3つ以上) → 空行1つ
+    text = re.sub(r"-{3,}", "\n", text)
+    # 連続する等号 (3つ以上) → 除去
+    text = re.sub(r"={3,}", "", text)
+    # 連続するアスタリスク (3つ以上) → 除去
+    text = re.sub(r"\*{3,}", "", text)
+    # 連続するチルダ (3つ以上) → 除去
+    text = re.sub(r"~{3,}", "", text)
+    # 連続するアンダースコア (3つ以上) → 除去
+    text = re.sub(r"_{3,}", "", text)
+
+    # 装飾記号の連続 (3つ以上): ★☆●○■□◆◇▲△▼▽◎※♪♫♬♩
+    text = re.sub(r"[★☆●○■□◆◇▲△▼▽◎※♪♫♬♩]{3,}", "", text)
+
+    # 連続する空行: 3行以上の空行 → 空行2つに圧縮
+    text = re.sub(r"\n{4,}", "\n\n\n", text)
+
+    # 先頭・末尾の空白行をstrip
+    text = text.strip()
+
+    return text
+
+
 # --- 画像解析 ---
 
 def extract_text_from_image(image_path: str) -> str:
@@ -258,7 +301,7 @@ def extract_text_from_image(image_path: str) -> str:
             max_output_tokens=4096,
         ),
     )
-    return response.text.strip()
+    return clean_extracted_text(response.text.strip())
 
 
 def _guess_mime(ext: str) -> str:
@@ -294,7 +337,7 @@ async def extract_text_from_url(url: str) -> str:
             max_output_tokens=4096,
         ),
     )
-    return response.text.strip()
+    return clean_extracted_text(response.text.strip())
 
 
 # --- 三者視点プラン生成 ---

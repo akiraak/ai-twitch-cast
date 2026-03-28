@@ -3,6 +3,12 @@
 ## 教師モード
 - [ ] バグ教師モードコンテンツを客観的に分析しイケてるコンテンツかAIで検証するモードの追加
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
+- [ ] メインコンテンツの読み上げ方式改善（文章→先生読み上げ、会話→二人で演じる） → [plans/read-main-content-aloud.md](plans/read-main-content-aloud.md)
+  - [ ] Step 2: メインコンテンツ識別・構造化（LLMで conversation/passage/word_list/table 判定、DB保存）
+  - [ ] Step 3: 構造生成プロンプトに種別ごとの読み上げルール追加
+  - [ ] Step 4: 監督レビューに種別考慮のレビュー観点追加
+  - [ ] Step 5: 管理画面にメインコンテンツ表示
+  - [ ] Step 6: テスト
 
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)

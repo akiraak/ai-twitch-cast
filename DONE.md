@@ -1,5 +1,11 @@
 # DONE
 
+## メインコンテンツ読み上げ方式改善 Step 1
+
+- [x] `clean_extracted_text()` を `src/lesson_generator.py` に追加（正規表現ベース、LLM不要）
+- [x] `extract_text_from_image()` / `extract_text_from_url()` の return でクリーニング適用
+- [x] テスト18件追加（`TestCleanExtractedText`）
+
 ## 再生成過程の管理画面表示
 
 - [x] 再生成前の元セリフを `original_dialogues` として dialogues JSON に保存
