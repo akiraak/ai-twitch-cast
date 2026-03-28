@@ -4,6 +4,11 @@
 
 cd "$(dirname "$0")"
 
+# venv有効化
+if [ -f .venv/bin/activate ]; then
+    source .venv/bin/activate
+fi
+
 # .envからWEB_PORT読み込み（デフォルト: 8080）
 if [ -f .env ]; then
     WEB_PORT=$(grep -E '^WEB_PORT=' .env | cut -d= -f2)
@@ -11,7 +16,8 @@ fi
 WEB_PORT="${WEB_PORT:-8080}"
 
 PID_FILE=".server.pid"
-STOP_FLAG=""
+STOP_FILE=".server.stop"
+rm -f "$STOP_FILE"
 
 # 既存プロセスが動いていたら停止する（二重起動防止）
 if [ -f "$PID_FILE" ]; then
@@ -30,14 +36,13 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 cleanup() {
-    STOP_FLAG=1
+    touch "$STOP_FILE"
     echo "サーバーを停止します..."
     if [ -f "$PID_FILE" ]; then
         kill "$(cat "$PID_FILE")" 2>/dev/null
         wait "$(cat "$PID_FILE")" 2>/dev/null
         rm -f "$PID_FILE"
     fi
-    exit 0
 }
 
 trap cleanup SIGINT SIGTERM
@@ -52,7 +57,7 @@ fi
 
 echo "Starting server on port $WEB_PORT..."
 
-while [ -z "$STOP_FLAG" ]; do
+while [ ! -f "$STOP_FILE" ]; do
     # teeパイプ不使用: $!でuvicorn本体のPIDを取得（ゾンビ防止）
     # ターミナル表示はtail -fで代替
     uvicorn scripts.web:app --host 0.0.0.0 --port "$WEB_PORT" >> server.log 2>&1 &
@@ -65,10 +70,10 @@ while [ -z "$STOP_FLAG" ]; do
     wait $PID
     EXIT_CODE=$?
     kill $TAIL_PID 2>/dev/null
-    # cleanup によるシグナル停止の場合はループを抜ける
-    if [ -n "$STOP_FLAG" ]; then
+    if [ -f "$STOP_FILE" ]; then
         break
     fi
     echo "サーバー終了 (code: $EXIT_CODE)、1秒後に再起動..."
     sleep 1
 done
+rm -f "$STOP_FILE"
