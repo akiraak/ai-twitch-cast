@@ -1,5 +1,10 @@
 # DONE
 
+## 管理画面Docs閲覧機能（Steps 1-2完了）
+
+- [x] Step 1: バックエンドAPI（docs_viewer.py 新規: ファイル一覧 + 内容取得、パストラバーサル対策）
+- [x] Step 2: ルート登録（web.py に docs_viewer_router 追加）
+
 ## Phase B-5でLLM評価を自動実行（Phase 2 完了）
 
 - [x] Step 5: `analyze_content` → `asyncio.run(analyze_content_full(...))` に切り替え（lesson_generator.py）

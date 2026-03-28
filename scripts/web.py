@@ -33,6 +33,7 @@ from scripts.routes.bgm import router as bgm_router
 from scripts.routes.se import router as se_router
 from scripts.routes.character import router as character_router
 from scripts.routes.db_viewer import router as db_viewer_router
+from scripts.routes.docs_viewer import router as docs_viewer_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.stream_control import router as stream_control_router
 from scripts.routes.files import router as files_router
@@ -93,6 +94,7 @@ app.include_router(bgm_router)
 app.include_router(se_router)
 app.include_router(character_router)
 app.include_router(db_viewer_router)
+app.include_router(docs_viewer_router)
 app.include_router(files_router)
 app.include_router(items_router)
 app.include_router(overlay_router)

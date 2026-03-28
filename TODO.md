@@ -9,8 +9,7 @@
 
 ## 2. 実装
 2.1. [ ] 管理画面からplans, docsファイルの内容を見れるようにする → [plans/docs-viewer.md](plans/docs-viewer.md)
-  - [ ] Step 1: バックエンドAPI（docs_viewer.py 新規: ファイル一覧 + 内容取得）
-  - [ ] Step 2: ルート登録（web.py）
+  - [ ] Step 3: フロントエンドUI（index.html + docs.js + utils.js）
   - [ ] Step 3: フロントエンドUI（index.html + docs.js + utils.js）
   - [ ] Step 4: テスト（test_api_docs_viewer.py 新規）
 
