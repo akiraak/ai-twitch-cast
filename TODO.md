@@ -6,7 +6,6 @@
 - [ ] 授業の品質分析が入ったのでコンテンツ生成に反映させる
 - [ ] セクションごとの会話のつながりが不自然なのを解決する
 - [ ] Phase B-5でLLM評価も自動実行する → [plans/quality-analysis-in-pipeline.md](plans/quality-analysis-in-pipeline.md)（Phase 2）
-  - [ ] Step 6: teacher.py フォールバックも `analyze_content_full` に統一
   - [ ] Step 7: テスト更新 + 全テスト通過確認
 - [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
 

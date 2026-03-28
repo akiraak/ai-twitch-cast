@@ -745,7 +745,11 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                 analysis_dict["lesson_id"] = lesson_id
             else:
                 section_dicts = [dict(s) for s in saved]
-                analysis = analyze_content(section_dicts, lang)
+                analysis = await analyze_content_full(
+                    section_dicts, lesson_name=lesson["name"],
+                    extracted_text=lesson.get("extracted_text", ""),
+                    lang=lang,
+                )
                 analysis.lesson_id = lesson_id
                 analysis_dict = analysis.to_dict()
             db.update_lesson(lesson_id, analysis_json=_json.dumps(analysis_dict, ensure_ascii=False))
