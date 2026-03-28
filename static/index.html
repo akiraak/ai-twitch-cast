@@ -42,6 +42,7 @@
   <div class="tab" onclick="switchTab('todo', this)">TODO</div>
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
   <div class="tab" onclick="switchTab('db', this)">DB</div>
+  <div class="tab" onclick="switchTab('docs', this)">Docs</div>
 </div>
 
 <div class="main">
@@ -475,6 +476,27 @@ users       1──N  comments      (user_id)</div>
     </div>
   </div>
 
+  <!-- ===== Docs ===== -->
+  <div class="tab-content" id="tab-docs">
+    <div class="card">
+      <h2>ドキュメント</h2>
+      <div style="display:flex; gap:6px; margin-bottom:10px;">
+        <button class="db-tab active" id="docs-dir-plans" onclick="switchDocsDir('plans')">plans</button>
+        <button class="db-tab" id="docs-dir-docs" onclick="switchDocsDir('docs')">docs</button>
+      </div>
+      <div id="docs-file-list" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h2 id="docs-file-name">ファイルを選択してください</h2>
+        <span id="docs-file-meta" style="font-size:0.8rem; color:#9a88b5;"></span>
+      </div>
+      <div id="docs-content" class="doc-modal-body"
+           style="max-height:600px; overflow-y:auto; border:1px solid #d0c0e8; border-radius:6px; padding:20px;">
+        <p style="color:#9a88b5;">← ファイルを選択すると内容が表示されます</p>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== チャット ===== -->
   <div class="tab-content" id="tab-chat">
@@ -614,6 +636,7 @@ users       1──N  comments      (user_id)</div>
 <script src="/static/js/admin/todo.js"></script>
 <script src="/static/js/admin/chat.js"></script>
 <script src="/static/js/admin/markdown.js"></script>
+<script src="/static/js/admin/docs.js"></script>
 <script src="/static/js/admin/lighting.js"></script>
 <script src="/static/js/admin/debug.js"></script>
 <script src="/static/js/admin/layout.js"></script>

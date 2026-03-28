@@ -44,7 +44,7 @@ GET /api/docs/file?dir=plans&name=xxx.md → PlainTextResponse(Markdown本文)
 
 `docs_viewer_router` を `app.include_router()` で登録。
 
-### Step 3: フロントエンドUI
+### Step 3: フロントエンドUI ✅ 完了
 
 #### 3a: HTML構造 (`static/index.html`)
 
