@@ -955,3 +955,58 @@ class TestDirectorReviewMainContent:
         call_args = mock_client.models.generate_content.call_args
         config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
         assert "Content type review" not in config.system_instruction
+
+
+class TestGenerateLessonScriptV2ReturnFormat:
+    """generate_lesson_script_v2 が dict（sections + analysis）を返すことを確認"""
+
+    def test_returns_dict_with_sections_and_analysis(self):
+        """v2パイプラインの戻り値がsectionsとanalysisを含むdictである"""
+        import json as _json
+        from src.lesson_generator import generate_lesson_script_v2
+
+        # Phase B-1: 構造生成レスポンス
+        structure_resp = _json.dumps([
+            {"section_type": "introduction", "display_text": "導入",
+             "emotion": "excited", "question": "", "answer": "", "wait_seconds": 0,
+             "dialogue_plan": [{"speaker": "teacher", "direction": "挨拶"}]},
+        ])
+        # Phase B-2: セリフ生成
+        dlg_resp = _json.dumps({"content": "こんにちは", "tts_text": "こんにちは", "emotion": "excited"})
+        # Phase B-3: レビュー（全合格）
+        review_resp = _json.dumps({
+            "reviews": [{"section_index": 0, "approved": True, "feedback": "OK"}],
+            "overall_feedback": "良い",
+        })
+
+        mock_client = MagicMock()
+        responses = [structure_resp, dlg_resp, review_resp]
+        call_idx = [0]
+        def _side_effect(*args, **kwargs):
+            idx = call_idx[0]
+            call_idx[0] += 1
+            text = responses[idx] if idx < len(responses) else dlg_resp
+            return MagicMock(text=text)
+        mock_client.models.generate_content.side_effect = _side_effect
+
+        with patch("src.lesson_generator.get_client", return_value=mock_client), \
+             patch("src.lesson_generator._get_model", return_value="test-model"), \
+             patch("src.lesson_generator._get_dialogue_model", return_value="test-model"):
+            result = generate_lesson_script_v2(
+                "テスト授業", "テスト教材",
+                teacher_config=TEACHER_CFG,
+                student_config=STUDENT_CFG,
+            )
+
+        # 戻り値がdict形式であること
+        assert isinstance(result, dict)
+        assert "sections" in result
+        assert "analysis" in result
+        # sectionsはlist[dict]
+        assert isinstance(result["sections"], list)
+        assert len(result["sections"]) == 1
+        assert result["sections"][0]["section_type"] == "introduction"
+        # analysisはto_dict()の結果（dict）
+        assert isinstance(result["analysis"], dict)
+        assert "total_score" in result["analysis"]
+        assert "rank" in result["analysis"]

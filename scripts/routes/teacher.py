@@ -632,7 +632,14 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
             yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
 
         try:
-            sections = task.result()
+            gen_result = task.result()
+            # v2パイプラインはdict（sections + analysis）、非v2はlist
+            if isinstance(gen_result, dict):
+                sections = gen_result["sections"]
+                embedded_analysis = gen_result.get("analysis")
+            else:
+                sections = gen_result
+                embedded_analysis = None
             saved = []
             for i, s in enumerate(sections):
                 # v3: director_sectionsから該当セクションのdialogue_directionsを取得
@@ -732,14 +739,19 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
             logger.info("TTS事前生成完了: lesson=%d, %d/%d パート (エラー: %d)",
                         lesson_id, generated - tts_errors, total_parts, tts_errors)
 
-            # 品質分析（アルゴリズムのみ、APIコスト0）
-            section_dicts = [dict(s) for s in saved]
-            analysis = analyze_content(section_dicts, lang)
-            analysis.lesson_id = lesson_id
-            analysis_dict = analysis.to_dict()
+            # 品質分析（パイプライン埋め込み or フォールバック）
+            if embedded_analysis:
+                analysis_dict = embedded_analysis
+                analysis_dict["lesson_id"] = lesson_id
+            else:
+                section_dicts = [dict(s) for s in saved]
+                analysis = analyze_content(section_dicts, lang)
+                analysis.lesson_id = lesson_id
+                analysis_dict = analysis.to_dict()
             db.update_lesson(lesson_id, analysis_json=_json.dumps(analysis_dict, ensure_ascii=False))
             logger.info("品質分析完了: lesson=%d, score=%.1f/%s, rank=%s",
-                        lesson_id, analysis.total_score, analysis.max_score, analysis.rank)
+                        lesson_id, analysis_dict.get("total_score", 0),
+                        analysis_dict.get("max_score", 0), analysis_dict.get("rank", "?"))
 
             result = {"ok": True, "sections": saved, "tts_generated": generated - tts_errors, "tts_errors": tts_errors, "analysis": analysis_dict}
         except Exception as e:

@@ -1,5 +1,16 @@
 # DONE
 
+## Phase B-5でLLM評価を自動実行（Phase 2 Step 5完了）
+
+- [x] Step 5: `analyze_content` → `asyncio.run(analyze_content_full(...))` に切り替え（lesson_generator.py）
+
+## 品質分析をパイプライン内に完全統合（2c完了）
+
+- [x] Step 1: Phase B-5追加（lesson_generator.py に analyze_content() 組み込み）
+- [x] Step 2: 戻り値変更（`return result` → `return {"sections": result, "analysis": analysis.to_dict()}`）
+- [x] Step 3: teacher.py 呼び出し側更新（v2/非v2分岐 + 埋め込みanalysis利用 + フォールバック）
+- [x] Step 4: テスト追加（v2戻り値形式テスト + APIテストのanalysis検証）、全669テスト通過
+
 ## 品質分析の自動実行（サーバー側）
 
 - [x] `lessons`テーブルに`analysis_json`カラム追加（DB永続化）

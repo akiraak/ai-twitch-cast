@@ -1,6 +1,6 @@
 # 授業の品質分析をスクリプト生成の中に含める（2c）
 
-## ステータス: Step 1 完了
+## ステータス: 完了
 
 ## 背景
 
@@ -35,12 +35,12 @@ teacher.py: 埋め込み済み分析結果をDB保存（重複呼び出し削除
 
 **注**: 仮セクション構築ではなく、result assemblyで構築済みの `result` をそのまま渡す方式を採用。`dialogues` がJSON文字列化済みで `analyze_content` の期待する入力形式と一致するため。
 
-### Step 2: 戻り値の変更 (`src/lesson_generator.py`)
+### Step 2: 戻り値の変更 (`src/lesson_generator.py`) ✅ 完了
 
 現在: `return result` (list[dict])
 変更後: `return {"sections": result, "analysis": analysis.to_dict()}`
 
-### Step 3: 呼び出し側の更新 (`scripts/routes/teacher.py`)
+### Step 3: 呼び出し側の更新 (`scripts/routes/teacher.py`) ✅ 完了
 
 **line 635:** `sections = task.result()` をアンパック
 - v2パス: `gen_result = task.result()` → `sections = gen_result["sections"]`
@@ -50,7 +50,7 @@ teacher.py: 埋め込み済み分析結果をDB保存（重複呼び出し削除
 - 埋め込み `analysis` があればそれをDB保存
 - なければフォールバックで `analyze_content()` 実行（非v2パス用）
 
-### Step 4: テスト
+### Step 4: テスト ✅ 完了
 
 **新規テスト** (`tests/test_lesson_generator.py`):
 - Phase B-5: `analyze_content` がモック経由で呼ばれ、戻り値dictに `analysis` が含まれることを確認
@@ -93,3 +93,62 @@ Phase B-5 の step/total は `1 + total_turns + 1 + regen_turns + 1`（常に最
 2. 管理画面でスクリプト生成 → SSEに「品質分析中...」表示
 3. APIレスポンスの `analysis` にスコア・ランクが含まれる
 4. DBの `analysis_json` に保存される
+
+---
+
+## Phase 2: LLM評価の自動実行
+
+### ステータス: 未着手
+
+### 背景
+
+Phase B-5では `analyze_content()`（アルゴリズムのみ、50点満点）を使っているため、LLM評価（+50点）は手動で「＋ LLM評価」ボタンを押さないと実行されない。`analyze_content_full()`（100点満点）に切り替えてLLM評価も自動で走るようにする。
+
+### 方針
+
+`analyze_content_full()` はasyncだが、`generate_lesson_script_v2()` は `asyncio.to_thread()` で別スレッドで実行されるため、そのスレッド内で `asyncio.run()` を使えば安全にasync関数を呼べる。
+
+### 実装ステップ
+
+#### Step 5: Phase B-5を `analyze_content_full` に切り替え (`src/lesson_generator.py`) ✅ 完了
+
+1. import変更: `analyze_content` → `analyze_content_full`、`import asyncio` 追加
+2. Phase B-5の呼び出しを変更:
+   ```python
+   # Before
+   analysis = analyze_content(result, "en" if en else "ja")
+   # After
+   analysis = asyncio.run(analyze_content_full(
+       result, lesson_name=lesson_name,
+       extracted_text=extracted_text,
+       lang="en" if en else "ja",
+   ))
+   ```
+3. 進捗メッセージ更新: 「品質分析中（LLM評価含む）... / Analyzing quality (with LLM)...」
+
+#### Step 6: teacher.py フォールバック更新 (`scripts/routes/teacher.py`)
+
+非v2パスのフォールバックも `analyze_content_full` に統一:
+```python
+# Before
+analysis = analyze_content(section_dicts, lang)
+# After
+analysis = await analyze_content_full(
+    section_dicts, lesson_name=lesson["name"],
+    extracted_text=lesson.get("extracted_text", ""),
+    lang=lang,
+)
+```
+
+#### Step 7: テスト
+
+- 既存テスト: `analyze_content_full` をモックして戻り値形式が維持されることを確認
+- 新規テスト: Phase B-5で `analyze_content_full` が呼ばれ、`llm_scores` が含まれることを確認
+
+### 対象ファイル
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `src/lesson_generator.py` | `analyze_content` → `asyncio.run(analyze_content_full(...))` |
+| `scripts/routes/teacher.py` | フォールバックも `analyze_content_full` に統一 |
+| `tests/test_lesson_generator.py` | モック対象を `analyze_content_full` に変更 |

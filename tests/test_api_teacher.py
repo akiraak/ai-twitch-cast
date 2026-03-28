@@ -339,6 +339,10 @@ class TestLessonSections:
         assert data["ok"] is True
         assert len(data["sections"]) == 2
         assert data["sections"][0]["section_type"] == "introduction"
+        # Phase B-5: 品質分析がパイプラインから埋め込まれている
+        assert "analysis" in data
+        assert "total_score" in data["analysis"]
+        assert "rank" in data["analysis"]
 
     def test_generate_script_with_rejection(self, api_client, test_db, mock_gemini):
         """不合格→再生成時にoriginal_dialoguesとrevised_directionsが保存される"""

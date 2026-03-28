@@ -13,7 +13,8 @@ import httpx
 from google.genai import types
 
 from src.gemini_client import get_client
-from src.content_analyzer import analyze_content
+from src.content_analyzer import analyze_content_full
+import asyncio
 from src.prompt_builder import get_stream_language
 
 logger = logging.getLogger(__name__)
@@ -2410,15 +2411,19 @@ def generate_lesson_script_v2(
             section["section_type"] = "explanation"
         result.append(section)
 
-    # --- Phase B-5: 品質分析（アルゴリズムのみ、APIコスト0） ---
+    # --- Phase B-5: 品質分析（アルゴリズム + LLM評価） ---
     analysis_total = 1 + total_turns + 1 + regen_turns + 1
     if en:
-        _progress(analysis_total, analysis_total, "Analyzing quality...")
+        _progress(analysis_total, analysis_total, "Analyzing quality (with LLM)...")
     else:
-        _progress(analysis_total, analysis_total, "品質分析中...")
+        _progress(analysis_total, analysis_total, "品質分析中（LLM評価含む）...")
 
-    analysis = analyze_content(result, "en" if en else "ja")
+    analysis = asyncio.run(analyze_content_full(
+        result, lesson_name=lesson_name,
+        extracted_text=extracted_text,
+        lang="en" if en else "ja",
+    ))
     logger.info("Phase B-5完了: score=%.1f/%s, rank=%s",
                 analysis.total_score, analysis.max_score, analysis.rank)
 
-    return result
+    return {"sections": result, "analysis": analysis.to_dict()}
