@@ -5,10 +5,9 @@
 ## 教師モード
 - [ ] コンテンツを生成し不自然なところがないかAIで検証する
 - [ ] コンテンツに出てくるメインコンテンツの文章や会話を読み上げるようにする
-- [>] 英語モードのセリフを英語にする → [plans/lesson-language-mode.md](plans/lesson-language-mode.md)
-  - [ ] Step 6: ドキュメント更新
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] セリフを生成したあとに監督に監修してもらいダメ出しを出してもらう。そのあとにもう一度セリフの生成をする。そのあとにTTSの生成
+- [ ] 英語モードでも発音が日本語になる。どこに日本語の発音になる要素があるか調査
 
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)

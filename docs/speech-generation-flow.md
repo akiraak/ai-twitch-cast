@@ -68,14 +68,32 @@
 
 | 設定 | 用途 | 例（ちょビ） | 例（なるこ） |
 |------|------|-------------|-------------|
-| `system_prompt` | テキスト生成時の性格・話し方 | Twitch配信者、ツッコミ気質… | 元気な生徒、素直… |
-| `rules` | 応答ルール（文字数制限等） | 1文40字以内、2文まで | 先生より短めに |
+| `system_prompt` | テキスト生成時の性格・話し方（日本語） | Twitch配信者、ツッコミ気質… | 元気な生徒、素直… |
+| `system_prompt_en` | 英語版の性格・話し方 | Curious Twitch streamer… | Energetic student… |
+| `system_prompt_bilingual` | バイリンガル版の性格・話し方 | 日英混在の性格設定 | 日英混在の性格設定 |
+| `rules` | 応答ルール（日本語） | 1文40字以内、2文まで | 先生より短めに |
+| `rules_en` | 英語版ルール | Max one ! per sentence | Keep it shorter than teacher |
+| `rules_bilingual` | バイリンガル版ルール | 日英を自然に混ぜる | 日英を自然に混ぜる |
 | `tts_voice` | TTS音声名 | Despina | Aoede |
-| `tts_style` | TTS読み上げスタイル | にこにこ柔らかトーン | テンション高めハキハキ |
+| `tts_style` | TTS読み上げスタイル（日本語） | にこにこ柔らかトーン | テンション高めハキハキ |
+| `tts_style_en` | 英語版TTSスタイル | Warm, cheerful tone | Energetic, upbeat tone |
+| `tts_style_bilingual` | バイリンガル版TTSスタイル | 日英を自然に切り替えて | 日英を自然に切り替えて |
 | `emotions` | 使用可能な感情一覧 | joy, excited, surprise… | joy, surprise, thinking… |
 | `emotion_blendshapes` | 感情→表情マッピング | joy→happy:1.0 | joy→happy:1.0 |
 | `self_note` | 今日の記憶メモ（自動更新） | 「今日はゲーム配信…」 | — |
 | `persona` | 過去応答から抽出した性格特徴 | 「照れ屋でツッコミ好き」 | — |
+
+### 言語モード別フィールド選択
+
+`get_localized_field(config, field)` （`src/prompt_builder.py`）が言語モードに応じて適切なフィールドを選択する:
+
+| 言語モード | 選択されるフィールド | フォールバック |
+|-----------|---------------------|--------------|
+| 日本語（primary=ja, sub=none） | `field`（例: `system_prompt`） | — |
+| 英語（primary=en, sub=none） | `field_en`（例: `system_prompt_en`） | `field` |
+| バイリンガル（sub!=none） | `field_bilingual`（例: `system_prompt_bilingual`） | `field` |
+
+未設定の言語版は日本語版にフォールバックするため、既存キャラは即座に壊れない。
 
 ## モード別フロー
 
@@ -169,7 +187,7 @@ comment_reader._respond()
     各dialogue発話ごとに synthesize(
       tts_text,
       voice = speaker別のtts_voice,
-      style = speaker別のtts_style
+      style = get_localized_field(config, "tts_style")  ← 言語モード対応
     )
     → section_{oi}_dlg_{di}.wav
 
@@ -188,12 +206,13 @@ comment_reader._respond()
     → speech_pipeline.speak(wav_path=cached, avatar_id="teacher")
 ```
 
-**キャラ個性の反映度: ★★★★☆**
+**キャラ個性の反映度: ★★★★★**
 
 - テキスト: 各セリフがキャラのペルソナ付きで個別生成 ✓
-- 声: キャラ固有のvoice/style ✓
+- 声: キャラ固有のvoice/style（言語モード対応） ✓
 - 表情: キャラのemotion_blendshapes ✓
-- self_note/persona は未使用（授業では不要と判断）
+- self_note/persona も含む ✓
+- 言語モードに応じてプロンプト全体が適切な言語で構築される ✓
 
 #### Phase A: プラン生成の詳細（3人のエキスパート）
 
@@ -253,23 +272,62 @@ comment_reader._respond()
 
 #### Phase B-2: セリフ個別生成の詳細
 
-`_generate_single_dialogue()` で各セリフを生成。キャラのペルソナがシステムプロンプトに直接組み込まれる。
+`_generate_single_dialogue()` で各セリフを生成。`build_lesson_dialogue_prompt()`（`src/prompt_builder.py`）でシステムプロンプトを構築し、言語モードに応じて全セクションが適切な言語で生成される。
 
-**システムプロンプト**（日本語の場合）:
+```python
+system_prompt = build_lesson_dialogue_prompt(
+    char=character_config,
+    role=role,
+    self_note=character_config.get("self_note"),
+    persona=character_config.get("persona"),
+)
 ```
-あなたは「{キャラ名}」です。Twitch教育配信のキャラクターとして自然に話してください。
+
+**システムプロンプトの構成**（言語モードにより日本語/英語で構築）:
+
+1. **キャラ紹介** — "あなたは「{name}」です…" / "You are '{name}'…"
+2. **キャラ system_prompt** — `get_localized_field(char, "system_prompt")` で言語版を選択
+3. **ルール** — `get_localized_field(char, "rules")` で言語版を選択
+4. **自分の記憶メモ** — self_note（授業でも使用）
+5. **ペルソナ** — persona（授業でも使用）
+6. **言語ルール** — 言語モード別の発話言語指示（英語のみ/バイリンガル混ぜ）
+7. **感情ガイド** — emotion の使い分け
+8. **出力形式** — JSON `{content, tts_text, emotion}` + tts_text の言語タグルール
+
+**日本語モードの例**:
+```
+あなたは「ちょビ」です。Twitch教育配信のキャラクターとして自然に話してください。
 
 {キャラのsystem_prompt全文}
 
-使用可能な感情: {キャラのemotions一覧}
-
 ルール:
-- このキャラクターとして自然に話す
+{キャラのrules}
+
+使用可能な感情: {emotions一覧}
+
+出力形式:
 - content: 字幕テキスト（タグなし）
 - tts_text: contentと同じだが、日本語以外に [lang:xx]...[/lang] タグを付ける
-  - 例: content="Helloは挨拶だよ" → tts_text="[lang:en]Hello[/lang]は挨拶だよ"
 - emotion: 使用可能な感情から選ぶ
 - JSONオブジェクトのみ出力: {"content": "...", "tts_text": "...", "emotion": "..."}
+```
+
+**英語モードの例**:
+```
+You are 'Chobi'. Speak naturally as a character in a Twitch educational stream.
+
+{キャラのsystem_prompt_en全文}
+
+Rules:
+{キャラのrules_en}
+
+Available emotions: {emotions一覧}
+
+Output format:
+- content: subtitle text (no tags)
+- tts_text: same as content, but wrap non-English parts with [lang:xx]...[/lang]
+- emotion: choose from available emotions
+- Output ONLY a JSON object: {"content": "...", "tts_text": "...", "emotion": "..."}
 ```
 
 **ユーザープロンプト**:
@@ -292,11 +350,13 @@ student: {前のセリフ}
 {extracted_text（先頭2000文字）}
 ```
 
+**キャラメモリの取得**: `get_lesson_characters()`（`src/lesson_generator.py`）でキャラ設定に加え、`self_note` と `persona` もDBから取得し、プロンプトに含める。
+
 **生成メタデータ**: 各セリフに `generation` フィールドが付与され、`system_prompt`・`user_prompt`・`raw_output`・`model`・`temperature` が記録される。管理画面で全文表示可能。
 
 **会話履歴の蓄積**: セクション内で順次処理し、前のセリフが「ここまでの会話」に追加される。これにより自然な対話の流れが維持される。
 
-ファイル: `src/lesson_generator.py` 行1340-1472（`_generate_single_dialogue`）、行1475-1517（`_generate_section_dialogues`）
+ファイル: `src/prompt_builder.py`（`build_lesson_dialogue_prompt`）、`src/lesson_generator.py`（`_generate_single_dialogue`、`_generate_section_dialogues`、`get_lesson_characters`）
 
 #### 生成フローの具体例（Lesson #20 日本語 introduction）
 
@@ -428,12 +488,12 @@ speech_pipeline.speak(text, voice, style, avatar_id, wav_path, ...)
 
 ## キャラ個性の反映度まとめ
 
-| モード | テキスト生成 | voice/style | emotion | self_note/persona | 個性度 |
-|--------|-------------|-------------|---------|-------------------|--------|
-| コメント応答 | キャラ自身のプロンプト | ✓ | ✓ | ✓ | ★★★★★ |
-| イベント応答 | キャラ自身のプロンプト | ✓ | ✓ | - | ★★★★☆ |
-| 授業スクリプト | キャラ個別LLM生成（v2） | ✓ | ✓ | - | ★★★★☆ |
-| 直接発話 | 外部指定 | ✓ | - | - | ★★☆☆☆ |
+| モード | テキスト生成 | voice/style | emotion | self_note/persona | 言語対応 | 個性度 |
+|--------|-------------|-------------|---------|-------------------|---------|--------|
+| コメント応答 | キャラ自身のプロンプト | ✓ | ✓ | ✓ | ✓ | ★★★★★ |
+| イベント応答 | キャラ自身のプロンプト | ✓ | ✓ | - | - | ★★★★☆ |
+| 授業スクリプト | キャラ個別LLM生成（v2） | ✓ | ✓ | ✓ | ✓ | ★★★★★ |
+| 直接発話 | 外部指定 | ✓ | - | - | - | ★★☆☆☆ |
 
 ## 授業モードの実装履歴
 
@@ -445,6 +505,9 @@ speech_pipeline.speak(text, voice, style, avatar_id, wav_path, ...)
 - セクション内は会話履歴を蓄積するため順次処理
 - 各セリフに `generation` メタデータ（プロンプト全文・raw_output）が付与され、管理画面で検証可能
 - teacher/student キャラが両方DBに存在する場合に自動選択
+- **言語モード対応**: `build_lesson_dialogue_prompt()` でプロンプト全体が言語モードに応じた言語で構築される（日本語/英語/バイリンガル）
+- **self_note/persona対応**: `get_lesson_characters()` でキャラメモリを取得し、セリフ生成プロンプトに含める
+- **TTSスタイル言語対応**: `get_localized_field()` で `tts_style_en` / `tts_style_bilingual` を自動選択
 
 ### 旧方式（フォールバック）
 

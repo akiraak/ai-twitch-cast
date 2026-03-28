@@ -1,5 +1,10 @@
 # DONE
 
+## 英語モードのセリフを英語にする Step 6
+
+- [x] `docs/speech-generation-flow.md` を更新: キャラ設定に言語版フィールド追記、Phase B-2のプロンプト構築説明を `build_lesson_dialogue_prompt()` に更新、self_note/persona対応、TTS言語対応、個性度★★★★★に更新
+- [x] プランステータスを「完了」に更新
+
 ## 英語モードのセリフを英語にする Step 5
 
 - [x] `get_tts_config()` で `get_localized_field(config, "tts_style")` を使い言語モード対応
