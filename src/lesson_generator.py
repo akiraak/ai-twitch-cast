@@ -580,6 +580,13 @@ Set appropriate **wait_seconds** (pause after each section) for pacing:
 - Include key vocabulary, example sentences, comparison tables, quiz choices, etc.
 - Use line breaks (\\n) to organize content clearly
 
+### Reading display_text aloud (MANDATORY)
+- ALL example sentences, conversation lines, and key phrases in display_text MUST be distributed to key_content fields in dialogue_directions
+- Main content (conversation lines, example sentences, key phrases) — ZERO omissions allowed in key_content
+- Table data and list items — include important entries in key_content
+- If display_text has a lot of content, split across multiple turns
+- Target: 80%+ of display_text's text information should be covered by some key_content
+
 ### dialogue_directions
 Design the dialogue flow for each section: who speaks, what they say, and what content to cover.
 The actual dialogue text will be generated separately by character AIs — you design the blueprint.
@@ -668,6 +675,13 @@ Output ONLY the JSON array."""
 - 悪い例: "フォーマルな挨拶"（短すぎ、タイトルだけ）
 - キーワード、例文、比較表、クイズの選択肢などを含める
 - 改行(\\n)で見やすく整理する
+
+### display_text の読み上げルール（必須）
+- display_text に含まれるすべての例文・会話文・重要フレーズを、dialogue_directions の key_content に分配すること
+- 特にメインコンテンツの文章（会話文・例文・キーフレーズ）は1つも漏らさず key_content に含めること
+- 表形式データやリストの重要項目も key_content に含めること
+- display_text の内容が多い場合は、複数ターンに分けて分配する
+- 目安: display_text の文字情報の 80% 以上が何らかの key_content でカバーされていること
 
 ### dialogue_directions（対話フロー設計）
 各セクションに dialogue_directions 配列を含めてください。
@@ -1387,6 +1401,13 @@ Follow the plan's section count, order, type, emotion, and wait_seconds exactly.
 - Include key vocabulary, example sentences, comparison tables, quiz choices, etc.
 - Use line breaks (\\n) to organize content clearly
 
+## Reading display_text aloud (mandatory)
+- ALL example sentences, conversation lines, and key phrases in display_text MUST be distributed to dialogue_plan directions
+- Main content (conversation lines, example sentences, key phrases) — ZERO omissions allowed
+- Table data and list items — include important entries
+- If display_text has a lot of content, split across multiple turns
+- Target: 80%+ of display_text's text information should be covered by dialogue directions
+
 ## dialogue_plan field
 Design a dialogue_plan for each section: who speaks and about what.
 The actual dialogue text will be generated separately — you only design the flow.
@@ -1455,6 +1476,13 @@ Output ONLY the JSON array."""
 - 悪い例: "フォーマルな挨拶"（短すぎ、タイトルだけ）
 - キーワード、例文、比較表、クイズの選択肢などを含める
 - 改行(\\n)で見やすく整理する
+
+## display_text の読み上げルール（必須）
+- display_text に含まれるすべての例文・会話文・重要フレーズを、dialogue_plan の direction に分配すること
+- 特にメインコンテンツの文章（会話文・例文・キーフレーズ）は1つも漏らさず direction に含めること
+- 表形式データやリストの重要項目も direction に含めること
+- display_text の内容が多い場合は、複数ターンに分けて分配する
+- 目安: display_text の文字情報の 80% 以上が何らかの direction でカバーされていること
 
 ## dialogue_plan フィールド
 各セクションに dialogue_plan 配列を含めてください。

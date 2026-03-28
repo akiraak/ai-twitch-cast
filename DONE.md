@@ -1,5 +1,10 @@
 # DONE
 
+## 監督レビュー + display_text 読み上げ強化 Step 1
+
+- [x] 監督プロンプト（英語・日本語）に display_text 読み上げルール追加（key_content 分配ルール）
+- [x] `_build_structure_prompt()`（英語・日本語）にも同ルール追加（dialogue_plan direction 分配ルール）
+
 ## /broadcast トークン認証廃止
 
 - [x] `overlay.py`: `BROADCAST_TOKEN`・トークンチェック・`/api/broadcast/token`エンドポイント削除

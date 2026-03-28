@@ -3,11 +3,17 @@
 ## 機能追加
 
 ## 教師モード
-- [ ] 教師モードコンテンツを客観的に分析しイケてるコンテンツかAIで検証するモードの追加
-- [ ] コンテンツに出てくるメインコンテンツの文章や会話を読み上げるようにする
+- [ ] 監督レビュー（ダメ出し→再生成）+ display_text 読み上げ強化 → [plans/director-review-and-display-text-coverage.md](plans/director-review-and-display-text-coverage.md)
+
+  - [ ] Step 2: display_text[:200] 切り詰め撤廃（全文をキャラクターAIに渡す）
+  - [ ] Step 3: `_director_review()` 新設（Phase B-3: 監督レビュー）
+  - [ ] Step 4: Phase B-4 再生成ロジック（不合格セクションのみ再生成）
+  - [ ] Step 5: `generate_lesson_script_v2()` に Phase B-3/B-4 統合
+  - [ ] Step 6: レビュー結果の保存・管理画面表示
+  - [ ] Step 7: SSE 進捗表示更新
+- [ ] バグ教師モードコンテンツを客観的に分析しイケてるコンテンツかAIで検証するモードの追加
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
-- [ ] セリフを生成したあとに監督に監修してもらいダメ出しを出してもらう。そのあとにもう一度セリフの生成をする。そのあとにTTSの生成
-- [ ] 英語モードでも発音が日本語になる。どこに日本語の発音になる要素があるか調査
+- [ ] セリフ生成時に display_text が200文字で切り詰められ、長いコンテンツの後半が欠落する問題（表示を分割する等の対策が必要）
 
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
