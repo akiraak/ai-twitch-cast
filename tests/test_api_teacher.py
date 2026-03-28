@@ -262,6 +262,65 @@ class TestLessonSections:
         assert len(data["sections"]) == 2
         assert data["sections"][0]["section_type"] == "introduction"
 
+    def test_generate_script_with_rejection(self, api_client, test_db, mock_gemini):
+        """不合格→再生成時にoriginal_dialoguesとrevised_directionsが保存される"""
+        import json as _json
+        from unittest.mock import MagicMock as _MagicMock
+        r = api_client.post("/api/lessons", json={"name": "RejectTest"})
+        lid = r.json()["lesson"]["id"]
+        test_db.update_lesson(lid, extracted_text="Hello world content.")
+
+        # Phase B-1: 構造（1セクション、dialogue_plan 1ターン）
+        structure_resp = _json.dumps([
+            {"section_type": "introduction", "display_text": "画面テキスト",
+             "emotion": "excited", "question": "", "answer": "", "wait_seconds": 0,
+             "dialogue_plan": [{"speaker": "teacher", "direction": "挨拶する"}]},
+        ])
+        # Phase B-2: 初回セリフ生成
+        dlg_original = _json.dumps({"content": "元のセリフ", "tts_text": "元TTS", "emotion": "excited"})
+        # Phase B-3: レビュー（不合格 + revised_directions）
+        review_resp = _json.dumps({
+            "reviews": [{
+                "section_index": 0,
+                "approved": False,
+                "feedback": "display_textが読まれていない",
+                "revised_directions": [
+                    {"speaker": "teacher", "direction": "画面テキストを読み上げる", "key_content": "Hello world"},
+                ],
+            }],
+            "overall_feedback": "要改善",
+        })
+        # Phase B-4: 再生成セリフ
+        dlg_regenerated = _json.dumps({"content": "再生成セリフ", "tts_text": "再生成TTS", "emotion": "excited"})
+
+        responses = [structure_resp, dlg_original, review_resp, dlg_regenerated]
+        call_idx = [0]
+        def _side_effect(*args, **kwargs):
+            idx = call_idx[0]
+            call_idx[0] += 1
+            text = responses[idx] if idx < len(responses) else dlg_regenerated
+            return _MagicMock(text=text)
+        mock_gemini.models.generate_content.side_effect = _side_effect
+
+        resp = api_client.post(f"/api/lessons/{lid}/generate-script")
+        data = parse_sse_result(resp)
+        assert data["ok"] is True
+        assert len(data["sections"]) == 1
+
+        # dialogues JSONを検証
+        dlgs_data = _json.loads(data["sections"][0]["dialogues"])
+        assert isinstance(dlgs_data, dict)
+        # 最終セリフは再生成後のもの
+        assert dlgs_data["dialogues"][0]["content"] == "再生成セリフ"
+        # 元のセリフが保存されている
+        assert "original_dialogues" in dlgs_data
+        assert dlgs_data["original_dialogues"][0]["content"] == "元のセリフ"
+        # レビュー結果にrevised_directionsが含まれる
+        assert dlgs_data["review"]["is_regenerated"] is True
+        assert dlgs_data["review"]["approved"] is False
+        assert len(dlgs_data["review"]["revised_directions"]) == 1
+        assert dlgs_data["review"]["revised_directions"][0]["key_content"] == "Hello world"
+
     def test_generate_script_no_text(self, api_client):
         """テキストなしでのスクリプト生成はエラー"""
         r = api_client.post("/api/lessons", json={"name": "Empty"})

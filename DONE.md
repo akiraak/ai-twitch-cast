@@ -1,5 +1,12 @@
 # DONE
 
+## 再生成過程の管理画面表示
+
+- [x] 再生成前の元セリフを `original_dialogues` として dialogues JSON に保存
+- [x] `revised_directions`（監督の修正指示）を review データに保存
+- [x] 管理画面に再生成過程を折りたたみ表示（修正指示・元セリフ・生成プロンプト）
+- [x] 不合格→再生成ケースのテスト追加（`test_generate_script_with_rejection`）
+
 ## 監督レビュー + display_text 読み上げ強化 Step 2〜7
 
 - [x] Step 2: display_text[:200] 切り詰め撤廃（全文をキャラクターAIに渡す）

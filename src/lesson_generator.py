@@ -2070,6 +2070,7 @@ def generate_lesson_script_v2(
     # --- Phase B-4: 再生成（不合格セクションのみ、1回のみ） ---
     rejected = [r for r in review_result["reviews"] if not r.get("approved")]
     review_map = {r["section_index"]: r for r in review_result["reviews"]}
+    original_dialogues_map = {}
 
     if rejected:
         regen_turns = sum(len(r.get("revised_directions", [])) for r in rejected)
@@ -2088,6 +2089,9 @@ def generate_lesson_script_v2(
             revised = r.get("revised_directions", [])
             if not revised or idx >= len(structure_sections):
                 return idx, section_dialogues[idx]
+
+            # 元のセリフを保存
+            original_dialogues_map[idx] = section_dialogues[idx] or []
 
             # dialogue_directions を差し替えて再生成
             section_copy = {**structure_sections[idx], "dialogue_directions": revised}
@@ -2145,7 +2149,10 @@ def generate_lesson_script_v2(
                 "approved": review_info.get("approved", True),
                 "feedback": review_info.get("feedback", ""),
                 "is_regenerated": review_info.get("is_regenerated", False),
+                "revised_directions": review_info.get("revised_directions", []),
             }
+        # 再生成前の元セリフ（不合格→再生成されたセクションのみ存在）
+        original_dlgs = original_dialogues_map.get(i)
 
         section = {
             "section_type": s.get("section_type", "explanation"),
@@ -2164,6 +2171,8 @@ def generate_lesson_script_v2(
             dialogues_with_meta = {
                 "dialogues": dialogues,
             }
+            if original_dlgs is not None:
+                dialogues_with_meta["original_dialogues"] = original_dlgs
             if review_data:
                 dialogues_with_meta["review"] = review_data
             # 監督レビューのgeneration情報も保存

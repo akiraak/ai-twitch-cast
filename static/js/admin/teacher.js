@@ -802,6 +802,7 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
 
     // 対話モード: dialoguesがあれば発話一覧を表示
     let _dlgs = [];
+    let _originalDlgs = null;
     let _reviewData = null;
     let _reviewGeneration = null;
     let _reviewOverallFeedback = '';
@@ -810,6 +811,7 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
       // v4: {dialogues: [...], review: {...}} 形式に対応
       if (_parsed && !Array.isArray(_parsed) && _parsed.dialogues) {
         _dlgs = _parsed.dialogues || [];
+        _originalDlgs = _parsed.original_dialogues || null;
         _reviewData = _parsed.review || null;
         _reviewGeneration = _parsed.review_generation || null;
         _reviewOverallFeedback = _parsed.review_overall_feedback || '';
@@ -849,6 +851,63 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
             </details>
           </div>
         </details>`;
+      }
+      // revised_directions（監督の修正指示）
+      const rvDirs = _reviewData.revised_directions || [];
+      if (rvDirs.length > 0) {
+        rvHtml += `<details style="margin-top:4px;">
+          <summary style="cursor:pointer; color:#e65100; font-size:0.62rem;">\u{1F3AC} 監督の修正指示 (revised_directions: ${rvDirs.length}件)</summary>
+          <div style="padding:4px 8px; background:#fff3e0; border:1px solid #ffcc80; border-radius:4px; margin-top:2px;">`;
+        for (const rd of rvDirs) {
+          const rdIcon = rd.speaker === 'teacher' ? '\u{1F393}' : '\u{1F64B}';
+          rvHtml += `<div style="margin-bottom:3px; padding:3px 6px; background:#fff8e1; border-left:3px solid #ffa726; border-radius:2px; font-size:0.65rem;">
+            <span style="font-weight:600;">${rdIcon} ${esc(rd.speaker || '?')}</span>
+            <div style="color:#555; margin-top:1px;">${esc(rd.direction || '')}</div>
+            ${rd.key_content ? `<div style="color:#e65100; margin-top:1px;">key: ${esc(rd.key_content)}</div>` : ''}
+          </div>`;
+        }
+        rvHtml += `</div></details>`;
+      }
+      // 再生成前のセリフ（original_dialogues）
+      if (_originalDlgs && _originalDlgs.length > 0) {
+        rvHtml += `<details style="margin-top:4px;">
+          <summary style="cursor:pointer; color:#c62828; font-size:0.62rem;">\u{1F5D1} 再生成前のセリフ (${_originalDlgs.length}件)</summary>
+          <div style="padding:4px 8px; background:#fce4ec; border:1px solid #ef9a9a; border-radius:4px; margin-top:2px;">`;
+        for (const od of _originalDlgs) {
+          const odIsT = od.speaker === 'teacher';
+          const odCh = odIsT ? _ci.teacher : _ci.student;
+          const odSpk = odIsT ? '\u{1F393}' + (odCh ? odCh.name : '先生') : '\u{1F64B}' + (odCh ? odCh.name : '生徒');
+          const odBg = odIsT ? '#fce4ec' : '#fff3e0';
+          const odBc = odIsT ? '#ef9a9a' : '#ffcc80';
+          let odGenHtml = '';
+          if (od.generation) {
+            const gen = od.generation;
+            odGenHtml = `<details style="margin-top:3px; margin-left:12px;">
+              <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F50D} 生成プロンプト (model: ${esc(gen.model || '?')})</summary>
+              <div style="padding:4px 8px; background:#fafafa; border:1px solid #e0e0e0; border-radius:4px; margin-top:2px;">
+                <details style="margin-bottom:4px;">
+                  <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F9E0} System Prompt</summary>
+                  <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(gen.system_prompt || '')}</pre>
+                </details>
+                <details style="margin-bottom:4px;">
+                  <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F4AC} User Prompt</summary>
+                  <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(gen.user_prompt || '')}</pre>
+                </details>
+                <details>
+                  <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F4DD} Raw Output</summary>
+                  <pre style="font-size:0.6rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(gen.raw_output || '')}</pre>
+                </details>
+              </div>
+            </details>`;
+          }
+          rvHtml += `<div style="margin-bottom:3px; padding:4px 8px; background:${odBg}; border-left:3px solid ${odBc}; border-radius:3px; font-size:0.72rem; opacity:0.8;">
+            <span style="font-weight:600; color:#555;">${odSpk}</span>
+            <span style="font-size:0.65rem; color:#7b1fa2; margin-left:4px;">[${esc(od.emotion || '')}]</span>
+            <div style="margin-top:2px; color:#555; text-decoration:line-through;">${esc(od.content || '')}</div>
+            ${odGenHtml}
+          </div>`;
+        }
+        rvHtml += `</div></details>`;
       }
       rvHtml += `</div>`;
       html += rvHtml;
