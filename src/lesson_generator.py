@@ -13,6 +13,7 @@ import httpx
 from google.genai import types
 
 from src.gemini_client import get_client
+from src.content_analyzer import analyze_content
 from src.prompt_builder import get_stream_language
 
 logger = logging.getLogger(__name__)
@@ -2269,9 +2270,9 @@ def generate_lesson_script_v2(
 
     # --- Phase B-3: 監督レビュー ---
     if en:
-        _progress(1 + total_turns, 1 + total_turns + 1, "Director reviewing dialogue...")
+        _progress(1 + total_turns, 1 + total_turns + 1 + 1, "Director reviewing dialogue...")
     else:
-        _progress(1 + total_turns, 1 + total_turns + 1, "監督がセリフをレビュー中...")
+        _progress(1 + total_turns, 1 + total_turns + 1 + 1, "監督がセリフをレビュー中...")
 
     sections_for_review = []
     for i, s in enumerate(structure_sections):
@@ -2289,14 +2290,15 @@ def generate_lesson_script_v2(
     rejected = [r for r in review_result["reviews"] if not r.get("approved")]
     review_map = {r["section_index"]: r for r in review_result["reviews"]}
     original_dialogues_map = {}
+    regen_turns = 0
 
     if rejected:
         regen_turns = sum(len(r.get("revised_directions", [])) for r in rejected)
         if en:
-            _progress(1 + total_turns, 1 + total_turns + 1 + regen_turns,
+            _progress(1 + total_turns, 1 + total_turns + 1 + regen_turns + 1,
                       f"Director feedback: {len(rejected)} section(s) need revision")
         else:
-            _progress(1 + total_turns, 1 + total_turns + 1 + regen_turns,
+            _progress(1 + total_turns, 1 + total_turns + 1 + regen_turns + 1,
                       f"監督のフィードバック: {len(rejected)}セクションが不合格")
 
         regen_step = [0]
@@ -2323,7 +2325,7 @@ def generate_lesson_script_v2(
                     msg = f"Revising section {idx + 1}: {t_name} ({turn_num}/{turn_total})"
                 else:
                     msg = f"セクション{idx + 1}を再生成中: {t_name} ({turn_num}/{turn_total})"
-                _progress(1 + total_turns + 1 + step, 1 + total_turns + 1 + regen_turns, msg)
+                _progress(1 + total_turns + 1 + step, 1 + total_turns + 1 + regen_turns + 1, msg)
 
             new_dialogues = _generate_section_dialogues(
                 client=client,
@@ -2407,5 +2409,16 @@ def generate_lesson_script_v2(
         if section["section_type"] not in valid_types:
             section["section_type"] = "explanation"
         result.append(section)
+
+    # --- Phase B-5: 品質分析（アルゴリズムのみ、APIコスト0） ---
+    analysis_total = 1 + total_turns + 1 + regen_turns + 1
+    if en:
+        _progress(analysis_total, analysis_total, "Analyzing quality...")
+    else:
+        _progress(analysis_total, analysis_total, "品質分析中...")
+
+    analysis = analyze_content(result, "en" if en else "ja")
+    logger.info("Phase B-5完了: score=%.1f/%s, rank=%s",
+                analysis.total_score, analysis.max_score, analysis.rank)
 
     return result

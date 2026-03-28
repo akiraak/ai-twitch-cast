@@ -5,7 +5,11 @@
 - [ ] メインコンテンツ読み上げ方式改善: 手動テストで会話文コンテンツの先生・生徒役割分担を確認
 - [ ] 授業の品質分析が入ったのでコンテンツ生成に反映させる
 - [ ] セクションごとの会話のつながりが不自然なのを解決する
-- [ ] 授業の品質分析をスクリプト生成の中に含める（2c）
+- [ ] 授業の品質分析をスクリプト生成の中に含める（2c） → [plans/quality-analysis-in-pipeline.md](plans/quality-analysis-in-pipeline.md)
+  - [x] Step 1: Phase B-5追加（lesson_generator.py に analyze_content() 組み込み）
+  - [ ] Step 2: 戻り値変更（list[dict] → dict with sections + analysis）
+  - [ ] Step 3: teacher.py 呼び出し側更新（アンパック + 重複分析削除）
+  - [ ] Step 4: テスト追加 + 全テスト通過確認
 - [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
 
 ## 実装
