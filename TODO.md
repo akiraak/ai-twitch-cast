@@ -9,7 +9,6 @@
 
 ## 2. 実装
 2.1. [ ] 管理画面からplans, docsファイルの内容を見れるようにする → [plans/docs-viewer.md](plans/docs-viewer.md)
-  - [ ] Step 3.5: UIレイアウト改善（サイドバー化 + スクロール委譲）
   - [ ] Step 4: テスト（test_api_docs_viewer.py 新規）
 
 ## 3. バグ
