@@ -1,5 +1,11 @@
 # DONE
 
+## メインコンテンツ読み上げ方式改善 Step 4
+
+- [x] `_director_review()` に `main_content` パラメータ追加、種別レビュー観点（EN/JA）をシステムプロンプトに追加
+- [x] ユーザープロンプトにも事前分析済みメインコンテンツ情報を追加
+- [x] テスト3件追加（`TestDirectorReviewMainContent`）
+
 ## メインコンテンツ読み上げ方式改善 Step 3
 
 - [x] `_build_structure_prompt()` に `main_content` パラメータ追加、種別ルール（EN/JA）をシステムプロンプトに統合

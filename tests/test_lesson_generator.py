@@ -10,6 +10,7 @@ from src.lesson_generator import (
     _build_dialogue_prompt,
     _build_section_from_dialogues,
     _build_structure_prompt,
+    _director_review,
     _format_character_for_prompt,
     _generate_single_dialogue,
     _generate_section_dialogues,
@@ -880,3 +881,77 @@ class TestExtractMainContent:
         if not contents:
             contents = call_args[1].get("contents", "")
         assert "教材テキストの内容" in str(contents)
+
+
+# --- 監督レビュー + main_content ---
+
+
+class TestDirectorReviewMainContent:
+    """_director_review の main_content 対応テスト"""
+
+    def _make_review_response(self, approved=True):
+        return json.dumps({
+            "reviews": [{"section_index": 0, "approved": approved, "feedback": "OK"}],
+            "overall_feedback": "Good",
+        })
+
+    def test_english_with_main_content(self):
+        """英語版: main_contentありでコンテンツ種別レビュー観点が含まれる"""
+        mc = [{"content_type": "conversation", "content": "A: Hi", "label": "Dialog"}]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        result = _director_review(
+            mock_client,
+            [{"section_type": "example", "display_text": "A: Hi", "dialogues": []}],
+            "text", "Test", en=True, main_content=mc,
+        )
+
+        # システムプロンプトにコンテンツ種別レビュー観点が含まれる
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "Content type review" in config.system_instruction
+        assert "conversation" in config.system_instruction
+        # ユーザープロンプトにメインコンテンツ情報が含まれる
+        contents = call_args[1].get("contents", call_args.kwargs.get("contents", ""))
+        assert "[conversation]" in str(contents)
+        assert result["reviews"][0]["approved"] is True
+
+    def test_japanese_with_main_content(self):
+        """日本語版: main_contentありでコンテンツ種別レビュー観点が含まれる"""
+        mc = [{"content_type": "passage", "content": "説明文です。", "label": "説明"}]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        _director_review(
+            mock_client,
+            [{"section_type": "explanation", "display_text": "説明", "dialogues": []}],
+            "テキスト", "テスト授業", en=False, main_content=mc,
+        )
+
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "コンテンツ種別レビュー" in config.system_instruction
+        contents = call_args[1].get("contents", call_args.kwargs.get("contents", ""))
+        assert "[passage]" in str(contents)
+
+    def test_no_main_content_no_extra_criteria(self):
+        """main_contentなしではコンテンツ種別レビューが追加されない"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        _director_review(
+            mock_client,
+            [{"section_type": "introduction", "display_text": "Hi", "dialogues": []}],
+            "text", "Test", en=True,
+        )
+
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "Content type review" not in config.system_instruction

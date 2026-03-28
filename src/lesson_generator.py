@@ -1867,6 +1867,7 @@ def _director_review(
     extracted_text: str,
     lesson_name: str,
     en: bool,
+    main_content: list[dict] | None = None,
 ) -> dict:
     """監督が生成済みセリフをレビューし、改善フィードバックを返す（Phase B-3）
 
@@ -1939,6 +1940,19 @@ Review the character AI's generated lines and provide feedback.
 - Keep the same general flow but ensure display_text content is covered
 
 Output ONLY the JSON object."""
+
+        # メインコンテンツ種別レビュー観点追加
+        if main_content:
+            system_prompt += """
+
+## Content type review (additional criteria)
+When pre-analyzed main content is provided, also check:
+- conversation: Are roles split between teacher and student? If teacher reads ALL lines alone, mark NOT approved
+- passage: Teacher should read and explain. Unnatural role-splitting is a problem
+- word_list: Items should be read with explanation, student may repeat or ask
+- table: Teacher should walk through entries, not skip important rows
+- The reading style must match the content_type"""
+
     else:
         system_prompt = """あなたは「監督」です。キャラクターAIが生成したセリフを監修し、ダメ出しを行ってください。
 
@@ -1994,6 +2008,18 @@ Output ONLY the JSON object."""
 
 JSONオブジェクトのみを出力してください。"""
 
+        # メインコンテンツ種別レビュー観点追加
+        if main_content:
+            system_prompt += """
+
+## コンテンツ種別レビュー（追加観点）
+事前分析済みメインコンテンツがある場合、以下も確認すること:
+- conversation（会話文）: 先生と生徒で役割分担しているか？先生が一人で全部読んでいたら不合格
+- passage（文章）: 先生が読み上げ・解説しているか？不自然な役割分担は問題
+- word_list（単語集）: 各項目が読み上げ・説明されているか、生徒がリピートや質問しているか
+- table（表）: 先生が重要行を解説しているか、重要項目をスキップしていないか
+- 読み上げ方が content_type に合っていること"""
+
     # ユーザープロンプト: セクション一覧（display_text + 生成済みセリフ）
     if en:
         user_parts = [f"# Lesson: {lesson_name}\n"]
@@ -2020,6 +2046,13 @@ JSONオブジェクトのみを出力してください。"""
             content = dlg.get("content", "")
             user_parts.append(f"  {speaker}: {content}")
         user_parts.append("")
+
+    if main_content:
+        if en:
+            user_parts.append("# Pre-analyzed main content")
+        else:
+            user_parts.append("# メインコンテンツ（事前分析済み）")
+        user_parts.append(_format_main_content_for_prompt(main_content, en))
 
     if extracted_text:
         if en:
@@ -2249,6 +2282,7 @@ def generate_lesson_script_v2(
 
     review_result = _director_review(
         client, sections_for_review, extracted_text, lesson_name, en,
+        main_content=main_content,
     )
 
     # --- Phase B-4: 再生成（不合格セクションのみ、1回のみ） ---
