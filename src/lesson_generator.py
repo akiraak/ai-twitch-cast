@@ -2132,7 +2132,14 @@ When pre-analyzed main content is provided, also check:
 - table: Teacher should walk through entries, not skip important rows
 - The reading style must match the content_type
 - Items marked ★ PRIMARY must have complete coverage — any omission is grounds for rejection
-- Supplementary items should be referenced where relevant but partial coverage is acceptable"""
+- Supplementary items should be referenced where relevant but partial coverage is acceptable
+
+## 🔊 Read-aloud content review (CRITICAL)
+Items marked 🔊 READ ALOUD are core teaching material that characters MUST read aloud / perform in the dialogue.
+- If 🔊 content is a conversation: characters must act it out with the original lines (teacher and student split roles)
+- If 🔊 content is a passage: the teacher must read the original text aloud, then explain
+- If 🔊 content is omitted, paraphrased beyond recognition, or only briefly mentioned → mark as NOT approved
+- The original wording from 🔊 content must appear in the dialogue (verbatim or near-verbatim)"""
 
     else:
         system_prompt = """あなたは「監督」です。キャラクターAIが生成したセリフを監修し、ダメ出しを行ってください。
@@ -2201,7 +2208,14 @@ JSONオブジェクトのみを出力してください。"""
 - table（表）: 先生が重要行を解説しているか、重要項目をスキップしていないか
 - 読み上げ方が content_type に合っていること
 - ★ 主要 のアイテムは完全にカバーされていなければ不合格
-- 補助アイテムは関連箇所で言及されていれば十分（部分的カバーでも可）"""
+- 補助アイテムは関連箇所で言及されていれば十分（部分的カバーでも可）
+
+## 🔊 読み上げ対象コンテンツのレビュー（最重要）
+🔊 読み上げ対象 のマークが付いたコンテンツは、キャラクターが必ず読み上げる/演じるべき核心教材です。
+- conversation（会話文）の場合: 先生と生徒が原文のセリフを使って演じているか？
+- passage（文章）の場合: 先生が原文を読み上げた上で解説しているか？
+- 🔊コンテンツが省略されている、大幅に意訳されている、軽く触れただけの場合 → 不合格
+- 🔊コンテンツの原文がセリフ内にそのまま（またはほぼそのまま）含まれていること"""
 
     # ユーザープロンプト: セクション一覧（display_text + 生成済みセリフ）
     if en:
