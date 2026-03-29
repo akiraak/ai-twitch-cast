@@ -1,5 +1,11 @@
 # DONE
 
+## UI/UXバグ修正
+
+- [x] teacher.js: プラン未生成でもスクリプト音声生成ボタンが押せる問題を修正
+- [x] teacher.js: 「キャ���設定」の文字化け修正（UTF-8バイト破損）
+- [x] stream.sh: Windows コマンド（taskkill/tasklist）のCP932出力をUTF-8変換
+
 ## メインコンテンツ階層化（主要/補助の役割分け）
 
 - [x] Step 1: `_normalize_roles()` ヘルパー追加 + `extract_main_content()` 更新

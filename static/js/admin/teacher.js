@@ -426,7 +426,7 @@ async function buildLessonItem(lessonId) {
   const studentChar = charList.find(c => c.role === 'student');
 
   const step2b = document.createElement('div');
-  step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasPlan || hasExtractedText ? ' step-active' : ' step-disabled');
+  step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasPlan ? ' step-active' : ' step-disabled');
   const step2bBody = document.createElement('div');
   step2bBody.className = 'lesson-step-body';
   const scriptLabel = hasPlan
@@ -454,7 +454,7 @@ async function buildLessonItem(lessonId) {
 
   // キャラ設定サマリー
   if (teacherChar || studentChar) {
-    step2bHtml += `<div style="margin-top:4px; font-weight:600; color:#7b1fa2;">${lang === 'en' ? 'Characters' : 'キャ���設定'} (${lang === 'en' ? 'used in prompt' : 'プロンプトに使用'}):</div>`;
+    step2bHtml += `<div style="margin-top:4px; font-weight:600; color:#7b1fa2;">${lang === 'en' ? 'Characters' : 'キャラ設定'} (${lang === 'en' ? 'used in prompt' : 'プロンプトに使用'}):</div>`;
     if (teacherChar) {
       const tPrompt = (teacherChar.system_prompt || '').substring(0, 60);
       step2bHtml += `<div>\u{1F393} ${esc(teacherChar.name || 'teacher')} &mdash; voice: ${esc(teacherChar.tts_voice || '?')} / style: ${esc((teacherChar.tts_style || '').substring(0, 20))}...</div>`;

@@ -21,6 +21,9 @@ cd "$(dirname "$0")"
 
 APP_NAME="WinNativeApp"
 
+# Windows コマンド出力の文字化け対策（CP932→UTF-8）
+win_decode() { iconv -f CP932 -t UTF-8 2>/dev/null; }
+
 # ソース（リポジトリ内）→ Windows FSビルドディレクトリ
 SRC_DIR="$(pwd)/win-native-app/WinNativeApp"
 BUILD_BASE="/mnt/c/Users/akira/AppData/Local/win-native-app"
@@ -29,8 +32,8 @@ BUILD_DIR="$BUILD_BASE/WinNativeApp"
 # --stop: アプリ停止
 if [[ "$1" == "--stop" ]]; then
     echo "停止中..."
-    taskkill.exe /IM "${APP_NAME}.exe" /F 2>/dev/null
-    if [ $? -eq 0 ]; then
+    taskkill.exe /IM "${APP_NAME}.exe" /F 2>/dev/null | win_decode
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
         echo "停止しました"
     else
         echo "実行中のアプリはありません"
@@ -40,7 +43,7 @@ fi
 
 # --status: 動作状況
 if [[ "$1" == "--status" ]]; then
-    if tasklist.exe /FI "IMAGENAME eq ${APP_NAME}.exe" /NH 2>/dev/null | grep -q "$APP_NAME"; then
+    if tasklist.exe /FI "IMAGENAME eq ${APP_NAME}.exe" /NH 2>/dev/null | win_decode | grep -q "$APP_NAME"; then
         echo "実行中"
         LOG_DIR="$BUILD_DIR/bin/Release/net8.0-windows10.0.22621.0/logs"
         LOG_FILE=$(ls -t "$LOG_DIR"/app*.log 2>/dev/null | head -1)
@@ -55,9 +58,9 @@ if [[ "$1" == "--status" ]]; then
 fi
 
 # 既に起動中なら停止してから起動
-if tasklist.exe /FI "IMAGENAME eq ${APP_NAME}.exe" /NH 2>/dev/null | grep -q "$APP_NAME"; then
+if tasklist.exe /FI "IMAGENAME eq ${APP_NAME}.exe" /NH 2>/dev/null | win_decode | grep -q "$APP_NAME"; then
     echo "既存のアプリを停止中..."
-    taskkill.exe /IM "${APP_NAME}.exe" /F 2>/dev/null
+    taskkill.exe /IM "${APP_NAME}.exe" /F 2>/dev/null | win_decode
     sleep 1
 fi
 
