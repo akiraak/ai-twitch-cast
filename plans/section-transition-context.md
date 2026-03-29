@@ -20,7 +20,7 @@ TODO 1.4「セクションごとの会話のつながりが不自然なのを解
 ### Step 1: ヘルパー関数 `_build_adjacent_sections()` を追加 ✅ 完了
 **ファイル**: `src/lesson_generator.py:1709` (`_generate_single_dialogue`の直前)
 
-### Step 2: `_generate_single_dialogue()` に `adjacent_sections` パラメータ追加
+### Step 2: `_generate_single_dialogue()` に `adjacent_sections` パラメータ追加 ✅ 完了
 **ファイル**: `src/lesson_generator.py:1734`
 
 - 引数に `adjacent_sections: dict | None = None` を追加

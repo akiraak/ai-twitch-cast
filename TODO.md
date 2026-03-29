@@ -5,7 +5,6 @@
 1.2. [ ] メインコンテンツ読み上げ方式改善: 手動テストで会話文コンテンツの先生・生徒役割分担を確認
 1.3. [ ] 授業の品質分析が入ったのでコンテンツ生成に反映させる
 1.4. [ ] セクションごとの会話のつながりが不自然なのを解決する → [plans/section-transition-context.md](plans/section-transition-context.md)
-  - [ ] Step 2: `_generate_single_dialogue()` に前後セクション情報注入
   - [ ] Step 3: `_generate_section_dialogues()` にパラメータ追加
   - [ ] Step 4: `section_worker()` / `regen_worker()` で隣接情報構築
   - [ ] Step 5: 監督 Phase A プロンプトにつなぎ指示追加

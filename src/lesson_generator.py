@@ -1741,6 +1741,7 @@ def _generate_single_dialogue(
     extracted_text: str,
     lesson_name: str,
     en: bool,
+    adjacent_sections: dict | None = None,
 ) -> dict:
     """1セリフをキャラのペルソナで生成し、generationメタデータ付きで返す"""
     from src.prompt_builder import build_lesson_dialogue_prompt
@@ -1761,6 +1762,22 @@ def _generate_single_dialogue(
 
     if en:
         user_parts = [f"# Lesson: {lesson_name}", f"# Section: {section_type}"]
+        if adjacent_sections:
+            idx = adjacent_sections["section_index"]
+            total = adjacent_sections["total_sections"]
+            user_parts.append(f"# Section position: {idx + 1} / {total}")
+            if adjacent_sections.get("prev"):
+                p = adjacent_sections["prev"]
+                p_text = p["display_text"][:200] if p.get("display_text") else ""
+                user_parts.append(f"# Previous section [{p.get('section_type', '')}]: {p.get('title', '')}")
+                if p_text:
+                    user_parts.append(f"#   Content: {p_text}")
+            if adjacent_sections.get("next"):
+                n = adjacent_sections["next"]
+                n_text = n["display_text"][:200] if n.get("display_text") else ""
+                user_parts.append(f"# Next section [{n.get('section_type', '')}]: {n.get('title', '')}")
+                if n_text:
+                    user_parts.append(f"#   Content: {n_text}")
         if display_text:
             user_parts.append(f"# Screen display (text visible to viewers — read this content aloud):\n{display_text}")
         if question:
@@ -1778,6 +1795,22 @@ def _generate_single_dialogue(
             user_parts.append(f"\n## Source material (reference)\n{extracted_text[:2000]}")
     else:
         user_parts = [f"# 授業: {lesson_name}", f"# セクション: {section_type}"]
+        if adjacent_sections:
+            idx = adjacent_sections["section_index"]
+            total = adjacent_sections["total_sections"]
+            user_parts.append(f"# セクション位置: {idx + 1} / {total}")
+            if adjacent_sections.get("prev"):
+                p = adjacent_sections["prev"]
+                p_text = p["display_text"][:200] if p.get("display_text") else ""
+                user_parts.append(f"# 前のセクション [{p.get('section_type', '')}]: {p.get('title', '')}")
+                if p_text:
+                    user_parts.append(f"#   内容: {p_text}")
+            if adjacent_sections.get("next"):
+                n = adjacent_sections["next"]
+                n_text = n["display_text"][:200] if n.get("display_text") else ""
+                user_parts.append(f"# 次のセクション [{n.get('section_type', '')}]: {n.get('title', '')}")
+                if n_text:
+                    user_parts.append(f"#   内容: {n_text}")
         if display_text:
             user_parts.append(f"# 画面表示（視聴者に見えるテキスト — この内容を読み上げること）:\n{display_text}")
         if question:
