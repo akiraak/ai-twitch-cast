@@ -1,9 +1,13 @@
 # DONE
 
-## セクション間つながり改善（Step 1）
+## セクション間つながり改善（全Step完了）
 
-- [x] ヘルパー関数 `_build_adjacent_sections()` を lesson_generator.py に追加
-- [x] プラン（plans/section-transition-context.md）の行番号を実装後の状態に更新
+- [x] Step 1: ヘルパー関数 `_build_adjacent_sections()` 追加
+- [x] Step 2: `_generate_single_dialogue()` に前後セクション情報注入（EN/JA）
+- [x] Step 3: `_generate_section_dialogues()` にパラメータ追加
+- [x] Step 4: `section_worker()` / `regen_worker()` で隣接情報構築・渡し
+- [x] Step 5: 監督 Phase A プロンプトにつなぎ指示追加（EN/JA）
+- [x] Step 6: テスト追加（10件: ヘルパー4件 + プロンプト注入6件）
 
 ## 授業スコアをタイトルに表示
 

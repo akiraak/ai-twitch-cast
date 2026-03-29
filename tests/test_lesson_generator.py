@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.lesson_generator import (
+    _build_adjacent_sections,
     _build_dialogue_output_example,
     _build_dialogue_prompt,
     _build_section_from_dialogues,
@@ -1051,3 +1052,124 @@ class TestGenerateLessonScriptV2ReturnFormat:
         analysis = result["analysis"]
         assert analysis["llm_scores"] is not None
         assert "entertainment" in analysis["llm_scores"]
+
+
+# --- _build_adjacent_sections テスト ---
+
+SAMPLE_SECTIONS = [
+    {"title": "挨拶", "display_text": "今日のテーマ: 挨拶", "section_type": "introduction"},
+    {"title": "基本表現", "display_text": "基本的な英語の挨拶表現を学びます", "section_type": "explanation"},
+    {"title": "まとめ", "display_text": "今日学んだことの復習", "section_type": "summary"},
+]
+
+
+class TestBuildAdjacentSections:
+    """_build_adjacent_sections のテスト"""
+
+    def test_first_section_no_prev(self):
+        """先頭セクションは prev なし、next あり"""
+        result = _build_adjacent_sections(SAMPLE_SECTIONS, 0)
+        assert result["section_index"] == 0
+        assert result["total_sections"] == 3
+        assert result["prev"] is None
+        assert result["next"] is not None
+        assert result["next"]["title"] == "基本表現"
+        assert result["next"]["section_type"] == "explanation"
+
+    def test_middle_section_has_both(self):
+        """中間セクションは prev/next 両方あり"""
+        result = _build_adjacent_sections(SAMPLE_SECTIONS, 1)
+        assert result["section_index"] == 1
+        assert result["prev"] is not None
+        assert result["prev"]["title"] == "挨拶"
+        assert result["next"] is not None
+        assert result["next"]["title"] == "まとめ"
+
+    def test_last_section_no_next(self):
+        """末尾セクションは next なし、prev あり"""
+        result = _build_adjacent_sections(SAMPLE_SECTIONS, 2)
+        assert result["section_index"] == 2
+        assert result["next"] is None
+        assert result["prev"] is not None
+        assert result["prev"]["title"] == "基本表現"
+
+    def test_single_section(self):
+        """セクションが1つだけの場合、prev/next 両方なし"""
+        result = _build_adjacent_sections([SAMPLE_SECTIONS[0]], 0)
+        assert result["total_sections"] == 1
+        assert result["prev"] is None
+        assert result["next"] is None
+
+
+class TestAdjacentSectionsInPrompt:
+    """adjacent_sections がプロンプトに反映されるかのテスト"""
+
+    def _make_mock_client(self):
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = json.dumps({
+            "content": "テスト", "tts_text": "テスト", "emotion": "neutral",
+        })
+        mock_client.models.generate_content.return_value = mock_response
+        return mock_client
+
+    def _call_with_adjacent(self, en, adjacent_sections):
+        mock_client = self._make_mock_client()
+        with patch("src.lesson_generator._get_dialogue_model", return_value="test-model"):
+            result = _generate_single_dialogue(
+                client=mock_client,
+                character_config=TEACHER_CFG,
+                role="teacher",
+                section_context={"section_type": "explanation", "display_text": "テスト"},
+                dialogue_plan_entry={"speaker": "teacher", "direction": "説明する"},
+                conversation_history=[],
+                extracted_text="",
+                lesson_name="テスト授業",
+                en=en,
+                adjacent_sections=adjacent_sections,
+            )
+        return result
+
+    def test_adjacent_sections_in_prompt_ja(self):
+        """JA版プロンプトに前後セクション情報が含まれる"""
+        adjacent = _build_adjacent_sections(SAMPLE_SECTIONS, 1)
+        result = self._call_with_adjacent(en=False, adjacent_sections=adjacent)
+        prompt = result["generation"]["user_prompt"]
+        assert "セクション位置: 2 / 3" in prompt
+        assert "前のセクション [introduction]: 挨拶" in prompt
+        assert "次のセクション [summary]: まとめ" in prompt
+
+    def test_adjacent_sections_in_prompt_en(self):
+        """EN版プロンプトに前後セクション情報が含まれる"""
+        adjacent = _build_adjacent_sections(SAMPLE_SECTIONS, 1)
+        result = self._call_with_adjacent(en=True, adjacent_sections=adjacent)
+        prompt = result["generation"]["user_prompt"]
+        assert "Section position: 2 / 3" in prompt
+        assert "Previous section [introduction]: 挨拶" in prompt
+        assert "Next section [summary]: まとめ" in prompt
+
+    def test_adjacent_sections_none_no_change(self):
+        """adjacent_sections が None の場合、位置情報が含まれない"""
+        result = self._call_with_adjacent(en=False, adjacent_sections=None)
+        prompt = result["generation"]["user_prompt"]
+        assert "セクション位置" not in prompt
+        assert "前のセクション" not in prompt
+        assert "次のセクション" not in prompt
+
+    def test_adjacent_sections_first_no_prev(self):
+        """先頭セクションでは prev 情報が含まれない"""
+        adjacent = _build_adjacent_sections(SAMPLE_SECTIONS, 0)
+        result = self._call_with_adjacent(en=False, adjacent_sections=adjacent)
+        prompt = result["generation"]["user_prompt"]
+        assert "セクション位置: 1 / 3" in prompt
+        assert "前のセクション" not in prompt
+        assert "次のセクション [explanation]: 基本表現" in prompt
+
+    def test_adjacent_sections_last_no_next(self):
+        """末尾セクションでは next 情報が含まれない"""
+        adjacent = _build_adjacent_sections(SAMPLE_SECTIONS, 2)
+        result = self._call_with_adjacent(en=False, adjacent_sections=adjacent)
+        prompt = result["generation"]["user_prompt"]
+        assert "セクション位置: 3 / 3" in prompt
+        assert "前のセクション [explanation]: 基本表現" in prompt
+        assert "次のセクション" not in prompt
