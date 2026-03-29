@@ -8,6 +8,7 @@
 1.5. [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
 
 ## 2. 実装
+- [ ] リファクタリング
 
 ## 3. バグ
 3.1. [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)

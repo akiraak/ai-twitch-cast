@@ -121,6 +121,17 @@ async function buildLessonItem(lessonId) {
   }
   const badgeText = badges.length ? ' (' + badges.join(' / ') + ')' : '';
 
+  // スコアバッジ
+  let scoreBadge = '';
+  if (lesson.analysis_json) {
+    try {
+      const a = JSON.parse(lesson.analysis_json);
+      const rc = (RANK_COLORS[a.rank] || '#888');
+      const score = Math.round(a.total_score);
+      scoreBadge = `<span style="font-size:0.85rem; font-weight:700; color:#fff; background:${rc}; border-radius:4px; padding:1px 7px; letter-spacing:0.5px;">${a.rank} ${score}点</span>`;
+    } catch (_) {}
+  }
+
   const details = document.createElement('details');
   details.className = 'lesson-item';
   details.style.cssText = 'border:1px solid #d0c0e8; border-radius:6px; padding:12px; margin-bottom:8px; background:#ffffff;';
@@ -136,6 +147,7 @@ async function buildLessonItem(lessonId) {
   summary.innerHTML = `<span class="lesson-arrow" style="color:#7b1fa2; font-size:0.75rem;">&#9660;</span>`
     + `<span style="font-size:0.65rem; color:#aaa; min-width:28px;">#${lessonId}</span>`
     + `<span>${esc(lesson.name)}</span>`
+    + scoreBadge
     + `<span style="font-size:0.7rem; color:#8a7a9a;">${esc(badgeText)}</span>`;
   details.appendChild(summary);
 
