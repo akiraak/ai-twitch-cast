@@ -4,8 +4,14 @@
 1.1. [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 1.2. [ ] メインコンテンツ読み上げ方式改善: 手動テストで会話文コンテンツの先生・生徒役割分担を確認
 1.3. [ ] 授業の品質分析が入ったのでコンテンツ生成に反映させる
-1.4. [ ] セクションごとの会話のつながりが不自然なのを解決する
+1.4. [ ] セクションごとの会話のつながりが不自然なのを解決する → [plans/section-transition-context.md](plans/section-transition-context.md)
+  - [ ] Step 2: `_generate_single_dialogue()` に前後セクション情報注入
+  - [ ] Step 3: `_generate_section_dialogues()` にパラメータ追加
+  - [ ] Step 4: `section_worker()` / `regen_worker()` で隣接情報構築
+  - [ ] Step 5: 監督 Phase A プロンプトにつなぎ指示追加
+  - [ ] Step 6: テスト追加
 1.5. [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
+- [ ] 品質評価た体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 
 ## 2. 実装
 - [ ] リファクタリング

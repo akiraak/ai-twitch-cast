@@ -1706,6 +1706,31 @@ JSON配列のみを出力してください。"""
     return base
 
 
+def _build_adjacent_sections(structure_sections: list[dict], idx: int) -> dict:
+    """隣接セクションのコンテキストを構築（セクション間の自然なつながり用）"""
+    adjacent = {
+        "section_index": idx,
+        "total_sections": len(structure_sections),
+        "prev": None,
+        "next": None,
+    }
+    if idx > 0:
+        prev_s = structure_sections[idx - 1]
+        adjacent["prev"] = {
+            "title": prev_s.get("title", ""),
+            "display_text": prev_s.get("display_text", ""),
+            "section_type": prev_s.get("section_type", ""),
+        }
+    if idx < len(structure_sections) - 1:
+        next_s = structure_sections[idx + 1]
+        adjacent["next"] = {
+            "title": next_s.get("title", ""),
+            "display_text": next_s.get("display_text", ""),
+            "section_type": next_s.get("section_type", ""),
+        }
+    return adjacent
+
+
 def _generate_single_dialogue(
     client,
     character_config: dict,

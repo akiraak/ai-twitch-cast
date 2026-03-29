@@ -1,5 +1,10 @@
 # DONE
 
+## セクション間つながり改善（Step 1）
+
+- [x] ヘルパー関数 `_build_adjacent_sections()` を lesson_generator.py に追加
+- [x] プラン（plans/section-transition-context.md）の行番号を実装後の状態に更新
+
 ## 授業スコアをタイトルに表示
 
 - [x] 管理画面の授業一覧タイトルにランクバッジ+スコアを表示（teacher.js）
