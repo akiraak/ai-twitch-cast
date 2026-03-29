@@ -292,6 +292,16 @@ _EXTRACT_MAIN_CONTENT_PROMPT = """\
 - main: 教材の主要コンテンツ（メインの会話文・本文など）。**必ず1つだけ**
 - sub: 補助的コンテンツ（関連語彙・文法説明・補足表など）
 
+さらに、各ブロックについて read_aloud（読み上げ対象）を判定してください:
+- true: 授業の基盤となるコンテンツで、キャラクターが原文を実際に読み上げる/演じる必要がある
+- false: 参照用コンテンツ。解説や議論の素材として使うが、逐語的な読み上げは不要
+
+read_aloud の判定基準:
+- conversation（会話文）で role=main → 通常 true（授業がこの会話を中心に構成される）
+- passage（文章）で role=main → true（本文を読み上げる必要がある）
+- word_list / table → 通常 false（解説の中で触れればよい）
+- role=sub → 通常 false
+
 以下のJSON配列のみを出力してください（説明不要）:
 ```json
 [
@@ -299,13 +309,15 @@ _EXTRACT_MAIN_CONTENT_PROMPT = """\
     "content_type": "conversation",
     "content": "A: Good morning!\\nB: Good morning! How are you?",
     "label": "Morning Greeting Conversation",
-    "role": "main"
+    "role": "main",
+    "read_aloud": true
   },
   {
     "content_type": "word_list",
     "content": "morning: 朝\\nHow are you: お元気ですか",
     "label": "Related Vocabulary",
-    "role": "sub"
+    "role": "sub",
+    "read_aloud": false
   }
 ]
 ```
@@ -315,6 +327,7 @@ _EXTRACT_MAIN_CONTENT_PROMPT = """\
 - label は内容を簡潔に説明する短いラベル（日本語でも英語でも可）
 - role は "main" が必ず1つだけ。メインの教材コンテンツ（主な会話文・本文）に付ける
 - 残りのブロックはすべて "sub"
+- read_aloud は授業で実際に読み上げる/演じるコンテンツに true を付ける
 - メインコンテンツでない部分（ヘッダ・フッタ・ナビゲーション等）は除外する
 - コンテンツが1種類しかなければ要素1つの配列でよい（role は "main"）
 
@@ -323,7 +336,7 @@ _EXTRACT_MAIN_CONTENT_PROMPT = """\
 
 
 def _normalize_roles(items: list[dict]) -> list[dict]:
-    """role フィールドを正規化: main が必ず1つだけになるようにする"""
+    """role / read_aloud フィールドを正規化: main が必ず1つだけになるようにする"""
     if not items:
         return items
     main_count = sum(1 for it in items if it.get("role") == "main")
@@ -341,6 +354,13 @@ def _normalize_roles(items: list[dict]) -> list[dict]:
     else:
         for it in items:
             it.setdefault("role", "sub")
+    # read_aloud デフォルト補完
+    for it in items:
+        if "read_aloud" not in it:
+            ct = it.get("content_type", "")
+            it["read_aloud"] = (
+                it.get("role") == "main" and ct in ("conversation", "passage")
+            )
     return items
 
 

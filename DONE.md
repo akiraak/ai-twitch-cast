@@ -1,5 +1,9 @@
 # DONE
 
+## メインコンテンツ読み上げ機能
+
+- [x] Step 1: `_EXTRACT_MAIN_CONTENT_PROMPT` に `read_aloud` フィールド追加 + `_normalize_roles()` でデフォルト補完
+
 ## UI/UXバグ修正
 
 - [x] teacher.js: プラン未生成でもスクリプト音声生成ボタンが押せる問題を修正
