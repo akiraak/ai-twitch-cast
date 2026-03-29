@@ -4,6 +4,7 @@
 
 - [x] Step 1: `_EXTRACT_MAIN_CONTENT_PROMPT` に `read_aloud` フィールド追加 + `_normalize_roles()` でデフォルト補完
 - [x] Step 2: `_format_main_content_for_prompt()` の切り詰め緩和（read_aloud=true+main→全文2000文字、🔊マーカー付与）
+- [x] Step 3: `_build_structure_prompt()` に🔊読み上げ指示追加（EN/JP両方、原文忠実使用・role分担・direction引用指示）
 
 ## UI/UXバグ修正
 
