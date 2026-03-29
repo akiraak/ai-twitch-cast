@@ -3,6 +3,7 @@
 ## メインコンテンツ読み上げ機能
 
 - [x] Step 1: `_EXTRACT_MAIN_CONTENT_PROMPT` に `read_aloud` フィールド追加 + `_normalize_roles()` でデフォルト補完
+- [x] Step 2: `_format_main_content_for_prompt()` の切り詰め緩和（read_aloud=true+main→全文2000文字、🔊マーカー付与）
 
 ## UI/UXバグ修正
 

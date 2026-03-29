@@ -1546,13 +1546,20 @@ def _format_main_content_for_prompt(main_content: list[dict], en: bool) -> str:
         label = mc.get("label", "")
         content = mc.get("content", "")
         role = mc.get("role", "main" if i == 1 else "sub")
+        read_aloud = mc.get("read_aloud", False)
         if role == "main":
             role_tag = "★ PRIMARY" if en else "★ 主要"
         else:
             role_tag = "supplementary" if en else "補助"
-        lines.append(f"{i}. [{ct}] ({role_tag}) \"{label}\"")
-        # コンテンツは先頭200文字まで（プロンプト肥大化防止）
-        preview = content[:200] + ("..." if len(content) > 200 else "")
+        # read_aloud かつ main → 🔊マーカー付き・全文（上限2000文字）
+        if read_aloud and role == "main":
+            aloud_tag = "🔊 READ ALOUD" if en else "🔊 読み上げ対象"
+            lines.append(f"{i}. [{ct}] ({role_tag}) ({aloud_tag}) \"{label}\"")
+            preview = content[:2000] + ("..." if len(content) > 2000 else "")
+        else:
+            lines.append(f"{i}. [{ct}] ({role_tag}) \"{label}\"")
+            # コンテンツは先頭200文字まで（プロンプト肥大化防止）
+            preview = content[:200] + ("..." if len(content) > 200 else "")
         for line in preview.split("\n"):
             lines.append(f"   {line}")
         lines.append("")
