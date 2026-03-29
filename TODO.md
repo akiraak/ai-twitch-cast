@@ -6,8 +6,7 @@
 1.5. [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
 - [ ] 品質評価た体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 - [ ] メインコンテンツ階層化の手動テスト: 既存レッスンで再抽出→UIで★主要コンテンツの区別確認
-- [ ] メインコンテンツ読み上げ機能 → [plans/main-content-read-aloud.md](plans/main-content-read-aloud.md)
-  - [ ] Step 5: テスト追加
+- [x] メインコンテンツ読み上げ機能 → [plans/main-content-read-aloud.md](plans/main-content-read-aloud.md)
 
 ## 2. 実装
 - [ ] リファクタリング

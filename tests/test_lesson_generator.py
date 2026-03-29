@@ -13,6 +13,7 @@ from src.lesson_generator import (
     _build_structure_prompt,
     _director_review,
     _format_character_for_prompt,
+    _format_main_content_for_prompt,
     _generate_single_dialogue,
     _generate_section_dialogues,
     _normalize_roles,
@@ -1255,3 +1256,251 @@ class TestAdjacentSectionsInPrompt:
         assert "セクション位置: 3 / 3" in prompt
         assert "前のセクション [explanation]: 基本表現" in prompt
         assert "次のセクション" not in prompt
+
+
+# --- read_aloud 機能テスト ---
+
+
+class TestNormalizeRolesReadAloud:
+    """_normalize_roles の read_aloud デフォルト補完テスト"""
+
+    def test_conversation_main_gets_read_aloud_true(self):
+        """conversation + role=main → read_aloud=True"""
+        items = [{"content_type": "conversation", "content": "A: Hi", "role": "main"}]
+        result = _normalize_roles(items)
+        assert result[0]["read_aloud"] is True
+
+    def test_passage_main_gets_read_aloud_true(self):
+        """passage + role=main → read_aloud=True"""
+        items = [{"content_type": "passage", "content": "Text", "role": "main"}]
+        result = _normalize_roles(items)
+        assert result[0]["read_aloud"] is True
+
+    def test_word_list_main_gets_read_aloud_false(self):
+        """word_list + role=main → read_aloud=False"""
+        items = [{"content_type": "word_list", "content": "apple: りんご", "role": "main"}]
+        result = _normalize_roles(items)
+        assert result[0]["read_aloud"] is False
+
+    def test_table_main_gets_read_aloud_false(self):
+        """table + role=main → read_aloud=False"""
+        items = [{"content_type": "table", "content": "| a | b |", "role": "main"}]
+        result = _normalize_roles(items)
+        assert result[0]["read_aloud"] is False
+
+    def test_conversation_sub_gets_read_aloud_false(self):
+        """conversation + role=sub → read_aloud=False"""
+        items = [
+            {"content_type": "passage", "content": "Main", "role": "main"},
+            {"content_type": "conversation", "content": "A: Hi", "role": "sub"},
+        ]
+        result = _normalize_roles(items)
+        assert result[1]["read_aloud"] is False
+
+    def test_explicit_read_aloud_preserved(self):
+        """LLMが明示的にread_aloudを設定していれば上書きしない"""
+        items = [
+            {"content_type": "word_list", "content": "vocab", "role": "main", "read_aloud": True},
+        ]
+        result = _normalize_roles(items)
+        assert result[0]["read_aloud"] is True  # 明示値を尊重
+
+    def test_multiple_items_defaults(self):
+        """複数アイテムでread_aloudデフォルト補完"""
+        items = [
+            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "role": "main"},
+            {"content_type": "word_list", "content": "hi: こんにちは", "role": "sub"},
+            {"content_type": "passage", "content": "Explanation", "role": "sub"},
+        ]
+        result = _normalize_roles(items)
+        assert result[0]["read_aloud"] is True   # conversation + main
+        assert result[1]["read_aloud"] is False   # word_list + sub
+        assert result[2]["read_aloud"] is False   # passage + sub
+
+
+class TestExtractMainContentReadAloud:
+    """extract_main_content が read_aloud フィールドを返すことのテスト"""
+
+    def test_read_aloud_field_present(self):
+        """LLM応答にread_aloudがあればそのまま返る"""
+        mock_response = MagicMock()
+        mock_response.text = json.dumps([
+            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Dialog", "role": "main", "read_aloud": True},
+            {"content_type": "word_list", "content": "hi: こんにちは", "label": "Vocab", "role": "sub", "read_aloud": False},
+        ])
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator.get_client", return_value=mock_client):
+            result = extract_main_content("Some text")
+
+        assert result[0]["read_aloud"] is True
+        assert result[1]["read_aloud"] is False
+
+    def test_read_aloud_default_when_missing(self):
+        """LLM応答にread_aloudがなくても_normalize_rolesで補完される"""
+        mock_response = MagicMock()
+        mock_response.text = json.dumps([
+            {"content_type": "conversation", "content": "A: Hi", "label": "Dialog", "role": "main"},
+            {"content_type": "word_list", "content": "vocab", "label": "Vocab", "role": "sub"},
+        ])
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+
+        with patch("src.lesson_generator.get_client", return_value=mock_client):
+            result = extract_main_content("Some text")
+
+        assert "read_aloud" in result[0]
+        assert result[0]["read_aloud"] is True   # conversation + main
+        assert "read_aloud" in result[1]
+        assert result[1]["read_aloud"] is False   # word_list + sub
+
+
+class TestFormatMainContentReadAloud:
+    """_format_main_content_for_prompt の read_aloud 対応テスト"""
+
+    def test_read_aloud_true_full_content(self):
+        """read_aloud=True + role=main → 🔊マーカー付き・全文表示（上限2000文字）"""
+        long_content = "A" * 500
+        mc = [{"content_type": "conversation", "content": long_content, "label": "Dialog", "role": "main", "read_aloud": True}]
+        result = _format_main_content_for_prompt(mc, en=False)
+        assert "🔊 読み上げ対象" in result
+        assert long_content in result  # 500文字は全文含まれる
+
+    def test_read_aloud_true_english(self):
+        """英語版: 🔊 READ ALOUDマーカー"""
+        mc = [{"content_type": "passage", "content": "Full text here", "label": "Passage", "role": "main", "read_aloud": True}]
+        result = _format_main_content_for_prompt(mc, en=True)
+        assert "🔊 READ ALOUD" in result
+        assert "Full text here" in result
+
+    def test_read_aloud_false_truncated(self):
+        """read_aloud=False → 従来通り200文字で切り詰め"""
+        long_content = "B" * 300
+        mc = [{"content_type": "word_list", "content": long_content, "label": "Vocab", "role": "main", "read_aloud": False}]
+        result = _format_main_content_for_prompt(mc, en=False)
+        assert "🔊" not in result
+        assert "B" * 200 in result
+        assert "B" * 300 not in result  # 300文字は切り詰められる
+        assert "..." in result
+
+    def test_read_aloud_true_but_sub_role_truncated(self):
+        """read_aloud=True でも role=sub → 切り詰め（🔊なし）"""
+        long_content = "C" * 300
+        mc = [
+            {"content_type": "conversation", "content": "Main", "label": "Main", "role": "main", "read_aloud": False},
+            {"content_type": "passage", "content": long_content, "label": "Sub", "role": "sub", "read_aloud": True},
+        ]
+        result = _format_main_content_for_prompt(mc, en=False)
+        # sub + read_aloud=True は🔊マーカーが付かない（条件: read_aloud AND role==main）
+        assert "🔊" not in result
+        assert "C" * 300 not in result
+
+    def test_read_aloud_2000_char_limit(self):
+        """read_aloud=True でも2000文字を超えたら切り詰め"""
+        long_content = "D" * 2500
+        mc = [{"content_type": "passage", "content": long_content, "label": "Long", "role": "main", "read_aloud": True}]
+        result = _format_main_content_for_prompt(mc, en=False)
+        assert "🔊 読み上げ対象" in result
+        assert "D" * 2000 in result
+        assert "D" * 2500 not in result
+        assert "..." in result
+
+
+class TestBuildStructurePromptReadAloud:
+    """_build_structure_prompt の read_aloud 指示テスト"""
+
+    def test_read_aloud_instructions_present_en(self):
+        """英語版: read_aloud=Trueのコンテンツがある→読み上げ指示が含まれる"""
+        mc = [{"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Dialog", "role": "main", "read_aloud": True}]
+        prompt = _build_structure_prompt(en=True, main_content=mc)
+        assert "🔊 READ ALOUD" in prompt
+        assert "Reading aloud main content" in prompt or "read aloud" in prompt.lower()
+
+    def test_read_aloud_instructions_present_ja(self):
+        """日本語版: read_aloud=Trueのコンテンツがある→読み上げ指示が含まれる"""
+        mc = [{"content_type": "passage", "content": "本文テキスト", "label": "本文", "role": "main", "read_aloud": True}]
+        prompt = _build_structure_prompt(en=False, main_content=mc)
+        assert "🔊 読み上げ対象" in prompt
+        assert "読み上げ" in prompt
+
+    def test_no_read_aloud_no_instructions(self):
+        """read_aloud=Falseのみ→読み上げ指示ブロックが追加されない"""
+        mc = [{"content_type": "word_list", "content": "vocab", "label": "Vocab", "role": "main", "read_aloud": False}]
+        prompt_en = _build_structure_prompt(en=True, main_content=mc)
+        prompt_ja = _build_structure_prompt(en=False, main_content=mc)
+        # 🔊マーカーはコンテンツ表示にも読み上げ指示にも含まれない
+        assert "🔊" not in prompt_en
+        assert "🔊" not in prompt_ja
+
+    def test_no_main_content_no_instructions(self):
+        """main_contentなし→読み上げ指示なし"""
+        prompt = _build_structure_prompt(en=True, main_content=None)
+        assert "🔊" not in prompt
+        prompt2 = _build_structure_prompt(en=True, main_content=[])
+        assert "🔊" not in prompt2
+
+
+class TestDirectorReviewReadAloud:
+    """_director_review の 🔊読み上げレビュー観点テスト"""
+
+    def _make_review_response(self, approved=True):
+        return json.dumps({
+            "reviews": [{"section_index": 0, "approved": approved, "feedback": "OK"}],
+            "overall_feedback": "Good",
+        })
+
+    def test_read_aloud_review_criteria_en(self):
+        """英語版: read_aloud=Trueのコンテンツがある→🔊レビュー観点が含まれる"""
+        mc = [{"content_type": "conversation", "content": "A: Hi", "label": "Dialog", "role": "main", "read_aloud": True}]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        _director_review(
+            mock_client,
+            [{"section_type": "example", "display_text": "A: Hi", "dialogues": []}],
+            "text", "Test", en=True, main_content=mc,
+        )
+
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "🔊" in config.system_instruction
+        assert "READ ALOUD" in config.system_instruction
+
+    def test_read_aloud_review_criteria_ja(self):
+        """日本語版: read_aloud=Trueのコンテンツがある→🔊レビュー観点が含まれる"""
+        mc = [{"content_type": "passage", "content": "本文", "label": "本文", "role": "main", "read_aloud": True}]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        _director_review(
+            mock_client,
+            [{"section_type": "explanation", "display_text": "本文", "dialogues": []}],
+            "テキスト", "テスト授業", en=False, main_content=mc,
+        )
+
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "🔊" in config.system_instruction
+        assert "読み上げ" in config.system_instruction
+
+    def test_no_main_content_no_review_criteria(self):
+        """main_contentなし→🔊レビュー観点が追加されない"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        _director_review(
+            mock_client,
+            [{"section_type": "example", "display_text": "vocab", "dialogues": []}],
+            "text", "Test", en=True,
+        )
+
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "🔊" not in config.system_instruction
