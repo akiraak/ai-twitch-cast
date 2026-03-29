@@ -43,10 +43,10 @@ display_textは200文字で切り詰め（プロンプト肥大化防止）。
 - 引数に `adjacent_sections: dict | None = None` を追加
 - `_generate_single_dialogue()` 呼び出し時に渡す
 
-### Step 4: `section_worker()` と `regen_worker()` で隣接情報を構築・渡す
+### Step 4: `section_worker()` と `regen_worker()` で隣接情報を構築・渡す ✅ 完了
 **ファイル**: `src/lesson_generator.py`
-- `section_worker()` (line 2259): `_build_adjacent_sections(structure_sections, sec_idx)` を呼んで `_generate_section_dialogues()` に渡す
-- `regen_worker()` (line 2333): 同様
+- `section_worker()` (line 2294): `_build_adjacent_sections(structure_sections, sec_idx)` を呼んで `_generate_section_dialogues()` に渡す
+- `regen_worker()` (line 2370): 同様
 
 ### Step 5: 監督 Phase A プロンプトに「つなぎ指示」を追加
 **ファイル**: `src/lesson_generator.py`

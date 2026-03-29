@@ -2307,6 +2307,7 @@ def generate_lesson_script_v2(
                 msg = f"セクション{sec_idx + 1}: {t_name} ({turn_num}/{turn_total})"
             _progress(step, 1 + total_turns, msg)
 
+        adjacent = _build_adjacent_sections(structure_sections, sec_idx)
         dialogues = _generate_section_dialogues(
             client=client,
             teacher_config=teacher_config,
@@ -2316,6 +2317,7 @@ def generate_lesson_script_v2(
             lesson_name=lesson_name,
             en=en,
             on_progress=dlg_progress,
+            adjacent_sections=adjacent,
         )
         return sec_idx, dialogues
 
@@ -2388,6 +2390,7 @@ def generate_lesson_script_v2(
                     msg = f"セクション{idx + 1}を再生成中: {t_name} ({turn_num}/{turn_total})"
                 _progress(1 + total_turns + 1 + step, 1 + total_turns + 1 + regen_turns + 1, msg)
 
+            adjacent = _build_adjacent_sections(structure_sections, idx)
             new_dialogues = _generate_section_dialogues(
                 client=client,
                 teacher_config=teacher_config,
@@ -2397,6 +2400,7 @@ def generate_lesson_script_v2(
                 lesson_name=lesson_name,
                 en=en,
                 on_progress=regen_progress,
+                adjacent_sections=adjacent,
             )
             return idx, new_dialogues
 
