@@ -8,6 +8,8 @@
 - [x] Step 4: `_director_review()` に🔊読み上げ対象レビュー観点追加（EN/JP両方、省略・意訳は不合格）
 - [x] Step 5: テスト追加（read_aloud: normalize_roles/extract/format/structure_prompt/director_review 全20件）
 - [x] Step 6: `_build_structure_prompt()` の🔊読み上げ指示に自然な導入パターン追加（EN/JP両方、文脈説明→役割分担→読み上げの3段階指示+dialogue_plan構成例）
+- [x] Step 7: `_director_review()` のレビュー観点に🔊読み上げ導入チェック追加（EN/JP両方、導入なし→不合格）
+- [x] Step 8: Phase 2テスト追加（導入パターン指示5件 + 導入チェック観点4件、計9件）
 
 ## UI/UXバグ修正
 

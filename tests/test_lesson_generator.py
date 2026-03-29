@@ -1504,3 +1504,115 @@ class TestDirectorReviewReadAloud:
         call_args = mock_client.models.generate_content.call_args
         config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
         assert "🔊" not in config.system_instruction
+
+
+# --- Phase 2: 読み上げ導入の自然化テスト ---
+
+
+class TestBuildStructurePromptLeadIn:
+    """_build_structure_prompt の読み上げ導入パターン指示テスト（Phase 2 Step 6）"""
+
+    def test_lead_in_instructions_present_en(self):
+        """英語版: read_aloud=Trueのコンテンツがある→導入パターン指示が含まれる"""
+        mc = [{"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Dialog", "role": "main", "read_aloud": True}]
+        prompt = _build_structure_prompt(en=True, main_content=mc)
+        assert "Natural lead-in" in prompt
+        assert "Do NOT jump straight into reading" in prompt
+        assert "Context setting" in prompt
+        assert "Role assignment" in prompt
+
+    def test_lead_in_instructions_present_ja(self):
+        """日本語版: read_aloud=Trueのコンテンツがある→導入パターン指示が含まれる"""
+        mc = [{"content_type": "passage", "content": "本文テキスト", "label": "本文", "role": "main", "read_aloud": True}]
+        prompt = _build_structure_prompt(en=False, main_content=mc)
+        assert "自然な導入" in prompt
+        assert "いきなり読み上げを始めないこと" in prompt
+        assert "文脈の説明" in prompt
+        assert "導入ターン" in prompt or "導入の次のターン" in prompt
+
+    def test_no_read_aloud_no_lead_in(self):
+        """read_aloud=Falseのみ→導入パターン指示が含まれない"""
+        mc = [{"content_type": "word_list", "content": "vocab", "label": "Vocab", "role": "main", "read_aloud": False}]
+        prompt_en = _build_structure_prompt(en=True, main_content=mc)
+        prompt_ja = _build_structure_prompt(en=False, main_content=mc)
+        assert "Natural lead-in" not in prompt_en
+        assert "自然な導入" not in prompt_ja
+
+    def test_dialogue_plan_example_en(self):
+        """英語版: dialogue_plan構成例が含まれる"""
+        mc = [{"content_type": "conversation", "content": "A: Hi", "label": "Dialog", "role": "main", "read_aloud": True}]
+        prompt = _build_structure_prompt(en=True, main_content=mc)
+        assert "dialogue_plan structure" in prompt
+        assert "Assign roles" in prompt
+
+    def test_dialogue_plan_example_ja(self):
+        """日本語版: dialogue_plan構成例が含まれる"""
+        mc = [{"content_type": "conversation", "content": "A: Hi", "label": "Dialog", "role": "main", "read_aloud": True}]
+        prompt = _build_structure_prompt(en=False, main_content=mc)
+        assert "dialogue_plan 構成例" in prompt
+        assert "役割分担" in prompt
+
+
+class TestDirectorReviewLeadIn:
+    """_director_review の🔊読み上げ導入チェック観点テスト（Phase 2 Step 7）"""
+
+    def _make_review_response(self, approved=True):
+        return json.dumps({
+            "reviews": [{"section_index": 0, "approved": approved, "feedback": "OK"}],
+            "overall_feedback": "Good",
+        })
+
+    def test_lead_in_review_criteria_en(self):
+        """英語版: read_aloud=Trueのコンテンツがある→導入チェック観点が含まれる"""
+        mc = [{"content_type": "conversation", "content": "A: Hi", "label": "Dialog", "role": "main", "read_aloud": True}]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        _director_review(
+            mock_client,
+            [{"section_type": "example", "display_text": "A: Hi", "dialogues": []}],
+            "text", "Test", en=True, main_content=mc,
+        )
+
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "lead-in" in config.system_instruction.lower()
+        assert "Read-aloud lead-in check" in config.system_instruction
+
+    def test_lead_in_review_criteria_ja(self):
+        """日本語版: read_aloud=Trueのコンテンツがある→導入チェック観点が含まれる"""
+        mc = [{"content_type": "passage", "content": "本文", "label": "本文", "role": "main", "read_aloud": True}]
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        _director_review(
+            mock_client,
+            [{"section_type": "explanation", "display_text": "本文", "dialogues": []}],
+            "テキスト", "テスト授業", en=False, main_content=mc,
+        )
+
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "導入チェック" in config.system_instruction
+        assert "導入なしに始まっている場合" in config.system_instruction
+
+    def test_no_main_content_no_lead_in_criteria(self):
+        """main_contentなし→導入チェック観点が追加されない"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = MagicMock(
+            text=self._make_review_response()
+        )
+
+        _director_review(
+            mock_client,
+            [{"section_type": "example", "display_text": "vocab", "dialogues": []}],
+            "text", "Test", en=True,
+        )
+
+        call_args = mock_client.models.generate_content.call_args
+        config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
+        assert "lead-in" not in config.system_instruction.lower()
