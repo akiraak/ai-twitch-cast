@@ -1684,12 +1684,25 @@ Design dialogue_plan according to each content_type's reading method above.
                 base += """
 ## Reading aloud main content (🔊 marked items)
 Items marked 🔊 READ ALOUD are the core teaching material for this lesson.
-Create a section early in the lesson where the character faithfully reads/performs the original content.
 
+### Natural lead-in (IMPORTANT)
+Do NOT jump straight into reading. Always include a lead-in turn BEFORE the read-aloud section:
+1. **Context setting**: Teacher explains what they're about to read/perform ("Let's look at today's conversation", "Here's a passage about...")
+2. **Role assignment** (conversation only): Teacher assigns roles ("I'll be Speaker A, you be Speaker B")
+3. **Then read**: The actual read-aloud starts in the NEXT turn after setup
+
+### Read-aloud rules by content_type
 - conversation: Split roles between teacher and student to "perform" the conversation. Use the original lines verbatim
 - passage: Teacher reads the original text aloud, then explains afterward
 - Include the relevant original text in the direction (e.g., "Read Speaker A's line: 'Good morning!'")
 - Do NOT paraphrase or summarize 🔊 content — use the original wording
+
+### dialogue_plan structure for 🔊 content
+Example for a conversation:
+  1. teacher direction: "Introduce that they'll practice the conversation. Assign roles."
+  2. teacher direction: "Read Speaker A's line: 'Good morning! How are you?'"
+  3. student direction: "Read Speaker B's line: 'I'm fine, thank you.'"
+  4. teacher direction: "React to the conversation. Transition to explanation."
 
 """
             base += _format_main_content_for_prompt(main_content, en=True)
@@ -1810,12 +1823,25 @@ JSON配列のみを出力してください。"""
                 base += """
 ## メインコンテンツの読み上げ（🔊マーク付きアイテム）
 🔊 読み上げ対象 と記されたアイテムは、この授業の核となる教材です。
-授業序盤にキャラクターが原文を忠実に読み上げる/演じるセクションを設けること。
 
+### 自然な導入（重要）
+いきなり読み上げを始めないこと。読み上げの前に必ず導入ターンを設けること:
+1. **文脈の説明**: これから何を読む/演じるか説明する（「今日の会話を見てみよう」「こんな文章があるよ」）
+2. **役割分担**（会話文のみ）: 役割を割り振る（「先生がAさん役、なるこちゃんがBさん役ね」）
+3. **読み上げ開始**: 導入の次のターンから実際の読み上げを始める
+
+### content_type ごとの読み上げルール
 - conversation: 先生と生徒で役割を分けて会話を「演じる」。原文のセリフをそのまま使う
 - passage: 先生が原文を読み上げ、その後解説する
 - directionに原文の該当部分を含めること（例: 「会話のAの台詞 "Good morning!" を読む」）
 - 🔊コンテンツを要約・言い換えしないこと — 原文のまま使う
+
+### 🔊コンテンツ用の dialogue_plan 構成例
+会話文の場合:
+  1. teacher direction: 「会話の練習をすることを紹介。役割分担を説明する」
+  2. teacher direction: 「Aの台詞を読む: 'Good morning! How are you?'」
+  3. student direction: 「Bの台詞を読む: 'I'm fine, thank you.'」
+  4. teacher direction: 「会話の感想を言い、解説に移る」
 
 """
             base += _format_main_content_for_prompt(main_content, en=False)

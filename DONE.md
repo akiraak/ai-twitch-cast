@@ -7,6 +7,7 @@
 - [x] Step 3: `_build_structure_prompt()` に🔊読み上げ指示追加（EN/JP両方、原文忠実使用・role分担・direction引用指示）
 - [x] Step 4: `_director_review()` に🔊読み上げ対象レビュー観点追加（EN/JP両方、省略・意訳は不合格）
 - [x] Step 5: テスト追加（read_aloud: normalize_roles/extract/format/structure_prompt/director_review 全20件）
+- [x] Step 6: `_build_structure_prompt()` の🔊読み上げ指示に自然な導入パターン追加（EN/JP両方、文脈説明→役割分担→読み上げの3段階指示+dialogue_plan構成例）
 
 ## UI/UXバグ修正
 
