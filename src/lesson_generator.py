@@ -1884,6 +1884,7 @@ def _generate_section_dialogues(
     lesson_name: str,
     en: bool,
     on_progress=None,
+    adjacent_sections: dict | None = None,
 ) -> list[dict]:
     """1セクション分のdialogue_plan/dialogue_directionsを順次処理し、セリフを個別生成する"""
     # v3: dialogue_directions（監督の直接設計）を優先、なければ従来のdialogue_plan
@@ -1911,6 +1912,7 @@ def _generate_section_dialogues(
             extracted_text=extracted_text,
             lesson_name=lesson_name,
             en=en,
+            adjacent_sections=adjacent_sections,
         )
         dialogues.append(dlg)
         conversation_history.append({

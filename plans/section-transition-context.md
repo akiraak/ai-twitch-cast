@@ -37,8 +37,8 @@ TODO 1.4「セクションごとの会話のつながりが不自然なのを解
 
 display_textは200文字で切り詰め（プロンプト肥大化防止）。
 
-### Step 3: `_generate_section_dialogues()` に `adjacent_sections` パラメータを通す
-**ファイル**: `src/lesson_generator.py:1845`
+### Step 3: `_generate_section_dialogues()` に `adjacent_sections` パラメータを通す ✅ 完了
+**ファイル**: `src/lesson_generator.py:1878`
 
 - 引数に `adjacent_sections: dict | None = None` を追加
 - `_generate_single_dialogue()` 呼び出し時に渡す
