@@ -185,7 +185,7 @@ class TestLessonSources:
 
         # Geminiモック: 1回目=テキスト抽出, 2回目=メインコンテンツ識別
         mc_json = json.dumps([
-            {"content_type": "passage", "content": "Hello world", "label": "Greeting"}
+            {"content_type": "passage", "content": "Hello world", "label": "Greeting", "role": "main"}
         ])
         mock_gemini.models.generate_content.side_effect = [
             MagicMock(text="Hello world text"),
@@ -197,12 +197,14 @@ class TestLessonSources:
         assert data["ok"] is True
         assert len(data["main_content"]) == 1
         assert data["main_content"][0]["content_type"] == "passage"
+        assert data["main_content"][0]["role"] == "main"
 
         # DBにも保存されているか
         lesson = test_db.get_lesson(lid)
         assert lesson["main_content"] != ""
         saved = json.loads(lesson["main_content"])
         assert saved[0]["content_type"] == "passage"
+        assert saved[0]["role"] == "main"
 
     def test_add_url_saves_main_content(self, api_client, test_db, mock_gemini):
         """add-url が main_content も保存する"""
@@ -210,7 +212,7 @@ class TestLessonSources:
         lid = r1.json()["lesson"]["id"]
 
         mc_json = json.dumps([
-            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Dialog"}
+            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Dialog", "role": "main"}
         ])
         mock_gemini.models.generate_content.side_effect = [
             MagicMock(text="A: Hi\nB: Hello"),  # URL抽出

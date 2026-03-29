@@ -280,7 +280,7 @@ def clean_extracted_text(text: str) -> str:
 # --- メインコンテンツ識別 ---
 
 _EXTRACT_MAIN_CONTENT_PROMPT = """\
-以下のテキストから、教材のメインコンテンツを識別して分類してください。
+以下のテキストから、教材のコンテンツを識別して分類してください。
 
 テキスト中の各コンテンツブロックについて、以下の種別で分類してください:
 - conversation: 会話文（A: / B: のような対話形式）
@@ -288,18 +288,24 @@ _EXTRACT_MAIN_CONTENT_PROMPT = """\
 - word_list: 単語リスト・フレーズ集
 - table: 表・比較データ
 
+また、各ブロックの役割（role）を判定してください:
+- main: 教材の主要コンテンツ（メインの会話文・本文など）。**必ず1つだけ**
+- sub: 補助的コンテンツ（関連語彙・文法説明・補足表など）
+
 以下のJSON配列のみを出力してください（説明不要）:
 ```json
 [
   {
     "content_type": "conversation",
     "content": "A: Good morning!\\nB: Good morning! How are you?",
-    "label": "Morning Greeting Conversation"
+    "label": "Morning Greeting Conversation",
+    "role": "main"
   },
   {
-    "content_type": "passage",
-    "content": "Formal greetings are used in business...",
-    "label": "Explanation of formal greetings"
+    "content_type": "word_list",
+    "content": "morning: 朝\\nHow are you: お元気ですか",
+    "label": "Related Vocabulary",
+    "role": "sub"
   }
 ]
 ```
@@ -307,11 +313,35 @@ _EXTRACT_MAIN_CONTENT_PROMPT = """\
 ルール:
 - content にはテキストの該当部分をそのまま含める（要約しない）
 - label は内容を簡潔に説明する短いラベル（日本語でも英語でも可）
+- role は "main" が必ず1つだけ。メインの教材コンテンツ（主な会話文・本文）に付ける
+- 残りのブロックはすべて "sub"
 - メインコンテンツでない部分（ヘッダ・フッタ・ナビゲーション等）は除外する
-- コンテンツが1種類しかなければ要素1つの配列でよい
+- コンテンツが1種類しかなければ要素1つの配列でよい（role は "main"）
 
 テキスト:
 """
+
+
+def _normalize_roles(items: list[dict]) -> list[dict]:
+    """role フィールドを正規化: main が必ず1つだけになるようにする"""
+    if not items:
+        return items
+    main_count = sum(1 for it in items if it.get("role") == "main")
+    if main_count == 0:
+        items[0]["role"] = "main"
+        for it in items[1:]:
+            it.setdefault("role", "sub")
+    elif main_count > 1:
+        found_first = False
+        for it in items:
+            if it.get("role") == "main":
+                if found_first:
+                    it["role"] = "sub"
+                found_first = True
+    else:
+        for it in items:
+            it.setdefault("role", "sub")
+    return items
 
 
 def extract_main_content(extracted_text: str) -> list[dict]:
@@ -331,8 +361,11 @@ def extract_main_content(extracted_text: str) -> list[dict]:
     try:
         result = _parse_json_response(response.text)
         if isinstance(result, list):
-            return result
-        return [result] if isinstance(result, dict) else []
+            return _normalize_roles(result)
+        if isinstance(result, dict):
+            result["role"] = "main"
+            return [result]
+        return []
     except Exception:
         logger.warning("メインコンテンツ解析失敗: %s", response.text[:200])
         return []
@@ -1484,7 +1517,7 @@ def _parse_json_response(text: str):
 
 
 def _format_main_content_for_prompt(main_content: list[dict], en: bool) -> str:
-    """main_content リストをプロンプト用テキストに整形する"""
+    """main_content リストをプロンプト用テキストに整形する（role対応）"""
     if not main_content:
         return ""
     lines = []
@@ -1492,7 +1525,12 @@ def _format_main_content_for_prompt(main_content: list[dict], en: bool) -> str:
         ct = mc.get("content_type", "passage")
         label = mc.get("label", "")
         content = mc.get("content", "")
-        lines.append(f"{i}. [{ct}] \"{label}\"")
+        role = mc.get("role", "main" if i == 1 else "sub")
+        if role == "main":
+            role_tag = "★ PRIMARY" if en else "★ 主要"
+        else:
+            role_tag = "supplementary" if en else "補助"
+        lines.append(f"{i}. [{ct}] ({role_tag}) \"{label}\"")
         # コンテンツは先頭200文字まで（プロンプト肥大化防止）
         preview = content[:200] + ("..." if len(content) > 200 else "")
         for line in preview.split("\n"):
@@ -1604,6 +1642,11 @@ Output ONLY the JSON array."""
 - Teacher walks through rows/columns
 - Student comments on differences or asks about entries
 
+## Main vs supplementary content priority
+- The item marked ★ PRIMARY is the core teaching material — it MUST be fully covered in dialogue_plan
+- Supplementary items support the primary content — include them where natural but they are lower priority
+- Structure the lesson around the primary content, using supplementary content to enrich understanding
+
 ## Pre-analyzed main content
 Design dialogue_plan according to each content_type's reading method above.
 
@@ -1710,6 +1753,11 @@ JSON配列のみを出力してください。"""
 ### table（表・比較データ）
 - 先生が行/列を順に解説する
 - 生徒が違いについてコメントしたり、質問する
+
+## 主要コンテンツと補助コンテンツの優先度
+- ★ 主要 と記されたアイテムが授業の核となる教材です — dialogue_plan で必ず完全にカバーすること
+- 補助アイテムは主要コンテンツを支援する素材 — 自然な箇所で取り入れるが優先度は低い
+- 主要コンテンツを中心に授業を構成し、補助コンテンツで理解を深める
 
 ## メインコンテンツ（事前分析済み）
 上記の content_type ごとの読み上げ方に従って dialogue_plan を設計してください。
@@ -2027,7 +2075,9 @@ When pre-analyzed main content is provided, also check:
 - passage: Teacher should read and explain. Unnatural role-splitting is a problem
 - word_list: Items should be read with explanation, student may repeat or ask
 - table: Teacher should walk through entries, not skip important rows
-- The reading style must match the content_type"""
+- The reading style must match the content_type
+- Items marked ★ PRIMARY must have complete coverage — any omission is grounds for rejection
+- Supplementary items should be referenced where relevant but partial coverage is acceptable"""
 
     else:
         system_prompt = """あなたは「監督」です。キャラクターAIが生成したセリフを監修し、ダメ出しを行ってください。
@@ -2094,7 +2144,9 @@ JSONオブジェクトのみを出力してください。"""
 - passage（文章）: 先生が読み上げ・解説しているか？不自然な役割分担は問題
 - word_list（単語集）: 各項目が読み上げ・説明されているか、生徒がリピートや質問しているか
 - table（表）: 先生が重要行を解説しているか、重要項目をスキップしていないか
-- 読み上げ方が content_type に合っていること"""
+- 読み上げ方が content_type に合っていること
+- ★ 主要 のアイテムは完全にカバーされていなければ不合格
+- 補助アイテムは関連箇所で言及されていれば十分（部分的カバーでも可）"""
 
     # ユーザープロンプト: セクション一覧（display_text + 生成済みセリフ）
     if en:

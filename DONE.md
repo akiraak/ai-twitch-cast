@@ -1,5 +1,16 @@
 # DONE
 
+## メインコンテンツ階層化（主要/補助の役割分け）
+
+- [x] Step 1: `_normalize_roles()` ヘルパー追加 + `extract_main_content()` 更新
+- [x] Step 2: `_EXTRACT_MAIN_CONTENT_PROMPT` に role 指示追加
+- [x] Step 3: `_format_main_content_for_prompt()` に ★主要/補助タグ付与
+- [x] Step 4: `_build_structure_prompt()` に優先度ガイダンス追加
+- [x] Step 5: `_director_review()` にロール対応レビュー基準追加
+- [x] Step 6: Teacher UI に主要/補助の視覚区別追加（★マーク・太枠・黄色背景）
+- [x] Step 7: テスト更新・追加（`TestNormalizeRoles` 新規、全テストにrole対応）
+- [x] ドキュメント更新（speech-generation-flow.md）
+
 ## セクション間つながり改善（全Step完了）
 
 - [x] Step 1: ヘルパー関数 `_build_adjacent_sections()` 追加

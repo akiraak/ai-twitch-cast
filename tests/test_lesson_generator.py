@@ -15,6 +15,7 @@ from src.lesson_generator import (
     _format_character_for_prompt,
     _generate_single_dialogue,
     _generate_section_dialogues,
+    _normalize_roles,
     _parse_json_response,
     clean_extracted_text,
     extract_main_content,
@@ -258,10 +259,10 @@ class TestBuildStructurePrompt:
             assert "dialogue_plan" in parsed[0]
 
     def test_english_with_main_content(self):
-        """英語版: main_contentありで種別ルールとコンテンツが含まれる"""
+        """英語版: main_contentありで種別ルール・優先度・コンテンツが含まれる"""
         mc = [
-            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Greeting"},
-            {"content_type": "passage", "content": "Some explanation text.", "label": "Explanation"},
+            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Greeting", "role": "main"},
+            {"content_type": "passage", "content": "Some explanation text.", "label": "Explanation", "role": "sub"},
         ]
         prompt = _build_structure_prompt(en=True, main_content=mc)
         assert "How to handle main content by type" in prompt
@@ -272,11 +273,16 @@ class TestBuildStructurePrompt:
         assert "[conversation]" in prompt
         assert "Greeting" in prompt
         assert "A: Hi" in prompt
+        # role タグが含まれる
+        assert "PRIMARY" in prompt
+        assert "supplementary" in prompt
+        # 優先度ガイダンスが含まれる
+        assert "Main vs supplementary content priority" in prompt
 
     def test_japanese_with_main_content(self):
-        """日本語版: main_contentありで種別ルールとコンテンツが含まれる"""
+        """日本語版: main_contentありで種別ルール・優先度・コンテンツが含まれる"""
         mc = [
-            {"content_type": "word_list", "content": "apple: りんご\ndog: 犬", "label": "単語リスト"},
+            {"content_type": "word_list", "content": "apple: りんご\ndog: 犬", "label": "単語リスト", "role": "main"},
         ]
         prompt = _build_structure_prompt(en=False, main_content=mc)
         assert "メインコンテンツの種別ごとの読み上げ方" in prompt
@@ -286,6 +292,10 @@ class TestBuildStructurePrompt:
         assert "[word_list]" in prompt
         assert "単語リスト" in prompt
         assert "apple: りんご" in prompt
+        # role タグが含まれる
+        assert "★ 主要" in prompt
+        # 優先度ガイダンスが含まれる
+        assert "主要コンテンツと補助コンテンツの優先度" in prompt
 
     def test_no_main_content_no_rules(self):
         """main_contentがNone/空の場合はルール追加なし"""
@@ -294,6 +304,16 @@ class TestBuildStructurePrompt:
             assert "How to handle main content" not in prompt
             prompt_ja = _build_structure_prompt(en=False, main_content=mc)
             assert "メインコンテンツの種別" not in prompt_ja
+
+    def test_main_content_role_fallback(self):
+        """roleフィールドなしの後方互換: 最初=main, 残り=sub"""
+        mc = [
+            {"content_type": "conversation", "content": "A: Hi", "label": "Dialog"},
+            {"content_type": "word_list", "content": "hi: こんにちは", "label": "Vocab"},
+        ]
+        prompt = _build_structure_prompt(en=True, main_content=mc)
+        assert "PRIMARY" in prompt
+        assert "supplementary" in prompt
 
 
 class TestGenerateSingleDialogue:
@@ -822,11 +842,11 @@ class TestExtractMainContent:
         assert extract_main_content(None) == []
 
     def test_valid_json_response(self):
-        """LLMが正しいJSON配列を返す場合"""
+        """LLMが正しいJSON配列を返す場合、role が正規化される"""
         mock_response = MagicMock()
         mock_response.text = json.dumps([
-            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Greeting"},
-            {"content_type": "passage", "content": "Text here.", "label": "Explanation"},
+            {"content_type": "conversation", "content": "A: Hi\nB: Hello", "label": "Greeting", "role": "main"},
+            {"content_type": "passage", "content": "Text here.", "label": "Explanation", "role": "sub"},
         ])
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
@@ -836,10 +856,12 @@ class TestExtractMainContent:
 
         assert len(result) == 2
         assert result[0]["content_type"] == "conversation"
+        assert result[0]["role"] == "main"
         assert result[1]["content_type"] == "passage"
+        assert result[1]["role"] == "sub"
 
     def test_single_dict_response(self):
-        """LLMがdict(配列でなく)を返した場合、1要素のリストにラップ"""
+        """LLMがdict(配列でなく)を返した場合、1要素のリストにラップ+role=main"""
         mock_response = MagicMock()
         mock_response.text = json.dumps(
             {"content_type": "passage", "content": "Text", "label": "Label"}
@@ -852,6 +874,7 @@ class TestExtractMainContent:
 
         assert len(result) == 1
         assert result[0]["content_type"] == "passage"
+        assert result[0]["role"] == "main"
 
     def test_invalid_response_returns_empty(self):
         """LLMがパース不能な応答を返した場合、空リスト"""
@@ -884,6 +907,61 @@ class TestExtractMainContent:
         assert "教材テキストの内容" in str(contents)
 
 
+class TestNormalizeRoles:
+    """_normalize_roles のテスト"""
+
+    def test_empty_list(self):
+        assert _normalize_roles([]) == []
+
+    def test_single_item_no_role(self):
+        """1件でroleなし → main"""
+        items = [{"content_type": "passage", "content": "x"}]
+        result = _normalize_roles(items)
+        assert result[0]["role"] == "main"
+
+    def test_no_main_assigns_first(self):
+        """mainが0件 → 最初をmainに"""
+        items = [
+            {"content_type": "conversation", "content": "A"},
+            {"content_type": "word_list", "content": "B"},
+        ]
+        result = _normalize_roles(items)
+        assert result[0]["role"] == "main"
+        assert result[1]["role"] == "sub"
+
+    def test_multiple_main_keeps_first(self):
+        """mainが複数 → 最初だけ残す"""
+        items = [
+            {"content_type": "conversation", "content": "A", "role": "main"},
+            {"content_type": "passage", "content": "B", "role": "main"},
+            {"content_type": "word_list", "content": "C", "role": "sub"},
+        ]
+        result = _normalize_roles(items)
+        assert result[0]["role"] == "main"
+        assert result[1]["role"] == "sub"
+        assert result[2]["role"] == "sub"
+
+    def test_correct_roles_preserved(self):
+        """正常なケース（main1つ+sub）はそのまま"""
+        items = [
+            {"content_type": "conversation", "content": "A", "role": "main"},
+            {"content_type": "word_list", "content": "B", "role": "sub"},
+        ]
+        result = _normalize_roles(items)
+        assert result[0]["role"] == "main"
+        assert result[1]["role"] == "sub"
+
+    def test_fills_missing_role_on_sub(self):
+        """mainは明示、残りにroleなし → subを補完"""
+        items = [
+            {"content_type": "passage", "content": "A"},
+            {"content_type": "conversation", "content": "B", "role": "main"},
+        ]
+        result = _normalize_roles(items)
+        assert result[0]["role"] == "sub"
+        assert result[1]["role"] == "main"
+
+
 # --- 監督レビュー + main_content ---
 
 
@@ -897,8 +975,8 @@ class TestDirectorReviewMainContent:
         })
 
     def test_english_with_main_content(self):
-        """英語版: main_contentありでコンテンツ種別レビュー観点が含まれる"""
-        mc = [{"content_type": "conversation", "content": "A: Hi", "label": "Dialog"}]
+        """英語版: main_contentありでコンテンツ種別レビュー観点・ロール基準が含まれる"""
+        mc = [{"content_type": "conversation", "content": "A: Hi", "label": "Dialog", "role": "main"}]
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = MagicMock(
             text=self._make_review_response()
@@ -915,14 +993,16 @@ class TestDirectorReviewMainContent:
         config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
         assert "Content type review" in config.system_instruction
         assert "conversation" in config.system_instruction
+        assert "PRIMARY" in config.system_instruction
         # ユーザープロンプトにメインコンテンツ情報が含まれる
         contents = call_args[1].get("contents", call_args.kwargs.get("contents", ""))
         assert "[conversation]" in str(contents)
+        assert "PRIMARY" in str(contents)
         assert result["reviews"][0]["approved"] is True
 
     def test_japanese_with_main_content(self):
-        """日本語版: main_contentありでコンテンツ種別レビュー観点が含まれる"""
-        mc = [{"content_type": "passage", "content": "説明文です。", "label": "説明"}]
+        """日本語版: main_contentありでコンテンツ種別レビュー観点・ロール基準が含まれる"""
+        mc = [{"content_type": "passage", "content": "説明文です。", "label": "説明", "role": "main"}]
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = MagicMock(
             text=self._make_review_response()
@@ -937,8 +1017,10 @@ class TestDirectorReviewMainContent:
         call_args = mock_client.models.generate_content.call_args
         config = call_args[1]["config"] if "config" in call_args[1] else call_args.kwargs["config"]
         assert "コンテンツ種別レビュー" in config.system_instruction
+        assert "★ 主要" in config.system_instruction
         contents = call_args[1].get("contents", call_args.kwargs.get("contents", ""))
         assert "[passage]" in str(contents)
+        assert "★ 主要" in str(contents)
 
     def test_no_main_content_no_extra_criteria(self):
         """main_contentなしではコンテンツ種別レビューが追加されない"""

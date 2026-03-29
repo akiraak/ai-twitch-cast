@@ -187,7 +187,7 @@ comment_reader._respond()
   ▼
 [Phase B-1: セクション構造 + dialogue_plan 生成]  ← director_sectionsがあればスキップ
   system_prompt = _build_structure_prompt()
-  入力: プランテキスト + 教材テキスト + 画像 + main_content（content_type別ルール）
+  入力: プランテキスト + 教材テキスト + 画像 + main_content（content_type別ルール + role別優先度）
   出力: 各セクションの display_text / question / answer / dialogue_plan
   → [{section_type, display_text, dialogue_plan: [{speaker, direction}], ...}]
   │
@@ -202,12 +202,13 @@ comment_reader._respond()
   │
   ▼
 [Phase B-3: 監督レビュー]  ← _director_review()
-  5つのレビュー観点で品質検証:
+  6つのレビュー観点で品質検証:
     1. display_text読み上げ網羅性（例文・会話・キーフレーズが話されているか）
     2. キャラクター一貫性（先生/生徒が役割に合った発話か）
     3. セクション間の流れ（文脈連続性・情報フロー）
     4. 正確性・網羅性（教材の要点カバー・事実誤認なし）
     5. コンテンツ種別準拠（main_contentのcontent_typeに応じた読み方）
+    6. 主要/補助の優先度（★主要は完全カバー必須、補助は部分カバー可）
   → 各セクションに approved / feedback / revised_directions
   │
   ▼
@@ -327,6 +328,10 @@ comment_reader._respond()
 - `word_list`: 先生が読み+解説、生徒が繰り返し/質問
 - `table`: 先生が行/列を説明、生徒がコメント
 
+**主要/補助の優先度**: `main_content` の各アイテムは `role` フィールド（`"main"` または `"sub"`）を持つ。`role: "main"` は教材の核となるコンテンツで必ず1つだけ存在する。
+- ★ 主要（`role: "main"`）: dialogue_planで完全カバー必須
+- 補助（`role: "sub"`）: 自然な箇所で取り入れるが優先度は低い
+
 **director_sectionsがある場合**: Phase B-1はスキップされ、監督の出力（`dialogue_directions`含む）がそのまま使われる（v3パス）。
 
 ユーザープロンプト:
@@ -371,6 +376,10 @@ system_prompt = build_lesson_dialogue_prompt(
 # 問題: {question}（questionセクションのみ）
 # 回答: {answer}（questionセクションのみ）
 
+## 前後のセクション（隣接セクション情報）
+前: {prev_section_type} — {prev_title} ({prev_display_text先頭100文字})
+次: {next_section_type} — {next_title} ({next_display_text先頭100文字})
+
 ## このターンの演出指示
 {dialogue_plan/dialogue_directionsのdirection}
 
@@ -385,6 +394,8 @@ student: {前のセリフ}
 ## 教材テキスト（参考）
 {extracted_text（先頭2000文字）}
 ```
+
+**隣接セクション情報**: `_build_adjacent_sections()` が前後セクションのタイトル・display_text・section_typeを取得し、ユーザープロンプトに含める。これにより各セリフが前後の文脈を意識した自然なつながりになる。
 
 **dialogue_plan vs dialogue_directions**: 2つの形式が並存する。
 - v2（レガシー）: `dialogue_plan: [{speaker, direction}]` — key_contentなし
@@ -408,6 +419,7 @@ student: {前のセリフ}
 3. **セクション間の流れ**: 文脈の連続性、自然な情報フロー
 4. **正確性・網羅性**: 教材の要点がカバーされているか、事実誤認がないか
 5. **コンテンツ種別準拠**（main_contentがある場合）: content_typeに応じた読み方になっているか
+6. **主要/補助の優先度**（main_contentがある場合）: ★主要（`role: "main"`）の未カバーは不合格、補助（`role: "sub"`）は部分カバーで可
 
 **出力**: 各セクションに `approved`（合格/不合格）、`feedback`（具体的な指摘）、`revised_directions`（不合格時の修正指示）を付与。
 

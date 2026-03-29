@@ -229,13 +229,20 @@ async function buildLessonItem(lessonId) {
           const ct = item.content_type || 'passage';
           const icon = typeIcons[ct] || '📄';
           const color = typeColors[ct] || '#333';
-          return `<div style="margin-bottom:8px; padding:6px 8px; border-left:3px solid ${color}; background:#fafafa; border-radius:0 4px 4px 0;">
-            <div style="font-weight:500; color:${color};">${icon} ${idx + 1}. [${esc(ct)}] ${esc(item.label || '')}</div>
+          const role = item.role || (idx === 0 ? 'main' : 'sub');
+          const isMain = role === 'main';
+          const borderWidth = isMain ? '5px' : '3px';
+          const bg = isMain ? '#fffde7' : '#fafafa';
+          const roleLabel = isMain ? ' ★' : '';
+          return `<div style="margin-bottom:8px; padding:6px 8px; border-left:${borderWidth} solid ${color}; background:${bg}; border-radius:0 4px 4px 0;${isMain ? ' box-shadow: 0 1px 3px rgba(0,0,0,0.1);' : ''}">
+            <div style="font-weight:${isMain ? '700' : '500'}; color:${color};">${icon}${roleLabel} ${idx + 1}. [${esc(ct)}] ${esc(item.label || '')}</div>
             <pre style="margin:4px 0 0; white-space:pre-wrap; word-break:break-word; font-size:0.72rem; color:#444;">${esc(item.content || '')}</pre>
           </div>`;
         }).join('');
+        const mainCount = mainContent.filter(i => (i.role || (mainContent.indexOf(i) === 0 ? 'main' : 'sub')) === 'main').length;
+        const subCount = mainContent.length - mainCount;
         step1Html += `<details style="margin-top:10px; font-size:0.8rem;">
-          <summary style="cursor:pointer; color:#7b1fa2; font-weight:500;">メインコンテンツ（${mainContent.length}件）</summary>
+          <summary style="cursor:pointer; color:#7b1fa2; font-weight:500;">コンテンツ（★主要${mainCount}件 + 補助${subCount}件）</summary>
           <div style="margin-top:6px; max-height:300px; overflow-y:auto;">${itemsHtml}</div>
         </details>`;
       }
