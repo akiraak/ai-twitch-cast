@@ -48,7 +48,7 @@ display_textは200文字で切り詰め（プロンプト肥大化防止）。
 - `section_worker()` (line 2294): `_build_adjacent_sections(structure_sections, sec_idx)` を呼んで `_generate_section_dialogues()` に渡す
 - `regen_worker()` (line 2370): 同様
 
-### Step 5: 監督 Phase A プロンプトに「つなぎ指示」を追加
+### Step 5: 監督 Phase A プロンプトに「つなぎ指示」を追加 ✅ 完了
 **ファイル**: `src/lesson_generator.py`
 
 EN版 (line 710 の後、Output format の前に挿入):

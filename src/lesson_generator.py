@@ -708,6 +708,13 @@ Each entry has:
 - "direction": Specific instruction for this turn (2-3 sentences). Include emotional tone and presentation style, not just content
 - "key_content": The specific material content this turn MUST mention (e.g. a vocabulary word, fact, or concept from the source material). Empty string if no specific content required
 
+### Section transitions (IMPORTANT)
+- For sections after the first: include a transition cue in the FIRST dialogue_direction entry that references the previous section
+  - Example: direction: "Briefly reference the greeting patterns from the previous section, then transition to informal alternatives"
+- For sections before the last: include a forward-looking cue in the LAST dialogue_direction entry
+  - Example: direction: "Wrap up and tease the next topic — casual slang expressions"
+- These cues ensure natural flow when each section's dialogue is generated independently
+
 ## Output format (JSON array)
 ```json
 [
@@ -803,6 +810,13 @@ Output ONLY the JSON array."""
 - "speaker": "teacher" または "student"
 - "direction": このターンの具体的な演出指示（2〜3文）。感情や話し方も含める
 - "key_content": このターンで必ず言及すべき教材の具体的内容（単語・事実・概念など）。特にない場合は空文字
+
+### セクション間のつなぎ（重要）
+- 最初以外のセクション: 最初の dialogue_direction に、前セクションの内容を参照するつなぎを含めること
+  - 例: direction: 「先ほどの挨拶パターンに軽く触れつつ、カジュアルな表現の説明へ移る」
+- 最後以外のセクション: 最後の dialogue_direction に、次セクションへの予告を含めること
+  - 例: direction: 「まとめた上で、次のスラング表現について軽く予告する」
+- セリフは各セクション独立で生成されるため、これらのつなぎ指示が自然な流れを作る鍵となる
 
 ## 出力形式（JSON配列）
 ```json
