@@ -6,7 +6,6 @@
 1.5. [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 - [>] メインコンテンツ読み上げ機能 Phase 2: 読み上げ導入の自然化 → [plans/main-content-read-aloud.md](plans/main-content-read-aloud.md)
-  - [ ] Step 7: `_director_review()` に導入チェック観点追加
   - [ ] Step 8: テスト追加
 
 ## 2. 実装

@@ -2165,7 +2165,13 @@ Items marked 🔊 READ ALOUD are core teaching material that characters MUST rea
 - If 🔊 content is a conversation: characters must act it out with the original lines (teacher and student split roles)
 - If 🔊 content is a passage: the teacher must read the original text aloud, then explain
 - If 🔊 content is omitted, paraphrased beyond recognition, or only briefly mentioned → mark as NOT approved
-- The original wording from 🔊 content must appear in the dialogue (verbatim or near-verbatim)"""
+- The original wording from 🔊 content must appear in the dialogue (verbatim or near-verbatim)
+
+## 🔊 Read-aloud lead-in check (CRITICAL)
+- If 🔊 content reading starts without any lead-in (no context-setting, no role assignment) → mark as NOT approved
+- The turn immediately before the first 🔊 read-aloud line should set up what is about to be read
+- For conversation: there must be a turn that introduces the conversation and assigns roles BEFORE the first line is read
+- For passage: there must be a turn that explains what text will be read BEFORE the teacher starts reading"""
 
     else:
         system_prompt = """あなたは「監督」です。キャラクターAIが生成したセリフを監修し、ダメ出しを行ってください。
@@ -2241,7 +2247,13 @@ JSONオブジェクトのみを出力してください。"""
 - conversation（会話文）の場合: 先生と生徒が原文のセリフを使って演じているか？
 - passage（文章）の場合: 先生が原文を読み上げた上で解説しているか？
 - 🔊コンテンツが省略されている、大幅に意訳されている、軽く触れただけの場合 → 不合格
-- 🔊コンテンツの原文がセリフ内にそのまま（またはほぼそのまま）含まれていること"""
+- 🔊コンテンツの原文がセリフ内にそのまま（またはほぼそのまま）含まれていること
+
+## 🔊 読み上げ導入チェック（最重要）
+- 🔊コンテンツの読み上げが導入なしに始まっている場合（文脈説明なし、役割分担なし）→ 不合格
+- 最初の🔊読み上げセリフの直前のターンで、これから何を読むか説明していること
+- conversation の場合: 最初のセリフ読み上げの前に、会話の紹介と役割分担のターンがあること
+- passage の場合: 先生が読み上げを始める前に、これからどんな文章を読むか説明するターンがあること"""
 
     # ユーザープロンプト: セクション一覧（display_text + 生成済みセリフ）
     if en:
