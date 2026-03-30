@@ -1,5 +1,11 @@
 # DONE
 
+## ドキュメントページのリロード時ファイル選択状態復元
+
+- [x] URL hashにdir+file情報を保存（`#docs:plans:filename.md` 形式）
+- [x] ページロード時にhashからdir/fileを復元しファイル内容を再表示
+- [x] ディレクトリ切替・タブ切替時もhashを適切に更新
+
 ## Docsファイルリスト表示改善
 
 - [x] APIにファイルタイトル抽出追加（1行目の`# Title`）

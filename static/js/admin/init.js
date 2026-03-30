@@ -1,12 +1,28 @@
 // 初期化・WebSocket接続
 
 const _initHash = location.hash.slice(1);
-const [_initTab, _initParam] = _initHash.split(':');
+const _initColonIdx = _initHash.indexOf(':');
+const _initTab = _initColonIdx === -1 ? _initHash : _initHash.substring(0, _initColonIdx);
+const _initParam = _initColonIdx === -1 ? '' : _initHash.substring(_initColonIdx + 1);
 if (_initTab === 'chat' && _initParam) {
   const pg = Math.max(1, parseInt(_initParam) || 1);
   _chatOffset = (pg - 1) * _chatLimit;
 }
+if (_initTab === 'docs' && _initParam) {
+  const colonIdx = _initParam.indexOf(':');
+  if (colonIdx === -1) {
+    _docsCurrentDir = _initParam;
+  } else {
+    _docsCurrentDir = _initParam.substring(0, colonIdx);
+    _docsCurrentFile = _initParam.substring(colonIdx + 1);
+  }
+  document.getElementById('docs-dir-plans').classList.toggle('active', _docsCurrentDir === 'plans');
+  document.getElementById('docs-dir-docs').classList.toggle('active', _docsCurrentDir === 'docs');
+}
 { if (TAB_NAMES.includes(_initTab)) switchTab(_initTab);
+}
+if (_initTab === 'docs' && _docsCurrentFile) {
+  selectDocFile(_docsCurrentFile);
 }
 
 // スキーマ取得後に共通コントロールを注入（スキーマAPIベース）

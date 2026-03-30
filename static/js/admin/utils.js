@@ -22,11 +22,19 @@ function switchTab(name, el) {
     const pg = Math.floor(_chatOffset / _chatLimit) + 1;
     location.hash = pg > 1 ? `chat:${pg}` : 'chat';
     loadChatHistory();
+  } else if (name === 'docs') {
+    if (_docsCurrentFile) {
+      location.hash = `docs:${_docsCurrentDir}:${_docsCurrentFile}`;
+    } else if (_docsCurrentDir !== 'plans') {
+      location.hash = `docs:${_docsCurrentDir}`;
+    } else {
+      location.hash = 'docs';
+    }
+    loadDocFiles();
   } else {
     location.hash = name;
   }
   if (name === 'db') loadDbTables();
-  if (name === 'docs') loadDocFiles();
   if (name === 'character') { loadLanguageModes(); loadCharacterLayers(); loadSpeechSettings(); }
   if (name === 'sound') loadBgmTracks();
   if (name === 'todo') loadTodoList();

@@ -6,6 +6,7 @@ let _docsFiles = [];
 function switchDocsDir(dir) {
   _docsCurrentDir = dir;
   _docsCurrentFile = '';
+  location.hash = `docs:${dir}`;
   document.getElementById('docs-dir-plans').classList.toggle('active', dir === 'plans');
   document.getElementById('docs-dir-docs').classList.toggle('active', dir === 'docs');
   loadDocFiles();
@@ -94,6 +95,7 @@ function renderDocFileBtn(f) {
 
 async function selectDocFile(name) {
   _docsCurrentFile = name;
+  location.hash = `docs:${_docsCurrentDir}:${name}`;
   loadDocFiles();
   const fileInfo = _docsFiles.find(f => f.name === name);
   const displayName = fileInfo?.title || name;
