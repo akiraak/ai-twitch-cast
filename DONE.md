@@ -6,6 +6,9 @@
 - [x] Step 2: avatarスキーマに `bodyAngle` スライダー追加
 - [x] Step 3: `_OVERLAY_DEFAULTS` に `bodyAngle` デフォルト値追加
 - [x] Step 4: `AvatarInstance` にsetBodyAngle() + 見回しgaze system追加
+- [x] Step 5: `applySettings()` でbodyAngle適用（settings.js）
+- [x] Step 6: 設定パネルのスライダー即時反映（settings-panel.js）
+- [x] プラン完了（全6 Step）
 
 ## speech-generation-flow.md 同期
 

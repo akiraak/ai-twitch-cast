@@ -64,6 +64,9 @@ function applySettings(s) {
     applyCommonStyle(avatarArea1, s.avatar1);
     if (s.avatar1.width != null) avatarArea1.style.width = s.avatar1.width + '%';
     if (s.avatar1.height != null) avatarArea1.style.height = s.avatar1.height + '%';
+    if (s.avatar1.bodyAngle != null) {
+      window.avatarInstances?.['teacher']?.setBodyAngle(s.avatar1.bodyAngle);
+    }
     if (window.dispatchEvent) window.dispatchEvent(new Event('resize'));
   }
   // === avatar2（生徒） ===
@@ -72,6 +75,9 @@ function applySettings(s) {
     applyCommonStyle(avatarArea2, s.avatar2);
     if (s.avatar2.width != null) avatarArea2.style.width = s.avatar2.width + '%';
     if (s.avatar2.height != null) avatarArea2.style.height = s.avatar2.height + '%';
+    if (s.avatar2.bodyAngle != null) {
+      window.avatarInstances?.['student']?.setBodyAngle(s.avatar2.bodyAngle);
+    }
   }
   // === lighting（アバター個別 or 共通） ===
   if (s.lighting_teacher) {

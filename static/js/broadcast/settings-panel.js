@@ -213,6 +213,11 @@ function _scheduleSpSave(key, value) {
         }
       }
     }
+    // bodyAngle即時反映
+    if ((_spItemId === 'avatar1' || _spItemId === 'avatar2') && key === 'bodyAngle') {
+      const id = _spItemId === 'avatar1' ? 'teacher' : 'student';
+      window.avatarInstances?.[id]?.setBodyAngle(value);
+    }
   }
   clearTimeout(_spSaveTimer);
   _spSaveTimer = setTimeout(async () => {
