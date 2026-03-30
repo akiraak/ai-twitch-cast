@@ -22,7 +22,7 @@ from src.lesson_generator import (
     generate_lesson_script_v2,
     get_lesson_characters,
 )
-from src.lesson_runner import LESSON_AUDIO_DIR, _cache_path, _dlg_cache_path, clear_tts_cache, get_tts_cache_info
+from src.lesson_runner import _cache_path, _dlg_cache_path, clear_tts_cache, get_tts_cache_info
 from src.prompt_builder import get_stream_language, set_stream_language
 from src.speech_pipeline import SpeechPipeline
 from src.tts import synthesize

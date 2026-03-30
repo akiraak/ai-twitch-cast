@@ -12,13 +12,7 @@
   - [ ] Step 5: フロントエンド変更（ジェネレータタブ・インポートUI・再生時generator指定）
 
 ## 実装
-- [ ] リファクタリング → [plans/refactoring-2026-03-30.md](plans/refactoring-2026-03-30.md)
-  - Phase 1: ✅ lesson_generator.py の分割完了（→ 8ファイルのパッケージ）
-  - Phase 2: ✅ db.py の分割完了（→ 4ファイルのパッケージ）
-  - Phase 3: ✅ ai_responder.py のキャラクター管理分離完了（→ character_manager.py）
-  - Phase 4: ✅ overlay.py の TODO 操作ロジック抽出完了（→ todo_service.py）
-  - [ ] Phase 5: 未使用 import の削除
-    - [ ] `scripts/routes/teacher.py` の `LESSON_AUDIO_DIR` 削除
+- ✅ リファクタリング完了 → [plans/refactoring-2026-03-30.md](plans/refactoring-2026-03-30.md)
 
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)

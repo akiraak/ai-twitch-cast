@@ -56,6 +56,11 @@
 - [x] テストのパッチ先を `scripts.services.todo_service` に更新
 - [x] 全725テスト通過確認
 
+## リファクタリング Phase 5: 未使用 import の削除
+
+- [x] `scripts/routes/teacher.py` の `LESSON_AUDIO_DIR` import 削除
+- [x] 全725テスト通過確認
+
 ## ドキュメントページのリロード時ファイル選択状態復元
 
 - [x] URL hashにdir+file情報を保存（`#docs:plans:filename.md` 形式）
