@@ -129,13 +129,40 @@ function _renderFieldControl(section, field) {
   }
 }
 
-function _injectCommonProps(el, section) {
+async function _injectCommonProps(el, section) {
   const body = el.querySelector('.panel-body');
   if (!body) return;
   const skipAttr = el.dataset.skipGroups;
   const skipGroups = skipAttr ? skipAttr.split(',').map(s => s.trim()) : [];
   body.insertAdjacentHTML('afterbegin', _commonPropsHTML(section, skipGroups));
-  // 固有パラメータがあればグループヘッダーを追加
+
+  // 固有スキーマも取得して注入
+  try {
+    const res = await fetch(`/api/items/schema?item_id=${encodeURIComponent(section)}`);
+    const schema = await res.json();
+    const commonKeys = new Set();
+    if (_commonSchema?.groups) {
+      for (const g of _commonSchema.groups) for (const f of g.fields) commonKeys.add(f.key);
+    }
+    const specificGroups = (schema.groups || []).filter(g =>
+      g.fields.some(f => !commonKeys.has(f.key))
+    );
+    if (specificGroups.length > 0) {
+      const row = (label, b) => `<div class="layout-row common-row"><span class="layout-label">${label}</span>${b}</div>`;
+      const groupHdr = (title) => `<div style="font-size:0.7rem; color:#e67e22; font-weight:600; margin:10px 0 4px; padding:2px 6px; background:rgba(230,126,34,0.06); border-radius:3px; border-left:2px solid #e67e22;">${title}</div>`;
+      let html = '';
+      for (const g of specificGroups) {
+        html += groupHdr(g.title);
+        for (const f of g.fields) {
+          if (commonKeys.has(f.key)) continue;
+          html += row(f.label, _renderFieldControl(section, f));
+        }
+      }
+      body.insertAdjacentHTML('beforeend', html);
+    }
+  } catch (e) {}
+
+  // 既存の固有パラメータ（HTMLに直書き）があればグループヘッダーを追加
   const specificRows = body.querySelectorAll('.layout-row:not(.common-row)');
   if (specificRows.length > 0) {
     specificRows[0].insertAdjacentHTML('beforebegin',
@@ -154,10 +181,12 @@ function _initToggles(container) {
   });
 }
 
-function initCommonProps() {
+async function initCommonProps() {
+  const promises = [];
   document.querySelectorAll('.panel-item[data-section]').forEach(el => {
-    _injectCommonProps(el, el.dataset.section);
+    promises.push(_injectCommonProps(el, el.dataset.section));
   });
+  await Promise.all(promises);
   _initToggles(document);
 }
 

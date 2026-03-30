@@ -284,7 +284,7 @@ class AvatarInstance {
 
       // bodyAngle再適用
       if (this._bodyAngle !== 0) {
-        vrm.scene.rotation.y = this._bodyAngle * Math.PI / 180;
+        vrm.scene.rotation.y = Math.PI + this._bodyAngle * Math.PI / 180;
       }
 
       console.log('VRM読み込み完了:', url);
@@ -321,7 +321,7 @@ class AvatarInstance {
   setBodyAngle(deg) {
     this._bodyAngle = deg;
     if (this.currentVRM) {
-      this.currentVRM.scene.rotation.y = deg * Math.PI / 180;
+      this.currentVRM.scene.rotation.y = Math.PI + deg * Math.PI / 180;
     }
   }
 
@@ -636,6 +636,16 @@ async function initAvatar() {
       ? '/resources/vrm/' + studentVrm
       : vrmUrl;
     await student.loadVRM(studentVrmUrl);
+  }
+
+  // VRMロード完了後、保存済み設定からbodyAngleを再適用
+  // (init.jsのapplySettingsはmodule前に実行されるため、ここで再適用が必要)
+  const saved = window._savedOverlaySettings || {};
+  if (saved.avatar1?.bodyAngle != null) {
+    teacherAvatar.setBodyAngle(saved.avatar1.bodyAngle);
+  }
+  if (saved.avatar2?.bodyAngle != null && student) {
+    student.setBodyAngle(saved.avatar2.bodyAngle);
   }
 }
 initAvatar();

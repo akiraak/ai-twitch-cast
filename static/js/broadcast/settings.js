@@ -52,12 +52,14 @@ function _applyLighting(lighting, avatarId) {
   });
 }
 
-// === 保存済み設定（表示時の再適用用） ===
+// === 保存済み設定（表示時の再適用用、avatar-renderer.jsからも参照） ===
 let _savedOverlaySettings = {};
+window._savedOverlaySettings = _savedOverlaySettings;
 
 // === 設定適用（%/vw単位） ===
 function applySettings(s) {
   _savedOverlaySettings = { ..._savedOverlaySettings, ...s };
+  window._savedOverlaySettings = _savedOverlaySettings;
   // === avatar1（先生） ===
   const avatarArea1 = document.getElementById('avatar-area-1');
   if (s.avatar1) {

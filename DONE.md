@@ -9,6 +9,11 @@
 - [x] Step 5: `applySettings()` でbodyAngle適用（settings.js）
 - [x] Step 6: 設定パネルのスライダー即時反映（settings-panel.js）
 - [x] プラン完了（全6 Step）
+- [x] bodyAngle回転バグ修正: Math.PIベースに加算（VRMの正面方向を考慮）
+- [x] 管理画面に固有スキーマ注入（layout.js: _injectCommonProps async化）
+- [x] VRMロード後のbodyAngle再適用（module実行順序問題の修正）
+- [x] _savedOverlaySettingsをwindowに公開
+- [x] 待機モーションパラメータ調整UIプラン作成
 
 ## speech-generation-flow.md 同期
 
