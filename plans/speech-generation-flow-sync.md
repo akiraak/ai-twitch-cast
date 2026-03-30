@@ -44,7 +44,7 @@ speech-generation-flow.md に対して以下を反映する:
 - Phase A の前に「テキスト抽出 → クリーニング → メインコンテンツ識別」のステップを追記
 - `clean_extracted_text()` と `extract_main_content()` → `_normalize_roles()` のフローを図示
 
-### 2. Phase B-1 セクションに追記
+### 2. Phase B-1 セクションに追記 ✅
 - `_format_main_content_for_prompt()` の上限ルール（2000文字/200文字）
 - 🔊マーカーの意味と条件
 

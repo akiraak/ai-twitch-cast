@@ -3,6 +3,7 @@
 ## speech-generation-flow.md 同期
 
 - [x] Step 1: 授業フロー図にテキスト抽出→クリーニング→メインコンテンツ識別ステップを追記
+- [x] Step 2: Phase B-1 に `_format_main_content_for_prompt()` の上限ルール（2000文字/200文字）・🔊マーカー条件を追記
 
 ## メインコンテンツ読み上げ機能
 
