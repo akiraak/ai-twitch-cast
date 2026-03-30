@@ -137,8 +137,8 @@ comment_reader._respond()
        → Gemini LLM → [{speaker, speech, tts_text, emotion, translation, se}, ...]
   │
   ▼
-感情適用: apply_emotion(emotion, avatar_id, character_config)  ← パイプライン外
-  │
+感情適用: apply_emotion(emotion, gesture=None, avatar_id, character_config)  ← パイプライン外
+  │       gestureが未指定の場合、EMOTION_GESTURESから自動マッピング
   ▼
 各発話ごとに:
   speech_pipeline.speak(
@@ -592,8 +592,8 @@ comment_reader.speak_event(event_type, detail, voice=None, style=None, avatar_id
        → [{speaker, speech, tts_text, emotion, translation}, ...]
   │
   ▼
-感情適用: apply_emotion(emotion, avatar_id, character_config)  ← パイプライン外
-  │
+感情適用: apply_emotion(emotion, gesture=None, avatar_id, character_config)  ← パイプライン外
+  │       gestureが未指定の場合、EMOTION_GESTURESから自動マッピング
   ▼
 speech_pipeline.speak(text, voice, style, avatar_id, subtitle, chat_result, tts_text, post_to_chat)
   │
@@ -672,6 +672,19 @@ speech_pipeline.speak(text, voice, style, subtitle, chat_result, tts_text,
 ```
 
 **感情BlendShapeの適用**: `apply_emotion()` は `speak()` の呼び出し元（comment_reader / lesson_runner）が `speak()` の前後で個別に呼び出す。speak前に感情適用 → speak → speak後にneutralリセット、のパターン。
+
+**ジェスチャー連動**: `apply_emotion()` は `gesture` パラメータを受け取る（省略可）。未指定の場合、`EMOTION_GESTURES` マッピングから感情に対応するジェスチャーが自動選択される:
+
+| emotion | gesture |
+|---------|---------|
+| joy | nod |
+| surprise | surprise |
+| thinking | head_tilt |
+| excited | happy_bounce |
+| sad | sad_droop |
+| grateful | bow |
+
+ジェスチャーが決定された場合、BlendShapeイベントに `gesture` フィールドが追加されて broadcast.html に送信される。
 
 **speaking_endイベント**: `notify_overlay_end()` で `"speaking_end"` イベントが送信される。これも呼び出し元がspeak後に呼び出す。
 

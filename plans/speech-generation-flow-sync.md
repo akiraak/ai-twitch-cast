@@ -61,7 +61,7 @@ speech-generation-flow.md に対して以下を反映する:
 ### 6. キャラクター設定テーブルを修正 ✅
 - なるこの `tts_voice` を Kore に修正（B2）
 
-### 7. apply_emotion セクションに追記
+### 7. apply_emotion セクションに追記 ✅
 - gesture パラメータと EMOTION_GESTURES マッピングの説明（A4）
 
 ### 8. 環境変数一覧を追加（オプション）
