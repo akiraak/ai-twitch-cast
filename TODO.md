@@ -16,10 +16,7 @@
   - Phase 1: ✅ lesson_generator.py の分割完了（→ 8ファイルのパッケージ）
   - Phase 2: ✅ db.py の分割完了（→ 4ファイルのパッケージ）
   - Phase 3: ✅ ai_responder.py のキャラクター管理分離完了（→ character_manager.py）
-  - [ ] Phase 4: overlay.py の TODO 操作ロジック抽出（861行）
-    - [ ] `scripts/services/todo_service.py` に TodoManager 抽出
-    - [ ] overlay.py のルートハンドラを薄くする
-    - [ ] テスト実行
+  - Phase 4: ✅ overlay.py の TODO 操作ロジック抽出完了（→ todo_service.py）
   - [ ] Phase 5: 未使用 import の削除
     - [ ] `scripts/routes/teacher.py` の `LESSON_AUDIO_DIR` 削除
 

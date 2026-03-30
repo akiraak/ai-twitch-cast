@@ -3,14 +3,13 @@
 import asyncio
 import json as _json_mod
 import logging
-import re
-import secrets
 from pathlib import Path
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from scripts import state
+from scripts.services import todo_service
 from src import db
 from src.scene_config import load_config_value, load_config_json
 
@@ -19,70 +18,15 @@ logger = logging.getLogger(__name__)
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = PROJECT_DIR / "static"
-TODO_PATH = PROJECT_DIR / "TODO.md"
 
 # TODO.mdファイル監視用
 _todo_last_mtime: float = 0.0
 _todo_watch_task: asyncio.Task | None = None
 
 
-def _get_todo_active():
-    """現在のアクティブTODO IDを返す ("project" or UUID)"""
-    return db.get_setting("todo.active", "project")
-
-
-def _get_todo_files():
-    """DB保存済みTODOファイル一覧を返す [{id, name, path}]"""
-    raw = db.get_setting("todo.files", "[]")
-    try:
-        return _json_mod.loads(raw)
-    except (ValueError, TypeError):
-        return []
-
-
-def _set_todo_files(files: list):
-    db.set_setting("todo.files", _json_mod.dumps(files, ensure_ascii=False))
-
-
-def _get_in_progress(file_id: str) -> list[str]:
-    raw = db.get_setting(f"todo.ip.{file_id}", "[]")
-    try:
-        return _json_mod.loads(raw)
-    except (ValueError, TypeError):
-        return []
-
-
-def _set_in_progress(file_id: str, items: list[str]):
-    db.set_setting(f"todo.ip.{file_id}", _json_mod.dumps(items, ensure_ascii=False))
-
-
-def _parse_todo_text(text: str, in_progress_override: list[str] | None = None):
-    """TODOテキストをパースしてアイテムリストを返す"""
-    items = []
-    current_section = ""
-    for line in text.splitlines():
-        m_section = re.match(r"\s*##\s+(.*)", line)
-        if m_section:
-            current_section = m_section.group(1).strip()
-            continue
-        m = re.match(r"\s*-\s*\[\s*\]\s*(.*)", line)
-        if m:
-            task_text = m.group(1).strip()
-            status = "in_progress" if in_progress_override is not None and task_text in in_progress_override else "todo"
-            items.append({"text": task_text, "status": status, "section": current_section})
-            continue
-        m = re.match(r"\s*-\s*\[>\]\s*(.*)", line)
-        if m:
-            items.append({"text": m.group(1).strip(), "status": "in_progress", "section": current_section})
-    # 作業中タスクを「作業中」セクションとして先頭に表示
-    in_progress = [{"text": i["text"], "status": i["status"], "section": "作業中"} for i in items if i["status"] == "in_progress"]
-    others = [i for i in items if i["status"] != "in_progress"]
-    return in_progress + others
-
-
 async def broadcast_todo():
     """TODOを読み込み、todo_updateイベントをブロードキャストする"""
-    todo_data = await get_todo()
+    todo_data = todo_service.get_items()
     event = {"type": "todo_update", "items": todo_data["items"]}
     await state.broadcast_overlay(event)
 
@@ -90,15 +34,15 @@ async def broadcast_todo():
 async def _watch_todo_file():
     """TODO.mdのmtimeを監視し、変更があればブロードキャストする（projectソースのみ）"""
     global _todo_last_mtime
-    todo_path = TODO_PATH
+    todo_path = todo_service.TODO_PATH
     if todo_path.exists():
         _todo_last_mtime = todo_path.stat().st_mtime
     while True:
         await asyncio.sleep(2)
         try:
-            if _get_todo_active() != "project":
+            if todo_service.get_active_source() != "project":
                 continue
-            todo_path = TODO_PATH
+            todo_path = todo_service.TODO_PATH
             if not todo_path.exists():
                 continue
             mtime = todo_path.stat().st_mtime
@@ -510,19 +454,7 @@ async def get_overlay_settings():
 @router.get("/api/todo")
 async def get_todo():
     """TODOから未完了タスクを返す（プロジェクトファイル or DB保存ファイル）"""
-    active = _get_todo_active()
-    if active != "project":
-        content = db.get_setting(f"todo.file.{active}.content", "")
-        if not content:
-            return {"items": []}
-        ip_list = _get_in_progress(active)
-        return {"items": _parse_todo_text(content, in_progress_override=ip_list)}
-    # project source
-    todo_path = TODO_PATH
-    if not todo_path.exists():
-        return {"items": []}
-    text = todo_path.read_text(encoding="utf-8")
-    return {"items": _parse_todo_text(text)}
+    return todo_service.get_items()
 
 
 @router.post("/api/todo/start")
@@ -533,32 +465,9 @@ async def start_todo(request: Request):
     if not task_text:
         return {"ok": False, "error": "タスクが見つかりません"}
 
-    active = _get_todo_active()
-    if active != "project":
-        # DB管理: リストに追加
-        ip_list = _get_in_progress(active)
-        if task_text not in ip_list:
-            ip_list.append(task_text)
-        _set_in_progress(active, ip_list)
-    else:
-        # ファイル書き戻し
-        todo_path = TODO_PATH
-        if not todo_path.exists():
-            return {"ok": False, "error": "タスクが見つかりません"}
-        text = todo_path.read_text(encoding="utf-8")
-        lines = text.splitlines()
-        found = False
-        new_lines = []
-        for line in lines:
-            m_todo = re.match(r"(\s*-\s*)\[\s*\](\s*)(.*)", line)
-            if m_todo and m_todo.group(3).strip() == task_text:
-                new_lines.append(f"{m_todo.group(1)}[>]{m_todo.group(2)}{m_todo.group(3)}")
-                found = True
-                continue
-            new_lines.append(line)
-        if not found:
-            return {"ok": False, "error": "タスクが見つかりません"}
-        todo_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    ok, error = todo_service.start_task(task_text)
+    if not ok:
+        return {"ok": False, "error": error}
 
     await state.broadcast_overlay({"type": "current_task", "task": task_text})
     await broadcast_todo()
@@ -577,30 +486,9 @@ async def stop_todo(request: Request):
     if not task_text:
         return {"ok": False, "error": "タスクが見つかりません"}
 
-    active = _get_todo_active()
-    if active != "project":
-        ip_list = _get_in_progress(active)
-        if task_text not in ip_list:
-            return {"ok": False, "error": "タスクが見つかりません"}
-        _set_in_progress(active, [t for t in ip_list if t != task_text])
-    else:
-        todo_path = TODO_PATH
-        if not todo_path.exists():
-            return {"ok": False, "error": "タスクが見つかりません"}
-        text = todo_path.read_text(encoding="utf-8")
-        lines = text.splitlines()
-        found = False
-        new_lines = []
-        for line in lines:
-            m = re.match(r"(\s*-\s*)\[>\](\s*)(.*)", line)
-            if m and m.group(3).strip() == task_text:
-                new_lines.append(f"{m.group(1)}[ ]{m.group(2)}{m.group(3)}")
-                found = True
-                continue
-            new_lines.append(line)
-        if not found:
-            return {"ok": False, "error": "タスクが見つかりません"}
-        todo_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    ok, error = todo_service.stop_task(task_text)
+    if not ok:
+        return {"ok": False, "error": error}
 
     await broadcast_todo()
     return {"ok": True}
@@ -609,32 +497,18 @@ async def stop_todo(request: Request):
 @router.get("/api/todo/files")
 async def list_todo_files():
     """保存済みTODOファイル一覧+アクティブIDを返す"""
-    files = _get_todo_files()
-    active = _get_todo_active()
-    return {"files": files, "active": active, "project_dir": str(PROJECT_DIR)}
+    return {
+        "files": todo_service.get_files(),
+        "active": todo_service.get_active_source(),
+        "project_dir": str(PROJECT_DIR),
+    }
 
 
 @router.post("/api/todo/upload")
 async def upload_todo(request: Request):
     """外部TODO.mdをアップロードしてDBに保存し、アクティブにする"""
     body = await request.json()
-    content = body.get("content", "")
-    name = body.get("name", "TODO.md")
-
-    # 同名ファイルがあれば更新、なければ新規追加
-    files = _get_todo_files()
-    file_id = None
-    for f in files:
-        if f["name"] == name:
-            file_id = f["id"]
-            break
-    if file_id is None:
-        file_id = secrets.token_hex(6)
-        files.append({"id": file_id, "name": name})
-
-    _set_todo_files(files)
-    db.set_setting(f"todo.file.{file_id}.content", content)
-    db.set_setting("todo.active", file_id)
+    file_id = todo_service.upload_file(body.get("content", ""), body.get("name", "TODO.md"))
     await broadcast_todo()
     return {"ok": True, "id": file_id}
 
@@ -643,12 +517,9 @@ async def upload_todo(request: Request):
 async def switch_todo(request: Request):
     """アクティブTODOファイルを切り替える"""
     body = await request.json()
-    file_id = body.get("id", "project")
-    if file_id != "project":
-        files = _get_todo_files()
-        if not any(f["id"] == file_id for f in files):
-            return {"ok": False, "error": "ファイルが見つかりません"}
-    db.set_setting("todo.active", file_id)
+    ok, error = todo_service.switch_source(body.get("id", "project"))
+    if not ok:
+        return {"ok": False, "error": error}
     await broadcast_todo()
     return {"ok": True}
 
@@ -656,17 +527,9 @@ async def switch_todo(request: Request):
 @router.delete("/api/todo/files/{file_id}")
 async def delete_todo_file(file_id: str):
     """保存済みTODOファイルを削除する"""
-    files = _get_todo_files()
-    new_files = [f for f in files if f["id"] != file_id]
-    if len(new_files) == len(files):
-        return {"ok": False, "error": "ファイルが見つかりません"}
-    _set_todo_files(new_files)
-    # コンテンツとin_progressも削除
-    db.set_setting(f"todo.file.{file_id}.content", "")
-    db.set_setting(f"todo.ip.{file_id}", "[]")
-    # アクティブだったらprojectに戻す
-    if _get_todo_active() == file_id:
-        db.set_setting("todo.active", "project")
+    ok, error = todo_service.delete_file(file_id)
+    if not ok:
+        return {"ok": False, "error": error}
     await broadcast_todo()
     return {"ok": True}
 

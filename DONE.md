@@ -42,6 +42,20 @@
 - [x] 未使用 `from pathlib import Path` 削除
 - [x] 全725テスト通過確認
 
+## リファクタリング Phase 4: overlay.py TODO操作ロジック抽出
+
+- [x] `scripts/services/todo_service.py` 新規作成 — TODO操作ロジック
+  - `get_active_source()`, `get_files()` — TODOソース管理
+  - `get_in_progress()`, `set_in_progress()` — 作業中状態の読み書き
+  - `parse_todo_text()` — TODOテキストパース
+  - `get_items()` — プロジェクトファイル or DB からアイテム取得
+  - `start_task()`, `stop_task()` — タスクの開始/停止（ファイル書き戻し含む）
+  - `upload_file()`, `switch_source()`, `delete_file()` — ファイル管理
+- [x] `overlay.py` のルートハンドラを薄くした（todo_service への委譲のみ）
+- [x] 不要な import（`re`, `secrets`）を削除
+- [x] テストのパッチ先を `scripts.services.todo_service` に更新
+- [x] 全725テスト通過確認
+
 ## ドキュメントページのリロード時ファイル選択状態復元
 
 - [x] URL hashにdir+file情報を保存（`#docs:plans:filename.md` 形式）
