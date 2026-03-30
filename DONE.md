@@ -1,5 +1,9 @@
 # DONE
 
+## アバター体の向き設定＋見回しモーション
+
+- [x] Step 1: `_get_item_type` バグ修正（avatar1/avatar2 → "avatar" マッピング）
+
 ## speech-generation-flow.md 同期
 
 - [x] Step 1: 授業フロー図にテキスト抽出→クリーニング→メインコンテンツ識別ステップを追記

@@ -149,7 +149,9 @@ def _get_item_type(item_id: str) -> str:
         return "capture"
     if item_id.startswith("child:"):
         return "child_text"
-    return item_id  # avatar, subtitle, todo
+    if item_id.startswith("avatar"):
+        return "avatar"
+    return item_id  # subtitle, todo
 
 
 @router.get("/api/items/schema")
