@@ -79,7 +79,7 @@
 | `rules` | 応答ルール（日本語） | 1文40字以内、2文まで | 先生より短めに |
 | `rules_en` | 英語版ルール | Max one ! per sentence | Keep it shorter than teacher |
 | `rules_bilingual` | バイリンガル版ルール | 日英を自然に混ぜる | 日英を自然に混ぜる |
-| `tts_voice` | TTS音声名 | Despina | Aoede |
+| `tts_voice` | TTS音声名 | Despina | Kore |
 | `tts_style` | TTS読み上げスタイル（日本語） | にこにこ柔らかトーン | テンション高めハキハキ |
 | `tts_style_en` | 英語版TTSスタイル | Warm, cheerful tone | Energetic, upbeat tone |
 | `tts_style_bilingual` | バイリンガル版TTSスタイル | 日英を自然に切り替えて | 日英を自然に切り替えて |
@@ -556,7 +556,7 @@ Phase B-3: 監督レビュー
 Phase C: TTS事前生成（4回）
   [0] voice=Despina style=にこにこ柔らか → section_00_dlg_00.wav
   [1] voice=Despina style=にこにこ柔らか → section_00_dlg_01.wav
-  [2] voice=Aoede  style=少年テンション高め → section_00_dlg_02.wav
+  [2] voice=Kore   style=少年テンション高め → section_00_dlg_02.wav
   [3] voice=Despina style=にこにこ柔らか → section_00_dlg_03.wav
 ```
 

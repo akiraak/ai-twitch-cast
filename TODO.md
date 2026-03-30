@@ -10,7 +10,7 @@
 ## 2. 実装
 - [ ] リファクタリング
 - [ ] speech-generation-flow.md をコード実装と同期 → [plans/speech-generation-flow-sync.md](plans/speech-generation-flow-sync.md)
-  - [ ] Step 6: キャラクター設定テーブルのなるこ `tts_voice` を Kore に修正
+
   - [ ] Step 7: 共通再生パイプラインの `apply_emotion()` に gesture 対応を追記
   - [ ] Step 8: 環境変数のフォールバックチェーン説明を追加
 

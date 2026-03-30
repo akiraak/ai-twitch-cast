@@ -58,7 +58,7 @@ speech-generation-flow.md に対して以下を反映する:
 ### 5. イベント応答セクションを修正 ✅
 - `generate_multi_event_response()` の戻り値から `se` を削除（B1）
 
-### 6. キャラクター設定テーブルを修正
+### 6. キャラクター設定テーブルを修正 ✅
 - なるこの `tts_voice` を Kore に修正（B2）
 
 ### 7. apply_emotion セクションに追記
