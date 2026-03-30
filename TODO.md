@@ -9,9 +9,6 @@
 
 ## 2. 実装
 - [ ] リファクタリング
-- [ ] speech-generation-flow.md をコード実装と同期 → [plans/speech-generation-flow-sync.md](plans/speech-generation-flow-sync.md)
-
-  - [ ] Step 8: 環境変数のフォールバックチェーン説明を追加
 
 ## 3. バグ
 3.1. [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)

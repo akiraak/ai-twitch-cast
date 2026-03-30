@@ -9,6 +9,8 @@
 - [x] Step 5: イベント応答の `generate_multi_event_response()` 戻り値から `se` を削除
 - [x] Step 6: キャラクター設定テーブルのなるこ `tts_voice` を Aoede → Kore に修正
 - [x] Step 7: `apply_emotion()` に gesture パラメータと EMOTION_GESTURES マッピングの説明を追記
+- [x] Step 8: 環境変数一覧セクション追加（全6モデル環境変数のフォールバックチェーン・用途・使用箇所）
+- [x] プラン完了（全8 Step）
 
 ## メインコンテンツ読み上げ機能
 

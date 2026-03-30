@@ -723,3 +723,20 @@ speech_pipeline.speak(text, voice, style, subtitle, chat_result, tts_text,
 - `generate_lesson_script()` — 教材テキストからの直接一括生成
 
 いずれも1回のLLM呼び出しで全セリフを生成するため、キャラの個性反映度は低い（★★★☆☆）。
+
+## 環境変数一覧（モデル選択）
+
+各LLM呼び出しで使用するモデルは環境変数で切替可能。すべて多段フォールバックチェーンを持つ。
+
+| 環境変数 | 用途 | フォールバックチェーン | 使用箇所 |
+|---------|------|----------------------|---------|
+| `GEMINI_CHAT_MODEL` | チャット・イベント応答・ユーザーメモ生成 | → `gemini-3-flash-preview` | `ai_responder.py`（全生成関数）、`avatar.py`（デモ会話） |
+| `GEMINI_TTS_MODEL` | TTS音声合成 | → `gemini-2.5-flash-preview-tts` | `tts.py`（`generate_audio`） |
+| `GEMINI_DIALOGUE_MODEL` | 授業セリフ個別生成（Phase B-2） | → `GEMINI_CHAT_MODEL` → `gemini-3-flash-preview` | `lesson_generator.py`（`_get_dialogue_model`） |
+| `GEMINI_KNOWLEDGE_MODEL` | 授業 知識エキスパート（Phase A） | → `GEMINI_CHAT_MODEL` → `gemini-3-flash-preview` | `lesson_generator.py`（`_get_knowledge_model`） |
+| `GEMINI_ENTERTAINMENT_MODEL` | 授業 エンタメエキスパート（Phase A） | → `GEMINI_CHAT_MODEL` → `gemini-3-flash-preview` | `lesson_generator.py`（`_get_entertainment_model`） |
+| `GEMINI_DIRECTOR_MODEL` | 授業 監督（Phase A/B-3） | → `GEMINI_CHAT_MODEL` → `gemini-3.1-pro-preview` | `lesson_generator.py`（`_get_director_model`）、`content_analyzer.py`（`_get_director_model`） |
+
+**フォールバックの読み方**: `→` は「未設定なら次を参照」を意味する。例えば `GEMINI_DIALOGUE_MODEL` が未設定の場合、`GEMINI_CHAT_MODEL` を参照し、それも未設定なら `gemini-3-flash-preview` を使用する。
+
+**設計意図**: `GEMINI_CHAT_MODEL` を設定するだけで大半のモデルが切り替わる。個別のモデルを変えたい場合（例: 監督だけProモデルにする）のみ専用環境変数を設定する。
