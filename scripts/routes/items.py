@@ -72,6 +72,16 @@ _ITEM_SPECIFIC_SCHEMA = {
             {"key": "scale", "label": "スケール", "type": "slider", "min": 0.1, "max": 3, "step": 0.05, "default": 1.0},
             {"key": "bodyAngle", "label": "体の向き (°)", "type": "slider", "min": -45, "max": 45, "step": 1, "default": 0},
         ]},
+        {"title": "待機モーション", "fields": [
+            {"key": "idleScale", "label": "動きの大きさ", "type": "slider", "min": 0, "max": 2, "step": 0.05, "default": 1.0},
+            {"key": "breathScale", "label": "呼吸の大きさ", "type": "slider", "min": 0, "max": 3, "step": 0.1, "default": 1.0},
+            {"key": "swayScale", "label": "体の揺れ", "type": "slider", "min": 0, "max": 3, "step": 0.1, "default": 1.0},
+            {"key": "headScale", "label": "頭の動き", "type": "slider", "min": 0, "max": 3, "step": 0.1, "default": 1.0},
+            {"key": "gazeRange", "label": "見回し範囲", "type": "slider", "min": 0, "max": 3, "step": 0.1, "default": 1.0},
+            {"key": "armAngle", "label": "腕の角度 (°)", "type": "slider", "min": 30, "max": 90, "step": 1, "default": 70},
+            {"key": "armScale", "label": "腕の揺れ", "type": "slider", "min": 0, "max": 3, "step": 0.1, "default": 1.0},
+            {"key": "earFreq", "label": "耳ぴくぴく頻度", "type": "slider", "min": 0, "max": 3, "step": 0.1, "default": 1.0},
+        ]},
     ],
     "subtitle": [
         {"title": "固有設定", "fields": [

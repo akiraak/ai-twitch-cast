@@ -14,6 +14,7 @@
 - [x] VRMロード後のbodyAngle再適用（module実行順序問題の修正）
 - [x] _savedOverlaySettingsをwindowに公開
 - [x] 待機モーションパラメータ調整UIプラン作成
+- [x] Step 1: avatarスキーマに待機モーションスライダー追加（8パラメータ）
 
 ## speech-generation-flow.md 同期
 

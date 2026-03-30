@@ -7,7 +7,6 @@
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 
 - [ ] 待機モーションパラメータ調整UI → [plans/avatar-idle-params.md](plans/avatar-idle-params.md)
-  - [ ] Step 1: avatarスキーマに待機モーションスライダー追加
   - [ ] Step 2: AvatarInstanceにパラメータ変数＋setter追加
   - [ ] Step 3: animate()でパラメータを参照
   - [ ] Step 4: applySettings()で待機パラメータ適用
