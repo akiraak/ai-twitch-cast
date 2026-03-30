@@ -382,11 +382,12 @@ _OVERLAY_DEFAULTS = {
     "avatar1": _make_item_defaults({
         "positionX": 46.5, "positionY": 24.3, "width": 53.5, "height": 75.7,
         "zIndex": 5, "bgOpacity": 0, "borderRadius": 0, "padding": 0,
+        "bodyAngle": 0,
     }),
     "avatar2": _make_item_defaults({
         "positionX": 0, "positionY": 30, "width": 40, "height": 70,
         "zIndex": 4, "bgOpacity": 0, "borderRadius": 0, "borderSize": 0,
-        "padding": 0, "backdropBlur": 0,
+        "padding": 0, "backdropBlur": 0, "bodyAngle": 0,
     }),
     "lighting": {
         "brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0,

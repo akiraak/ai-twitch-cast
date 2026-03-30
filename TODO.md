@@ -7,7 +7,6 @@
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 - [ ] メインコンテンツ読み上げ機能 Phase 2: 手動テストで読み上げ前に導入ターン（文脈説明・役割分担）が含まれることを確認
 - [ ] アバターの体の向き設定＋自然な見回しモーション → [plans/avatar-body-angle-gaze.md](plans/avatar-body-angle-gaze.md)
-  - [ ] Step 3: `_OVERLAY_DEFAULTS` に `bodyAngle` デフォルト値追加
   - [ ] Step 4: `AvatarInstance` にsetBodyAngle() + 見回しgaze system追加
   - [ ] Step 5: `applySettings()` でbodyAngle適用
   - [ ] Step 6: 設定パネルのスライダー即時反映
