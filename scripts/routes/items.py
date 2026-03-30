@@ -70,6 +70,7 @@ _ITEM_SPECIFIC_SCHEMA = {
     "avatar": [
         {"title": "固有設定", "fields": [
             {"key": "scale", "label": "スケール", "type": "slider", "min": 0.1, "max": 3, "step": 0.05, "default": 1.0},
+            {"key": "bodyAngle", "label": "体の向き (°)", "type": "slider", "min": -45, "max": 45, "step": 1, "default": 0},
         ]},
     ],
     "subtitle": [

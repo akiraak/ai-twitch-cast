@@ -3,6 +3,7 @@
 ## アバター体の向き設定＋見回しモーション
 
 - [x] Step 1: `_get_item_type` バグ修正（avatar1/avatar2 → "avatar" マッピング）
+- [x] Step 2: avatarスキーマに `bodyAngle` スライダー追加
 
 ## speech-generation-flow.md 同期
 
