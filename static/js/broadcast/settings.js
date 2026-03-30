@@ -69,6 +69,14 @@ function applySettings(s) {
     if (s.avatar1.bodyAngle != null) {
       window.avatarInstances?.['teacher']?.setBodyAngle(s.avatar1.bodyAngle);
     }
+    const idleKeys1 = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
+    const idleParams1 = {};
+    for (const k of idleKeys1) {
+      if (s.avatar1[k] != null) idleParams1[k] = s.avatar1[k];
+    }
+    if (Object.keys(idleParams1).length > 0) {
+      window.avatarInstances?.['teacher']?.setIdleParams(idleParams1);
+    }
     if (window.dispatchEvent) window.dispatchEvent(new Event('resize'));
   }
   // === avatar2（生徒） ===
@@ -79,6 +87,14 @@ function applySettings(s) {
     if (s.avatar2.height != null) avatarArea2.style.height = s.avatar2.height + '%';
     if (s.avatar2.bodyAngle != null) {
       window.avatarInstances?.['student']?.setBodyAngle(s.avatar2.bodyAngle);
+    }
+    const idleKeys2 = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
+    const idleParams2 = {};
+    for (const k of idleKeys2) {
+      if (s.avatar2[k] != null) idleParams2[k] = s.avatar2[k];
+    }
+    if (Object.keys(idleParams2).length > 0) {
+      window.avatarInstances?.['student']?.setIdleParams(idleParams2);
     }
   }
   // === lighting（アバター個別 or 共通） ===
