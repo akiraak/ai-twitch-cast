@@ -10,7 +10,6 @@
 ## 2. 実装
 - [ ] リファクタリング
 - [ ] speech-generation-flow.md をコード実装と同期 → [plans/speech-generation-flow-sync.md](plans/speech-generation-flow-sync.md)
-  - [ ] Step 3: Phase B-2 に `GEMINI_DIALOGUE_MODEL` 環境変数を追記
   - [ ] Step 4: Phase B-3 レビュー観点を6→8に更新（🔊読み上げ網羅性 + 導入チェック追加）
   - [ ] Step 5: イベント応答の `generate_multi_event_response()` 戻り値から `se` を削除
   - [ ] Step 6: キャラクター設定テーブルのなるこ `tts_voice` を Kore に修正

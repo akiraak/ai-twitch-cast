@@ -48,7 +48,7 @@ speech-generation-flow.md に対して以下を反映する:
 - `_format_main_content_for_prompt()` の上限ルール（2000文字/200文字）
 - 🔊マーカーの意味と条件
 
-### 3. Phase B-2 セクションに追記
+### 3. Phase B-2 セクションに追記 ✅
 - `GEMINI_DIALOGUE_MODEL` 環境変数の説明
 
 ### 4. Phase B-3 セクションを更新

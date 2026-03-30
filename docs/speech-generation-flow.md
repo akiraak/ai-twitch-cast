@@ -220,6 +220,7 @@ comment_reader._respond()
   │
   ▼
 [Phase B-2: セリフ個別生成]  ← dialogue_plan/dialogue_directions の各エントリごとにLLM呼び出し
+  モデル: GEMINI_DIALOGUE_MODEL（→ GEMINI_CHAT_MODEL → gemini-3-flash-preview）
   セクション間は最大3並列（ThreadPoolExecutor、generate_lesson_script_v2内）
   セクション内は順次処理（会話履歴を蓄積するため）
   各セリフ: _generate_single_dialogue()
@@ -395,6 +396,8 @@ comment_reader._respond()
 #### Phase B-2: セリフ個別生成の詳細
 
 `_generate_single_dialogue()` で各セリフを生成。`build_lesson_dialogue_prompt()`（`src/prompt_builder.py`）でシステムプロンプトを構築し、言語モードに応じて全セクションが適切な言語で生成される。
+
+**モデル**: `GEMINI_DIALOGUE_MODEL` 環境変数（フォールバック: `GEMINI_CHAT_MODEL` → `gemini-3-flash-preview`）。`_get_dialogue_model()` で取得。
 
 ```python
 system_prompt = build_lesson_dialogue_prompt(
