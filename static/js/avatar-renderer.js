@@ -223,6 +223,15 @@ class AvatarInstance {
     // --- ジェスチャー表情 ---
     this.gestureExprState = null;
     this.gestureShapes = {};
+
+    // --- 体の向き + 見回し ---
+    this._bodyAngle = 0;
+    this._gazeTargetY = 0;
+    this._gazeCurrentY = 0;
+    this._gazeTargetX = 0;
+    this._gazeCurrentX = 0;
+    this._gazeNextChange = performance.now() / 1000 + 3 + Math.random() * 5;
+    this._gazeHoldUntil = 0;
   }
 
   _resizeRenderer() {
@@ -273,6 +282,11 @@ class AvatarInstance {
         console.log('VRM expressions available:', names);
       }
 
+      // bodyAngle再適用
+      if (this._bodyAngle !== 0) {
+        vrm.scene.rotation.y = this._bodyAngle * Math.PI / 180;
+      }
+
       console.log('VRM読み込み完了:', url);
       this.t0 = performance.now() / 1000;
     } catch (e) {
@@ -303,6 +317,13 @@ class AvatarInstance {
   stopLipsync() { this.lipsyncFrames = null; this.pendingLipsyncFrames = null; }
 
   setIdleScale(s) { this.idleScale = s; }
+
+  setBodyAngle(deg) {
+    this._bodyAngle = deg;
+    if (this.currentVRM) {
+      this.currentVRM.scene.rotation.y = deg * Math.PI / 180;
+    }
+  }
 
   playGesture(name) {
     if (!this.currentVRM) return;
@@ -384,10 +405,20 @@ class AvatarInstance {
       const sway = (Math.sin(t * 0.9) * 1.0 + Math.sin(t * 0.37) * 0.4) * s;
       setBoneRotation(this.currentVRM, 'spine', quatFromAxisAngle(0, 0, 1, sway));
 
+      // --- 見回し (gaze) ---
+      if (now >= this._gazeNextChange && now >= this._gazeHoldUntil) {
+        this._gazeTargetY = (Math.random() - 0.5) * 12;  // ±6°
+        this._gazeTargetX = (Math.random() - 0.5) * 6;   // ±3°
+        this._gazeHoldUntil = now + 2 + Math.random() * 4;
+        this._gazeNextChange = this._gazeHoldUntil + 3 + Math.random() * 10;
+      }
+      this._gazeCurrentY += (this._gazeTargetY - this._gazeCurrentY) * Math.min(1, delta * 2);
+      this._gazeCurrentX += (this._gazeTargetX - this._gazeCurrentX) * Math.min(1, delta * 2);
+
       // --- 頭の動き ---
-      const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s;
+      const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s + this._gazeCurrentX;
       const headZ = (Math.sin(t * 0.5) * 1.6 + Math.sin(t * 1.1) * 0.6) * s;
-      const headY = Math.sin(t * 0.4) * 1.2 * s;
+      const headY = Math.sin(t * 0.4) * 1.2 * s + this._gazeCurrentY;
       const qHead = quatFromAxisAngle(1, 0, 0, headX)
         .multiply(quatFromAxisAngle(0, 1, 0, headY))
         .multiply(quatFromAxisAngle(0, 0, 1, headZ));
@@ -507,6 +538,7 @@ window.avatarVRM = {
   startLipsync()         { teacherAvatar.startLipsync(); },
   stopLipsync()          { teacherAvatar.stopLipsync(); },
   setIdleScale(s)        { teacherAvatar.idleScale = s; },
+  setBodyAngle(deg)      { teacherAvatar.setBodyAngle(deg); },
   playGesture(name)      { teacherAvatar.playGesture(name); },
   debugExpressions()     { teacherAvatar.debugExpressions(); },
 };
