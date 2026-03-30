@@ -5,9 +5,15 @@
 - [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 - [ ] 教材やセリフの生成をGeminiとClaude Codeで選択可能にする → [plans/claude-code-lesson-generator.md](plans/claude-code-lesson-generator.md)
+  - [ ] Step 1: DBマイグレーション — `generator` カラム追加
+  - [ ] Step 2: `prompts/lesson_generate.md` ワークフロー定義
+  - [ ] Step 3: APIエンドポイント追加・修正（import-sections API + 既存API修正）
+  - [ ] Step 4: LessonRunner修正（generator パラメータ + キャッシュパス）
+  - [ ] Step 5: フロントエンド変更（ジェネレータタブ・インポートUI・再生時generator指定）
 
 ## 実装
 - [ ] リファクタリング
+- [ ] 管理画面のドキュメントファイルページで、ドキュメントを開いた状態でリロードすると「ファイルを選択してください」の表示になってしまう
 
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
