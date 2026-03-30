@@ -589,7 +589,7 @@ comment_reader.speak_event(event_type, detail, voice=None, style=None, avatar_id
   │
   └─ マルチ: generate_multi_event_response(event_type, detail, characters, last_event_responses)
        先生約70%単独、約30%両者
-       → [{speaker, speech, tts_text, emotion, translation, se}, ...]
+       → [{speaker, speech, tts_text, emotion, translation}, ...]
   │
   ▼
 感情適用: apply_emotion(emotion, avatar_id, character_config)  ← パイプライン外

@@ -6,6 +6,7 @@
 - [x] Step 2: Phase B-1 に `_format_main_content_for_prompt()` の上限ルール（2000文字/200文字）・🔊マーカー条件を追記
 - [x] Step 3: Phase B-2 に `GEMINI_DIALOGUE_MODEL` 環境変数（フォールバックチェーン含む）を追記
 - [x] Step 4: Phase B-3 レビュー観点を6→8に更新（🔊読み上げ網羅性 + 🔊導入チェック追加）
+- [x] Step 5: イベント応答の `generate_multi_event_response()` 戻り値から `se` を削除
 
 ## メインコンテンツ読み上げ機能
 
