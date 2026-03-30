@@ -233,6 +233,7 @@ class AvatarInstance {
 
     // --- 体の向き + 見回し ---
     this._bodyAngle = 0;
+    this._headTilt = 0;
     this._gazeTargetY = 0;
     this._gazeCurrentY = 0;
     this._gazeTargetX = 0;
@@ -330,6 +331,10 @@ class AvatarInstance {
     if (this.currentVRM) {
       this.currentVRM.scene.rotation.y = Math.PI + deg * Math.PI / 180;
     }
+  }
+
+  setHeadTilt(deg) {
+    this._headTilt = deg;
   }
 
   setIdleParams(params) {
@@ -434,7 +439,7 @@ class AvatarInstance {
       this._gazeCurrentX += (this._gazeTargetX - this._gazeCurrentX) * Math.min(1, delta * 2);
 
       // --- 頭の動き ---
-      const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s * this.headScale + this._gazeCurrentX;
+      const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s * this.headScale + this._gazeCurrentX + this._headTilt;
       const headZ = (Math.sin(t * 0.5) * 1.6 + Math.sin(t * 1.1) * 0.6) * s * this.headScale;
       const headY = Math.sin(t * 0.4) * 1.2 * s * this.headScale + this._gazeCurrentY;
       const qHead = quatFromAxisAngle(1, 0, 0, headX)
@@ -665,6 +670,12 @@ async function initAvatar() {
   }
   if (saved.avatar2?.bodyAngle != null && student) {
     student.setBodyAngle(saved.avatar2.bodyAngle);
+  }
+  if (saved.avatar1?.headTilt != null) {
+    teacherAvatar.setHeadTilt(saved.avatar1.headTilt);
+  }
+  if (saved.avatar2?.headTilt != null && student) {
+    student.setHeadTilt(saved.avatar2.headTilt);
   }
 
   // VRMロード完了後、保存済み待機モーションパラメータを再適用

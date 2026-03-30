@@ -218,6 +218,11 @@ function _scheduleSpSave(key, value) {
       const id = _spItemId === 'avatar1' ? 'teacher' : 'student';
       window.avatarInstances?.[id]?.setBodyAngle(value);
     }
+    // headTilt即時反映
+    if ((_spItemId === 'avatar1' || _spItemId === 'avatar2') && key === 'headTilt') {
+      const id = _spItemId === 'avatar1' ? 'teacher' : 'student';
+      window.avatarInstances?.[id]?.setHeadTilt(value);
+    }
     // 待機モーションパラメータ即時反映
     const _idleKeys = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
     if ((_spItemId === 'avatar1' || _spItemId === 'avatar2') && _idleKeys.includes(key)) {

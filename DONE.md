@@ -20,6 +20,7 @@
 - [x] Step 4: applySettings()でavatar1/avatar2の待機パラメータをsetIdleParams()で適用
 - [x] Step 5: 設定パネルのスライダー操作で待機モーションパラメータ即時反映（settings-panel.js）
 - [x] Step 6: VRMロード後に保存済み待機モーションパラメータを再適用（avatar-renderer.js initAvatar）
+- [x] 顔の上下（headTilt）設定追加 — 固有設定にスライダー（-30°〜+30°）、即時反映・DB保存・VRMロード後再適用
 
 ## speech-generation-flow.md 同期
 

@@ -69,6 +69,9 @@ function applySettings(s) {
     if (s.avatar1.bodyAngle != null) {
       window.avatarInstances?.['teacher']?.setBodyAngle(s.avatar1.bodyAngle);
     }
+    if (s.avatar1.headTilt != null) {
+      window.avatarInstances?.['teacher']?.setHeadTilt(s.avatar1.headTilt);
+    }
     const idleKeys1 = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
     const idleParams1 = {};
     for (const k of idleKeys1) {
@@ -87,6 +90,9 @@ function applySettings(s) {
     if (s.avatar2.height != null) avatarArea2.style.height = s.avatar2.height + '%';
     if (s.avatar2.bodyAngle != null) {
       window.avatarInstances?.['student']?.setBodyAngle(s.avatar2.bodyAngle);
+    }
+    if (s.avatar2.headTilt != null) {
+      window.avatarInstances?.['student']?.setHeadTilt(s.avatar2.headTilt);
     }
     const idleKeys2 = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
     const idleParams2 = {};
