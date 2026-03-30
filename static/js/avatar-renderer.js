@@ -416,17 +416,17 @@ class AvatarInstance {
       }
 
       // --- 呼吸 (~4秒周期) ---
-      const breath = Math.sin(t * 1.6) * 0.8 * s;
+      const breath = Math.sin(t * 1.6) * 0.8 * s * this.breathScale;
       setBoneRotation(this.currentVRM, 'chest', quatFromAxisAngle(1, 0, 0, breath));
 
       // --- 体の揺れ (~7秒周期) ---
-      const sway = (Math.sin(t * 0.9) * 1.0 + Math.sin(t * 0.37) * 0.4) * s;
+      const sway = (Math.sin(t * 0.9) * 1.0 + Math.sin(t * 0.37) * 0.4) * s * this.swayScale;
       setBoneRotation(this.currentVRM, 'spine', quatFromAxisAngle(0, 0, 1, sway));
 
       // --- 見回し (gaze) ---
       if (now >= this._gazeNextChange && now >= this._gazeHoldUntil) {
-        this._gazeTargetY = (Math.random() - 0.5) * 12;  // ±6°
-        this._gazeTargetX = (Math.random() - 0.5) * 6;   // ±3°
+        this._gazeTargetY = (Math.random() - 0.5) * 12 * this.gazeRange;  // ±6° * gazeRange
+        this._gazeTargetX = (Math.random() - 0.5) * 6 * this.gazeRange;   // ±3° * gazeRange
         this._gazeHoldUntil = now + 2 + Math.random() * 4;
         this._gazeNextChange = this._gazeHoldUntil + 3 + Math.random() * 10;
       }
@@ -434,23 +434,24 @@ class AvatarInstance {
       this._gazeCurrentX += (this._gazeTargetX - this._gazeCurrentX) * Math.min(1, delta * 2);
 
       // --- 頭の動き ---
-      const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s + this._gazeCurrentX;
-      const headZ = (Math.sin(t * 0.5) * 1.6 + Math.sin(t * 1.1) * 0.6) * s;
-      const headY = Math.sin(t * 0.4) * 1.2 * s + this._gazeCurrentY;
+      const headX = (Math.sin(t * 0.7) * 1.2 + Math.sin(t * 1.3) * 0.6) * s * this.headScale + this._gazeCurrentX;
+      const headZ = (Math.sin(t * 0.5) * 1.6 + Math.sin(t * 1.1) * 0.6) * s * this.headScale;
+      const headY = Math.sin(t * 0.4) * 1.2 * s * this.headScale + this._gazeCurrentY;
       const qHead = quatFromAxisAngle(1, 0, 0, headX)
         .multiply(quatFromAxisAngle(0, 1, 0, headY))
         .multiply(quatFromAxisAngle(0, 0, 1, headZ));
       setBoneRotation(this.currentVRM, 'head', qHead);
 
       // --- 腕の揺れ ---
-      const rArmSway = Math.sin(t * 0.6 + 1.0) * 0.8 * s;
-      const lArmSway = Math.sin(t * 0.6 + 2.5) * 0.8 * s;
-      setBoneRotation(this.currentVRM, 'rightUpperArm', quatFromAxisAngle(0, 0, 1, -70 + rArmSway));
-      setBoneRotation(this.currentVRM, 'leftUpperArm', quatFromAxisAngle(0, 0, 1, 70 + lArmSway));
+      const aa = this.armAngle;
+      const rArmSway = Math.sin(t * 0.6 + 1.0) * 0.8 * s * this.armScale;
+      const lArmSway = Math.sin(t * 0.6 + 2.5) * 0.8 * s * this.armScale;
+      setBoneRotation(this.currentVRM, 'rightUpperArm', quatFromAxisAngle(0, 0, 1, -aa + rArmSway));
+      setBoneRotation(this.currentVRM, 'leftUpperArm', quatFromAxisAngle(0, 0, 1, aa + lArmSway));
 
       // --- 前腕 ---
-      const rFore = 20 + Math.sin(t * 0.8 + 0.5) * 0.6 * s;
-      const lFore = -20 + Math.sin(t * 0.8 + 2.0) * 0.6 * s;
+      const rFore = 20 + Math.sin(t * 0.8 + 0.5) * 0.6 * s * this.armScale;
+      const lFore = -20 + Math.sin(t * 0.8 + 2.0) * 0.6 * s * this.armScale;
       setBoneRotation(this.currentVRM, 'rightLowerArm', quatFromAxisAngle(0, 1, 0, rFore));
       setBoneRotation(this.currentVRM, 'leftLowerArm', quatFromAxisAngle(0, 1, 0, lFore));
     }
@@ -472,8 +473,8 @@ class AvatarInstance {
         }
       }
 
-      // 耳ぴくぴく（カスタムBlendShape）
-      if (now >= this.nextEarTwitch && now >= this.earTwitchEnd) {
+      // 耳ぴくぴく（カスタムBlendShape、earFreq=0で無効）
+      if (this.earFreq > 0 && now >= this.nextEarTwitch && now >= this.earTwitchEnd) {
         this.earTwitchShake = Math.random() < 0.15;
         if (this.earTwitchShake) {
           this.earTwitchDuration = 0.3 + Math.random() * 0.3;
@@ -484,7 +485,7 @@ class AvatarInstance {
         }
         this.earTwitchEnd = now + this.earTwitchDuration;
         this.earTwitchStart = now;
-        this.nextEarTwitch = now + 3 + Math.random() * 7;
+        this.nextEarTwitch = now + (3 + Math.random() * 7) / this.earFreq;
       }
       try {
         if (now < this.earTwitchEnd) {

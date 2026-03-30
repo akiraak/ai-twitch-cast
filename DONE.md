@@ -16,6 +16,7 @@
 - [x] 待機モーションパラメータ調整UIプラン作成
 - [x] Step 1: avatarスキーマに待機モーションスライダー追加（8パラメータ）
 - [x] Step 2: AvatarInstanceにパラメータ変数（7種）＋setIdleParams() setter追加
+- [x] Step 3: animate()でハードコード値をインスタンス変数に置換（breathScale/swayScale/gazeRange/headScale/armAngle/armScale/earFreq）
 
 ## speech-generation-flow.md 同期
 
