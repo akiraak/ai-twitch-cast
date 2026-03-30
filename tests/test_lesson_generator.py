@@ -331,7 +331,7 @@ class TestGenerateSingleDialogue:
         })
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator._get_dialogue_model", return_value="test-model"):
+        with patch("src.lesson_generator.utils._get_dialogue_model", return_value="test-model"):
             result = _generate_single_dialogue(
                 client=mock_client,
                 character_config=TEACHER_CFG,
@@ -365,7 +365,7 @@ class TestGenerateSingleDialogue:
         })
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator._get_dialogue_model", return_value="test-model"):
+        with patch("src.lesson_generator.utils._get_dialogue_model", return_value="test-model"):
             result = _generate_single_dialogue(
                 client=mock_client,
                 character_config=STUDENT_CFG,
@@ -390,7 +390,7 @@ class TestGenerateSingleDialogue:
         mock_response.text = '{"content":"test","tts_text":"test","emotion":"neutral"}'
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator._get_model", return_value="m"):
+        with patch("src.lesson_generator.utils._get_model", return_value="m"):
             result = _generate_single_dialogue(
                 client=mock_client,
                 character_config=STUDENT_CFG,
@@ -435,7 +435,7 @@ class TestGenerateSectionDialogues:
             ],
         }
 
-        with patch("src.lesson_generator._get_model", return_value="m"):
+        with patch("src.lesson_generator.utils._get_model", return_value="m"):
             dialogues = _generate_section_dialogues(
                 client=mock_client,
                 teacher_config=TEACHER_CFG,
@@ -486,7 +486,7 @@ class TestGenerateSectionDialogues:
             ],
         }
 
-        with patch("src.lesson_generator._get_model", return_value="m"):
+        with patch("src.lesson_generator.utils._get_model", return_value="m"):
             _generate_section_dialogues(
                 client=mock_client,
                 teacher_config=TEACHER_CFG,
@@ -560,7 +560,7 @@ class TestDialogueDirectionsCompat:
             ],
         }
 
-        with patch("src.lesson_generator._get_model", return_value="m"):
+        with patch("src.lesson_generator.utils._get_model", return_value="m"):
             dialogues = _generate_section_dialogues(
                 client=mock_client,
                 teacher_config=TEACHER_CFG,
@@ -594,7 +594,7 @@ class TestDialogueDirectionsCompat:
             ],
         }
 
-        with patch("src.lesson_generator._get_model", return_value="m"):
+        with patch("src.lesson_generator.utils._get_model", return_value="m"):
             dialogues = _generate_section_dialogues(
                 client=mock_client,
                 teacher_config=TEACHER_CFG,
@@ -623,7 +623,7 @@ class TestDialogueDirectionsCompat:
             ],
         }
 
-        with patch("src.lesson_generator._get_model", return_value="m"):
+        with patch("src.lesson_generator.utils._get_model", return_value="m"):
             dialogues = _generate_section_dialogues(
                 client=mock_client,
                 teacher_config=TEACHER_CFG,
@@ -654,7 +654,7 @@ class TestDialogueDirectionsCompat:
             ],
         }
 
-        with patch("src.lesson_generator._get_model", return_value="m"):
+        with patch("src.lesson_generator.utils._get_model", return_value="m"):
             dialogues = _generate_section_dialogues(
                 client=mock_client,
                 teacher_config=TEACHER_CFG,
@@ -683,7 +683,7 @@ class TestDialogueDirectionsCompat:
             ],
         }
 
-        with patch("src.lesson_generator._get_model", return_value="m"):
+        with patch("src.lesson_generator.utils._get_model", return_value="m"):
             dialogues = _generate_section_dialogues(
                 client=mock_client,
                 teacher_config=TEACHER_CFG,
@@ -852,7 +852,7 @@ class TestExtractMainContent:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator.get_client", return_value=mock_client):
+        with patch("src.lesson_generator.utils.get_client", return_value=mock_client):
             result = extract_main_content("Some text")
 
         assert len(result) == 2
@@ -870,7 +870,7 @@ class TestExtractMainContent:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator.get_client", return_value=mock_client):
+        with patch("src.lesson_generator.utils.get_client", return_value=mock_client):
             result = extract_main_content("Some text")
 
         assert len(result) == 1
@@ -884,8 +884,8 @@ class TestExtractMainContent:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator.get_client", return_value=mock_client), \
-             patch("src.lesson_generator._parse_json_response", side_effect=Exception("parse error")):
+        with patch("src.lesson_generator.utils.get_client", return_value=mock_client), \
+             patch("src.lesson_generator.utils._parse_json_response", side_effect=Exception("parse error")):
             result = extract_main_content("Some text")
 
         assert result == []
@@ -897,7 +897,7 @@ class TestExtractMainContent:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator.get_client", return_value=mock_client):
+        with patch("src.lesson_generator.utils.get_client", return_value=mock_client):
             extract_main_content("教材テキストの内容")
 
         call_args = mock_client.models.generate_content.call_args
@@ -1086,10 +1086,10 @@ class TestGenerateLessonScriptV2ReturnFormat:
         async def _fake_analyze_full(*args, **kwargs):
             return mock_analysis
 
-        with patch("src.lesson_generator.get_client", return_value=mock_client), \
-             patch("src.lesson_generator._get_model", return_value="test-model"), \
-             patch("src.lesson_generator._get_dialogue_model", return_value="test-model"), \
-             patch("src.lesson_generator.analyze_content_full", side_effect=_fake_analyze_full) as mock_acf:
+        with patch("src.lesson_generator.utils.get_client", return_value=mock_client), \
+             patch("src.lesson_generator.utils._get_model", return_value="test-model"), \
+             patch("src.lesson_generator.utils._get_dialogue_model", return_value="test-model"), \
+             patch("src.lesson_generator.v2.analyze_content_full", side_effect=_fake_analyze_full) as mock_acf:
             result = generate_lesson_script_v2(
                 "テスト授業", "テスト教材",
                 teacher_config=TEACHER_CFG,
@@ -1198,7 +1198,7 @@ class TestAdjacentSectionsInPrompt:
 
     def _call_with_adjacent(self, en, adjacent_sections):
         mock_client = self._make_mock_client()
-        with patch("src.lesson_generator._get_dialogue_model", return_value="test-model"):
+        with patch("src.lesson_generator.utils._get_dialogue_model", return_value="test-model"):
             result = _generate_single_dialogue(
                 client=mock_client,
                 character_config=TEACHER_CFG,
@@ -1331,7 +1331,7 @@ class TestExtractMainContentReadAloud:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator.get_client", return_value=mock_client):
+        with patch("src.lesson_generator.utils.get_client", return_value=mock_client):
             result = extract_main_content("Some text")
 
         assert result[0]["read_aloud"] is True
@@ -1347,7 +1347,7 @@ class TestExtractMainContentReadAloud:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("src.lesson_generator.get_client", return_value=mock_client):
+        with patch("src.lesson_generator.utils.get_client", return_value=mock_client):
             result = extract_main_content("Some text")
 
         assert "read_aloud" in result[0]

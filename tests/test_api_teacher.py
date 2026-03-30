@@ -219,7 +219,7 @@ class TestLessonSources:
             MagicMock(text=mc_json),             # メインコンテンツ識別
         ]
 
-        with patch("src.lesson_generator.httpx.AsyncClient") as mock_http:
+        with patch("src.lesson_generator.extractor.httpx.AsyncClient") as mock_http:
             mock_resp = AsyncMock()
             mock_resp.text = "<html><body>A: Hi B: Hello</body></html>"
             mock_resp.raise_for_status = MagicMock()

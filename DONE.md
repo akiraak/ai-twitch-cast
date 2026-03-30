@@ -1,5 +1,21 @@
 # DONE
 
+## リファクタリング Phase 1: lesson_generator.py パッケージ化
+
+- [x] `src/lesson_generator.py`（2,666行）を `src/lesson_generator/` パッケージに分割
+  - `utils.py` — モデル選択、JSONパース、画像/コンテンツ整形
+  - `extractor.py` — テキスト抽出・前処理・画像/URL解析
+  - `dialogue.py` — キャラクター取得、プロンプト構築、セリフ個別生成
+  - `structure.py` — セクション構造設計プロンプト構築
+  - `director.py` — ディレクター評価（セリフレビュー）
+  - `planner.py` — 三者視点プラン生成
+  - `script.py` — スクリプト生成（v1 + from_plan）
+  - `v2.py` — v2パイプライン（構造→セリフ→レビュー→再生成）
+  - `__init__.py` — 全公開関数 + 内部関数の re-export（import互換維持）
+- [x] 未使用 import `base64` を削除
+- [x] `conftest.py` の `mock_gemini` を submodule 対応に更新
+- [x] 全725テスト通過確認
+
 ## ドキュメントページのリロード時ファイル選択状態復元
 
 - [x] URL hashにdir+file情報を保存（`#docs:plans:filename.md` 形式）
