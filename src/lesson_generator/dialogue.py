@@ -17,9 +17,9 @@ def get_lesson_characters() -> dict:
         {"teacher": config_dict or None, "student": config_dict or None}
     """
     from src import db
-    from src.ai_responder import _get_channel_id, seed_all_characters
+    from src.character_manager import get_channel_id, seed_all_characters
 
-    channel_id = _get_channel_id()
+    channel_id = get_channel_id()
     seed_all_characters(channel_id)
 
     teacher_row = db.get_character_by_role(channel_id, "teacher")

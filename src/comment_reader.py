@@ -530,8 +530,8 @@ class CommentReader:
         if not self._characters or not self._characters.get("student"):
             return None
         student_cfg = self._characters["student"]
-        from src.ai_responder import _get_channel_id
-        row = db.get_character_by_role(_get_channel_id(), "student")
+        from src.character_manager import get_channel_id
+        row = db.get_character_by_role(get_channel_id(), "student")
         if not row:
             return None
         return {"id": row["id"], "config": student_cfg}

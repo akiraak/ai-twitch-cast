@@ -609,7 +609,7 @@ def _migrate_characters_unique_name(conn):
 
 def _migrate_characters_tts_defaults(conn):
     """characters.config に tts_voice/tts_style がなければデフォルト値を補完する（冪等）"""
-    from src.ai_responder import DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER
+    from src.character_manager import DEFAULT_CHARACTER, DEFAULT_STUDENT_CHARACTER
 
     defaults_by_role = {
         "teacher": {

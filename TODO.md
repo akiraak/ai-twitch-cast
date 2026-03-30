@@ -15,19 +15,12 @@
 - [ ] リファクタリング → [plans/refactoring-2026-03-30.md](plans/refactoring-2026-03-30.md)
   - Phase 1: ✅ lesson_generator.py の分割完了（→ 8ファイルのパッケージ）
   - Phase 2: ✅ db.py の分割完了（→ 4ファイルのパッケージ）
-  - [ ] Phase 3: ai_responder.py のキャラクター管理分離（1,149行→2ファイル）
-    - [ ] テスト実行（ベースライン確認）
-    - [ ] `src/character_manager.py` 作成、キャラクター関連11関数を移動
-    - [ ] `ai_responder.py` で re-export（import互換維持）
-    - [ ] `_get_channel_id()` → `get_channel_id()` に公開化
-    - [ ] multi/single コンテキスト構築の重複解消
-    - [ ] テスト実行
+  - Phase 3: ✅ ai_responder.py のキャラクター管理分離完了（→ character_manager.py）
   - [ ] Phase 4: overlay.py の TODO 操作ロジック抽出（861行）
     - [ ] `scripts/services/todo_service.py` に TodoManager 抽出
     - [ ] overlay.py のルートハンドラを薄くする
     - [ ] テスト実行
   - [ ] Phase 5: 未使用 import の削除
-    - [ ] `src/ai_responder.py` の `Path` 削除
     - [ ] `scripts/routes/teacher.py` の `LESSON_AUDIO_DIR` 削除
 
 ## バグ

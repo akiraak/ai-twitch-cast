@@ -26,6 +26,22 @@
 - [x] `conftest.py` の `mock_gemini` を submodule 対応に更新
 - [x] 全725テスト通過確認
 
+## リファクタリング Phase 3: ai_responder.py キャラクター管理分離
+
+- [x] `src/character_manager.py` 新規作成 — キャラクターライフサイクル管理（12関数+定数+キャッシュ）
+  - `get_channel_id()` — `_get_channel_id()` を公開化
+  - `seed_character()`, `seed_all_characters()` — DB初期化
+  - `build_character_context()`, `build_all_character_contexts()` — コンテキスト構築
+  - `load_character()`, `get_character()`, `get_character_id()` — キャッシュ付きキャラ取得
+  - `get_all_characters()`, `get_chat_characters()`, `get_tts_config()` — 各種取得
+  - `invalidate_character_cache()` — キャッシュ無効化
+  - `DEFAULT_CHARACTER`, `DEFAULT_STUDENT_CHARACTER` — デフォルト定数
+- [x] `ai_responder.py` を応答生成に集中（re-export で import 互換維持）
+- [x] `_build_comment_context()` + `_build_timeline_contents()` でmulti/singleコンテキスト構築の重複解消
+- [x] 外部呼び出し元（comment_reader, lesson_generator/dialogue, db/core）を `character_manager` に直接import
+- [x] 未使用 `from pathlib import Path` 削除
+- [x] 全725テスト通過確認
+
 ## ドキュメントページのリロード時ファイル選択状態復元
 
 - [x] URL hashにdir+file情報を保存（`#docs:plans:filename.md` 形式）
