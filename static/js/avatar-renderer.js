@@ -193,6 +193,13 @@ class AvatarInstance {
     this.mixer = null;
     this.currentGestureAction = null;
     this.idleScale = 1.0;
+    this.breathScale = 1.0;
+    this.swayScale = 1.0;
+    this.headScale = 1.0;
+    this.gazeRange = 1.0;
+    this.armAngle = 70;
+    this.armScale = 1.0;
+    this.earFreq = 1.0;
     this.t0 = performance.now() / 1000;
     this.clock = new THREE.Clock();
 
@@ -323,6 +330,17 @@ class AvatarInstance {
     if (this.currentVRM) {
       this.currentVRM.scene.rotation.y = Math.PI + deg * Math.PI / 180;
     }
+  }
+
+  setIdleParams(params) {
+    if (params.idleScale != null) this.idleScale = params.idleScale;
+    if (params.breathScale != null) this.breathScale = params.breathScale;
+    if (params.swayScale != null) this.swayScale = params.swayScale;
+    if (params.headScale != null) this.headScale = params.headScale;
+    if (params.gazeRange != null) this.gazeRange = params.gazeRange;
+    if (params.armAngle != null) this.armAngle = params.armAngle;
+    if (params.armScale != null) this.armScale = params.armScale;
+    if (params.earFreq != null) this.earFreq = params.earFreq;
   }
 
   playGesture(name) {

@@ -15,6 +15,7 @@
 - [x] _savedOverlaySettingsをwindowに公開
 - [x] 待機モーションパラメータ調整UIプラン作成
 - [x] Step 1: avatarスキーマに待機モーションスライダー追加（8パラメータ）
+- [x] Step 2: AvatarInstanceにパラメータ変数（7種）＋setIdleParams() setter追加
 
 ## speech-generation-flow.md 同期
 
