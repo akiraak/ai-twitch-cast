@@ -5,8 +5,7 @@
 - [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 
-- [ ] 待機モーションパラメータ調整UI → [plans/avatar-idle-params.md](plans/avatar-idle-params.md)
-  - [ ] Step 6: VRMロード後の再適用
+- [ ] 待機モーションパラメータ調整UI — 手動テスト未実施 → [plans/avatar-idle-params.md](plans/avatar-idle-params.md)
 
 ## 実装
 - [ ] リファクタリング
