@@ -28,10 +28,19 @@ async def list_doc_files(dir: str = "plans"):
     for p in target.rglob("*.md"):
         rel = p.relative_to(target)
         stat = p.stat()
+        title = ""
+        try:
+            with p.open("r", encoding="utf-8") as f:
+                first_line = f.readline().strip()
+                if first_line.startswith("# "):
+                    title = first_line[2:].strip()
+        except Exception:
+            pass
         files.append({
             "name": str(rel),
             "size": stat.st_size,
             "modified": stat.st_mtime,
+            "title": title,
         })
 
     return {"ok": True, "files": files}

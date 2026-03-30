@@ -4,6 +4,7 @@
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] スクリプト再生成時にLLM評価結果が上書きされる問題の対応
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
+- [ ] 教材やセリフの生成をGeminiとClaude Codeで選択可能にする → [plans/claude-code-lesson-generator.md](plans/claude-code-lesson-generator.md)
 
 ## 実装
 - [ ] リファクタリング
@@ -18,3 +19,4 @@
 - [ ] YouTube動画などFPSが高いウィンドウをキャプチャしてスムーズに配信できるかの検証 → [plans/high-fps-capture-verification.md](plans/high-fps-capture-verification.md)
 - [ ] capture.pyのbroadcast_items全面移行（二重管理解消） → [plans/capture-broadcast-items-migration.md](plans/capture-broadcast-items-migration.md)
 - [ ] SE（効果音）とコメント応答の連携検証（AIがSEカテゴリを正しく選択するか、再生タイミング・音量が適切か）
+/

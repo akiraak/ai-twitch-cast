@@ -479,13 +479,13 @@ users       1──N  comments      (user_id)</div>
   <!-- ===== Docs ===== -->
   <div class="tab-content" id="tab-docs">
     <div style="display:flex; gap:16px; align-items:flex-start;">
-      <div class="card" style="min-width:200px; max-width:260px; flex-shrink:0; position:sticky; top:8px;">
+      <div class="card" style="min-width:220px; max-width:300px; flex-shrink:0; position:sticky; top:8px;">
         <h2>ドキュメント</h2>
         <div style="display:flex; gap:6px; margin-bottom:10px;">
           <button class="db-tab active" id="docs-dir-plans" onclick="switchDocsDir('plans')">plans</button>
           <button class="db-tab" id="docs-dir-docs" onclick="switchDocsDir('docs')">docs</button>
         </div>
-        <div id="docs-file-list" style="display:flex; flex-direction:column; gap:4px;"></div>
+        <div id="docs-file-list" style="display:flex; flex-direction:column; gap:4px; max-height:70vh; overflow-y:auto;"></div>
       </div>
       <div class="card" style="flex:1; min-width:0;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">

@@ -1,6 +1,7 @@
 // Docs閲覧（plans/ docs/ のMarkdownファイル）
 let _docsCurrentDir = 'plans';
 let _docsCurrentFile = '';
+let _docsFiles = [];
 
 function switchDocsDir(dir) {
   _docsCurrentDir = dir;
@@ -15,19 +16,88 @@ async function loadDocFiles() {
   try {
     const res = await fetch(`/api/docs/files?dir=${_docsCurrentDir}`);
     const data = await res.json();
-    data.files.sort((a, b) => a.name.localeCompare(b.name));
+    if (!data.ok) return;
+    _docsFiles = data.files;
+
+    // ルート vs サブディレクトリにグループ分け
+    const rootFiles = [];
+    const groups = {};
+    data.files.forEach(f => {
+      const slashIdx = f.name.indexOf('/');
+      if (slashIdx === -1) {
+        rootFiles.push(f);
+      } else {
+        const dir = f.name.substring(0, slashIdx);
+        if (!groups[dir]) groups[dir] = [];
+        groups[dir].push(f);
+      }
+    });
+
+    // 各グループを修正日時の新しい順でソート
+    const sortByDate = (a, b) => b.modified - a.modified;
+    rootFiles.sort(sortByDate);
+    Object.values(groups).forEach(g => g.sort(sortByDate));
+
     const el = document.getElementById('docs-file-list');
-    el.innerHTML = data.files.map(f =>
-      `<button class="db-tab${f.name === _docsCurrentFile ? ' active' : ''}"
-              onclick="selectDocFile('${esc(f.name)}')">${esc(f.name)}</button>`
-    ).join('');
+    let html = '';
+
+    // サブディレクトリ（archive以外）を先に表示
+    const dirNames = Object.keys(groups).sort();
+    const nonArchive = dirNames.filter(d => d !== 'archive');
+    const archiveDirs = dirNames.filter(d => d === 'archive');
+
+    for (const dir of nonArchive) {
+      html += renderDocGroup(dir, groups[dir]);
+    }
+
+    // ルートファイル
+    rootFiles.forEach(f => { html += renderDocFileBtn(f); });
+
+    // archiveは末尾に表示
+    for (const dir of archiveDirs) {
+      html += renderDocGroup(dir, groups[dir]);
+    }
+
+    el.innerHTML = html;
+
+    // 選択中ファイルがフォルダ内の場合、そのフォルダを自動展開
+    if (_docsCurrentFile && _docsCurrentFile.includes('/')) {
+      const folderDetails = el.querySelectorAll('details.docs-folder');
+      folderDetails.forEach(d => {
+        if (d.querySelector(`button.docs-file-btn.active`)) {
+          d.open = true;
+        }
+      });
+    }
   } catch(e) {}
+}
+
+function renderDocGroup(dir, files) {
+  const inner = files.map(f => renderDocFileBtn(f)).join('');
+  return `<details class="docs-folder">
+    <summary>${esc(dir)} <span class="docs-folder-count">(${files.length})</span></summary>
+    <div class="docs-folder-body">${inner}</div>
+  </details>`;
+}
+
+function renderDocFileBtn(f) {
+  const baseName = f.name.includes('/') ? f.name.split('/').pop() : f.name;
+  const title = f.title || baseName;
+  const activeClass = f.name === _docsCurrentFile ? ' active' : '';
+  return `<button class="docs-file-btn${activeClass}"
+    onclick="selectDocFile('${esc(f.name)}')"
+    title="${esc(f.name)}">
+    <span class="docs-file-title">${esc(title)}</span>
+    <span class="docs-file-name">${esc(baseName)}</span>
+  </button>`;
 }
 
 async function selectDocFile(name) {
   _docsCurrentFile = name;
   loadDocFiles();
-  document.getElementById('docs-file-name').textContent = name;
+  const fileInfo = _docsFiles.find(f => f.name === name);
+  const displayName = fileInfo?.title || name;
+  document.getElementById('docs-file-name').textContent = displayName;
 
   try {
     const res = await fetch(`/api/docs/file?dir=${_docsCurrentDir}&name=${encodeURIComponent(name)}`);
