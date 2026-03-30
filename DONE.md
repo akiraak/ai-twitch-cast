@@ -1,5 +1,9 @@
 # DONE
 
+## speech-generation-flow.md 同期
+
+- [x] Step 1: 授業フロー図にテキスト抽出→クリーニング→メインコンテンツ識別ステップを追記
+
 ## メインコンテンツ読み上げ機能
 
 - [x] Step 1: `_EXTRACT_MAIN_CONTENT_PROMPT` に `read_aloud` フィールド追加 + `_normalize_roles()` でデフォルト補完

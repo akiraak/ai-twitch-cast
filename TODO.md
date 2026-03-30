@@ -9,6 +9,14 @@
 
 ## 2. 実装
 - [ ] リファクタリング
+- [ ] speech-generation-flow.md をコード実装と同期 → [plans/speech-generation-flow-sync.md](plans/speech-generation-flow-sync.md)
+  - [ ] Step 2: Phase B-1 に `_format_main_content_for_prompt()` の上限ルール・🔊マーカー条件を追記
+  - [ ] Step 3: Phase B-2 に `GEMINI_DIALOGUE_MODEL` 環境変数を追記
+  - [ ] Step 4: Phase B-3 レビュー観点を6→8に更新（🔊読み上げ網羅性 + 導入チェック追加）
+  - [ ] Step 5: イベント応答の `generate_multi_event_response()` 戻り値から `se` を削除
+  - [ ] Step 6: キャラクター設定テーブルのなるこ `tts_voice` を Kore に修正
+  - [ ] Step 7: 共通再生パイプラインの `apply_emotion()` に gesture 対応を追記
+  - [ ] Step 8: 環境変数のフォールバックチェーン説明を追加
 
 ## 3. バグ
 3.1. [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)

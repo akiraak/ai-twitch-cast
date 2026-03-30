@@ -174,7 +174,34 @@ comment_reader._respond()
 #### 全体フロー
 
 ```
-教材テキスト + 画像
+画像 or URL
+  │
+  ▼
+[テキスト抽出]
+  画像 → extract_text_from_image()（Gemini Vision）
+  URL  → extract_text_from_url()（aiohttp + BeautifulSoup）
+  │
+  ▼
+[クリーニング]  ← clean_extracted_text()
+  HTMLエンティティ変換（&nbsp; &amp; &lt; 等）
+  装飾記号除去（---、===、★★★ 等の連続記号）
+  空行圧縮（4行以上 → 3行）
+  → extracted_text（DB保存）
+  │
+  ▼
+[メインコンテンツ識別]  ← extract_main_content()（Gemini LLM）
+  テキストを構造化ブロックに分類:
+    content_type: conversation / passage / word_list / table
+    role: main（1つだけ）/ sub
+    read_aloud: true（主要コンテンツ）/ false（参照用）
+  → _normalize_roles() で role/read_aloud を正規化
+    - main が0個 → 先頭を main に昇格
+    - main が複数 → 先頭以外を sub に降格
+    - read_aloud 未設定 → main かつ conversation/passage なら true
+  → main_content（JSON配列、DB保存）
+  │
+  ▼
+教材テキスト（extracted_text）+ 画像 + メインコンテンツ（main_content）
   │
   ▼
 [Phase A: プラン生成]  ← キャラ設定は不使用（3人のエキスパートLLM）
@@ -274,7 +301,7 @@ comment_reader._respond()
                        question, answer, dialogue_directions}]
 ```
 
-ファイル: `src/lesson_generator.py`（`generate_lesson_plan`）
+ファイル: `scripts/routes/teacher.py`（テキスト抽出・メインコンテンツ識別の呼び出し元）、`src/lesson_generator.py`（`clean_extracted_text`、`extract_main_content`、`_normalize_roles`、`generate_lesson_plan`）
 
 | エキスパート | モデル（環境変数） | 出力形式 |
 |-------------|-------------------|---------|
