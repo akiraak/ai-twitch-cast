@@ -14,13 +14,7 @@
 ## 実装
 - [ ] リファクタリング → [plans/refactoring-2026-03-30.md](plans/refactoring-2026-03-30.md)
   - Phase 1: ✅ lesson_generator.py の分割完了（→ 8ファイルのパッケージ）
-  - [ ] Phase 2: db.py の分割（2,138行→ドメイン別分離）
-    - [ ] テスト実行（ベースライン確認）
-    - [ ] `src/db/` 作成、`core.py` に元のコードを配置
-    - [ ] lessons, audio, items を各ファイルに移動
-    - [ ] `__init__.py` で全公開関数を re-export
-    - [ ] テスト実行（`test_db.py` + 全テスト）
-    - [ ] `conftest.py` の `test_db` フィクスチャ動作確認
+  - Phase 2: ✅ db.py の分割完了（→ 4ファイルのパッケージ）
   - [ ] Phase 3: ai_responder.py のキャラクター管理分離（1,149行→2ファイル）
     - [ ] テスト実行（ベースライン確認）
     - [ ] `src/character_manager.py` 作成、キャラクター関連11関数を移動

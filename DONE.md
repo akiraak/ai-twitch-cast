@@ -13,6 +13,16 @@
   - `v2.py` — v2パイプライン（構造→セリフ→レビュー→再生成）
   - `__init__.py` — 全公開関数 + 内部関数の re-export（import互換維持）
 - [x] 未使用 import `base64` を削除
+
+## リファクタリング Phase 2: db.py パッケージ化
+
+- [x] `src/db.py`（2,138行）を `src/db/` パッケージに分割
+  - `core.py` — 接続管理・マイグレーション・channels/characters/shows/episodes/users/comments/settings/character_memory
+  - `audio.py` — BGM・SE トラック CRUD
+  - `lessons.py` — レッスン（教師モード）CRUD
+  - `items.py` — ブロードキャストアイテム・カスタムテキスト・キャプチャウィンドウ CRUD + アイテム移行関数
+  - `__init__.py` — 全公開関数 + 移行関数の re-export（import互換維持）
+- [x] `conftest.py` の `test_db` フィクスチャを `src.db.core` パッチに更新
 - [x] `conftest.py` の `mock_gemini` を submodule 対応に更新
 - [x] 全725テスト通過確認
 

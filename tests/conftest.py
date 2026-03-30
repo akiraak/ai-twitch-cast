@@ -21,20 +21,22 @@ for mod_name in _STUB_MODULES:
 def test_db(tmp_path, monkeypatch):
     """隔離されたテスト用SQLite DB
 
-    db.pyのシングルトン接続をリセットし、tmp_pathにDBを作成する。
+    db パッケージ（src/db/）のシングルトン接続をリセットし、tmp_pathにDBを作成する。
+    core モジュールの実体をパッチして、全サブモジュールが同じテスト接続を使うようにする。
     テスト終了後に接続を閉じてクリーンアップ。
     """
     import src.db as db_mod
+    import src.db.core as db_core
 
     db_path = tmp_path / "test.db"
-    monkeypatch.setattr(db_mod, "DB_PATH", db_path)
-    monkeypatch.setattr(db_mod, "_conn", None)
+    monkeypatch.setattr(db_core, "DB_PATH", db_path)
+    monkeypatch.setattr(db_core, "_conn", None)
 
     conn = db_mod.get_connection()
     yield db_mod
 
     conn.close()
-    monkeypatch.setattr(db_mod, "_conn", None)
+    monkeypatch.setattr(db_core, "_conn", None)
 
 
 @pytest.fixture

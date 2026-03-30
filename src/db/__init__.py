@@ -1,0 +1,111 @@
+"""データベース管理モジュール（SQLite）
+
+パッケージ化されたモジュール。既存の import パスとの互換性を維持するため、
+全公開関数と必要なプライベート関数を re-export する。
+"""
+
+# --- core ---
+from .core import (
+    DB_PATH,
+    _conn,
+    _now,
+    get_connection,
+    get_or_create_channel,
+    get_or_create_character,
+    get_character_by_channel,
+    get_characters_by_channel,
+    get_character_by_id,
+    get_character_by_role,
+    update_character,
+    update_character_config_field,
+    get_character_config_field,
+    get_or_create_show,
+    start_episode,
+    end_episode,
+    get_or_create_user,
+    increment_comment_count,
+    count_user_comments_in_episode,
+    update_user_last_seen,
+    update_user_note,
+    get_users_commented_since,
+    get_user_recent_comments,
+    save_comment,
+    get_recent_comments,
+    save_avatar_comment,
+    get_recent_avatar_comments,
+    get_recent_timeline,
+    clear_comments,
+    clear_avatar_comments,
+    save_action,
+    get_user_comment_count,
+    get_setting,
+    set_setting,
+    get_settings_by_prefix,
+    get_character_memory,
+    update_character_persona,
+    update_character_self_note,
+)
+
+# --- audio ---
+from .audio import (
+    get_bgm_track_volume,
+    get_all_bgm_track_volumes,
+    get_all_bgm_tracks,
+    set_bgm_track_volume,
+    set_bgm_track_source_url,
+    delete_bgm_track_volume,
+    get_all_se_tracks,
+    get_se_tracks_by_category,
+    upsert_se_track,
+    delete_se_track,
+)
+
+# --- lessons ---
+from .lessons import (
+    create_lesson,
+    get_lesson,
+    get_all_lessons,
+    update_lesson,
+    delete_lesson,
+    add_lesson_source,
+    get_lesson_sources,
+    delete_lesson_source,
+    add_lesson_section,
+    get_lesson_sections,
+    update_lesson_section,
+    delete_lesson_section,
+    delete_lesson_sections,
+    reorder_lesson_sections,
+    get_lesson_plan,
+    get_lesson_plans,
+    upsert_lesson_plan,
+    delete_lesson_plans,
+)
+
+# --- items ---
+from .items import (
+    get_capture_windows,
+    upsert_capture_window,
+    update_capture_window_layout,
+    delete_capture_window,
+    get_capture_window_by_name,
+    _item_to_custom_text_dict,
+    get_custom_texts,
+    create_custom_text,
+    update_custom_text,
+    update_custom_text_layout,
+    delete_custom_text,
+    get_broadcast_items,
+    get_all_broadcast_items,
+    get_child_items,
+    create_child_item,
+    delete_child_item,
+    delete_broadcast_item_cascade,
+    get_broadcast_item,
+    upsert_broadcast_item,
+    update_broadcast_item_layout,
+    _migrate_custom_texts_to_items,
+    _migrate_capture_windows_to_items,
+    _migrate_avatar_to_avatar1,
+    migrate_overlay_to_items,
+)
