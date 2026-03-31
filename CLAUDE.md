@@ -68,7 +68,9 @@ ai-twitch-cast/
 │   ├── twitch_chat.py        # Twitchチャット受信
 │   ├── ai_responder.py       # AI応答生成（会話履歴・配信コンテキスト・ユーザーメモ対応）
 │   ├── comment_reader.py     # コメント読み上げサービス（15分バッチでユーザーメモ更新）
-│   ├── lesson_generator.py   # 教師モード — 画像/URL解析・授業スクリプト生成
+│   ├── lesson_generator/     # 教師モード（パッケージ）
+│   │   ├── extractor.py     # テキスト抽出（画像/URL解析）
+│   │   └── utils.py         # 共有ユーティリティ（キャラクター情報・プロンプト構築）
 │   ├── lesson_runner.py      # 授業再生エンジン（セクション順次再生・制御）
 │   ├── git_watcher.py        # Gitコミット監視（クールダウン60秒+バッチ通知）
 │   ├── db.py                 # データベース管理（SQLite）
@@ -208,9 +210,8 @@ python3 -m pytest tests/test_db.py   # 特定ファイルのみ
 | `test_native_app_patterns.py` | C#ソースコード | 危険パターンの再発防止（ソース解析のみ） |
 | `test_api_character.py` | キャラクターAPI | CRUD・言語モード |
 | `test_api_stream.py` | 配信制御API | シーン・音量・アバター |
-| `test_api_teacher.py` | 教師モードAPI | コンテンツCRUD・スクリプト生成・授業制御 |
+| `test_api_teacher.py` | 教師モードAPI | コンテンツCRUD・JSONインポート・授業制御 |
 | `test_lesson_runner.py` | LessonRunner | 状態管理・ライフサイクル |
-| `test_lesson_generator.py` | `src/lesson_generator.py` | 対話スクリプト構築・プロンプト生成 |
 
 ### テスト規約
 - **新しいDB関数を追加したら `test_db.py` にテストを追加すること**

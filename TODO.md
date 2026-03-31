@@ -3,8 +3,6 @@
 ## 教師モード
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
-- [ ] 授業生成にGeminiとClaude CodeとあるけどClaude CodeのみにしてGemini生成の機能を削除する → [plans/remove-gemini-lesson-generation.md](plans/remove-gemini-lesson-generation.md)
-  - [ ] Step 7: クリーンアップ — 環境変数・CLAUDE.md更新
 - [ ] Claude Codeでの生成の手順をまとめる。管理画面の授業生成のところで見えるようにする
 
 ## 実装

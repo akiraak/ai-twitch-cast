@@ -1,6 +1,6 @@
 # Gemini授業生成機能の削除（Claude Codeのみに統一）
 
-**ステータス: 作業中（Step 5 完了）**
+**ステータス: 完了**
 
 ## 概要
 
@@ -152,7 +152,7 @@
 - `tests/test_content_analyzer.py` の `analyze_content`（アルゴリズム分析）テスト
 - `tests/conftest.py` の `mock_gemini`（ai_responder/tts等で引き続き使用）・`src.lesson_generator` パッチ（extractor.pyで使用）
 
-### Step 7: クリーンアップ
+### Step 7: クリーンアップ ✅ 完了
 
 - `prompts/lesson_generate.md` — 変更不要（Claude Code用マニュアル）
 - 環境変数の整理（`.env.example`）:
@@ -199,7 +199,7 @@
 
 ## 確認事項
 
-- [ ] 全テスト通過
+- [x] 全テスト通過（626 passed）
 - [ ] サーバー起動確認
 - [ ] 管理画面で授業一覧表示
 - [ ] Claude CodeでJSONインポート → 授業再生が動作

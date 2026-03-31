@@ -1,5 +1,12 @@
 # DONE
 
+## Gemini授業生成削除 Step 7: クリーンアップ
+
+- [x] `.env.example` から授業モード役割別モデル環境変数4つを削除（GEMINI_KNOWLEDGE/ENTERTAINMENT/DIRECTOR/DIALOGUE_MODEL）
+- [x] CLAUDE.md: lesson_generatorのディレクトリ構成を更新（パッケージ化 → extractor.py + utils.py）
+- [x] CLAUDE.md: テスト表からtest_lesson_generator.py（削除済み）を除去
+- [x] プランファイルのステータスを「完了」に更新
+
 ## Gemini授業生成削除 Step 5: teacher.jsフロントエンド整理
 
 - [x] ジェネレータタブ削除（`_buildGeneratorTabs`, `_switchLessonGenerator`, `_lessonGeneratorTab`, `_getLessonGenerator`）
