@@ -1,6 +1,6 @@
 # Claude Code CLIによる授業生成機能の追加
 
-**ステータス: 進行中（Step 4 完了）**
+**ステータス: 完了（全Step実装済み）**
 
 ## Context
 
@@ -216,35 +216,38 @@ def _cache_path(lesson_id, order_index, part_index, lang="ja", generator="gemini
 
 ---
 
-## Step 5: フロントエンド変更
+## Step 5: フロントエンド変更 — **実装済み**
 
-**ファイル: `static/js/admin/teacher.js`**
+**ファイル: `static/js/admin/teacher.js`**, **`static/js/admin/utils.js`**
 
 ### 5-1. ジェネレータ切り替えタブ
 
 言語タブ（ja/en）の下にジェネレータ切り替えを追加:
 
 ```
-[Gemini (3 sections)] [Claude Code (5 sections)]
+[🤖 Gemini (3)] [🧠 Claude Code (5)]
 ```
 
-- 各タブにセクション数をバッジ表示
-- 切り替えるとセクション一覧が更新
+- 各タブに現在言語でフィルタしたセクション数をバッジ表示
+- 切り替えるとセクション一覧・Step 2bヘッダー・入力情報表示が更新
 - ジェネレータ状態は `_lessonGeneratorTab[lessonId]` で管理
+- ヘッダーバッジにも `G:N/C:N` 表示（Claude側セクションがある場合）
 
 ### 5-2. インポートUI
 
-Claude Code タブに「JSONインポート」ボタン:
-- クリック → テキストエリアのモーダル表示
-- Claude Codeが出力したJSONを貼り付け
+Claude Code タブに「JSONインポート」ボタン + 使い方ガイド:
+- クリック → テキストエリアのモーダル表示（`utils.js` の `showModal` に `textarea`/`placeholder` オプション追加）
+- JSON配列 `[...]` または `{sections: [...], plan_summary: "..."}` 形式を受け付け
+- インポート前に確認ダイアログ表示
 - 「インポート」→ `POST /api/lessons/{id}/import-sections?lang=XX&generator=claude`
+- 成功後は自動的にClaudeタブに切り替え
 
-### 5-3. 授業再生の generator 指定
+### 5-3. 授業再生・TTSキャッシュの generator 指定
 
-「再生」ボタンクリック時に現在選択中のジェネレータを送信:
-```javascript
-api('POST', `/api/lessons/${id}/start?lang=${lang}&generator=${gen}`)
-```
+- `startLesson()`: 現在選択中のジェネレータを `?generator=` で送信
+- TTSキャッシュ取得 (`get_tts_cache`): `?generator=` 付きで取得
+- TTSキャッシュ削除 (`clearSectionCache`): `?generator=` 付きで削除
+- セクション音声再生 (`playSectionAudio`): `?generator=` 付きでキャッシュ取得
 
 ---
 
@@ -270,6 +273,7 @@ api('POST', `/api/lessons/${id}/start?lang=${lang}&generator=${gen}`)
 | `scripts/routes/teacher.py` | 修正（新規API + 既存API修正） |
 | `src/lesson_runner.py` | 修正（generator パラメータ + キャッシュパス + 旧パス互換） |
 | `static/js/admin/teacher.js` | 修正（ジェネレータUI追加） |
+| `static/js/admin/utils.js` | 修正（showModalにtextareaオプション追加） |
 | `tests/test_db.py` | 修正（generatorカラムのテスト追加） |
 | `tests/test_lesson_runner.py` | 修正（generator パラメータのテスト追加） |
 | `tests/test_lesson_generator.py` | 修正（必要に応じて） |

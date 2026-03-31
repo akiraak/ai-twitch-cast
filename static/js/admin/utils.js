@@ -78,15 +78,19 @@ function escHtml(s) {
  * @param {string} opts.inputValue - テキスト入力の初期値
  * @returns {Promise} 確認ダイアログ: true/false、入力ダイアログ: 文字列/null
  */
-function showModal(message, { title = '確認', okLabel = 'OK', cancelLabel = 'キャンセル', danger = false, input = null, inputValue = '' } = {}) {
+function showModal(message, { title = '確認', okLabel = 'OK', cancelLabel = 'キャンセル', danger = false, input = null, inputValue = '', textarea = false, placeholder = '' } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     const btnClass = danger ? 'danger' : 'primary';
-    const inputHtml = input !== null
-      ? `<input type="text" class="modal-input" placeholder="${esc(input)}" value="${esc(inputValue)}">`
-      : '';
-    overlay.innerHTML = `<div class="modal-box">
+    const hasInput = input !== null || textarea;
+    let inputHtml = '';
+    if (textarea) {
+      inputHtml = `<textarea class="modal-input" placeholder="${esc(placeholder || input || '')}" rows="12" style="width:100%; font-family:monospace; font-size:0.8rem; resize:vertical;">${esc(inputValue)}</textarea>`;
+    } else if (input !== null) {
+      inputHtml = `<input type="text" class="modal-input" placeholder="${esc(input)}" value="${esc(inputValue)}">`;
+    }
+    overlay.innerHTML = `<div class="modal-box"${textarea ? ' style="max-width:700px;"' : ''}>
       <h3>${esc(title)}</h3>
       <p>${esc(message)}</p>
       ${inputHtml}
@@ -99,23 +103,28 @@ function showModal(message, { title = '確認', okLabel = 'OK', cancelLabel = '�
     const doResolve = (action) => {
       overlay.remove();
       if (action === 'ok') {
-        resolve(input !== null ? (inputEl ? inputEl.value : '') : true);
+        resolve(hasInput ? (inputEl ? inputEl.value : '') : true);
       } else {
-        resolve(input !== null ? null : false);
+        resolve(hasInput ? null : false);
       }
     };
     overlay.addEventListener('click', e => {
       const action = e.target.dataset?.action;
       if (action) doResolve(action);
     });
-    if (inputEl) {
+    if (inputEl && !textarea) {
       inputEl.addEventListener('keydown', e => {
         if (e.key === 'Enter') doResolve('ok');
         if (e.key === 'Escape') doResolve('cancel');
       });
     }
+    if (inputEl && textarea) {
+      inputEl.addEventListener('keydown', e => {
+        if (e.key === 'Escape') doResolve('cancel');
+      });
+    }
     document.body.appendChild(overlay);
-    if (inputEl) { inputEl.focus(); inputEl.select(); }
+    if (inputEl) { inputEl.focus(); }
   });
 }
 

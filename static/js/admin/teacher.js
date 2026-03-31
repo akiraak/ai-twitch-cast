@@ -15,8 +15,15 @@ let _openLessonIds = new Set();
 // 言語タブ状態（lesson_id → 'ja' or 'en'）
 let _lessonLangTab = {};
 
+// ジェネレータタブ状態（lesson_id → 'gemini' or 'claude'）
+let _lessonGeneratorTab = {};
+
 function _getLessonLang(lessonId) {
   return _lessonLangTab[lessonId] || 'ja';
+}
+
+function _getLessonGenerator(lessonId) {
+  return _lessonGeneratorTab[lessonId] || 'gemini';
 }
 
 function _buildLangTabs(lessonId, plans, sections) {
@@ -37,6 +44,26 @@ function _buildLangTabs(lessonId, plans, sections) {
 
 async function _switchLessonLang(lessonId, lang) {
   _lessonLangTab[lessonId] = lang;
+  _openLessonIds.add(lessonId);
+  await loadLessons();
+}
+
+function _buildGeneratorTabs(lessonId, sectionsByGenerator) {
+  const currentGen = _getLessonGenerator(lessonId);
+  const geminiSections = (sectionsByGenerator && sectionsByGenerator.gemini) || [];
+  const claudeSections = (sectionsByGenerator && sectionsByGenerator.claude) || [];
+  const geminiBadge = geminiSections.length ? ` (${geminiSections.length})` : '';
+  const claudeBadge = claudeSections.length ? ` (${claudeSections.length})` : '';
+  return `<div style="display:flex; gap:4px; margin-bottom:10px;">
+    <button onclick="_switchLessonGenerator(${lessonId}, 'gemini')" style="padding:4px 14px; border:1px solid #d0c0e8; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:600;
+      ${currentGen === 'gemini' ? 'background:#7b1fa2; color:#fff;' : 'background:#faf7ff; color:#7b1fa2;'}">🤖 Gemini${geminiBadge}</button>
+    <button onclick="_switchLessonGenerator(${lessonId}, 'claude')" style="padding:4px 14px; border:1px solid #d0c0e8; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:600;
+      ${currentGen === 'claude' ? 'background:#7b1fa2; color:#fff;' : 'background:#faf7ff; color:#7b1fa2;'}">🧠 Claude Code${claudeBadge}</button>
+  </div>`;
+}
+
+async function _switchLessonGenerator(lessonId, generator) {
+  _lessonGeneratorTab[lessonId] = generator;
   _openLessonIds.add(lessonId);
   await loadLessons();
 }
@@ -97,9 +124,11 @@ async function buildLessonItem(lessonId) {
   const lesson = res.lesson;
   const sources = res.sources;
   const allSections = res.sections;
+  const sectionsByGenerator = res.sections_by_generator || {};
   const plans = res.plans || {};
   const lang = _getLessonLang(lessonId);
-  const sections = allSections.filter(s => (s.lang || 'ja') === lang);
+  const generator = _getLessonGenerator(lessonId);
+  const sections = allSections.filter(s => (s.lang || 'ja') === lang && (s.generator || 'gemini') === generator);
   const hasSources = sources.length > 0;
   const hasSections = sections.length > 0;
 
@@ -118,6 +147,12 @@ async function buildLessonItem(lessonId) {
     if (jaSec.length) langBadges.push('JA:' + jaSec.length);
     if (enSec.length) langBadges.push('EN:' + enSec.length);
     badges.push(langBadges.join('/'));
+  }
+  // generator別バッジ
+  const geminiSec = allSections.filter(s => (s.generator || 'gemini') === 'gemini');
+  const claudeSec = allSections.filter(s => (s.generator || 'gemini') === 'claude');
+  if (claudeSec.length) {
+    badges.push('G:' + geminiSec.length + '/C:' + claudeSec.length);
   }
   const badgeText = badges.length ? ' (' + badges.join(' / ') + ')' : '';
 
@@ -258,6 +293,19 @@ async function buildLessonItem(lessonId) {
   const langTabsDiv = document.createElement('div');
   langTabsDiv.innerHTML = _buildLangTabs(lessonId, plans, allSections);
   body.appendChild(langTabsDiv);
+
+  // === ジェネレータタブ ===
+  // 現在の言語でフィルタしたsections_by_generatorを構築
+  const langFilteredByGen = {};
+  for (const s of allSections) {
+    if ((s.lang || 'ja') !== lang) continue;
+    const g = s.generator || 'gemini';
+    langFilteredByGen[g] = langFilteredByGen[g] || [];
+    langFilteredByGen[g].push(s);
+  }
+  const genTabsDiv = document.createElement('div');
+  genTabsDiv.innerHTML = _buildGeneratorTabs(lessonId, langFilteredByGen);
+  body.appendChild(genTabsDiv);
 
   // === STEP 2a: プラン生成（三者視点） ===
   const langPlan = plans[lang] || {};
@@ -441,44 +489,65 @@ async function buildLessonItem(lessonId) {
     try { totalDlgs += JSON.parse(s.dialogues || '[]').length; } catch(e) {}
   }
 
-  let step2bHtml = `<div style="margin-bottom:4px; padding:4px 8px; background:#f5f0ff; border-radius:4px; font-size:0.72rem; font-weight:600; color:#6a1b9a;">\u{1F3AD} Phase C: ${lang === 'en' ? 'Dialogue Generation' : 'セリフ個別生成'}</div>`;
-  step2bHtml += `<div class="lesson-step-title">${lang === 'en' ? 'Script Generation' : 'スクリプト生成'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ', ' + totalDlgs + (lang === 'en' ? ' utterances' : '発話') + ')' : ''}</div>`;
-
-  // 入力データ表示
-  step2bHtml += `<div style="margin-bottom:8px; padding:6px 10px; background:#f5f0ff; border:1px solid #d0c0e8; border-radius:4px; font-size:0.72rem; color:#555;">`;
-  step2bHtml += `<div style="font-weight:600; color:#7b1fa2; margin-bottom:4px;">${lang === 'en' ? 'Input' : '入力'}:</div>`;
-  if (hasPlan) {
-    step2bHtml += `<div>\u{1F3AC} ${lang === 'en' ? 'Director plan' : '監督プラン'} (${planSecCount} ${lang === 'en' ? 'sections' : 'セクション'}) \u2190 Step 2a</div>`;
+  const genLabel = generator === 'claude' ? '🧠 Claude Code' : '🤖 Gemini';
+  let step2bHtml = '';
+  if (generator === 'gemini') {
+    step2bHtml += `<div style="margin-bottom:4px; padding:4px 8px; background:#f5f0ff; border-radius:4px; font-size:0.72rem; font-weight:600; color:#6a1b9a;">\u{1F3AD} Phase C: ${lang === 'en' ? 'Dialogue Generation' : 'セリフ個別生成'}</div>`;
+  } else {
+    step2bHtml += `<div style="margin-bottom:4px; padding:4px 8px; background:#f3e5f5; border-radius:4px; font-size:0.72rem; font-weight:600; color:#6a1b9a;">🧠 Claude Code: ${lang === 'en' ? 'Imported Sections' : 'インポートセクション'}</div>`;
   }
-  step2bHtml += `<div>\u{1F4DD} ${lang === 'en' ? 'Extracted text' : '抽出テキスト'} (${etLen}${lang === 'en' ? ' chars' : '文字'}) \u2190 Step 1</div>`;
+  step2bHtml += `<div class="lesson-step-title">${genLabel} ${lang === 'en' ? 'Script' : 'スクリプト'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ', ' + totalDlgs + (lang === 'en' ? ' utterances' : '発話') + ')' : ''}</div>`;
 
-  // キャラ設定サマリー
-  if (teacherChar || studentChar) {
-    step2bHtml += `<div style="margin-top:4px; font-weight:600; color:#7b1fa2;">${lang === 'en' ? 'Characters' : 'キャラ設定'} (${lang === 'en' ? 'used in prompt' : 'プロンプトに使用'}):</div>`;
-    if (teacherChar) {
-      const tPrompt = (teacherChar.system_prompt || '').substring(0, 60);
-      step2bHtml += `<div>\u{1F393} ${esc(teacherChar.name || 'teacher')} &mdash; voice: ${esc(teacherChar.tts_voice || '?')} / style: ${esc((teacherChar.tts_style || '').substring(0, 20))}...</div>`;
-      step2bHtml += `<details style="margin-left:20px;"><summary style="cursor:pointer; color:#1565c0; font-size:0.68rem;">system_prompt</summary><pre style="font-size:0.65rem; max-height:100px; overflow-y:auto; white-space:pre-wrap; background:#fff; padding:4px; border:1px solid #ddd; border-radius:3px;">${esc(teacherChar.system_prompt || '')}</pre></details>`;
+  if (generator === 'gemini') {
+    // 入力データ表示（Geminiのみ）
+    step2bHtml += `<div style="margin-bottom:8px; padding:6px 10px; background:#f5f0ff; border:1px solid #d0c0e8; border-radius:4px; font-size:0.72rem; color:#555;">`;
+    step2bHtml += `<div style="font-weight:600; color:#7b1fa2; margin-bottom:4px;">${lang === 'en' ? 'Input' : '入力'}:</div>`;
+    if (hasPlan) {
+      step2bHtml += `<div>\u{1F3AC} ${lang === 'en' ? 'Director plan' : '監督プラン'} (${planSecCount} ${lang === 'en' ? 'sections' : 'セクション'}) \u2190 Step 2a</div>`;
     }
-    if (studentChar) {
-      step2bHtml += `<div>\u{1F64B} ${esc(studentChar.name || 'student')} &mdash; voice: ${esc(studentChar.tts_voice || '?')} / style: ${esc((studentChar.tts_style || '').substring(0, 20))}...</div>`;
-      step2bHtml += `<details style="margin-left:20px;"><summary style="cursor:pointer; color:#e65100; font-size:0.68rem;">system_prompt</summary><pre style="font-size:0.65rem; max-height:100px; overflow-y:auto; white-space:pre-wrap; background:#fff; padding:4px; border:1px solid #ddd; border-radius:3px;">${esc(studentChar.system_prompt || '')}</pre></details>`;
+    step2bHtml += `<div>\u{1F4DD} ${lang === 'en' ? 'Extracted text' : '抽出テキスト'} (${etLen}${lang === 'en' ? ' chars' : '文字'}) \u2190 Step 1</div>`;
+
+    // キャラ設定サマリー
+    if (teacherChar || studentChar) {
+      step2bHtml += `<div style="margin-top:4px; font-weight:600; color:#7b1fa2;">${lang === 'en' ? 'Characters' : 'キャラ設定'} (${lang === 'en' ? 'used in prompt' : 'プロンプトに使用'}):</div>`;
+      if (teacherChar) {
+        const tPrompt = (teacherChar.system_prompt || '').substring(0, 60);
+        step2bHtml += `<div>\u{1F393} ${esc(teacherChar.name || 'teacher')} &mdash; voice: ${esc(teacherChar.tts_voice || '?')} / style: ${esc((teacherChar.tts_style || '').substring(0, 20))}...</div>`;
+        step2bHtml += `<details style="margin-left:20px;"><summary style="cursor:pointer; color:#1565c0; font-size:0.68rem;">system_prompt</summary><pre style="font-size:0.65rem; max-height:100px; overflow-y:auto; white-space:pre-wrap; background:#fff; padding:4px; border:1px solid #ddd; border-radius:3px;">${esc(teacherChar.system_prompt || '')}</pre></details>`;
+      }
+      if (studentChar) {
+        step2bHtml += `<div>\u{1F64B} ${esc(studentChar.name || 'student')} &mdash; voice: ${esc(studentChar.tts_voice || '?')} / style: ${esc((studentChar.tts_style || '').substring(0, 20))}...</div>`;
+        step2bHtml += `<details style="margin-left:20px;"><summary style="cursor:pointer; color:#e65100; font-size:0.68rem;">system_prompt</summary><pre style="font-size:0.65rem; max-height:100px; overflow-y:auto; white-space:pre-wrap; background:#fff; padding:4px; border:1px solid #ddd; border-radius:3px;">${esc(studentChar.system_prompt || '')}</pre></details>`;
+      }
     }
+    step2bHtml += `<div style="margin-top:4px; color:#888; font-size:0.68rem;">${lang === 'en' ? 'Method: Individual LLM calls per dialogue turn (with director directions)' : '生成方法: 監督の指示に基づきセリフを個別LLM呼び出しで生成'}</div>`;
+    step2bHtml += `<div style="color:#888; font-size:0.68rem;">${lang === 'en' ? 'Model/temp shown in each dialogue\'s generation metadata' : 'モデル・温度は各セリフの生成メタデータに表示'}</div>`;
+    step2bHtml += `</div>`;
   }
-  step2bHtml += `<div style="margin-top:4px; color:#888; font-size:0.68rem;">${lang === 'en' ? 'Method: Individual LLM calls per dialogue turn (with director directions)' : '生成方法: 監督の指示に基づきセリフを個別LLM呼び出しで生成'}</div>`;
-  step2bHtml += `<div style="color:#888; font-size:0.68rem;">${lang === 'en' ? 'Model/temp shown in each dialogue\'s generation metadata' : 'モデル・温度は各セリフの生成メタデータに表示'}</div>`;
-  step2bHtml += `</div>`;
 
-  step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button onclick="generateScript(${lessonId}, '${lang}')" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? (lang === 'en' ? 'Regenerate' : '再生成') : esc(scriptLabel)}</button>
-      <span class="script-status"></span>
-    </div>`;
+  if (generator === 'gemini') {
+    step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <button onclick="generateScript(${lessonId}, '${lang}')" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? (lang === 'en' ? 'Regenerate' : '再生成') : esc(scriptLabel)}</button>
+        <span class="script-status"></span>
+      </div>`;
+  } else {
+    // Claude Code タブ: JSONインポート
+    step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <button onclick="importClaudeSections(${lessonId}, '${lang}')" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">📋 JSONインポート</button>
+        <span class="import-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
+      </div>
+      <div style="margin-bottom:8px; padding:6px 10px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; font-size:0.72rem; color:#555;">
+        <div style="font-weight:600; color:#6a1b9a; margin-bottom:2px;">使い方:</div>
+        <div>1. Claude Code CLIで <code>prompts/lesson_generate.md</code> に従い授業を生成</div>
+        <div>2. 出力されたJSONをコピーして「JSONインポート」で貼り付け</div>
+      </div>`;
+  }
   step2bBody.innerHTML = step2bHtml;
 
   // TTSキャッシュ情報取得
   let ttsCacheMap = {};
   if (hasSections) {
-    const cacheRes = await api('GET', '/api/lessons/' + lessonId + '/tts-cache?lang=' + lang);
+    const cacheRes = await api('GET', '/api/lessons/' + lessonId + '/tts-cache?lang=' + lang + '&generator=' + generator);
     if (cacheRes && cacheRes.ok) {
       for (const c of cacheRes.sections) {
         ttsCacheMap[c.order_index] = c.parts;
@@ -1095,7 +1164,8 @@ async function deleteSection(lessonId, sectionId) {
 }
 
 async function clearSectionCache(lessonId, orderIndex) {
-  await api('DELETE', '/api/lessons/' + lessonId + '/tts-cache/' + orderIndex);
+  const gen = _getLessonGenerator(lessonId);
+  await api('DELETE', `/api/lessons/${lessonId}/tts-cache/${orderIndex}?generator=${gen}`);
   showToast('TTSキャッシュ削除', 'success');
   _openLessonIds.add(lessonId);
   await loadLessons();
@@ -1211,9 +1281,10 @@ function _renderScoreBar(label, sd) {
 
 async function startLesson(lessonId, lang) {
   lang = lang || _getLessonLang(lessonId);
-  const res = await api('POST', '/api/lessons/' + lessonId + '/start?lang=' + lang);
+  const gen = _getLessonGenerator(lessonId);
+  const res = await api('POST', `/api/lessons/${lessonId}/start?lang=${lang}&generator=${gen}`);
   if (res && res.ok) {
-    showToast(lang === 'en' ? 'Lesson started' : '授業開始', 'success');
+    showToast(lang === 'en' ? 'Lesson started' : `授業開始 (${gen})`, 'success');
     await loadLessons();
   } else if (res && res.error) {
     showToast('Error: ' + res.error, 'error');
@@ -1283,7 +1354,8 @@ async function playSectionAudio(btn, orderIndex, lessonId) {
   // セクション全パートを連続再生
   _stopCurrentAudio();
   const lang = _getLessonLang(lessonId);
-  const cacheRes = await api('GET', `/api/lessons/${lessonId}/tts-cache?lang=${lang}`);
+  const gen = _getLessonGenerator(lessonId);
+  const cacheRes = await api('GET', `/api/lessons/${lessonId}/tts-cache?lang=${lang}&generator=${gen}`);
   if (!cacheRes || !cacheRes.ok) return;
   const section = (cacheRes.sections || []).find(s => s.order_index === orderIndex);
   if (!section || !section.parts || !section.parts.length) { showToast('TTSキャッシュなし', 'error'); return; }
@@ -1311,6 +1383,58 @@ async function playSectionAudio(btn, orderIndex, lessonId) {
     audio.play();
   }
   playNext();
+}
+
+// --- JSONインポート（Claude Code用） ---
+
+async function importClaudeSections(lessonId, lang) {
+  lang = lang || _getLessonLang(lessonId);
+  const json = await showModal('Claude Codeが生成したセクションJSONを貼り付けてください', {
+    title: '🧠 Claude Code セクションインポート',
+    textarea: true,
+    okLabel: 'インポート',
+    placeholder: '[{"section_type": "introduction", "emotion": "joy", ...}]',
+  });
+  if (!json) return;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(json);
+  } catch(e) {
+    showToast('JSONパースエラー: ' + e.message, 'error');
+    return;
+  }
+
+  // 配列またはオブジェクト（{sections: [...]}）を受け付ける
+  let sections;
+  let planSummary = null;
+  if (Array.isArray(parsed)) {
+    sections = parsed;
+  } else if (parsed.sections && Array.isArray(parsed.sections)) {
+    sections = parsed.sections;
+    planSummary = parsed.plan_summary || null;
+  } else {
+    showToast('不正なフォーマット: 配列または {sections: [...]} が必要です', 'error');
+    return;
+  }
+
+  const ok = await showConfirm(
+    `${sections.length}セクションをインポートします。既存のClaude Codeセクション（${lang}）は上書きされます。`,
+    { title: 'インポート確認' }
+  );
+  if (!ok) return;
+
+  const body = { sections };
+  if (planSummary) body.plan_summary = planSummary;
+  const res = await api('POST', `/api/lessons/${lessonId}/import-sections?lang=${lang}&generator=claude`, body);
+  if (res && res.ok) {
+    showToast(`インポート完了: ${res.imported}セクション`, 'success');
+    _lessonGeneratorTab[lessonId] = 'claude';
+    _openLessonIds.add(lessonId);
+    await loadLessons();
+  } else {
+    showToast('インポート失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
+  }
 }
 
 // ステータスポーリング不要（loadLessonsで全更新）

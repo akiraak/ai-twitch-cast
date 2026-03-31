@@ -1,5 +1,15 @@
 # DONE
 
+## Claude Code授業生成 Step 5: フロントエンド変更（全Step完了）
+
+- [x] ジェネレータ切り替えタブ追加（言語タブの下に `[Gemini (N)] [Claude Code (N)]`）
+- [x] セクション表示をlang+generatorでフィルタ、ヘッダーバッジにgenerator情報追加
+- [x] Claude Codeタブに「JSONインポート」ボタン+テキストエリアモーダル追加
+- [x] `showModal` に `textarea`/`placeholder` オプション追加（`utils.js`）
+- [x] 授業再生 `startLesson()` にgeneratorパラメータ追加
+- [x] TTSキャッシュ取得・削除・セクション再生にgeneratorパラメータ追加
+- [x] プランステータスを「完了」に更新
+
 ## Claude Code授業生成 Step 4: LessonRunner修正
 
 - [x] `_cache_path` / `_dlg_cache_path` に `generator` パラメータ追加（新パス `{lang}/{generator}/` + gemini旧パスフォールバック）
