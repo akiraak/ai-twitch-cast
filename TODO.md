@@ -4,7 +4,6 @@
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 - [ ] 授業生成にGeminiとClaude CodeとあるけどClaude CodeのみにしてGemini生成の機能を削除する → [plans/remove-gemini-lesson-generation.md](plans/remove-gemini-lesson-generation.md)
-  - [ ] Step 4: teacher.py API整理 — generate-plan/generate-script削除、generatorデフォルト変更
   - [ ] Step 5: teacher.js整理 — Gemini UI削除、Claude Code固定、QAをgenerator非依存に
   - [ ] Step 6: テスト整理 — 不要テスト削除・修正
   - [ ] Step 7: クリーンアップ — 環境変数・conftest・CLAUDE.md更新

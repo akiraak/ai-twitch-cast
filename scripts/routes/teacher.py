@@ -7,7 +7,6 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src import db
@@ -18,10 +17,8 @@ from src.lesson_generator import (
     extract_text_from_url,
     get_lesson_characters,
 )
-from src.lesson_runner import _cache_path, _dlg_cache_path, clear_tts_cache, get_tts_cache_info
+from src.lesson_runner import clear_tts_cache, get_tts_cache_info
 from src.prompt_builder import get_stream_language, set_stream_language
-from src.speech_pipeline import SpeechPipeline
-from src.tts import synthesize
 
 
 def _with_lang(lang: str):
@@ -402,98 +399,7 @@ async def delete_lesson_source(lesson_id: int, source_id: int):
     return {"ok": True}
 
 
-# --- プラン生成 ---
-
-
-@router.post("/api/lessons/{lesson_id}/generate-plan")
-async def generate_plan(lesson_id: int, lang: str = "ja"):
-    """三者視点（知識・エンタメ・校長）で授業プランを生成する（SSE進捗付き）"""
-    lesson = db.get_lesson(lesson_id)
-    if not lesson:
-        return {"ok": False, "error": "コンテンツが見つかりません"}
-
-    extracted_text = lesson.get("extracted_text", "")
-    if not extracted_text:
-        return {"ok": False, "error": "教材テキストがありません。画像またはURLを追加してください。"}
-
-    # 画像パスを収集
-    sources = db.get_lesson_sources(lesson_id)
-    image_paths = [
-        str(PROJECT_DIR / s["file_path"])
-        for s in sources
-        if s["source_type"] == "image" and s["file_path"]
-    ]
-
-    async def event_stream():
-        progress_queue = asyncio.Queue()
-
-        def on_progress(step, total, message):
-            progress_queue.put_nowait({"step": step, "total": total, "message": message})
-
-        restore_lang = _with_lang(lang)
-
-        async def run_generation():
-            try:
-                return await asyncio.to_thread(
-                    generate_lesson_plan,
-                    lesson["name"], extracted_text, image_paths or None,
-                    on_progress=on_progress,
-                )
-            finally:
-                restore_lang()
-
-        task = asyncio.create_task(run_generation())
-
-        while not task.done():
-            try:
-                progress = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
-                yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
-            except asyncio.TimeoutError:
-                pass
-
-        # drain remaining progress events
-        while not progress_queue.empty():
-            progress = progress_queue.get_nowait()
-            yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
-
-        try:
-            plan = task.result()
-            # DB保存（言語別テーブル）
-            plan_json_str = _json.dumps(plan["plan_sections"], ensure_ascii=False)
-            director_json_str = _json.dumps(plan.get("director_sections", []), ensure_ascii=False)
-            generations_str = _json.dumps(plan.get("generations", {}), ensure_ascii=False)
-            db.upsert_lesson_plan(
-                lesson_id, lang,
-                knowledge=plan["knowledge"],
-                entertainment=plan["entertainment"],
-                plan_json=plan_json_str,
-                director_json=director_json_str,
-                plan_generations=generations_str,
-                generator="gemini",
-            )
-            # 後方互換: lessons テーブルにも保存
-            db.update_lesson(
-                lesson_id,
-                plan_knowledge=plan["knowledge"],
-                plan_entertainment=plan["entertainment"],
-                plan_json=plan_json_str,
-            )
-            logger.info("プラン生成完了: lesson=%d, sections=%d", lesson_id, len(plan["plan_sections"]))
-            result = {
-                "ok": True,
-                "knowledge": plan["knowledge"],
-                "entertainment": plan["entertainment"],
-                "plan_sections": plan["plan_sections"],
-                "director_sections": plan.get("director_sections", []),
-                "generations": plan.get("generations", {}),
-            }
-        except Exception as e:
-            logger.error("プラン生成失敗: %s", e)
-            result = {"ok": False, "error": str(e)}
-
-        yield f"data: {_json.dumps(result, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+# --- プラン手動編集 ---
 
 
 class PlanUpdate(BaseModel):
@@ -522,254 +428,6 @@ async def update_plan(lesson_id: int, body: PlanUpdate):
                          plan_entertainment=entertainment, plan_json=plan_json)
     return {"ok": True}
 
-
-# --- スクリプト生成 ---
-
-
-@router.post("/api/lessons/{lesson_id}/generate-script")
-async def generate_script(lesson_id: int, lang: str = "ja"):
-    """授業スクリプトを生成する（既存セクションは上書き、SSE進捗付き）"""
-    lesson = db.get_lesson(lesson_id)
-    if not lesson:
-        return {"ok": False, "error": "コンテンツが見つかりません"}
-
-    extracted_text = lesson.get("extracted_text", "")
-    if not extracted_text:
-        return {"ok": False, "error": "教材テキストがありません。画像またはURLを追加してください。"}
-
-    # 画像パスを収集
-    sources = db.get_lesson_sources(lesson_id)
-    image_paths = [
-        str(PROJECT_DIR / s["file_path"])
-        for s in sources
-        if s["source_type"] == "image" and s["file_path"]
-    ]
-
-    # 指定言語のプランがあればプランベースで生成
-    plan_sections = None
-    director_sections = None
-    lang_plan = db.get_lesson_plan(lesson_id, lang)
-    if lang_plan and lang_plan.get("plan_json"):
-        try:
-            plan_sections = _json.loads(lang_plan["plan_json"])
-        except Exception:
-            pass
-    if lang_plan and lang_plan.get("director_json"):
-        try:
-            director_sections = _json.loads(lang_plan["director_json"])
-        except Exception:
-            pass
-    # フォールバック: lessons テーブルのプラン
-    if not plan_sections:
-        plan_json_str = lesson.get("plan_json", "")
-        if plan_json_str:
-            try:
-                plan_sections = _json.loads(plan_json_str)
-            except Exception:
-                pass
-
-    # メインコンテンツ取得
-    main_content = None
-    mc_str = lesson.get("main_content", "")
-    if mc_str:
-        try:
-            main_content = _json.loads(mc_str)
-        except Exception:
-            pass
-
-    # キャラ取得（先生・生徒が揃えばv2対話モード）
-    characters = get_lesson_characters()
-    teacher_config = characters.get("teacher")
-    student_config = characters.get("student")
-
-    async def event_stream():
-        # 指定言語のGemini生成スクリプトとTTSキャッシュを削除
-        clear_tts_cache(lesson_id, lang=lang, generator="gemini")
-        db.delete_lesson_sections(lesson_id, lang=lang, generator="gemini")
-
-        progress_queue = asyncio.Queue()
-
-        def on_progress(step, total, message):
-            progress_queue.put_nowait({"step": step, "total": total, "message": message})
-
-        restore_lang = _with_lang(lang)
-
-        async def run_generation():
-            try:
-                # 先生・生徒が揃っている場合はv2（キャラ個別LLM呼び出し）
-                if teacher_config and student_config:
-                    return await asyncio.to_thread(
-                        generate_lesson_script_v2,
-                        lesson["name"], extracted_text, plan_sections,
-                        director_sections=director_sections,
-                        source_images=image_paths or None,
-                        on_progress=on_progress,
-                        teacher_config=teacher_config,
-                        student_config=student_config,
-                        main_content=main_content,
-                    )
-                elif plan_sections:
-                    return await asyncio.to_thread(
-                        generate_lesson_script_from_plan,
-                        lesson["name"], extracted_text, plan_sections, image_paths or None,
-                        on_progress=on_progress,
-                        student_config=student_config,
-                    )
-                else:
-                    return await asyncio.to_thread(
-                        generate_lesson_script,
-                        lesson["name"], extracted_text, image_paths or None,
-                        on_progress=on_progress,
-                        student_config=student_config,
-                    )
-            finally:
-                restore_lang()
-
-        task = asyncio.create_task(run_generation())
-
-        while not task.done():
-            try:
-                progress = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
-                yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
-            except asyncio.TimeoutError:
-                pass
-
-        # drain remaining progress events
-        while not progress_queue.empty():
-            progress = progress_queue.get_nowait()
-            yield f"data: {_json.dumps(progress, ensure_ascii=False)}\n\n"
-
-        try:
-            gen_result = task.result()
-            # v2パイプラインはdict（sections + analysis）、非v2はlist
-            if isinstance(gen_result, dict):
-                sections = gen_result["sections"]
-                embedded_analysis = gen_result.get("analysis")
-            else:
-                sections = gen_result
-                embedded_analysis = None
-            saved = []
-            for i, s in enumerate(sections):
-                # v3: director_sectionsから該当セクションのdialogue_directionsを取得
-                dd_str = ""
-                if director_sections and i < len(director_sections):
-                    dd = director_sections[i].get("dialogue_directions", [])
-                    if dd:
-                        dd_str = _json.dumps(dd, ensure_ascii=False)
-                sec = db.add_lesson_section(
-                    lesson_id, order_index=i,
-                    section_type=s["section_type"],
-                    title=s.get("title", ""),
-                    content=s["content"],
-                    tts_text=s["tts_text"],
-                    display_text=s["display_text"],
-                    emotion=s["emotion"],
-                    question=s.get("question", ""),
-                    answer=s.get("answer", ""),
-                    wait_seconds=s.get("wait_seconds", 0),
-                    lang=lang,
-                    dialogues=s.get("dialogues", ""),
-                    dialogue_directions=dd_str,
-                    generator="gemini",
-                )
-                saved.append(sec)
-            logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))
-
-            # --- TTS音声の事前生成 ---
-            # 対話モードのキャラ設定を取得
-            characters = get_lesson_characters()
-            teacher_cfg = characters.get("teacher") or {}
-            student_cfg = characters.get("student") or {}
-            teacher_voice = teacher_cfg.get("tts_voice")
-            student_voice = student_cfg.get("tts_voice")
-            teacher_style = teacher_cfg.get("tts_style")
-            student_style = student_cfg.get("tts_style")
-
-            # 各セクションのTTS生成単位を計算
-            tts_jobs = []  # (cached_path, tts_text, voice, style, label)
-            for s in saved:
-                oi = s["order_index"]
-                dlgs_raw = s.get("dialogues", "")
-                dlgs = []
-                if dlgs_raw:
-                    try:
-                        parsed = _json.loads(dlgs_raw) if isinstance(dlgs_raw, str) else dlgs_raw
-                        # v4: {dialogues: [...], review: {...}} 形式に対応
-                        if isinstance(parsed, dict) and "dialogues" in parsed:
-                            dlgs = parsed["dialogues"]
-                        else:
-                            dlgs = parsed
-                    except Exception:
-                        pass
-
-                if dlgs:
-                    # 対話モード: 各dialogue発話のTTSを個別生成
-                    for di, dlg in enumerate(dlgs):
-                        speaker = dlg.get("speaker", "teacher")
-                        voice = teacher_voice if speaker == "teacher" else student_voice
-                        style = teacher_style if speaker == "teacher" else student_style
-                        tts_text = dlg.get("tts_text", dlg.get("content", ""))
-                        cached = _dlg_cache_path(lesson_id, oi, di, lang=lang)
-                        tts_jobs.append((cached, tts_text, voice, style,
-                                         f"セクション{oi + 1} 発話{di + 1}"))
-                else:
-                    # 単話者モード: セクションを文分割してTTS生成
-                    content = s["content"]
-                    tts_text = s.get("tts_text") or content
-                    c_parts = SpeechPipeline.split_sentences(content)
-                    t_parts = SpeechPipeline.split_sentences(tts_text)
-                    for pi, _part in enumerate(c_parts):
-                        part_tts = t_parts[pi] if pi < len(t_parts) else _part
-                        cached = _cache_path(lesson_id, oi, pi, lang=lang)
-                        tts_jobs.append((cached, part_tts, None, None,
-                                         f"セクション{oi + 1} パート{pi + 1}"))
-
-            total_parts = len(tts_jobs)
-            generated = 0
-            tts_errors = 0
-            for cached, tts_text, voice, style, label in tts_jobs:
-                generated += 1
-                progress_msg = f"TTS生成中: {label} ({generated}/{total_parts})"
-                yield f"data: {_json.dumps({'step': generated, 'total': total_parts, 'message': progress_msg, 'phase': 'tts'}, ensure_ascii=False)}\n\n"
-
-                cached.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    kwargs = {}
-                    if voice:
-                        kwargs["voice"] = voice
-                    if style:
-                        kwargs["style"] = style
-                    await asyncio.to_thread(synthesize, tts_text, str(cached), **kwargs)
-                    logger.info("[tts-cache] 生成: %s", cached)
-                except Exception as e:
-                    logger.warning("[tts-cache] 生成失敗 (%s): %s", label, e)
-                    tts_errors += 1
-
-            logger.info("TTS事前生成完了: lesson=%d, %d/%d パート (エラー: %d)",
-                        lesson_id, generated - tts_errors, total_parts, tts_errors)
-
-            # 品質分析（パイプライン埋め込み or フォールバック）
-            if embedded_analysis:
-                analysis_dict = embedded_analysis
-                analysis_dict["lesson_id"] = lesson_id
-            else:
-                section_dicts = [dict(s) for s in saved]
-                analysis = analyze_content(section_dicts, lang=lang)
-                analysis.lesson_id = lesson_id
-                analysis_dict = analysis.to_dict()
-            db.update_lesson(lesson_id, analysis_json=_json.dumps(analysis_dict, ensure_ascii=False))
-            logger.info("品質分析完了: lesson=%d, score=%.1f/%s, rank=%s",
-                        lesson_id, analysis_dict.get("total_score", 0),
-                        analysis_dict.get("max_score", 0), analysis_dict.get("rank", "?"))
-
-            result = {"ok": True, "sections": saved, "tts_generated": generated - tts_errors, "tts_errors": tts_errors, "analysis": analysis_dict}
-        except Exception as e:
-            logger.error("スクリプト生成失敗: %s", e)
-            result = {"ok": False, "error": str(e)}
-
-        yield f"data: {_json.dumps(result, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 # --- セクション インポート ---
@@ -900,7 +558,7 @@ async def delete_section(lesson_id: int, section_id: int):
 
 
 @router.post("/api/lessons/{lesson_id}/start")
-async def start_lesson(lesson_id: int, lang: str = "ja", generator: str = "gemini"):
+async def start_lesson(lesson_id: int, lang: str = "ja", generator: str = "claude"):
     """授業を開始する"""
     runner = _get_lesson_runner()
     # 授業再生中は配信言語も一時的に合わせる
@@ -916,7 +574,7 @@ async def start_lesson(lesson_id: int, lang: str = "ja", generator: str = "gemin
 
 
 @router.get("/api/lessons/{lesson_id}/tts-cache")
-async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "gemini"):
+async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "claude"):
     """TTSキャッシュ状況を取得する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:

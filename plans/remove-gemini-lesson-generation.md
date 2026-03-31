@@ -1,6 +1,6 @@
 # Gemini授業生成機能の削除（Claude Codeのみに統一）
 
-**ステータス: 作業中（Step 3 完了）**
+**ステータス: 作業中（Step 4 完了）**
 
 ## 概要
 
@@ -81,29 +81,33 @@
 - `tests/test_content_analyzer.py`: `TestLLMEvaluation` クラス（3テスト）と `test_analyze_with_llm` を削除、`analyze_content_full` import削除、不要import（`pytest`, `unittest.mock`）削除
 - `tests/conftest.py`: `src.content_analyzer` の `get_client` パッチ削除
 
-### Step 4: バックエンド — teacher.pyのAPI整理
+### Step 4: バックエンド — teacher.pyのAPI整理 ✅ 完了
 
-**削除するエンドポイント:**
-- `POST /api/lessons/{id}/generate-plan` — プラン生成API（`generate_plan` 関数, 413行〜）
-- `POST /api/lessons/{id}/generate-script` — スクリプト生成API（`generate_script` 関数, 534行〜）
+**削除したエンドポイント:**
+- `POST /api/lessons/{id}/generate-plan` — プラン生成API（`generate_plan` 関数）
+- `POST /api/lessons/{id}/generate-script` — スクリプト生成API（`generate_script` 関数）
 
-**残すエンドポイント:**
+**残したエンドポイント:**
 - `PUT /api/lessons/{id}/plan` — プラン手動編集（Gemini API不使用、Claude Codeでもplan_summaryインポート可能）
-- `POST /api/lessons/{id}/analyze` — 品質分析（~~`include_llm`パラメータを削除し、`analyze_content`のみ使用に変更~~ → Step 3で前倒し完了）
+- `POST /api/lessons/{id}/analyze` — 品質分析（Step 3で`analyze_content`のみに変更済み）
 
-**簡素化するエンドポイント（APIデフォルトを`"claude"`に変更）:**
-- `POST /api/lessons/{id}/import-sections` — 既に`generator="claude"`デフォルト（変更不要）
+**簡素化したエンドポイント（APIデフォルトを`"claude"`に変更）:**
 - `POST /api/lessons/{id}/start` — `generator="gemini"` → `generator="claude"` に変更
 - `GET /api/lessons/{id}/tts-cache` — `generator="gemini"` → `generator="claude"` に変更
+- `POST /api/lessons/{id}/import-sections` — 既に`generator="claude"`デフォルト（変更不要）
 - `DELETE /api/lessons/{id}/tts-cache` — `generator=None`（変更不要、全generator対象）
 - `DELETE /api/lessons/{id}/tts-cache/{order_index}` — `generator=None`（変更不要）
 
 **import文の整理:**
-- ~~`generate_lesson_plan`, `generate_lesson_script`, `generate_lesson_script_from_plan`, `generate_lesson_script_v2` のimport削除~~ → Step 2で前倒し完了
-- ~~`analyze_content_full` のimport削除~~ → Step 3で前倒し完了
+- ~~`generate_lesson_plan` 等~~ → Step 2で前倒し完了
+- ~~`analyze_content_full`~~ → Step 3で前倒し完了
+- `StreamingResponse`, `SpeechPipeline`, `synthesize`, `_cache_path`, `_dlg_cache_path` を削除（generate-plan/generate-script削除で不要に）
+
+**テスト修正（プラン外）:**
+- `tests/test_api_teacher.py`: `test_start_lesson` と `test_get_tts_cache_empty` で `generator="claude"` を明示（APIデフォルト変更に合わせてセクション追加時のgeneratorを一致させた）
 
 **`GET /api/lessons/{id}` レスポンス:**
-- `sections_by_generator` の構造は残す（既存geminiデータ＋claudeデータ両方表示用）
+- `sections_by_generator` の構造は残した（既存geminiデータ＋claudeデータ両方表示用）
 - `plan` 関連のデータ（`plan_json`, `director_json`, `generations`）は表示のみ（新規生成不可）
 
 ### Step 5: フロントエンド — teacher.jsの整理

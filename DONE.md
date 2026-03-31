@@ -1,5 +1,13 @@
 # DONE
 
+## Gemini授業生成削除 Step 4: teacher.py API整理
+
+- [x] `generate_plan` エンドポイント（POST /api/lessons/{id}/generate-plan）を削除
+- [x] `generate_script` エンドポイント（POST /api/lessons/{id}/generate-script）を削除
+- [x] 不要import削除（StreamingResponse, SpeechPipeline, synthesize, _cache_path, _dlg_cache_path）
+- [x] `start_lesson` / `get_tts_cache` のgeneratorデフォルトを "gemini" → "claude" に変更
+- [x] テスト修正: test_start_lesson / test_get_tts_cache_empty で generator="claude" を明示
+
 ## Gemini授業生成削除 Step 3: content_analyzer.py整理
 
 - [x] `analyze_content_full`, `_get_director_model`, `_evaluate_with_llm` を削除

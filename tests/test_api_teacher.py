@@ -494,9 +494,9 @@ class TestLessonControl:
         """授業開始"""
         r = api_client.post("/api/lessons", json={"name": "StartTest"})
         lid = r.json()["lesson"]["id"]
-        # セクション追加
-        test_db.add_lesson_section(lid, 0, "introduction", "はじめに")
-        test_db.add_lesson_section(lid, 1, "explanation", "説明")
+        # セクション追加（APIデフォルトが"claude"なのでgeneratorを合わせる）
+        test_db.add_lesson_section(lid, 0, "introduction", "はじめに", generator="claude")
+        test_db.add_lesson_section(lid, 1, "explanation", "説明", generator="claude")
 
         resp = api_client.post(f"/api/lessons/{lid}/start")
         data = resp.json()
@@ -564,7 +564,7 @@ class TestTtsCacheAPI:
 
         r = api_client.post("/api/lessons", json={"name": "CacheTest"})
         lid = r.json()["lesson"]["id"]
-        test_db.add_lesson_section(lid, 0, "intro", "Hello")
+        test_db.add_lesson_section(lid, 0, "intro", "Hello", generator="claude")
 
         resp = api_client.get(f"/api/lessons/{lid}/tts-cache")
         data = resp.json()
