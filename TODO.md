@@ -6,7 +6,7 @@
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 - [ ] 教材やセリフの生成をGeminiとClaude Codeで選択可能にする → [plans/claude-code-lesson-generator.md](plans/claude-code-lesson-generator.md)
   - [x] Step 1: DBマイグレーション — `generator` カラム追加
-  - [ ] Step 2: `prompts/lesson_generate.md` ワークフロー定義
+  - [x] Step 2: `prompts/lesson_generate.md` ワークフロー定義
   - [ ] Step 3: APIエンドポイント追加・修正（import-sections API + 既存API修正）
   - [ ] Step 4: LessonRunner修正（generator パラメータ + キャッシュパス）
   - [ ] Step 5: フロントエンド変更（ジェネレータタブ・インポートUI・再生時generator指定）

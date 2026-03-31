@@ -1,5 +1,9 @@
 # DONE
 
+## Claude Code授業生成 Step 2: ワークフロー定義
+
+- [x] `prompts/lesson_generate.md` 新規作成（Claude Codeが授業スクリプトを生成する手順書）
+
 ## Claude Code授業生成 Step 1: DBマイグレーション
 
 - [x] `lesson_sections` に `generator` カラム追加（デフォルト: `'gemini'`）
