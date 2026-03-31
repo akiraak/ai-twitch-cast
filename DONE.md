@@ -1,5 +1,12 @@
 # DONE
 
+## アバターパラメータ保存抜け根本修正
+
+- [x] `GET /api/overlay/settings`がDBの全プロパティをマージするよう修正（`_OVERLAY_DEFAULTS`に無いキーも返す）
+- [x] avatar1/avatar2のデフォルトに全パラメータ（headTilt, scale, idle系）を追加
+- [x] フロントエンド3箇所のハードコードidleKeysリストを除去（settings.js, avatar-renderer.js, settings-panel.js）
+- [x] 今後はスキーマにパラメータ追加するだけで保存→復元が自動的に動く
+
 ## English 1-1 授業コンテンツ生成
 
 - [x] 教材画像読み取り（Kenjiの自己紹介・Section B穴埋め・Culture Note）

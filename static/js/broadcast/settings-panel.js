@@ -223,9 +223,8 @@ function _scheduleSpSave(key, value) {
       const id = _spItemId === 'avatar1' ? 'teacher' : 'student';
       window.avatarInstances?.[id]?.setHeadTilt(value);
     }
-    // 待機モーションパラメータ即時反映
-    const _idleKeys = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
-    if ((_spItemId === 'avatar1' || _spItemId === 'avatar2') && _idleKeys.includes(key)) {
+    // 待機モーションパラメータ即時反映（bodyAngle/headTilt以外のアバターキーは全てsetIdleParamsに渡す）
+    if ((_spItemId === 'avatar1' || _spItemId === 'avatar2') && key !== 'bodyAngle' && key !== 'headTilt') {
       const id = _spItemId === 'avatar1' ? 'teacher' : 'student';
       window.avatarInstances?.[id]?.setIdleParams({[key]: value});
     }

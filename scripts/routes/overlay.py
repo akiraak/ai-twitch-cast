@@ -326,12 +326,19 @@ _OVERLAY_DEFAULTS = {
     "avatar1": _make_item_defaults({
         "positionX": 46.5, "positionY": 24.3, "width": 53.5, "height": 75.7,
         "zIndex": 5, "bgOpacity": 0, "borderRadius": 0, "padding": 0,
-        "bodyAngle": 0,
+        "bodyAngle": 0, "headTilt": 0, "scale": 1.0,
+        "idleScale": 1.0, "breathScale": 1.0, "swayScale": 1.0,
+        "headScale": 1.0, "gazeRange": 1.0, "armAngle": 70,
+        "armScale": 1.0, "earFreq": 1.0,
     }),
     "avatar2": _make_item_defaults({
         "positionX": 0, "positionY": 30, "width": 40, "height": 70,
         "zIndex": 4, "bgOpacity": 0, "borderRadius": 0, "borderSize": 0,
-        "padding": 0, "backdropBlur": 0, "bodyAngle": 0,
+        "padding": 0, "backdropBlur": 0,
+        "bodyAngle": 0, "headTilt": 0, "scale": 1.0,
+        "idleScale": 1.0, "breathScale": 1.0, "swayScale": 1.0,
+        "headScale": 1.0, "gazeRange": 1.0, "armAngle": 70,
+        "armScale": 1.0, "earFreq": 1.0,
     }),
     "lighting": {
         "brightness": 1.0, "contrast": 1.0, "temperature": 0.1, "saturation": 1.0,
@@ -448,6 +455,14 @@ async def get_overlay_settings():
                     result[section][prop] = val
             else:
                 result[section][prop] = file_section.get(prop, fallback)
+
+        # デフォルトに無いDBプロパティもマージ（新規パラメータの自動復元）
+        if bi:
+            _skip = {"id", "type", "label", "parentId"}
+            for prop, val in bi.items():
+                if prop not in result[section] and prop not in _skip:
+                    result[section][prop] = val
+
     return result
 
 

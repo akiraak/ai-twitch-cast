@@ -679,20 +679,8 @@ async function initAvatar() {
   }
 
   // VRMロード完了後、保存済み待機モーションパラメータを再適用
-  const idleKeys = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
-  const teacherIdle = {};
-  for (const k of idleKeys) {
-    if (saved.avatar1?.[k] != null) teacherIdle[k] = saved.avatar1[k];
-  }
-  if (Object.keys(teacherIdle).length > 0) teacherAvatar.setIdleParams(teacherIdle);
-
-  if (student && !student._disabled) {
-    const studentIdle = {};
-    for (const k of idleKeys) {
-      if (saved.avatar2?.[k] != null) studentIdle[k] = saved.avatar2[k];
-    }
-    if (Object.keys(studentIdle).length > 0) student.setIdleParams(studentIdle);
-  }
+  if (saved.avatar1) teacherAvatar.setIdleParams(saved.avatar1);
+  if (saved.avatar2 && student && !student._disabled) student.setIdleParams(saved.avatar2);
 }
 initAvatar();
 

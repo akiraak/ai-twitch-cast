@@ -72,14 +72,7 @@ function applySettings(s) {
     if (s.avatar1.headTilt != null) {
       window.avatarInstances?.['teacher']?.setHeadTilt(s.avatar1.headTilt);
     }
-    const idleKeys1 = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
-    const idleParams1 = {};
-    for (const k of idleKeys1) {
-      if (s.avatar1[k] != null) idleParams1[k] = s.avatar1[k];
-    }
-    if (Object.keys(idleParams1).length > 0) {
-      window.avatarInstances?.['teacher']?.setIdleParams(idleParams1);
-    }
+    window.avatarInstances?.['teacher']?.setIdleParams(s.avatar1);
     if (window.dispatchEvent) window.dispatchEvent(new Event('resize'));
   }
   // === avatar2（生徒） ===
@@ -94,14 +87,7 @@ function applySettings(s) {
     if (s.avatar2.headTilt != null) {
       window.avatarInstances?.['student']?.setHeadTilt(s.avatar2.headTilt);
     }
-    const idleKeys2 = ['idleScale','breathScale','swayScale','headScale','gazeRange','armAngle','armScale','earFreq'];
-    const idleParams2 = {};
-    for (const k of idleKeys2) {
-      if (s.avatar2[k] != null) idleParams2[k] = s.avatar2[k];
-    }
-    if (Object.keys(idleParams2).length > 0) {
-      window.avatarInstances?.['student']?.setIdleParams(idleParams2);
-    }
+    window.avatarInstances?.['student']?.setIdleParams(s.avatar2);
   }
   // === lighting（アバター個別 or 共通） ===
   if (s.lighting_teacher) {
