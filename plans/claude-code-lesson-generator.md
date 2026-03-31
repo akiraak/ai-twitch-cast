@@ -1,6 +1,6 @@
 # Claude Code CLIによる授業生成機能の追加
 
-**ステータス: 計画中**
+**ステータス: 進行中（Step 1 完了）**
 
 ## Context
 
@@ -27,20 +27,36 @@ try:
 except sqlite3.OperationalError:
     pass
 
-# Migration: lesson_plans に generator カラム追加
+# Migration: lesson_plans に generator カラム追加 + UNIQUE制約変更
+# 既存テーブルは UNIQUE(lesson_id, lang) だが、generator追加後は UNIQUE(lesson_id, lang, generator) が必要。
+# SQLiteではテーブルレベルのUNIQUE制約をALTERで変更できないため、テーブル再作成で対応する。
 try:
-    conn.execute("ALTER TABLE lesson_plans ADD COLUMN generator TEXT NOT NULL DEFAULT 'gemini'")
-    conn.commit()
+    conn.execute("SELECT generator FROM lesson_plans LIMIT 1")
 except sqlite3.OperationalError:
-    pass
-
-# Migration: lesson_plans に新しいUNIQUEインデックス追加（lesson_id, lang, generator）
-# 既存の UNIQUE(lesson_id, lang) を拡張
-try:
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_lesson_plans_lid_lang_gen ON lesson_plans(lesson_id, lang, generator)")
+    # generator カラムが存在しない → マイグレーション実行
+    conn.execute("""CREATE TABLE lesson_plans_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+        lang TEXT NOT NULL DEFAULT 'ja',
+        knowledge TEXT NOT NULL DEFAULT '',
+        entertainment TEXT NOT NULL DEFAULT '',
+        plan_json TEXT NOT NULL DEFAULT '',
+        director_json TEXT NOT NULL DEFAULT '',
+        plan_generations TEXT NOT NULL DEFAULT '',
+        generator TEXT NOT NULL DEFAULT 'gemini',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(lesson_id, lang, generator)
+    )""")
+    conn.execute("""INSERT INTO lesson_plans_new
+        (id, lesson_id, lang, knowledge, entertainment, plan_json,
+         director_json, plan_generations, generator, created_at, updated_at)
+        SELECT id, lesson_id, lang, knowledge, entertainment, plan_json,
+               director_json, plan_generations, 'gemini', created_at, updated_at
+        FROM lesson_plans""")
+    conn.execute("DROP TABLE lesson_plans")
+    conn.execute("ALTER TABLE lesson_plans_new RENAME TO lesson_plans")
     conn.commit()
-except sqlite3.OperationalError:
-    pass
 ```
 
 ### 1-2. CRUD関数に `generator` パラメータ追加

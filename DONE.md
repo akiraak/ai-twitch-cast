@@ -1,5 +1,12 @@
 # DONE
 
+## Claude Code授業生成 Step 1: DBマイグレーション
+
+- [x] `lesson_sections` に `generator` カラム追加（デフォルト: `'gemini'`）
+- [x] `lesson_plans` テーブル再作成で `generator` カラム追加 + UNIQUE制約を `(lesson_id, lang, generator)` に変更
+- [x] CRUD関数に `generator` パラメータ追加（後方互換維持）
+- [x] テスト追加（generator別セクション・プランのCRUD）
+
 ## リファクタリング Phase 1: lesson_generator.py パッケージ化
 
 - [x] `src/lesson_generator.py`（2,666行）を `src/lesson_generator/` パッケージに分割

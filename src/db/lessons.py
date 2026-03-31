@@ -92,35 +92,38 @@ def delete_lesson_source(source_id):
 def add_lesson_section(lesson_id, order_index, section_type, content, tts_text="",
                        display_text="", emotion="neutral", question="", answer="",
                        wait_seconds=8, title="", lang="ja", dialogues="",
-                       dialogue_directions=""):
+                       dialogue_directions="", generator="gemini"):
     """授業セクションを追加する"""
     conn = get_connection()
     cur = conn.execute(
         "INSERT INTO lesson_sections "
         "(lesson_id, order_index, section_type, title, content, tts_text, display_text, "
-        "emotion, question, answer, wait_seconds, lang, dialogues, dialogue_directions, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "emotion, question, answer, wait_seconds, lang, dialogues, dialogue_directions, "
+        "generator, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (lesson_id, order_index, section_type, title, content, tts_text,
          display_text, emotion, question, answer, wait_seconds, lang, dialogues,
-         dialogue_directions, _now()),
+         dialogue_directions, generator, _now()),
     )
     conn.commit()
     return dict(conn.execute("SELECT * FROM lesson_sections WHERE id = ?", (cur.lastrowid,)).fetchone())
 
 
-def get_lesson_sections(lesson_id, lang=None):
+def get_lesson_sections(lesson_id, lang=None, generator=None):
     """授業セクション一覧を取得する（order_index順）"""
     conn = get_connection()
+    where = "WHERE lesson_id = ?"
+    params = [lesson_id]
     if lang:
-        rows = conn.execute(
-            "SELECT * FROM lesson_sections WHERE lesson_id = ? AND lang = ? ORDER BY order_index",
-            (lesson_id, lang),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM lesson_sections WHERE lesson_id = ? ORDER BY order_index",
-            (lesson_id,),
-        ).fetchall()
+        where += " AND lang = ?"
+        params.append(lang)
+    if generator:
+        where += " AND generator = ?"
+        params.append(generator)
+    rows = conn.execute(
+        f"SELECT * FROM lesson_sections {where} ORDER BY order_index",
+        params,
+    ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -146,13 +149,18 @@ def delete_lesson_section(section_id):
     conn.commit()
 
 
-def delete_lesson_sections(lesson_id, lang=None):
+def delete_lesson_sections(lesson_id, lang=None, generator=None):
     """授業の全セクションを削除する（再生成用）"""
     conn = get_connection()
+    where = "WHERE lesson_id = ?"
+    params = [lesson_id]
     if lang:
-        conn.execute("DELETE FROM lesson_sections WHERE lesson_id = ? AND lang = ?", (lesson_id, lang))
-    else:
-        conn.execute("DELETE FROM lesson_sections WHERE lesson_id = ?", (lesson_id,))
+        where += " AND lang = ?"
+        params.append(lang)
+    if generator:
+        where += " AND generator = ?"
+        params.append(generator)
+    conn.execute(f"DELETE FROM lesson_sections {where}", params)
     conn.commit()
 
 
@@ -169,13 +177,19 @@ def reorder_lesson_sections(lesson_id, section_ids):
 
 # --- lesson_plans (言語別) ---
 
-def get_lesson_plan(lesson_id, lang):
+def get_lesson_plan(lesson_id, lang, generator=None):
     """指定言語のプランを取得する"""
     conn = get_connection()
-    row = conn.execute(
-        "SELECT * FROM lesson_plans WHERE lesson_id = ? AND lang = ?",
-        (lesson_id, lang),
-    ).fetchone()
+    if generator:
+        row = conn.execute(
+            "SELECT * FROM lesson_plans WHERE lesson_id = ? AND lang = ? AND generator = ?",
+            (lesson_id, lang, generator),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM lesson_plans WHERE lesson_id = ? AND lang = ?",
+            (lesson_id, lang),
+        ).fetchone()
     return dict(row) if row else None
 
 
@@ -190,36 +204,41 @@ def get_lesson_plans(lesson_id):
 
 
 def upsert_lesson_plan(lesson_id, lang, knowledge="", entertainment="", plan_json="",
-                       director_json="", plan_generations=""):
+                       director_json="", plan_generations="", generator="gemini"):
     """プランを保存する（INSERT or UPDATE）"""
     conn = get_connection()
     now = _now()
     existing = conn.execute(
-        "SELECT id FROM lesson_plans WHERE lesson_id = ? AND lang = ?",
-        (lesson_id, lang),
+        "SELECT id FROM lesson_plans WHERE lesson_id = ? AND lang = ? AND generator = ?",
+        (lesson_id, lang, generator),
     ).fetchone()
     if existing:
         conn.execute(
             "UPDATE lesson_plans SET knowledge = ?, entertainment = ?, plan_json = ?, "
             "director_json = ?, plan_generations = ?, updated_at = ? "
-            "WHERE lesson_id = ? AND lang = ?",
-            (knowledge, entertainment, plan_json, director_json, plan_generations, now, lesson_id, lang),
+            "WHERE lesson_id = ? AND lang = ? AND generator = ?",
+            (knowledge, entertainment, plan_json, director_json, plan_generations, now, lesson_id, lang, generator),
         )
     else:
         conn.execute(
             "INSERT INTO lesson_plans (lesson_id, lang, knowledge, entertainment, plan_json, "
-            "director_json, plan_generations, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (lesson_id, lang, knowledge, entertainment, plan_json, director_json, plan_generations, now, now),
+            "director_json, plan_generations, generator, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (lesson_id, lang, knowledge, entertainment, plan_json, director_json, plan_generations, generator, now, now),
         )
     conn.commit()
 
 
-def delete_lesson_plans(lesson_id, lang=None):
+def delete_lesson_plans(lesson_id, lang=None, generator=None):
     """プランを削除する"""
     conn = get_connection()
+    where = "WHERE lesson_id = ?"
+    params = [lesson_id]
     if lang:
-        conn.execute("DELETE FROM lesson_plans WHERE lesson_id = ? AND lang = ?", (lesson_id, lang))
-    else:
-        conn.execute("DELETE FROM lesson_plans WHERE lesson_id = ?", (lesson_id,))
+        where += " AND lang = ?"
+        params.append(lang)
+    if generator:
+        where += " AND generator = ?"
+        params.append(generator)
+    conn.execute(f"DELETE FROM lesson_plans {where}", params)
     conn.commit()

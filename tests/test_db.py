@@ -17,7 +17,7 @@ class TestSchema:
             "users", "comments", "actions", "settings",
             "bgm_tracks", "se_tracks",
             "custom_texts", "character_memory",
-            "lessons", "lesson_sources", "lesson_sections",
+            "lessons", "lesson_sources", "lesson_sections", "lesson_plans",
         }
         assert expected.issubset(names)
 
@@ -823,3 +823,86 @@ class TestLessonSections:
         test_db.update_lesson_section(s["id"], dialogues=new_dialogues)
         sections = test_db.get_lesson_sections(lesson["id"])
         assert sections[0]["dialogues"] == new_dialogues
+
+    def test_generator_default(self, test_db):
+        """generatorのデフォルトは'gemini'"""
+        lesson = test_db.create_lesson("GenDefault")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "テスト")
+        assert s["generator"] == "gemini"
+
+    def test_generator_claude(self, test_db):
+        """generator='claude'で保存・取得"""
+        lesson = test_db.create_lesson("GenClaude")
+        test_db.add_lesson_section(lesson["id"], 0, "introduction", "Gemini版", generator="gemini")
+        test_db.add_lesson_section(lesson["id"], 0, "introduction", "Claude版", generator="claude")
+        # フィルタなし → 両方取得
+        all_sections = test_db.get_lesson_sections(lesson["id"])
+        assert len(all_sections) == 2
+        # generatorフィルタ
+        gemini = test_db.get_lesson_sections(lesson["id"], generator="gemini")
+        assert len(gemini) == 1
+        assert gemini[0]["content"] == "Gemini版"
+        claude = test_db.get_lesson_sections(lesson["id"], generator="claude")
+        assert len(claude) == 1
+        assert claude[0]["content"] == "Claude版"
+
+    def test_delete_sections_by_generator(self, test_db):
+        """generator指定でセクション削除"""
+        lesson = test_db.create_lesson("DelGen")
+        test_db.add_lesson_section(lesson["id"], 0, "introduction", "G", generator="gemini")
+        test_db.add_lesson_section(lesson["id"], 1, "explanation", "C", generator="claude")
+        test_db.delete_lesson_sections(lesson["id"], generator="claude")
+        remaining = test_db.get_lesson_sections(lesson["id"])
+        assert len(remaining) == 1
+        assert remaining[0]["generator"] == "gemini"
+
+
+class TestLessonPlans:
+    def test_upsert_and_get(self, test_db):
+        """プランの保存と取得"""
+        lesson = test_db.create_lesson("PlanTest")
+        test_db.upsert_lesson_plan(lesson["id"], "ja", knowledge="知識", entertainment="エンタメ")
+        plan = test_db.get_lesson_plan(lesson["id"], "ja")
+        assert plan is not None
+        assert plan["knowledge"] == "知識"
+        assert plan["generator"] == "gemini"
+
+    def test_upsert_update(self, test_db):
+        """プランの更新"""
+        lesson = test_db.create_lesson("PlanUpd")
+        test_db.upsert_lesson_plan(lesson["id"], "ja", knowledge="v1")
+        test_db.upsert_lesson_plan(lesson["id"], "ja", knowledge="v2")
+        plan = test_db.get_lesson_plan(lesson["id"], "ja")
+        assert plan["knowledge"] == "v2"
+
+    def test_generator_separate(self, test_db):
+        """同じlesson_id/langでもgeneratorが異なれば別プラン"""
+        lesson = test_db.create_lesson("PlanGen")
+        test_db.upsert_lesson_plan(lesson["id"], "ja", knowledge="Gemini知識", generator="gemini")
+        test_db.upsert_lesson_plan(lesson["id"], "ja", knowledge="Claude知識", generator="claude")
+        # generator指定で取得
+        gemini = test_db.get_lesson_plan(lesson["id"], "ja", generator="gemini")
+        assert gemini["knowledge"] == "Gemini知識"
+        claude = test_db.get_lesson_plan(lesson["id"], "ja", generator="claude")
+        assert claude["knowledge"] == "Claude知識"
+        # 全プラン
+        all_plans = test_db.get_lesson_plans(lesson["id"])
+        assert len(all_plans) == 2
+
+    def test_delete_by_generator(self, test_db):
+        """generator指定でプラン削除"""
+        lesson = test_db.create_lesson("PlanDelGen")
+        test_db.upsert_lesson_plan(lesson["id"], "ja", generator="gemini")
+        test_db.upsert_lesson_plan(lesson["id"], "ja", generator="claude")
+        test_db.delete_lesson_plans(lesson["id"], generator="claude")
+        remaining = test_db.get_lesson_plans(lesson["id"])
+        assert len(remaining) == 1
+        assert remaining[0]["generator"] == "gemini"
+
+    def test_delete_all(self, test_db):
+        """全プラン削除"""
+        lesson = test_db.create_lesson("PlanDelAll")
+        test_db.upsert_lesson_plan(lesson["id"], "ja")
+        test_db.upsert_lesson_plan(lesson["id"], "en")
+        test_db.delete_lesson_plans(lesson["id"])
+        assert len(test_db.get_lesson_plans(lesson["id"])) == 0
