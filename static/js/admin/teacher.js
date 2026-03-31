@@ -315,7 +315,7 @@ async function buildLessonItem(lessonId) {
 
   // セクション一覧
   const secContainer = document.createElement('div');
-  renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap, {teacher: teacherChar, student: studentChar}, langPlan);
+  renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap, {teacher: teacherChar, student: studentChar}, plans[lang]);
   step2bBody.appendChild(secContainer);
 
   step2b.innerHTML = '<div class="lesson-step-num">2</div>';

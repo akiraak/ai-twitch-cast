@@ -1,5 +1,12 @@
 # DONE
 
+## English 1-1 授業コンテンツ生成
+
+- [x] 教材画像読み取り（Kenjiの自己紹介・Section B穴埋め・Culture Note）
+- [x] 授業スクリプト生成（8セクション: 導入→読解2回→文法整理→実践→文化理解→クイズ2回→まとめ）
+- [x] APIでDBにインポート（lesson_id=168, lang=ja, generator=claude）
+- [x] teacher.jsバグ修正: プラン表示で`langPlan`→`plans[lang]`に修正（プラン情報が正しく渡されていなかった）
+
 ## Gemini授業生成削除 Step 7: クリーンアップ
 
 - [x] `.env.example` から授業モード役割別モデル環境変数4つを削除（GEMINI_KNOWLEDGE/ENTERTAINMENT/DIRECTOR/DIALOGUE_MODEL）
