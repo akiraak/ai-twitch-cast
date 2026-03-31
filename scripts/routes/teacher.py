@@ -588,7 +588,7 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
 
     async def event_stream():
         # 指定言語のGemini生成スクリプトとTTSキャッシュを削除
-        clear_tts_cache(lesson_id, lang=lang)
+        clear_tts_cache(lesson_id, lang=lang, generator="gemini")
         db.delete_lesson_sections(lesson_id, lang=lang, generator="gemini")
 
         progress_queue = asyncio.Queue()
@@ -924,12 +924,12 @@ async def start_lesson(lesson_id: int, lang: str = "ja", generator: str = "gemin
 
 
 @router.get("/api/lessons/{lesson_id}/tts-cache")
-async def get_tts_cache(lesson_id: int, lang: str = "ja"):
+async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "gemini"):
     """TTSキャッシュ状況を取得する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    sections = get_tts_cache_info(lesson_id, lang=lang)
+    sections = get_tts_cache_info(lesson_id, lang=lang, generator=generator)
     return {"ok": True, "sections": sections}
 
 
@@ -963,22 +963,22 @@ async def analyze_lesson(lesson_id: int, lang: str = "ja", include_llm: bool = T
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache")
-async def delete_tts_cache(lesson_id: int, lang: str | None = None):
+async def delete_tts_cache(lesson_id: int, lang: str | None = None, generator: str | None = None):
     """全TTSキャッシュを削除する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    clear_tts_cache(lesson_id, lang=lang)
-    logger.info("TTSキャッシュ全削除: lesson=%d, lang=%s", lesson_id, lang or "all")
+    clear_tts_cache(lesson_id, lang=lang, generator=generator)
+    logger.info("TTSキャッシュ全削除: lesson=%d, lang=%s, generator=%s", lesson_id, lang or "all", generator or "all")
     return {"ok": True}
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache/{order_index}")
-async def delete_tts_cache_section(lesson_id: int, order_index: int, lang: str = "ja"):
+async def delete_tts_cache_section(lesson_id: int, order_index: int, lang: str = "ja", generator: str | None = None):
     """特定セクションのTTSキャッシュを削除する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    clear_tts_cache(lesson_id, order_index=order_index, lang=lang)
-    logger.info("TTSキャッシュ削除: lesson=%d, section=%d, lang=%s", lesson_id, order_index, lang)
+    clear_tts_cache(lesson_id, order_index=order_index, lang=lang, generator=generator)
+    logger.info("TTSキャッシュ削除: lesson=%d, section=%d, lang=%s, generator=%s", lesson_id, order_index, lang, generator or "all")
     return {"ok": True}

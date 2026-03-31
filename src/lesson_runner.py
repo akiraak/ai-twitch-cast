@@ -23,24 +23,70 @@ class LessonState(str, Enum):
     PAUSED = "paused"
 
 
-def _cache_path(lesson_id: int, order_index: int, part_index: int, lang: str = "ja") -> Path:
-    """TTSキャッシュファイルのパスを返す"""
-    return LESSON_AUDIO_DIR / str(lesson_id) / lang / f"section_{order_index:02d}_part_{part_index:02d}.wav"
+def _cache_path(lesson_id: int, order_index: int, part_index: int, lang: str = "ja", generator: str = "gemini") -> Path:
+    """TTSキャッシュファイルのパスを返す（generator別サブディレクトリ、旧パス互換あり）"""
+    filename = f"section_{order_index:02d}_part_{part_index:02d}.wav"
+    new_path = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / filename
+    if new_path.exists():
+        return new_path
+    # 旧パス互換（generator導入前のキャッシュ）
+    if generator == "gemini":
+        legacy = LESSON_AUDIO_DIR / str(lesson_id) / lang / filename
+        if legacy.exists():
+            return legacy
+    return new_path
 
 
-def _dlg_cache_path(lesson_id: int, order_index: int, dlg_index: int, lang: str = "ja") -> Path:
-    """dialogue用TTSキャッシュファイルのパスを返す"""
-    return LESSON_AUDIO_DIR / str(lesson_id) / lang / f"section_{order_index:02d}_dlg_{dlg_index:02d}.wav"
+def _dlg_cache_path(lesson_id: int, order_index: int, dlg_index: int, lang: str = "ja", generator: str = "gemini") -> Path:
+    """dialogue用TTSキャッシュファイルのパスを返す（generator別サブディレクトリ、旧パス互換あり）"""
+    filename = f"section_{order_index:02d}_dlg_{dlg_index:02d}.wav"
+    new_path = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / filename
+    if new_path.exists():
+        return new_path
+    # 旧パス互換（generator導入前のキャッシュ）
+    if generator == "gemini":
+        legacy = LESSON_AUDIO_DIR / str(lesson_id) / lang / filename
+        if legacy.exists():
+            return legacy
+    return new_path
 
 
-def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | None = None):
+def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | None = None, generator: str | None = None):
     """TTSキャッシュを削除する
 
     Args:
         lesson_id: レッスンID
         order_index: 指定時はそのセクションのみ、Noneなら全セクション
         lang: 指定時はその言語のみ、Noneなら全言語
+        generator: 指定時はそのジェネレータのキャッシュのみ、Noneなら全ジェネレータ
     """
+    if generator is not None:
+        # 特定generatorのキャッシュのみ削除
+        if lang:
+            gen_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator
+            if not gen_dir.exists():
+                return
+            if order_index is not None:
+                for f in gen_dir.glob(f"section_{order_index:02d}_*.wav"):
+                    f.unlink(missing_ok=True)
+            else:
+                shutil.rmtree(gen_dir, ignore_errors=True)
+        else:
+            lesson_dir = LESSON_AUDIO_DIR / str(lesson_id)
+            if not lesson_dir.exists():
+                return
+            for lang_dir in lesson_dir.iterdir():
+                if lang_dir.is_dir():
+                    gen_dir = lang_dir / generator
+                    if gen_dir.exists():
+                        if order_index is not None:
+                            for f in gen_dir.glob(f"section_{order_index:02d}_*.wav"):
+                                f.unlink(missing_ok=True)
+                        else:
+                            shutil.rmtree(gen_dir, ignore_errors=True)
+        return
+
+    # generator=None → 既存動作（全ジェネレータ削除）
     if lang:
         lesson_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
     else:
@@ -48,39 +94,70 @@ def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | 
     if not lesson_dir.exists():
         return
     if order_index is not None:
+        # レガシーファイル（lang直下）
         for f in lesson_dir.glob(f"section_{order_index:02d}_part_*.wav"):
             f.unlink(missing_ok=True)
+        # generatorサブディレクトリ内のファイル
+        if lang:
+            for sub in lesson_dir.iterdir():
+                if sub.is_dir():
+                    for f in sub.glob(f"section_{order_index:02d}_*.wav"):
+                        f.unlink(missing_ok=True)
     else:
         shutil.rmtree(lesson_dir, ignore_errors=True)
 
 
-def get_tts_cache_info(lesson_id: int, lang: str = "ja") -> list[dict]:
-    """TTSキャッシュの状況を返す（part形式 + dlg形式の両方を検索）"""
-    lesson_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
+def get_tts_cache_info(lesson_id: int, lang: str = "ja", generator: str = "gemini") -> list[dict]:
+    """TTSキャッシュの状況を返す（part形式 + dlg形式の両方を検索）
+
+    Args:
+        lesson_id: レッスンID
+        lang: 言語
+        generator: ジェネレータ（新パス構造のサブディレクトリ、geminiの場合は旧パスもスキャン）
+    """
     sections_map: dict[int, list[dict]] = {}
-    if lesson_dir.exists():
+    seen: set[tuple[int, str, int]] = set()  # (order_index, type, index) 重複排除
+
+    # スキャン対象ディレクトリ: 新パス + レガシーパス（geminiのみ）
+    scan_dirs: list[Path] = []
+    gen_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator
+    if gen_dir.exists():
+        scan_dirs.append(gen_dir)
+    if generator == "gemini":
+        legacy_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
+        if legacy_dir.exists():
+            scan_dirs.append(legacy_dir)
+
+    for scan_dir in scan_dirs:
         # part形式: section_00_part_00.wav
-        for f in sorted(lesson_dir.glob("section_*_part_*.wav")):
+        for f in sorted(scan_dir.glob("section_*_part_*.wav")):
             parts = f.stem.split("_")  # section_00_part_00
             oi = int(parts[1])
             pi = int(parts[3])
-            sections_map.setdefault(oi, []).append({
-                "part_index": pi,
-                "path": str(f.relative_to(PROJECT_DIR)),
-                "size": f.stat().st_size,
-            })
+            key = (oi, "part", pi)
+            if key not in seen:
+                seen.add(key)
+                sections_map.setdefault(oi, []).append({
+                    "part_index": pi,
+                    "path": str(f.relative_to(PROJECT_DIR)),
+                    "size": f.stat().st_size,
+                })
         # dlg形式: section_00_dlg_00.wav
-        for f in sorted(lesson_dir.glob("section_*_dlg_*.wav")):
+        for f in sorted(scan_dir.glob("section_*_dlg_*.wav")):
             parts = f.stem.split("_")  # section_00_dlg_00
             oi = int(parts[1])
             di = int(parts[3])
-            sections_map.setdefault(oi, []).append({
-                "part_index": di,
-                "path": str(f.relative_to(PROJECT_DIR)),
-                "size": f.stat().st_size,
-            })
+            key = (oi, "dlg", di)
+            if key not in seen:
+                seen.add(key)
+                sections_map.setdefault(oi, []).append({
+                    "part_index": di,
+                    "path": str(f.relative_to(PROJECT_DIR)),
+                    "size": f.stat().st_size,
+                })
+
     # DB上のセクション数に合わせて返す
-    db_sections = db.get_lesson_sections(lesson_id, lang=lang)
+    db_sections = db.get_lesson_sections(lesson_id, lang=lang, generator=generator)
     result = []
     for i, sec in enumerate(db_sections):
         result.append({
@@ -110,6 +187,7 @@ class LessonRunner:
         self._task: asyncio.Task | None = None
         self._pause_event = asyncio.Event()
         self._pause_event.set()  # 初期状態は非一時停止
+        self._generator: str = "gemini"
         self._episode_id: int | None = None
         self._teacher_cfg: dict | None = None
         self._student_cfg: dict | None = None
@@ -149,6 +227,7 @@ class LessonRunner:
         self._lesson_id = lesson_id
         self._lesson_name = lesson["name"]
         self._lang = lang
+        self._generator = generator
         self._sections = sections
         self._current_index = 0
         self._state = LessonState.RUNNING
@@ -209,6 +288,7 @@ class LessonRunner:
         self._lesson_id = None
         self._sections = []
         self._current_index = 0
+        self._generator = "gemini"
         self._teacher_cfg = None
         self._student_cfg = None
         logger.info("授業停止")
@@ -248,6 +328,7 @@ class LessonRunner:
                 self._lesson_id = None
                 self._sections = []
                 self._current_index = 0
+                self._generator = "gemini"
                 self._teacher_cfg = None
                 self._student_cfg = None
 
@@ -334,7 +415,7 @@ class LessonRunner:
                 break
             part_tts = tts_parts[i] if i < len(tts_parts) else part
 
-            cached = _cache_path(self._lesson_id, order_index, i, lang=self._lang)
+            cached = _cache_path(self._lesson_id, order_index, i, lang=self._lang, generator=self._generator)
             if cached.exists():
                 wav_paths.append(cached)
                 cache_hits += 1
@@ -378,7 +459,7 @@ class LessonRunner:
         style = cfg.get("tts_style")
         tts_text = dlg.get("tts_text", dlg.get("content", ""))
 
-        cached = _dlg_cache_path(self._lesson_id, order_index, index, lang=self._lang)
+        cached = _dlg_cache_path(self._lesson_id, order_index, index, lang=self._lang, generator=self._generator)
         if cached.exists():
             return cached
 
@@ -541,6 +622,7 @@ class LessonRunner:
             "state": self._state.value,
             "lesson_id": self._lesson_id,
             "lang": self._lang,
+            "generator": self._generator,
             "current_index": self._current_index,
             "total_sections": len(self._sections),
         }

@@ -45,6 +45,7 @@ class TestLessonState:
         status = runner.get_status()
         assert status["state"] == "idle"
         assert status["lesson_id"] is None
+        assert status["generator"] == "gemini"
         assert status["current_index"] == 0
         assert status["total_sections"] == 0
 
@@ -114,16 +115,72 @@ class TestTtsCache:
     """TTSキャッシュ関連のテスト"""
 
     def test_cache_path(self):
-        """キャッシュパスの生成"""
+        """キャッシュパスの生成（generator別サブディレクトリ）"""
         p = _cache_path(1, 0, 2)
         assert p.name == "section_00_part_02.wav"
-        assert "lessons/1/" in str(p)
+        assert "lessons/1/ja/gemini/" in str(p)
+
+    def test_cache_path_with_generator(self):
+        """claude generatorのキャッシュパス"""
+        p = _cache_path(1, 0, 2, generator="claude")
+        assert "lessons/1/ja/claude/" in str(p)
+        assert p.name == "section_00_part_02.wav"
+
+    def test_cache_path_legacy_fallback(self, tmp_path, monkeypatch):
+        """geminiの場合、旧パス（lang直下）のキャッシュにフォールバック"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        # 旧パスにキャッシュファイルを配置
+        legacy_dir = tmp_path / "1" / "ja"
+        legacy_dir.mkdir(parents=True)
+        legacy_file = legacy_dir / "section_00_part_00.wav"
+        legacy_file.write_bytes(b"legacy")
+
+        p = _cache_path(1, 0, 0, generator="gemini")
+        assert p == legacy_file
+
+    def test_cache_path_no_legacy_for_claude(self, tmp_path, monkeypatch):
+        """claude generatorでは旧パスにフォールバックしない"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        legacy_dir = tmp_path / "1" / "ja"
+        legacy_dir.mkdir(parents=True)
+        (legacy_dir / "section_00_part_00.wav").write_bytes(b"legacy")
+
+        p = _cache_path(1, 0, 0, generator="claude")
+        # 新パスを返す（存在しない）
+        assert "claude" in str(p)
+        assert not p.exists()
+
+    def test_cache_path_new_path_preferred(self, tmp_path, monkeypatch):
+        """新パスが存在する場合はそちらを優先"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        # 旧パスと新パスの両方にファイルを配置
+        legacy_dir = tmp_path / "1" / "ja"
+        legacy_dir.mkdir(parents=True)
+        (legacy_dir / "section_00_part_00.wav").write_bytes(b"legacy")
+        new_dir = tmp_path / "1" / "ja" / "gemini"
+        new_dir.mkdir(parents=True)
+        new_file = new_dir / "section_00_part_00.wav"
+        new_file.write_bytes(b"new")
+
+        p = _cache_path(1, 0, 0, generator="gemini")
+        assert p == new_file
 
     def test_dlg_cache_path(self):
         """dialogue用キャッシュパスの生成"""
         p = _dlg_cache_path(1, 3, 1, lang="en")
         assert p.name == "section_03_dlg_01.wav"
-        assert "lessons/1/en" in str(p)
+        assert "lessons/1/en/gemini/" in str(p)
+
+    def test_dlg_cache_path_legacy_fallback(self, tmp_path, monkeypatch):
+        """dialogue用: geminiの場合、旧パスにフォールバック"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        legacy_dir = tmp_path / "1" / "ja"
+        legacy_dir.mkdir(parents=True)
+        legacy_file = legacy_dir / "section_00_dlg_00.wav"
+        legacy_file.write_bytes(b"legacy")
+
+        p = _dlg_cache_path(1, 0, 0, generator="gemini")
+        assert p == legacy_file
 
     def test_clear_tts_cache_all(self, tmp_path, monkeypatch):
         """全キャッシュ削除"""
@@ -137,7 +194,7 @@ class TestTtsCache:
         assert not lesson_dir.exists()
 
     def test_clear_tts_cache_section(self, tmp_path, monkeypatch):
-        """特定セクションのキャッシュ削除"""
+        """特定セクションのキャッシュ削除（レガシーファイル）"""
         monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
         lesson_dir = tmp_path / "1"
         lesson_dir.mkdir()
@@ -148,13 +205,61 @@ class TestTtsCache:
         assert not (lesson_dir / "section_00_part_00.wav").exists()
         assert (lesson_dir / "section_01_part_00.wav").exists()
 
+    def test_clear_tts_cache_section_with_generator_subdir(self, tmp_path, monkeypatch):
+        """特定セクション削除時にgeneratorサブディレクトリも削除される"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        lang_dir = tmp_path / "1" / "ja"
+        # レガシーファイル
+        lang_dir.mkdir(parents=True)
+        (lang_dir / "section_00_part_00.wav").write_bytes(b"x")
+        # generatorサブディレクトリのファイル
+        gen_dir = lang_dir / "gemini"
+        gen_dir.mkdir()
+        (gen_dir / "section_00_part_00.wav").write_bytes(b"x")
+        (gen_dir / "section_01_part_00.wav").write_bytes(b"x")
+
+        clear_tts_cache(1, order_index=0, lang="ja")
+        assert not (lang_dir / "section_00_part_00.wav").exists()
+        assert not (gen_dir / "section_00_part_00.wav").exists()
+        assert (gen_dir / "section_01_part_00.wav").exists()
+
+    def test_clear_tts_cache_specific_generator(self, tmp_path, monkeypatch):
+        """特定generatorのキャッシュのみ削除"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        # geminiとclaudeのキャッシュ
+        gemini_dir = tmp_path / "1" / "ja" / "gemini"
+        claude_dir = tmp_path / "1" / "ja" / "claude"
+        gemini_dir.mkdir(parents=True)
+        claude_dir.mkdir(parents=True)
+        (gemini_dir / "section_00_part_00.wav").write_bytes(b"x")
+        (claude_dir / "section_00_part_00.wav").write_bytes(b"x")
+
+        clear_tts_cache(1, lang="ja", generator="claude")
+        assert not claude_dir.exists()
+        assert (gemini_dir / "section_00_part_00.wav").exists()
+
+    def test_clear_tts_cache_specific_generator_section(self, tmp_path, monkeypatch):
+        """特定generator+特定セクションのキャッシュ削除"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        gen_dir = tmp_path / "1" / "ja" / "claude"
+        gen_dir.mkdir(parents=True)
+        (gen_dir / "section_00_part_00.wav").write_bytes(b"x")
+        (gen_dir / "section_00_dlg_00.wav").write_bytes(b"x")
+        (gen_dir / "section_01_part_00.wav").write_bytes(b"x")
+
+        clear_tts_cache(1, order_index=0, lang="ja", generator="claude")
+        assert not (gen_dir / "section_00_part_00.wav").exists()
+        assert not (gen_dir / "section_00_dlg_00.wav").exists()
+        assert (gen_dir / "section_01_part_00.wav").exists()
+
     def test_clear_tts_cache_nonexistent(self, tmp_path, monkeypatch):
         """存在しないキャッシュディレクトリの削除はエラーにならない"""
         monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
         clear_tts_cache(999)  # no error
+        clear_tts_cache(999, generator="claude")  # no error
 
     def test_get_tts_cache_info(self, tmp_path, monkeypatch, test_db):
-        """キャッシュ情報取得"""
+        """キャッシュ情報取得（レガシーパス互換）"""
         monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
         monkeypatch.setattr("src.lesson_runner.PROJECT_DIR", tmp_path.parent)
 
@@ -164,7 +269,7 @@ class TestTtsCache:
         test_db.add_lesson_section(lid, 0, "intro", "Hello")
         test_db.add_lesson_section(lid, 1, "explain", "World")
 
-        # セクション0のキャッシュを作成（lang="ja" サブディレクトリ）
+        # セクション0のキャッシュを作成（レガシー: lang直下）
         cache_dir = tmp_path / str(lid) / "ja"
         cache_dir.mkdir(parents=True)
         (cache_dir / "section_00_part_00.wav").write_bytes(b"wavdata")
@@ -177,6 +282,26 @@ class TestTtsCache:
         assert info[0]["parts"][0]["size"] == 7
         assert info[1]["order_index"] == 1
         assert info[1]["parts"] == []
+
+    def test_get_tts_cache_info_new_path(self, tmp_path, monkeypatch, test_db):
+        """キャッシュ情報取得（新パス構造: generator別サブディレクトリ）"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        monkeypatch.setattr("src.lesson_runner.PROJECT_DIR", tmp_path.parent)
+
+        lesson = test_db.create_lesson("NewPathTest")
+        lid = lesson["id"]
+        test_db.add_lesson_section(lid, 0, "intro", "Hello", generator="claude")
+
+        # 新パス構造のキャッシュ
+        cache_dir = tmp_path / str(lid) / "ja" / "claude"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "section_00_part_00.wav").write_bytes(b"data")
+
+        info = get_tts_cache_info(lid, generator="claude")
+        assert len(info) == 1
+        assert info[0]["order_index"] == 0
+        assert len(info[0]["parts"]) == 1
+        assert info[0]["parts"][0]["size"] == 4
 
 
 class TestDialoguePlayback:

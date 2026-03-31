@@ -1,6 +1,6 @@
 # Claude Code CLIによる授業生成機能の追加
 
-**ステータス: 進行中（Step 3 完了）**
+**ステータス: 進行中（Step 4 完了）**
 
 ## Context
 
@@ -206,6 +206,13 @@ def _cache_path(lesson_id, order_index, part_index, lang="ja", generator="gemini
 # 変更: get_tts_cache_info(lesson_id, lang="ja", generator="gemini")
 # 指定ジェネレータのキャッシュ情報を返す
 ```
+
+### 4-5. `get_status()` に `generator` 追加、`teacher.py` のTTSキャッシュAPI修正 — **実装済み**
+
+- `get_status()` の返り値に `generator` フィールドを追加
+- `teacher.py`: `generate-script` の `clear_tts_cache` に `generator="gemini"` を明示
+- `teacher.py`: TTSキャッシュAPI 3エンドポイント（GET/DELETE/DELETE by section）に `generator` クエリパラメータ追加
+- `clear_tts_cache(generator=None)` 時、`order_index` 指定でもgeneratorサブディレクトリ内のファイルを削除するよう拡張
 
 ---
 

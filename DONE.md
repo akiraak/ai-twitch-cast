@@ -1,5 +1,15 @@
 # DONE
 
+## Claude Code授業生成 Step 4: LessonRunner修正
+
+- [x] `_cache_path` / `_dlg_cache_path` に `generator` パラメータ追加（新パス `{lang}/{generator}/` + gemini旧パスフォールバック）
+- [x] `clear_tts_cache` に `generator` パラメータ追加（`None`=全ジェネレータ、指定時はそのgeneratorのみ）
+- [x] `get_tts_cache_info` に `generator` パラメータ追加（新パス+レガシーパスの重複排除スキャン）
+- [x] `LessonRunner` に `self._generator` 保持（start/stop/完了時にセット・リセット）
+- [x] `get_status()` に `generator` フィールド追加
+- [x] `teacher.py`: TTSキャッシュAPI 3エンドポイントに `generator` クエリパラメータ追加
+- [x] テスト追加（レガシーフォールバック・新パス優先・generator別キャッシュ削除など10件）
+
 ## Claude Code授業生成 Step 3: APIエンドポイント追加・修正
 
 - [x] `POST /api/lessons/{id}/import-sections` 新規追加（フォーマット検証・generator指定・dialogues JSON変換）
