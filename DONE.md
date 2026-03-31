@@ -1,5 +1,16 @@
 # DONE
 
+## Gemini授業生成削除 Step 5: teacher.jsフロントエンド整理
+
+- [x] ジェネレータタブ削除（`_buildGeneratorTabs`, `_switchLessonGenerator`, `_lessonGeneratorTab`, `_getLessonGenerator`）
+- [x] Step 2a プラン生成UI全体を削除（約160行）
+- [x] Step 2bのGemini分岐削除（入力データ表示・スクリプト生成ボタン）→ Claude Code JSONインポートのみ
+- [x] `generatePlan()`, `generateScript()`, `_streamSSE()` 関数を削除
+- [x] QA品質分析: `generator === 'gemini'`条件を除去、「＋LLM評価」ボタン削除、`_renderAnalysisResult`のLLMスコア表示削除
+- [x] デフォルト値 `'gemini'` → `'claude'` に統一（セクションフィルタ・バッジ・startLesson・clearSectionCache・playSectionAudio）
+- [x] Step番号 2a/2b → 2 に統合、`_clearDownstreamSteps`参照も更新
+- [x] Step 6（テスト整理）は前倒し完了済みのため対象なし
+
 ## Gemini授業生成削除 Step 4: teacher.py API整理
 
 - [x] `generate_plan` エンドポイント（POST /api/lessons/{id}/generate-plan）を削除

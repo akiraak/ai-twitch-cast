@@ -1,6 +1,6 @@
 # Gemini授業生成機能の削除（Claude Codeのみに統一）
 
-**ステータス: 作業中（Step 4 完了）**
+**ステータス: 作業中（Step 5 完了）**
 
 ## 概要
 
@@ -110,53 +110,47 @@
 - `sections_by_generator` の構造は残した（既存geminiデータ＋claudeデータ両方表示用）
 - `plan` 関連のデータ（`plan_json`, `director_json`, `generations`）は表示のみ（新規生成不可）
 
-### Step 5: フロントエンド — teacher.jsの整理
+### Step 5: フロントエンド — teacher.jsの整理 ✅ 完了
 
-**削除するUI:**
+**削除したUI:**
 - ジェネレータ切り替えタブ（`_buildGeneratorTabs`, `_switchLessonGenerator`）→ Claude Code固定
-- `_lessonGeneratorTab` 状態管理を削除
-- Step 2a: プラン生成UI（`generator === 'gemini'` ブロック全体、lines 310-469）
-- Step 2b: Gemini固有の「スクリプト生成」ボタン・入力データ表示（`generator === 'gemini'` ブロック）→ Claude Codeの「JSONインポート」のみ残す
-- `generatePlan()`, `generateScript()` 関数
+- `_lessonGeneratorTab` 状態管理・`_getLessonGenerator()` 関数を削除
+- Step 2a: プラン生成UI全体（`generator === 'gemini'` ブロック）
+- Step 2b: Gemini固有の「スクリプト生成」ボタン・入力データ表示 → Claude Codeの「JSONインポート」のみ残した
+- `generatePlan()`, `generateScript()`, `_streamSSE()` 関数を削除
 
-**変更するUI:**
-- QA品質分析: `generator === 'gemini'` 条件を外し、Claude Codeインポート後のセクションにも表示
-- `analyzeLesson()` 関数: `include_llm` パラメータを削除（常にアルゴリズム分析のみ）— バックエンド側はStep 3で完了済み、フロントのみ
+**変更したUI:**
+- QA品質分析: `generator === 'gemini'` 条件を外し、全セクションで表示可能に
+- `analyzeLesson()` 関数: `include_llm` パラメータを削除（常にアルゴリズム分析のみ）
+- `_renderAnalysisResult()`: LLMスコア表示セクションを削除
+- Step番号: 2a/2b → 2に統合、`_clearDownstreamSteps`の参照も更新
 
 **デフォルト値変更:**
-- `_getLessonGenerator()` のデフォルト: `'gemini'` → `'claude'`（line 26）
-- セクションフィルタ: `(s.generator || 'gemini')` → `(s.generator || 'claude')`（line 131）
-- バッジ表示: generator別バッジのデフォルトも同様に変更
+- `generator` を `'claude'` 固定（`_getLessonGenerator()` 削除）
+- セクションフィルタ: `(s.generator || 'gemini')` → `(s.generator || 'claude')`
+- バッジ表示・`startLesson`・`clearSectionCache`・`playSectionAudio`: すべて `'claude'` 固定
+- 空セクションメッセージ: 「スクリプト生成を押してください」→「JSONインポートでセクションを追加してください」
 
-**残すUI:**
-- セクション一覧表示（Step 3相当）
+**残したUI:**
+- セクション一覧表示
 - JSONインポート機能
-- 授業再生コントロール（Step 4）
+- 授業再生コントロール
 - TTSキャッシュ管理
-- 既存Geminiデータの閲覧（sections_by_generatorで表示される）
+- 既存Geminiデータのバッジカウント表示（G:N/C:N）
 
-### Step 6: テストの整理
+### Step 6: テストの整理 — 前倒し完了（対象なし）
 
-**削除:**
-- `tests/test_lesson_generator.py` — Gemini LLM呼び出しのモックテスト全体
-  - `generate_lesson_plan` テスト
-  - `generate_lesson_script` テスト
-  - `generate_lesson_script_v2` テスト
-  - dialogue/director テスト
-- ~~`tests/test_content_analyzer.py` の `analyze_content_full` テスト（`test_llm_evaluation`, `test_llm_error_handling`, `test_llm_score_clamping`, `test_analyze_with_llm`）~~ → Step 3で前倒し完了
-- `tests/test_api_teacher.py` の以下テスト:
-  - `test_generate_plan`, `test_generate_plan_no_text`, `test_generate_plan_not_found`
-  - `test_generate_script`, `test_generate_script_with_rejection`, `test_generate_script_no_text`, `test_generate_script_uses_plan`
+以下すべて前のStepで対応済み:
+- ~~`tests/test_lesson_generator.py`~~ → Step 2時点で既に存在しない（モジュール削除でテストも除去済み）
+- ~~`tests/test_content_analyzer.py` のLLMテスト~~ → Step 3で前倒し完了
+- ~~`tests/test_api_teacher.py` の `test_generate_plan`/`test_generate_script`~~ → Step 4で前倒し完了（エンドポイント削除に合わせてテストも除去済み）
+- ~~`generatorデフォルト値のテスト修正`~~ → Step 4で `test_start_lesson` と `test_get_tts_cache_empty` を修正済み
 
-**残す:**
+**残っているテスト（変更不要）:**
 - `tests/test_api_teacher.py` の `import-sections`, `start`, `tts-cache` テスト
 - `tests/test_lesson_runner.py` — 授業再生テスト
 - `tests/test_content_analyzer.py` の `analyze_content`（アルゴリズム分析）テスト
-- `tests/conftest.py` の `mock_gemini`（ai_responder/tts等で引き続き使用）
-
-**修正:**
-- generatorデフォルト値変更に合わせてテストのパラメータ修正
-- `get_lesson_characters` のテストがtest_lesson_generator.pyにある場合、移動先に合わせて新テスト作成
+- `tests/conftest.py` の `mock_gemini`（ai_responder/tts等で引き続き使用）・`src.lesson_generator` パッチ（extractor.pyで使用）
 
 ### Step 7: クリーンアップ
 

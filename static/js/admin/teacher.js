@@ -15,15 +15,9 @@ let _openLessonIds = new Set();
 // 言語タブ状態（lesson_id → 'ja' or 'en'）
 let _lessonLangTab = {};
 
-// ジェネレータタブ状態（lesson_id → 'gemini' or 'claude'）
-let _lessonGeneratorTab = {};
 
 function _getLessonLang(lessonId) {
   return _lessonLangTab[lessonId] || 'ja';
-}
-
-function _getLessonGenerator(lessonId) {
-  return _lessonGeneratorTab[lessonId] || 'gemini';
 }
 
 function _buildLangTabs(lessonId, plans, sections) {
@@ -44,26 +38,6 @@ function _buildLangTabs(lessonId, plans, sections) {
 
 async function _switchLessonLang(lessonId, lang) {
   _lessonLangTab[lessonId] = lang;
-  _openLessonIds.add(lessonId);
-  await loadLessons();
-}
-
-function _buildGeneratorTabs(lessonId, sectionsByGenerator) {
-  const currentGen = _getLessonGenerator(lessonId);
-  const geminiSections = (sectionsByGenerator && sectionsByGenerator.gemini) || [];
-  const claudeSections = (sectionsByGenerator && sectionsByGenerator.claude) || [];
-  const geminiBadge = geminiSections.length ? ` (${geminiSections.length})` : '';
-  const claudeBadge = claudeSections.length ? ` (${claudeSections.length})` : '';
-  return `<div style="display:flex; gap:4px; margin-bottom:10px;">
-    <button onclick="_switchLessonGenerator(${lessonId}, 'gemini')" style="padding:4px 14px; border:1px solid #d0c0e8; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:600;
-      ${currentGen === 'gemini' ? 'background:#7b1fa2; color:#fff;' : 'background:#faf7ff; color:#7b1fa2;'}">🤖 Gemini${geminiBadge}</button>
-    <button onclick="_switchLessonGenerator(${lessonId}, 'claude')" style="padding:4px 14px; border:1px solid #d0c0e8; border-radius:4px; cursor:pointer; font-size:0.8rem; font-weight:600;
-      ${currentGen === 'claude' ? 'background:#7b1fa2; color:#fff;' : 'background:#faf7ff; color:#7b1fa2;'}">🧠 Claude Code${claudeBadge}</button>
-  </div>`;
-}
-
-async function _switchLessonGenerator(lessonId, generator) {
-  _lessonGeneratorTab[lessonId] = generator;
   _openLessonIds.add(lessonId);
   await loadLessons();
 }
@@ -127,8 +101,8 @@ async function buildLessonItem(lessonId) {
   const sectionsByGenerator = res.sections_by_generator || {};
   const plans = res.plans || {};
   const lang = _getLessonLang(lessonId);
-  const generator = _getLessonGenerator(lessonId);
-  const sections = allSections.filter(s => (s.lang || 'ja') === lang && (s.generator || 'gemini') === generator);
+  const generator = 'claude';
+  const sections = allSections.filter(s => (s.lang || 'ja') === lang && (s.generator || 'claude') === generator);
   const hasSources = sources.length > 0;
   const hasSections = sections.length > 0;
 
@@ -149,8 +123,8 @@ async function buildLessonItem(lessonId) {
     badges.push(langBadges.join('/'));
   }
   // generator別バッジ
-  const geminiSec = allSections.filter(s => (s.generator || 'gemini') === 'gemini');
-  const claudeSec = allSections.filter(s => (s.generator || 'gemini') === 'claude');
+  const geminiSec = allSections.filter(s => (s.generator || 'claude') === 'gemini');
+  const claudeSec = allSections.filter(s => (s.generator || 'claude') === 'claude');
   if (claudeSec.length) {
     badges.push('G:' + geminiSec.length + '/C:' + claudeSec.length);
   }
@@ -294,181 +268,8 @@ async function buildLessonItem(lessonId) {
   langTabsDiv.innerHTML = _buildLangTabs(lessonId, plans, allSections);
   body.appendChild(langTabsDiv);
 
-  // === ジェネレータタブ ===
-  // 現在の言語でフィルタしたsections_by_generatorを構築
-  const langFilteredByGen = {};
-  for (const s of allSections) {
-    if ((s.lang || 'ja') !== lang) continue;
-    const g = s.generator || 'gemini';
-    langFilteredByGen[g] = langFilteredByGen[g] || [];
-    langFilteredByGen[g].push(s);
-  }
-  const genTabsDiv = document.createElement('div');
-  genTabsDiv.innerHTML = _buildGeneratorTabs(lessonId, langFilteredByGen);
-  body.appendChild(genTabsDiv);
 
-  // === STEP 2a: プラン生成（三者視点） — Geminiのみ表示 ===
-  const langPlan = plans[lang] || {};
-  const hasPlan = !!(langPlan.plan_json);
- if (generator === 'gemini') {
-  const step2a = document.createElement('div');
-  step2a.className = 'lesson-step' + (hasPlan ? ' step-done' : hasExtractedText ? ' step-active' : ' step-disabled');
-  const step2aBody = document.createElement('div');
-  step2aBody.className = 'lesson-step-body';
-  const planLabel = lang === 'en' ? 'Plan Generation (3 experts)' : 'プラン生成（三者視点）';
-  let planHtml = `<div class="lesson-step-title">${planLabel}${hasPlan ? ' ✓' : ''}</div>
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button onclick="generatePlan(${lessonId}, '${lang}')" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasPlan ? (lang === 'en' ? 'Regenerate' : 'プラン再生成') : (lang === 'en' ? 'Generate Plan' : 'プラン生成')}</button>
-      <span class="plan-status"></span>
-    </div>`;
-
-  // 既存プランの表示 — plan_generationsからプロンプト・出力を取得（JSハードコード廃止）
-  if (hasPlan) {
-    const _preStyle = 'margin-top:4px; background:#fafafa; padding:6px; border:1px solid #ddd; border-radius:4px; font-size:0.65rem; max-height:250px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:#333;';
-    const _outPreStyle = (bg, border, color) => `margin-top:4px; background:${bg}; padding:6px; border:1px solid ${border}; border-radius:4px; font-size:0.7rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; color:${color};`;
-
-    // v3: plan_generationsメタデータをパース（APIから取得、JSハードコード廃止）
-    let planGen = null;
-    try {
-      if (langPlan.plan_generations) {
-        planGen = typeof langPlan.plan_generations === 'string'
-          ? JSON.parse(langPlan.plan_generations) : langPlan.plan_generations;
-      }
-    } catch(e) {}
-    const kg = planGen && planGen.knowledge;
-    const eg = planGen && planGen.entertainment;
-    const dg = planGen && planGen.director;
-
-    // Phase Aヘッダー
-    planHtml += `<div style="margin-top:4px; margin-bottom:8px; padding:6px 10px; background:#f0ecf5; border-radius:6px; font-size:0.78rem; font-weight:600; color:#7b1fa2;">\u{1F4D8} Phase A: ${lang === 'en' ? 'Material Analysis' : '教材分析'}</div>`;
-
-    // --- Step 1: 知識先生 ---
-    const kModel = kg ? kg.model : '?';
-    const kTemp = kg ? kg.temperature : '?';
-    planHtml += `<div style="margin-top:4px; border:1px solid #bbdefb; border-radius:6px; overflow:hidden;">`;
-    planHtml += `<div style="background:#e3f2fd; padding:6px 10px; font-size:0.78rem; font-weight:600; color:#1565c0;">\u{1F4DA} Step 1: ${lang === 'en' ? 'Knowledge Expert' : '知識先生'} <span style="font-weight:400; font-size:0.68rem; color:#666;">model: ${esc(String(kModel))} / temp: ${kTemp}</span></div>`;
-    planHtml += `<div style="padding:8px 10px; font-size:0.72rem;">`;
-    if (kg) {
-      planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E4} ${lang === 'en' ? 'System Prompt' : 'システムプロンプト'}</summary>
-        <pre style="${_preStyle}">${esc(kg.system_prompt || '')}</pre></details>`;
-      planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E5} ${lang === 'en' ? 'User Prompt' : 'ユーザープロンプト'}</summary>
-        <pre style="${_preStyle}">${esc(kg.user_prompt || '')}</pre></details>`;
-      planHtml += `<details open><summary style="cursor:pointer; color:#1565c0; font-size:0.72rem; font-weight:600;">\u{1F4E4} ${lang === 'en' ? 'Output' : '出力'} (${(kg.raw_output || '').length}${lang === 'en' ? ' chars' : '文字'})</summary>
-        <pre style="${_outPreStyle('#f0f4ff','#bbdefb','#1a237e')}">${esc(kg.raw_output || '')}</pre></details>`;
-    } else if (langPlan.knowledge) {
-      planHtml += `<div style="color:#999; font-size:0.68rem; margin-bottom:4px;">\u26A0 ${lang === 'en' ? 'No prompt metadata (legacy format)' : 'プロンプトメタデータなし（旧形式）'}</div>`;
-      planHtml += `<details open><summary style="cursor:pointer; color:#1565c0; font-size:0.72rem; font-weight:600;">\u{1F4E4} ${lang === 'en' ? 'Output' : '出力'} (${langPlan.knowledge.length}${lang === 'en' ? ' chars' : '文字'})</summary>
-        <pre style="${_outPreStyle('#f0f4ff','#bbdefb','#1a237e')}">${esc(langPlan.knowledge)}</pre></details>`;
-    }
-    planHtml += `</div></div>`;
-
-    // --- 矢印 ---
-    planHtml += `<div style="text-align:center; color:#999; font-size:0.75rem; margin:2px 0;">\u25BC ${lang === 'en' ? 'Knowledge output included in input' : '知識先生の出力が入力に含まれる'}</div>`;
-
-    // --- Step 2: エンタメ先生 ---
-    const eModel = eg ? eg.model : '?';
-    const eTemp = eg ? eg.temperature : '?';
-    planHtml += `<div style="border:1px solid #ffe0b2; border-radius:6px; overflow:hidden;">`;
-    planHtml += `<div style="background:#fff3e0; padding:6px 10px; font-size:0.78rem; font-weight:600; color:#e65100;">\u{1F3AD} Step 2: ${lang === 'en' ? 'Entertainment Expert' : 'エンタメ先生'} <span style="font-weight:400; font-size:0.68rem; color:#666;">model: ${esc(String(eModel))} / temp: ${eTemp}</span></div>`;
-    planHtml += `<div style="padding:8px 10px; font-size:0.72rem;">`;
-    if (eg) {
-      planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E4} ${lang === 'en' ? 'System Prompt' : 'システムプロンプト'}</summary>
-        <pre style="${_preStyle}">${esc(eg.system_prompt || '')}</pre></details>`;
-      planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E5} ${lang === 'en' ? 'User Prompt' : 'ユーザープロンプト'} (${lang === 'en' ? 'includes Knowledge output' : '知識先生の出力を含む'})</summary>
-        <pre style="${_preStyle}">${esc(eg.user_prompt || '')}</pre></details>`;
-      planHtml += `<details open><summary style="cursor:pointer; color:#e65100; font-size:0.72rem; font-weight:600;">\u{1F4E4} ${lang === 'en' ? 'Output' : '出力'} (${(eg.raw_output || '').length}${lang === 'en' ? ' chars' : '文字'})</summary>
-        <pre style="${_outPreStyle('#fff3e0','#ffe0b2','#bf360c')}">${esc(eg.raw_output || '')}</pre></details>`;
-    } else if (langPlan.entertainment) {
-      planHtml += `<div style="color:#999; font-size:0.68rem; margin-bottom:4px;">\u26A0 ${lang === 'en' ? 'No prompt metadata (legacy format)' : 'プロンプトメタデータなし（旧形式）'}</div>`;
-      planHtml += `<details open><summary style="cursor:pointer; color:#e65100; font-size:0.72rem; font-weight:600;">\u{1F4E4} ${lang === 'en' ? 'Output' : '出力'} (${langPlan.entertainment.length}${lang === 'en' ? ' chars' : '文字'})</summary>
-        <pre style="${_outPreStyle('#fff3e0','#ffe0b2','#bf360c')}">${esc(langPlan.entertainment)}</pre></details>`;
-    }
-    planHtml += `</div></div>`;
-
-    // --- 矢印 ---
-    planHtml += `<div style="text-align:center; color:#999; font-size:0.75rem; margin:2px 0;">\u25BC ${lang === 'en' ? 'Knowledge + Entertainment outputs included in input' : '知識 + エンタメの出力が入力に含まれる'}</div>`;
-
-    // --- Step 3: 監督 ---
-    const dModel = dg ? dg.model : '?';
-    const dTemp = dg ? dg.temperature : '?';
-    planHtml += `<div style="border:1px solid #a5d6a7; border-radius:6px; overflow:hidden;">`;
-    planHtml += `<div style="background:#e8f5e9; padding:6px 10px; font-size:0.78rem; font-weight:600; color:#2e7d32;">\u{1F3AC} Step 3: ${lang === 'en' ? 'Director' : '監督'} <span style="font-weight:400; font-size:0.68rem; color:#666;">model: ${esc(String(dModel))} / temp: ${dTemp}</span></div>`;
-    planHtml += `<div style="padding:8px 10px; font-size:0.72rem;">`;
-    if (dg) {
-      planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E4} ${lang === 'en' ? 'System Prompt' : 'システムプロンプト'}</summary>
-        <pre style="${_preStyle}">${esc(dg.system_prompt || '')}</pre></details>`;
-      planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4E5} ${lang === 'en' ? 'User Prompt' : 'ユーザープロンプト'}</summary>
-        <pre style="${_preStyle}">${esc(dg.user_prompt || '')}</pre></details>`;
-      planHtml += `<details style="margin-bottom:4px;"><summary style="cursor:pointer; color:#888; font-size:0.68rem;">\u{1F4DD} ${lang === 'en' ? 'Raw Output (JSON)' : '生出力（JSON）'} (${(dg.raw_output || '').length}${lang === 'en' ? ' chars' : '文字'})</summary>
-        <pre style="${_outPreStyle('#e8f5e9','#a5d6a7','#1b5e20')}">${esc(dg.raw_output || '')}</pre></details>`;
-    } else {
-      planHtml += `<div style="color:#999; font-size:0.68rem; margin-bottom:4px;">\u26A0 ${lang === 'en' ? 'No prompt metadata (legacy format)' : 'プロンプトメタデータなし（旧形式）'}</div>`;
-    }
-
-    // パース結果: セクション一覧（display_text + dialogue_directions + key_content）
-    try {
-      const planSections = JSON.parse(langPlan.plan_json);
-      if (planSections.length) {
-        planHtml += `<div style="margin-top:6px; font-size:0.72rem; color:#2e7d32; font-weight:600;">\u{1F4CB} ${lang === 'en' ? 'Parsed Result' : 'パース結果'}: ${planSections.length} ${lang === 'en' ? 'sections' : 'セクション'}</div>`;
-        for (let i = 0; i < planSections.length; i++) {
-          const ps = planSections[i];
-          const icon = SECTION_ICONS[ps.section_type] || '\u{1F4D6}';
-          const waitInfo = ps.wait_seconds ? `${ps.wait_seconds}${lang === 'en' ? 's' : '秒'}` : '';
-          const ddCount = (ps.dialogue_directions || []).length;
-
-          planHtml += `<details style="margin-bottom:3px; border:1px solid #c8e6c9; border-radius:4px; overflow:hidden;"${ps.display_text || ddCount ? ' open' : ''}>`;
-          planHtml += `<summary style="cursor:pointer; padding:4px 8px; background:#f1f8e9; font-size:0.72rem;">
-            <span>${icon}</span>
-            <strong>${lang === 'en' ? 'Section' : 'セクション'}${i + 1} [${esc(ps.section_type)}] ${esc(ps.title || '')}</strong>
-            <span style="color:#558b2f; margin-left:6px;">[${esc(ps.emotion || 'neutral')}]</span>
-            ${waitInfo ? `<span style="color:#795548; margin-left:4px;">\u23F1${waitInfo}</span>` : ''}
-            ${ps.has_question ? '<span style="color:#e65100; margin-left:4px;">\u2753</span>' : ''}
-            ${ddCount ? `<span style="color:#6a1b9a; margin-left:4px;">\u{1F399}${ddCount}${lang === 'en' ? ' turns' : 'ターン'}</span>` : ''}
-          </summary>`;
-          planHtml += `<div style="padding:6px 8px; font-size:0.7rem;">`;
-
-          // display_text (v3)
-          if (ps.display_text) {
-            planHtml += `<div style="margin-bottom:4px;"><strong style="color:#2e7d32;">display_text:</strong>
-              <pre style="margin-top:2px; background:#fff; padding:4px 6px; border:1px solid #c8e6c9; border-radius:3px; font-size:0.68rem; white-space:pre-wrap; word-break:break-word;">${esc(ps.display_text)}</pre></div>`;
-          }
-
-          // dialogue_directions (v3)
-          if (ps.dialogue_directions && ps.dialogue_directions.length) {
-            planHtml += `<div style="margin-bottom:4px;"><strong style="color:#2e7d32;">dialogue_directions:</strong></div>`;
-            for (let di = 0; di < ps.dialogue_directions.length; di++) {
-              const dd = ps.dialogue_directions[di];
-              const isT = dd.speaker === 'teacher';
-              const spkIcon = isT ? '\u{1F3A4}' : '\u{1F64B}';
-              const spkColor = isT ? '#1565c0' : '#e65100';
-              const spkBg = isT ? '#e3f2fd' : '#fff3e0';
-              planHtml += `<div style="margin-left:8px; margin-bottom:3px; padding:4px 8px; background:${spkBg}; border-radius:3px; font-size:0.68rem;">
-                <span style="font-weight:600; color:${spkColor};">[${i + 1}-${di + 1}] ${spkIcon} ${esc(dd.speaker || '?')}</span>
-                <div style="margin-top:2px; color:#333;">${lang === 'en' ? 'Direction' : '指示'}: ${esc(dd.direction || '')}</div>
-                ${dd.key_content ? `<div style="margin-top:1px; color:#6a1b9a; font-weight:500;">key_content: ${esc(dd.key_content)}</div>` : ''}
-              </div>`;
-            }
-          }
-
-          // summary（旧形式フォールバック）
-          if (!ps.display_text && !(ps.dialogue_directions && ps.dialogue_directions.length) && ps.summary) {
-            planHtml += `<div style="color:#33691e;">${esc(ps.summary)}</div>`;
-          }
-
-          planHtml += `</div></details>`;
-        }
-      }
-    } catch(e) {}
-    planHtml += `</div></div>`;
-  }
-
-  step2aBody.innerHTML = planHtml;
-  step2a.innerHTML = '<div class="lesson-step-num">2a</div>';
-  step2a.appendChild(step2aBody);
-  body.appendChild(step2a);
- } // end generator === 'gemini' (Step 2a)
-
-  // === STEP 2b: スクリプト生成 ===
+  // === STEP 2: スクリプト（Claude Code） ===
   // キャラ設定取得
   const charsRes = await api('GET', '/api/characters');
   const charList = Array.isArray(charsRes) ? charsRes : [];
@@ -476,74 +277,29 @@ async function buildLessonItem(lessonId) {
   const studentChar = charList.find(c => c.role === 'student');
 
   const step2b = document.createElement('div');
-  step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasPlan ? ' step-active' : ' step-disabled');
+  step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasSources ? ' step-active' : ' step-disabled');
   const step2bBody = document.createElement('div');
   step2bBody.className = 'lesson-step-body';
-  const scriptLabel = hasPlan
-    ? (lang === 'en' ? 'Generate Script+Audio from Plan' : 'プランからスクリプト+音声生成')
-    : (lang === 'en' ? 'Generate Script+Audio' : 'スクリプト+音声生成');
 
-  // 入力情報
-  const etLen = (lesson.extracted_text || '').length;
-  const planSecCount = hasPlan ? (() => { try { return JSON.parse(langPlan.plan_json).length; } catch(e) { return '?'; } })() : 0;
   let totalDlgs = 0;
   for (const s of sections) {
     try { totalDlgs += JSON.parse(s.dialogues || '[]').length; } catch(e) {}
   }
 
-  const genLabel = generator === 'claude' ? '🧠 Claude Code' : '🤖 Gemini';
   let step2bHtml = '';
-  if (generator === 'gemini') {
-    step2bHtml += `<div style="margin-bottom:4px; padding:4px 8px; background:#f5f0ff; border-radius:4px; font-size:0.72rem; font-weight:600; color:#6a1b9a;">\u{1F3AD} Phase C: ${lang === 'en' ? 'Dialogue Generation' : 'セリフ個別生成'}</div>`;
-  } else {
-    step2bHtml += `<div style="margin-bottom:4px; padding:4px 8px; background:#f3e5f5; border-radius:4px; font-size:0.72rem; font-weight:600; color:#6a1b9a;">🧠 Claude Code: ${lang === 'en' ? 'Imported Sections' : 'インポートセクション'}</div>`;
-  }
-  step2bHtml += `<div class="lesson-step-title">${genLabel} ${lang === 'en' ? 'Script' : 'スクリプト'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ', ' + totalDlgs + (lang === 'en' ? ' utterances' : '発話') + ')' : ''}</div>`;
+  step2bHtml += `<div style="margin-bottom:4px; padding:4px 8px; background:#f3e5f5; border-radius:4px; font-size:0.72rem; font-weight:600; color:#6a1b9a;">🧠 Claude Code: ${lang === 'en' ? 'Imported Sections' : 'インポートセクション'}</div>`;
+  step2bHtml += `<div class="lesson-step-title">🧠 Claude Code ${lang === 'en' ? 'Script' : 'スクリプト'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ', ' + totalDlgs + (lang === 'en' ? ' utterances' : '発話') + ')' : ''}</div>`;
 
-  if (generator === 'gemini') {
-    // 入力データ表示（Geminiのみ）
-    step2bHtml += `<div style="margin-bottom:8px; padding:6px 10px; background:#f5f0ff; border:1px solid #d0c0e8; border-radius:4px; font-size:0.72rem; color:#555;">`;
-    step2bHtml += `<div style="font-weight:600; color:#7b1fa2; margin-bottom:4px;">${lang === 'en' ? 'Input' : '入力'}:</div>`;
-    if (hasPlan) {
-      step2bHtml += `<div>\u{1F3AC} ${lang === 'en' ? 'Director plan' : '監督プラン'} (${planSecCount} ${lang === 'en' ? 'sections' : 'セクション'}) \u2190 Step 2a</div>`;
-    }
-    step2bHtml += `<div>\u{1F4DD} ${lang === 'en' ? 'Extracted text' : '抽出テキスト'} (${etLen}${lang === 'en' ? ' chars' : '文字'}) \u2190 Step 1</div>`;
-
-    // キャラ設定サマリー
-    if (teacherChar || studentChar) {
-      step2bHtml += `<div style="margin-top:4px; font-weight:600; color:#7b1fa2;">${lang === 'en' ? 'Characters' : 'キャラ設定'} (${lang === 'en' ? 'used in prompt' : 'プロンプトに使用'}):</div>`;
-      if (teacherChar) {
-        const tPrompt = (teacherChar.system_prompt || '').substring(0, 60);
-        step2bHtml += `<div>\u{1F393} ${esc(teacherChar.name || 'teacher')} &mdash; voice: ${esc(teacherChar.tts_voice || '?')} / style: ${esc((teacherChar.tts_style || '').substring(0, 20))}...</div>`;
-        step2bHtml += `<details style="margin-left:20px;"><summary style="cursor:pointer; color:#1565c0; font-size:0.68rem;">system_prompt</summary><pre style="font-size:0.65rem; max-height:100px; overflow-y:auto; white-space:pre-wrap; background:#fff; padding:4px; border:1px solid #ddd; border-radius:3px;">${esc(teacherChar.system_prompt || '')}</pre></details>`;
-      }
-      if (studentChar) {
-        step2bHtml += `<div>\u{1F64B} ${esc(studentChar.name || 'student')} &mdash; voice: ${esc(studentChar.tts_voice || '?')} / style: ${esc((studentChar.tts_style || '').substring(0, 20))}...</div>`;
-        step2bHtml += `<details style="margin-left:20px;"><summary style="cursor:pointer; color:#e65100; font-size:0.68rem;">system_prompt</summary><pre style="font-size:0.65rem; max-height:100px; overflow-y:auto; white-space:pre-wrap; background:#fff; padding:4px; border:1px solid #ddd; border-radius:3px;">${esc(studentChar.system_prompt || '')}</pre></details>`;
-      }
-    }
-    step2bHtml += `<div style="margin-top:4px; color:#888; font-size:0.68rem;">${lang === 'en' ? 'Method: Individual LLM calls per dialogue turn (with director directions)' : '生成方法: 監督の指示に基づきセリフを個別LLM呼び出しで生成'}</div>`;
-    step2bHtml += `<div style="color:#888; font-size:0.68rem;">${lang === 'en' ? 'Model/temp shown in each dialogue\'s generation metadata' : 'モデル・温度は各セリフの生成メタデータに表示'}</div>`;
-    step2bHtml += `</div>`;
-  }
-
-  if (generator === 'gemini') {
-    step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-        <button onclick="generateScript(${lessonId}, '${lang}')" style="padding:5px 14px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasSections ? (lang === 'en' ? 'Regenerate' : '再生成') : esc(scriptLabel)}</button>
-        <span class="script-status"></span>
-      </div>`;
-  } else {
-    // Claude Code タブ: JSONインポート
-    step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-        <button onclick="importClaudeSections(${lessonId}, '${lang}')" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">📋 JSONインポート</button>
-        <span class="import-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
-      </div>
-      <div style="margin-bottom:8px; padding:6px 10px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; font-size:0.72rem; color:#555;">
-        <div style="font-weight:600; color:#6a1b9a; margin-bottom:2px;">使い方:</div>
-        <div>1. Claude Code CLIで <code>prompts/lesson_generate.md</code> に従い授業を生成</div>
-        <div>2. 出力されたJSONをコピーして「JSONインポート」で貼り付け</div>
-      </div>`;
-  }
+  // Claude Code: JSONインポート
+  step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button onclick="importClaudeSections(${lessonId}, '${lang}')" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">📋 JSONインポート</button>
+      <span class="import-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
+    </div>
+    <div style="margin-bottom:8px; padding:6px 10px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; font-size:0.72rem; color:#555;">
+      <div style="font-weight:600; color:#6a1b9a; margin-bottom:2px;">使い方:</div>
+      <div>1. Claude Code CLIで <code>prompts/lesson_generate.md</code> に従い授業を生成</div>
+      <div>2. 出力されたJSONをコピーして「JSONインポート」で貼り付け</div>
+    </div>`;
   step2bBody.innerHTML = step2bHtml;
 
   // TTSキャッシュ情報取得
@@ -562,12 +318,12 @@ async function buildLessonItem(lessonId) {
   renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap, {teacher: teacherChar, student: studentChar}, langPlan);
   step2bBody.appendChild(secContainer);
 
-  step2b.innerHTML = '<div class="lesson-step-num">2b</div>';
+  step2b.innerHTML = '<div class="lesson-step-num">2</div>';
   step2b.appendChild(step2bBody);
   body.appendChild(step2b);
 
-  // === 品質分析 === (Geminiタブのみ)
-  if (hasSections && generator === 'gemini') {
+  // === 品質分析 ===
+  if (hasSections) {
     const qaDiv = document.createElement('div');
     qaDiv.className = 'lesson-step step-active';
     qaDiv.innerHTML = `<div class="lesson-step-num" style="background:#1565c0;">QA</div>`;
@@ -575,8 +331,7 @@ async function buildLessonItem(lessonId) {
     qaBody.className = 'lesson-step-body';
     qaBody.innerHTML = `<div class="lesson-step-title">品質分析</div>
       <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
-        <button onclick="analyzeLesson(${lessonId}, '${lang}', false)" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">アルゴリズム分析</button>
-        <button onclick="analyzeLesson(${lessonId}, '${lang}', true)" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">＋ LLM評価</button>
+        <button onclick="analyzeLesson(${lessonId}, '${lang}')" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">アルゴリズム分析</button>
         <span class="qa-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
       </div>
       <div class="qa-result" id="qa-result-${lessonId}"></div>`;
@@ -694,7 +449,7 @@ async function addLessonSource(lessonId) {
     cancelLabel: 'URL',
   });
   if (choice === true) {
-    _clearDownstreamSteps(lessonId, ['2a', '2b', '3']);
+    _clearDownstreamSteps(lessonId, ['2', '3']);
     // 既存データをクリア
     await api('POST', '/api/lessons/' + lessonId + '/clear-sources');
     // 画像: 複数ファイル選択
@@ -712,7 +467,7 @@ async function addLessonSource(lessonId) {
       okLabel: '追加',
     });
     if (url) {
-      _clearDownstreamSteps(lessonId, ['2a', '2b', '3']);
+      _clearDownstreamSteps(lessonId, ['2', '3']);
       await doAddLessonUrl(lessonId, url);
     }
   }
@@ -748,7 +503,7 @@ async function uploadLessonImages(lessonId, input) {
 }
 
 async function extractLessonText(lessonId) {
-  _clearDownstreamSteps(lessonId, ['2a', '2b', '3']);
+  _clearDownstreamSteps(lessonId, ['2', '3']);
   const item = _findLessonItem(lessonId);
   const statusEl = item ? item.querySelector('.extract-status') : null;
   const btn = item ? item.querySelector('.btn-extract') : null;
@@ -790,123 +545,10 @@ function _findStatusEl(lessonId) {
   return item ? item.querySelector('.lesson-upload-status') : null;
 }
 
-// --- SSEストリーミング共通 ---
-
-function _streamSSE(url, statusEl, onComplete) {
-  return new Promise((resolve) => {
-    fetch(url, { method: 'POST' }).then(response => {
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      function read() {
-        reader.read().then(({ done, value }) => {
-          if (done) { resolve(null); return; }
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop();
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.ok !== undefined) {
-                // 最終結果
-                resolve(data);
-              } else if (data.step !== undefined && statusEl) {
-                // 進捗更新
-                _showSpinner(statusEl, data.message);
-              }
-            } catch(e) {}
-          }
-          read();
-        });
-      }
-      read();
-    }).catch(e => {
-      resolve({ ok: false, error: e.message });
-    });
-  });
-}
-
-// --- プラン生成 ---
-
-async function generatePlan(lessonId, lang) {
-  lang = lang || _getLessonLang(lessonId);
-  _clearDownstreamSteps(lessonId, ['2b', '3']);
-  const items = document.querySelectorAll('.lesson-item');
-  let statusEl = null;
-  let btn = null;
-  for (const item of items) {
-    const b = item.querySelector(`button[onclick*="generatePlan(${lessonId}"]`);
-    if (b) {
-      btn = b;
-      statusEl = b.parentElement.querySelector('.plan-status');
-      break;
-    }
-  }
-  if (btn) btn.disabled = true;
-  if (statusEl) _showSpinner(statusEl, lang === 'en' ? 'Generating plan...' : 'プラン生成開始...');
-  const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-plan?lang=' + lang, statusEl);
-  if (btn) btn.disabled = false;
-  if (statusEl) _hideSpinner(statusEl);
-  if (res && res.ok) {
-    showToast('プラン生成完了 (' + res.plan_sections.length + 'セクション構成)', 'success');
-  } else {
-    const errMsg = res && res.error ? res.error : '不明なエラー';
-    showToast('プラン生成失敗: ' + errMsg, 'error');
-    if (statusEl) {
-      statusEl.innerHTML = '<span style="color:#c62828; font-size:0.8rem; font-weight:600;">❌ ' + esc(errMsg) + '</span>';
-    }
-  }
-  _openLessonIds.add(lessonId);
-  await loadLessons();
-}
-
-// --- 授業スクリプト ---
-
-async function generateScript(lessonId, lang) {
-  lang = lang || _getLessonLang(lessonId);
-  _clearDownstreamSteps(lessonId, ['3']);
-  const items = document.querySelectorAll('.lesson-item');
-  let statusEl = null;
-  let btn = null;
-  for (const item of items) {
-    const b = item.querySelector(`button[onclick*="generateScript(${lessonId}"]`);
-    if (b) {
-      btn = b;
-      statusEl = b.parentElement.querySelector('.script-status');
-      break;
-    }
-  }
-  if (btn) btn.disabled = true;
-  // 既存セクション一覧を即座にクリア
-  const secContainer = btn ? btn.closest('.lesson-step-body').querySelector('div:last-child') : null;
-  if (secContainer) renderSectionsInto(secContainer, [], lessonId, {});
-  if (statusEl) _showSpinner(statusEl, lang === 'en' ? 'Generating script...' : 'スクリプト生成開始...');
-  const res = await _streamSSE('/api/lessons/' + lessonId + '/generate-script?lang=' + lang, statusEl);
-  if (btn) btn.disabled = false;
-  if (statusEl) _hideSpinner(statusEl);
-  if (res && res.ok) {
-    let msg = 'スクリプト+音声生成完了 (' + res.sections.length + 'セクション';
-    if (res.tts_generated !== undefined) msg += ', TTS ' + res.tts_generated + '件';
-    if (res.tts_errors) msg += ', エラー ' + res.tts_errors + '件';
-    msg += ')';
-    showToast(msg, 'success');
-  } else {
-    const errMsg = res && res.error ? res.error : '不明なエラー';
-    showToast('スクリプト生成失敗: ' + errMsg, 'error');
-    if (statusEl) {
-      statusEl.innerHTML = '<span style="color:#c62828; font-size:0.8rem; font-weight:600;">❌ ' + esc(errMsg) + '</span>';
-    }
-  }
-  _openLessonIds.add(lessonId);
-  await loadLessons();
-}
-
 function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo, langPlan) {
   container.innerHTML = '';
   if (!sections || !sections.length) {
-    container.innerHTML = '<div style="color:#8a7a9a; font-size:0.8rem; padding:8px;">スクリプトがありません。「スクリプト生成」を押してください。</div>';
+    container.innerHTML = '<div style="color:#8a7a9a; font-size:0.8rem; padding:8px;">スクリプトがありません。「JSONインポート」でセクションを追加してください。</div>';
     return;
   }
   ttsCacheMap = ttsCacheMap || {};
@@ -1166,8 +808,7 @@ async function deleteSection(lessonId, sectionId) {
 }
 
 async function clearSectionCache(lessonId, orderIndex) {
-  const gen = _getLessonGenerator(lessonId);
-  await api('DELETE', `/api/lessons/${lessonId}/tts-cache/${orderIndex}?generator=${gen}`);
+  await api('DELETE', `/api/lessons/${lessonId}/tts-cache/${orderIndex}?generator=claude`);
   showToast('TTSキャッシュ削除', 'success');
   _openLessonIds.add(lessonId);
   await loadLessons();
@@ -1223,15 +864,6 @@ function _renderAnalysisResult(resultEl, a) {
     html += _renderScoreBar(algoLabels[key] || key, sd);
   }
 
-  // LLM評価
-  if (a.llm_scores) {
-    html += `<div style="font-size:0.8rem; font-weight:600; margin:8px 0 4px;">LLM評価</div>`;
-    const llmLabels = { entertainment: 'エンタメ性', education: '教育効果', character: 'キャラ活用', structure: '構成力' };
-    for (const [key, sd] of Object.entries(a.llm_scores)) {
-      html += _renderScoreBar(llmLabels[key] || key, sd);
-    }
-  }
-
   // 改善提案
   if (a.suggestions && a.suggestions.length > 0) {
     html += `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:0.75rem; color:#1565c0; font-weight:600;">改善提案（${a.suggestions.length}件）</summary>
@@ -1245,14 +877,14 @@ function _renderAnalysisResult(resultEl, a) {
   resultEl.innerHTML = html;
 }
 
-async function analyzeLesson(lessonId, lang, includeLlm) {
+async function analyzeLesson(lessonId, lang) {
   const statusEl = document.querySelector(`#qa-result-${lessonId}`)?.closest('.lesson-step-body')?.querySelector('.qa-status');
   const resultEl = document.getElementById('qa-result-' + lessonId);
   if (!resultEl) return;
-  if (statusEl) statusEl.textContent = includeLlm ? '分析中（LLM評価含む）...' : '分析中...';
+  if (statusEl) statusEl.textContent = '分析中...';
   resultEl.innerHTML = '';
 
-  const res = await api('POST', '/api/lessons/' + lessonId + '/analyze?lang=' + lang + '&include_llm=' + includeLlm);
+  const res = await api('POST', '/api/lessons/' + lessonId + '/analyze?lang=' + lang);
   if (statusEl) statusEl.textContent = '';
   if (!res || !res.ok) {
     resultEl.innerHTML = `<div style="color:#c62828; font-size:0.8rem;">${res?.error || 'エラーが発生しました'}</div>`;
@@ -1283,10 +915,9 @@ function _renderScoreBar(label, sd) {
 
 async function startLesson(lessonId, lang) {
   lang = lang || _getLessonLang(lessonId);
-  const gen = _getLessonGenerator(lessonId);
-  const res = await api('POST', `/api/lessons/${lessonId}/start?lang=${lang}&generator=${gen}`);
+  const res = await api('POST', `/api/lessons/${lessonId}/start?lang=${lang}&generator=claude`);
   if (res && res.ok) {
-    showToast(lang === 'en' ? 'Lesson started' : `授業開始 (${gen})`, 'success');
+    showToast(lang === 'en' ? 'Lesson started' : '授業開始', 'success');
     await loadLessons();
   } else if (res && res.error) {
     showToast('Error: ' + res.error, 'error');
@@ -1356,8 +987,7 @@ async function playSectionAudio(btn, orderIndex, lessonId) {
   // セクション全パートを連続再生
   _stopCurrentAudio();
   const lang = _getLessonLang(lessonId);
-  const gen = _getLessonGenerator(lessonId);
-  const cacheRes = await api('GET', `/api/lessons/${lessonId}/tts-cache?lang=${lang}&generator=${gen}`);
+  const cacheRes = await api('GET', `/api/lessons/${lessonId}/tts-cache?lang=${lang}&generator=claude`);
   if (!cacheRes || !cacheRes.ok) return;
   const section = (cacheRes.sections || []).find(s => s.order_index === orderIndex);
   if (!section || !section.parts || !section.parts.length) { showToast('TTSキャッシュなし', 'error'); return; }
@@ -1431,7 +1061,6 @@ async function importClaudeSections(lessonId, lang) {
   const res = await api('POST', `/api/lessons/${lessonId}/import-sections?lang=${lang}&generator=claude`, body);
   if (res && res.ok) {
     showToast(`インポート完了: ${res.count}セクション`, 'success');
-    _lessonGeneratorTab[lessonId] = 'claude';
     _openLessonIds.add(lessonId);
     await loadLessons();
   } else {
