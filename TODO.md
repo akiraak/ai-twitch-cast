@@ -12,7 +12,6 @@
   - [ ] Step 5: フロントエンド変更（ジェネレータタブ・インポートUI・再生時generator指定）
 
 ## 実装
-- ✅ リファクタリング完了 → [plans/refactoring-2026-03-30.md](plans/refactoring-2026-03-30.md)
 
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
