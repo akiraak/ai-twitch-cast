@@ -1,5 +1,14 @@
 # DONE
 
+## Gemini授業生成削除 Step 2: lesson_generatorパッケージ整理
+
+- [x] planner.py / script.py / v2.py / dialogue.py / director.py / structure.py を削除（-2,396行）
+- [x] utils.py からGemini専用モデル関数4個を削除
+- [x] `__init__.py` から削除モジュールのre-exportを除去
+- [x] teacher.py のimport文から削除関数を前倒し除去
+- [x] test_lesson_generator.py を削除（削除モジュールのテスト、Step 6から前倒し）
+- [x] test_api_teacher.py からgenerate_plan/generate_scriptテスト7件を削除（Step 6から前倒し）
+
 ## Claude Code授業生成: 動作確認・バグ修正
 
 - [x] `teacher.js` インポート成功トーストの `res.imported` → `res.count` バグ修正

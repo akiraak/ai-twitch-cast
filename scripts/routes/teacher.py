@@ -16,10 +16,6 @@ from src.lesson_generator import (
     extract_main_content,
     extract_text_from_image,
     extract_text_from_url,
-    generate_lesson_plan,
-    generate_lesson_script,
-    generate_lesson_script_from_plan,
-    generate_lesson_script_v2,
     get_lesson_characters,
 )
 from src.lesson_runner import _cache_path, _dlg_cache_path, clear_tts_cache, get_tts_cache_info

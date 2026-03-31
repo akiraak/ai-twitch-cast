@@ -1,6 +1,6 @@
 # Gemini授業生成機能の削除（Claude Codeのみに統一）
 
-**ステータス: 作業中（Step 1 完了）**
+**ステータス: 作業中（Step 2 完了）**
 
 ## 概要
 
@@ -40,9 +40,9 @@
 - 利用側（lesson_runner.py, avatar.py, teacher.py）は `__init__.py` 経由のため変更不要
 - 全749テスト通過確認済み
 
-### Step 2: バックエンド — lesson_generatorパッケージの整理
+### Step 2: バックエンド — lesson_generatorパッケージの整理 ✅ 完了
 
-**削除するファイル（丸ごと）:**
+**削除したファイル（丸ごと）:**
 - `src/lesson_generator/planner.py` — プラン生成（Gemini 3回呼び出し）
 - `src/lesson_generator/script.py` — スクリプト生成v1
 - `src/lesson_generator/v2.py` — スクリプト生成v2（キャラ個別LLM）
@@ -50,11 +50,11 @@
 - `src/lesson_generator/director.py` — 監督レビュー
 - `src/lesson_generator/structure.py` — v2セクション構造生成プロンプト
 
-**残すファイル:**
+**残したファイル:**
 - `src/lesson_generator/extractor.py` — テキスト抽出（画像/URL解析）は授業データ準備で使用
 - `src/lesson_generator/utils.py` — `get_client`, `_parse_json_response`, `_guess_mime`, `_build_image_parts`, `_format_main_content_for_prompt`, `_is_english_mode` は extractor.py や avatar.py で使用。Step 1で `get_lesson_characters`, `_format_character_for_prompt` も追加済み
 
-**utils.py から削除する関数:**
+**utils.py から削除した関数:**
 - `_get_knowledge_model()` — Gemini専用
 - `_get_entertainment_model()` — Gemini専用
 - `_get_director_model()` — Gemini専用
@@ -63,6 +63,9 @@
 **`__init__.py` を更新:**
 - 削除したモジュール（planner/script/v2/dialogue/director/structure）のre-exportをすべて除去
 - extractor.py と utils.py の残す関数のみ公開（`get_lesson_characters`, `_format_character_for_prompt` 含む）
+
+**追加対応（プラン外）:**
+- `scripts/routes/teacher.py` のimport文から削除関数（`generate_lesson_plan`, `generate_lesson_script`, `generate_lesson_script_from_plan`, `generate_lesson_script_v2`）を除去（モジュール削除でインポートエラーになるため前倒し対応。エンドポイント本体はStep 4で削除）
 
 ### Step 3: バックエンド — content_analyzer.pyの整理
 
@@ -90,7 +93,7 @@
 - `DELETE /api/lessons/{id}/tts-cache/{order_index}` — `generator=None`（変更不要）
 
 **import文の整理:**
-- `generate_lesson_plan`, `generate_lesson_script`, `generate_lesson_script_from_plan`, `generate_lesson_script_v2` のimport削除
+- ~~`generate_lesson_plan`, `generate_lesson_script`, `generate_lesson_script_from_plan`, `generate_lesson_script_v2` のimport削除~~ → Step 2で前倒し完了
 - `analyze_content_full` のimport削除
 
 **`GET /api/lessons/{id}` レスポンス:**

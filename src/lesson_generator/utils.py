@@ -28,29 +28,6 @@ def _get_model():
     return _CHAT_MODEL
 
 
-def _get_knowledge_model():
-    """知識先生のモデル"""
-    return os.environ.get("GEMINI_KNOWLEDGE_MODEL",
-           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
-
-
-def _get_entertainment_model():
-    """エンタメ先生のモデル"""
-    return os.environ.get("GEMINI_ENTERTAINMENT_MODEL",
-           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
-
-
-def _get_director_model():
-    """監督のモデル（最高推論力）"""
-    return os.environ.get("GEMINI_DIRECTOR_MODEL",
-           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3.1-pro-preview"))
-
-
-def _get_dialogue_model():
-    """セリフ個別生成のモデル"""
-    return os.environ.get("GEMINI_DIALOGUE_MODEL",
-           os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"))
-
 
 def _parse_json_response(text: str):
     """LLMレスポンスからJSONをパースする（壊れたJSONは自動修復）"""
