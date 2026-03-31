@@ -82,6 +82,63 @@ def _build_image_parts(source_images: list[str] | None) -> list:
     return parts
 
 
+def get_lesson_characters() -> dict:
+    """授業用キャラクター（先生・生徒）を取得する。
+
+    Returns:
+        {"teacher": config_dict or None, "student": config_dict or None}
+    """
+    import json as _json
+    from src import db
+    from src.character_manager import get_channel_id, seed_all_characters
+
+    channel_id = get_channel_id()
+    seed_all_characters(channel_id)
+
+    teacher_row = db.get_character_by_role(channel_id, "teacher")
+    student_row = db.get_character_by_role(channel_id, "student")
+
+    if teacher_row:
+        teacher = _json.loads(teacher_row["config"])
+        teacher["name"] = teacher_row["name"]
+        memory = db.get_character_memory(teacher_row["id"])
+        teacher["self_note"] = memory.get("self_note", "")
+        teacher["persona"] = memory.get("persona", "")
+    else:
+        teacher = None
+    if student_row:
+        student = _json.loads(student_row["config"])
+        student["name"] = student_row["name"]
+        memory = db.get_character_memory(student_row["id"])
+        student["self_note"] = memory.get("self_note", "")
+        student["persona"] = memory.get("persona", "")
+    else:
+        student = None
+    return {"teacher": teacher, "student": student}
+
+
+def _format_character_for_prompt(config: dict, role_label: str, en: bool) -> str:
+    """キャラ設定からプロンプト用の説明テキストを構築する
+
+    性格（system_prompt）と感情のみ使用。
+    rules はシーン依存（コメント応答 vs 授業）なので含めない。
+    """
+    name = config.get("name", role_label)
+    system_prompt = config.get("system_prompt", "")
+    emotions = config.get("emotions", {})
+
+    lines = [f"### {role_label}: {name}（speaker: \"{role_label}\"）"]
+    if system_prompt:
+        lines.append(system_prompt)
+    if emotions:
+        emotion_list = ", ".join(emotions.keys())
+        if en:
+            lines.append(f"\n**Available emotions:** {emotion_list}")
+        else:
+            lines.append(f"\n**使用可能な感情:** {emotion_list}")
+    return "\n".join(lines)
+
+
 def _format_main_content_for_prompt(main_content: list[dict], en: bool) -> str:
     """main_content リストをプロンプト用テキストに整形する（role対応）"""
     if not main_content:

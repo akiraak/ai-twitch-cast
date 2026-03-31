@@ -17,6 +17,8 @@ from .utils import (
     _guess_mime,
     _build_image_parts,
     _format_main_content_for_prompt,
+    get_lesson_characters,
+    _format_character_for_prompt,
 )
 
 # --- extractor ---
@@ -30,8 +32,6 @@ from .extractor import (
 
 # --- dialogue ---
 from .dialogue import (
-    get_lesson_characters,
-    _format_character_for_prompt,
     _build_dialogue_prompt,
     _build_dialogue_output_example,
     _build_section_from_dialogues,
