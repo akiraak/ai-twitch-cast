@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src import db
-from src.content_analyzer import analyze_content, analyze_content_full
+from src.content_analyzer import analyze_content
 from src.lesson_generator import (
     extract_main_content,
     extract_text_from_image,
@@ -754,11 +754,7 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                 analysis_dict["lesson_id"] = lesson_id
             else:
                 section_dicts = [dict(s) for s in saved]
-                analysis = await analyze_content_full(
-                    section_dicts, lesson_name=lesson["name"],
-                    extracted_text=lesson.get("extracted_text", ""),
-                    lang=lang,
-                )
+                analysis = analyze_content(section_dicts, lang=lang)
                 analysis.lesson_id = lesson_id
                 analysis_dict = analysis.to_dict()
             db.update_lesson(lesson_id, analysis_json=_json.dumps(analysis_dict, ensure_ascii=False))
@@ -930,8 +926,8 @@ async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "gemi
 
 
 @router.post("/api/lessons/{lesson_id}/analyze")
-async def analyze_lesson(lesson_id: int, lang: str = "ja", include_llm: bool = True):
-    """コンテンツ品質分析（アルゴリズム指標 + LLM評価）"""
+async def analyze_lesson(lesson_id: int, lang: str = "ja"):
+    """コンテンツ品質分析（アルゴリズム指標）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
@@ -941,16 +937,7 @@ async def analyze_lesson(lesson_id: int, lang: str = "ja", include_llm: bool = T
         return {"ok": False, "error": "セクションがありません。先にスクリプトを生成してください"}
 
     section_dicts = [dict(s) for s in sections]
-
-    if include_llm:
-        result = await analyze_content_full(
-            section_dicts,
-            lesson_name=lesson["name"],
-            extracted_text=lesson.get("extracted_text", ""),
-            lang=lang,
-        )
-    else:
-        result = analyze_content(section_dicts, lang=lang)
+    result = analyze_content(section_dicts, lang=lang)
 
     result.lesson_id = lesson_id
     analysis_dict = result.to_dict()

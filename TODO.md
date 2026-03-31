@@ -4,7 +4,6 @@
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 - [ ] 授業生成にGeminiとClaude CodeとあるけどClaude CodeのみにしてGemini生成の機能を削除する → [plans/remove-gemini-lesson-generation.md](plans/remove-gemini-lesson-generation.md)
-  - [ ] Step 3: content_analyzer.py整理 — `analyze_content_full` + LLM関連削除
   - [ ] Step 4: teacher.py API整理 — generate-plan/generate-script削除、generatorデフォルト変更
   - [ ] Step 5: teacher.js整理 — Gemini UI削除、Claude Code固定、QAをgenerator非依存に
   - [ ] Step 6: テスト整理 — 不要テスト削除・修正
@@ -14,6 +13,7 @@
 ## 実装
 
 ## バグ
+- [ ] キャラの顔の上下が保存されていない
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）
 

@@ -1,6 +1,6 @@
 # Gemini授業生成機能の削除（Claude Codeのみに統一）
 
-**ステータス: 作業中（Step 2 完了）**
+**ステータス: 作業中（Step 3 完了）**
 
 ## 概要
 
@@ -67,13 +67,19 @@
 **追加対応（プラン外）:**
 - `scripts/routes/teacher.py` のimport文から削除関数（`generate_lesson_plan`, `generate_lesson_script`, `generate_lesson_script_from_plan`, `generate_lesson_script_v2`）を除去（モジュール削除でインポートエラーになるため前倒し対応。エンドポイント本体はStep 4で削除）
 
-### Step 3: バックエンド — content_analyzer.pyの整理
+### Step 3: バックエンド — content_analyzer.pyの整理 ✅ 完了
 
 **content_analyzer.py:**
-- `analyze_content()` — アルゴリズム指標のみ → **残す**
-- `analyze_content_full()` — Gemini LLM評価 → **削除**
-- `_get_director_model()` — content_analyzer.py内の独自コピー → `analyze_content_full` と共に **削除**
-- LLM関連のimport（`google.genai`, `gemini_client`）は`analyze_content_full`削除後に不要なら除去
+- `analyze_content()` — アルゴリズム指標のみ → **残した**
+- `analyze_content_full()` — Gemini LLM評価 → **削除した**
+- `_get_director_model()` — content_analyzer.py内の独自コピー → **削除した**
+- `_evaluate_with_llm()` — LLM評価本体 → **削除した**
+- LLM関連のimport（`google.genai`, `gemini_client`, `os`）→ **削除した**
+
+**追加対応（プラン外）:**
+- `scripts/routes/teacher.py`: `analyze_content_full` のimport削除、2箇所の呼び出しを `analyze_content` に変更、`analyze_lesson` APIから `include_llm` パラメータ削除（モジュール削除でインポートエラーになるため前倒し対応。エンドポイント削除はStep 4で実施）
+- `tests/test_content_analyzer.py`: `TestLLMEvaluation` クラス（3テスト）と `test_analyze_with_llm` を削除、`analyze_content_full` import削除、不要import（`pytest`, `unittest.mock`）削除
+- `tests/conftest.py`: `src.content_analyzer` の `get_client` パッチ削除
 
 ### Step 4: バックエンド — teacher.pyのAPI整理
 
@@ -83,7 +89,7 @@
 
 **残すエンドポイント:**
 - `PUT /api/lessons/{id}/plan` — プラン手動編集（Gemini API不使用、Claude Codeでもplan_summaryインポート可能）
-- `POST /api/lessons/{id}/analyze` — 品質分析（`include_llm`パラメータを削除し、`analyze_content`のみ使用に変更）
+- `POST /api/lessons/{id}/analyze` — 品質分析（~~`include_llm`パラメータを削除し、`analyze_content`のみ使用に変更~~ → Step 3で前倒し完了）
 
 **簡素化するエンドポイント（APIデフォルトを`"claude"`に変更）:**
 - `POST /api/lessons/{id}/import-sections` — 既に`generator="claude"`デフォルト（変更不要）
@@ -94,7 +100,7 @@
 
 **import文の整理:**
 - ~~`generate_lesson_plan`, `generate_lesson_script`, `generate_lesson_script_from_plan`, `generate_lesson_script_v2` のimport削除~~ → Step 2で前倒し完了
-- `analyze_content_full` のimport削除
+- ~~`analyze_content_full` のimport削除~~ → Step 3で前倒し完了
 
 **`GET /api/lessons/{id}` レスポンス:**
 - `sections_by_generator` の構造は残す（既存geminiデータ＋claudeデータ両方表示用）
@@ -111,7 +117,7 @@
 
 **変更するUI:**
 - QA品質分析: `generator === 'gemini'` 条件を外し、Claude Codeインポート後のセクションにも表示
-- `analyzeLesson()` 関数: `include_llm` パラメータを削除（常にアルゴリズム分析のみ）
+- `analyzeLesson()` 関数: `include_llm` パラメータを削除（常にアルゴリズム分析のみ）— バックエンド側はStep 3で完了済み、フロントのみ
 
 **デフォルト値変更:**
 - `_getLessonGenerator()` のデフォルト: `'gemini'` → `'claude'`（line 26）
@@ -133,7 +139,7 @@
   - `generate_lesson_script` テスト
   - `generate_lesson_script_v2` テスト
   - dialogue/director テスト
-- `tests/test_content_analyzer.py` の `analyze_content_full` テスト（`test_llm_evaluation`, `test_llm_error_handling`, `test_llm_score_clamping`, `test_analyze_with_llm`）
+- ~~`tests/test_content_analyzer.py` の `analyze_content_full` テスト（`test_llm_evaluation`, `test_llm_error_handling`, `test_llm_score_clamping`, `test_analyze_with_llm`）~~ → Step 3で前倒し完了
 - `tests/test_api_teacher.py` の以下テスト:
   - `test_generate_plan`, `test_generate_plan_no_text`, `test_generate_plan_not_found`
   - `test_generate_script`, `test_generate_script_with_rejection`, `test_generate_script_no_text`, `test_generate_script_uses_plan`
@@ -156,7 +162,7 @@
   - 残す: `GEMINI_API_KEY`（TTS/AI応答で使用）, `GEMINI_CHAT_MODEL`, `GEMINI_TOPIC_MODEL`, `GEMINI_TTS_MODEL`
 - `conftest.py` の Gemini モック:
   - `src.lesson_generator` と `src.lesson_generator.utils` のパッチは残す（extractor.pyがget_clientを使用）
-  - `src.content_analyzer` のパッチは `analyze_content_full` 削除後に不要なら除去
+  - ~~`src.content_analyzer` のパッチは `analyze_content_full` 削除後に不要なら除去~~ → Step 3で完了済み
 - CLAUDE.md のディレクトリ構成・テスト表を更新
 
 ---

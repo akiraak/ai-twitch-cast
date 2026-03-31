@@ -1,5 +1,13 @@
 # DONE
 
+## Gemini授業生成削除 Step 3: content_analyzer.py整理
+
+- [x] `analyze_content_full`, `_get_director_model`, `_evaluate_with_llm` を削除
+- [x] LLM関連import（`google.genai`, `gemini_client`, `os`）を削除
+- [x] teacher.py: `analyze_content_full` → `analyze_content` に変更、`include_llm`パラメータ削除（Step 4から前倒し）
+- [x] test_content_analyzer.py: LLMテスト4件削除（Step 6から前倒し）
+- [x] conftest.py: `src.content_analyzer` の `get_client` パッチ削除（Step 7から前倒し）
+
 ## Gemini授業生成削除 Step 2: lesson_generatorパッケージ整理
 
 - [x] planner.py / script.py / v2.py / dialogue.py / director.py / structure.py を削除（-2,396行）

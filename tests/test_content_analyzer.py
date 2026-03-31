@@ -1,9 +1,6 @@
 """コンテンツ品質分析エンジンのテスト"""
 
 import json
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from src.content_analyzer import (
     AnalysisResult,
@@ -16,7 +13,6 @@ from src.content_analyzer import (
     _calc_rank,
     _extract_ngrams,
     analyze_content,
-    analyze_content_full,
 )
 
 
@@ -339,65 +335,6 @@ class TestAnalyzeContent:
 
 
 # ---------------------------------------------------------------------------
-# LLM評価テスト（モック）
-# ---------------------------------------------------------------------------
-
-class TestLLMEvaluation:
-    @pytest.mark.asyncio
-    async def test_llm_evaluation(self, mock_gemini):
-        llm_response = json.dumps({
-            "entertainment": {"score": 12, "reasoning": "面白い展開がある", "suggestions": ["もっとフック"]},
-            "education": {"score": 13, "reasoning": "段階的で良い", "suggestions": []},
-            "character": {"score": 8, "reasoning": "キャラが立っている", "suggestions": ["掛け合い増やす"]},
-            "structure": {"score": 9, "reasoning": "構成が良い", "suggestions": []},
-        }, ensure_ascii=False)
-        mock_gemini.models.generate_content.return_value.text = llm_response
-
-        sections = [
-            _section(section_type="introduction", content="導入" * 20, display_text="テスト"),
-            _section(section_type="explanation", content="説明" * 30, display_text="内容"),
-        ]
-        result = await analyze_content_full(sections, "テスト授業", "教材テキスト", lang="ja")
-
-        assert result.llm_scores is not None
-        assert result.max_score == 100.0
-        assert result.llm_scores["entertainment"].score == 12
-        assert result.llm_scores["education"].score == 13
-        assert result.llm_scores["character"].score == 8
-        assert result.llm_scores["structure"].score == 9
-        assert result.total_score > 0
-
-    @pytest.mark.asyncio
-    async def test_llm_error_handling(self, mock_gemini):
-        mock_gemini.models.generate_content.side_effect = Exception("API error")
-
-        sections = [_section(content="テスト")]
-        result = await analyze_content_full(sections, "test", "text", lang="ja")
-
-        assert result.llm_scores is not None
-        # エラー時は全て0点
-        for sd in result.llm_scores.values():
-            assert sd.score == 0
-
-    @pytest.mark.asyncio
-    async def test_llm_score_clamping(self, mock_gemini):
-        """LLMが最大値を超えるスコアを返した場合にクランプされる"""
-        llm_response = json.dumps({
-            "entertainment": {"score": 99, "reasoning": "r", "suggestions": []},
-            "education": {"score": -5, "reasoning": "r", "suggestions": []},
-            "character": {"score": 10, "reasoning": "r", "suggestions": []},
-            "structure": {"score": 10, "reasoning": "r", "suggestions": []},
-        }, ensure_ascii=False)
-        mock_gemini.models.generate_content.return_value.text = llm_response
-
-        sections = [_section(content="テスト")]
-        result = await analyze_content_full(sections, "test", "text", lang="ja")
-
-        assert result.llm_scores["entertainment"].score == 15.0  # max clamped
-        assert result.llm_scores["education"].score == 0  # min clamped
-
-
-# ---------------------------------------------------------------------------
 # APIテスト
 # ---------------------------------------------------------------------------
 
@@ -426,7 +363,7 @@ class TestAnalyzeAPI:
                                    tts_text="説明テキスト" * 20, display_text="テスト説明",
                                    emotion="neutral", wait_seconds=8, lang="ja")
 
-        resp = api_client.post(f"/api/lessons/{lid}/analyze?include_llm=false")
+        resp = api_client.post(f"/api/lessons/{lid}/analyze")
         data = resp.json()
         assert data["ok"] is True
         analysis = data["analysis"]
@@ -435,24 +372,3 @@ class TestAnalyzeAPI:
         assert analysis["llm_scores"] is None
         assert "display_text_coverage" in analysis["algorithmic_scores"]
         assert analysis["rank"] in ("S", "A", "B", "C", "D")
-
-    def test_analyze_with_llm(self, api_client, test_db, mock_gemini):
-        r = api_client.post("/api/lessons", json={"name": "Full"})
-        lid = r.json()["lesson"]["id"]
-        test_db.add_lesson_section(lid, 0, "explanation", "テスト" * 30,
-                                   display_text="テスト", lang="ja")
-
-        llm_response = json.dumps({
-            "entertainment": {"score": 10, "reasoning": "ok", "suggestions": []},
-            "education": {"score": 10, "reasoning": "ok", "suggestions": []},
-            "character": {"score": 7, "reasoning": "ok", "suggestions": []},
-            "structure": {"score": 7, "reasoning": "ok", "suggestions": []},
-        }, ensure_ascii=False)
-        mock_gemini.models.generate_content.return_value.text = llm_response
-
-        resp = api_client.post(f"/api/lessons/{lid}/analyze?include_llm=true")
-        data = resp.json()
-        assert data["ok"] is True
-        analysis = data["analysis"]
-        assert analysis["max_score"] == 100.0
-        assert analysis["llm_scores"] is not None
