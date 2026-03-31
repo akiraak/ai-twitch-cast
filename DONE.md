@@ -1,5 +1,15 @@
 # DONE
 
+## Claude Code授業生成 Step 3: APIエンドポイント追加・修正
+
+- [x] `POST /api/lessons/{id}/import-sections` 新規追加（フォーマット検証・generator指定・dialogues JSON変換）
+- [x] `GET /api/lessons/{id}` に `sections_by_generator` レスポンス追加
+- [x] `POST /api/lessons/{id}/start` に `generator` クエリパラメータ追加
+- [x] `POST /api/lessons/{id}/generate-script` — `generator="gemini"` 明示（delete/add）
+- [x] `POST /api/lessons/{id}/generate-plan` — `generator="gemini"` 明示（upsert）
+- [x] `LessonRunner.start()` に `generator` パラメータ追加（Step 4-1 先取り）
+- [x] テスト追加（7件: インポートCRUD・バリデーション・generator共存・sections_by_generator）
+
 ## Claude Code授業生成 Step 2: ワークフロー定義
 
 - [x] `prompts/lesson_generate.md` 新規作成（Claude Codeが授業スクリプトを生成する手順書）

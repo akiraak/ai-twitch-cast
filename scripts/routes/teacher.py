@@ -88,6 +88,11 @@ class UrlAdd(BaseModel):
     url: str
 
 
+class SectionImport(BaseModel):
+    sections: list[dict]
+    plan_summary: str | None = None
+
+
 @router.get("/api/lessons")
 async def list_lessons():
     """全コンテンツ一覧"""
@@ -187,7 +192,13 @@ async def get_lesson(lesson_id: int):
         if p.get("plan_generations"):
             plan_data["plan_generations"] = p["plan_generations"]
         plans[p["lang"]] = plan_data
-    return {"ok": True, "lesson": lesson, "sources": sources, "sections": sections, "plans": plans}
+    # generator別にグループ化
+    sections_by_generator: dict[str, list] = {}
+    for s in sections:
+        gen = s.get("generator", "gemini")
+        sections_by_generator.setdefault(gen, []).append(s)
+    return {"ok": True, "lesson": lesson, "sources": sources, "sections": sections,
+            "sections_by_generator": sections_by_generator, "plans": plans}
 
 
 @router.put("/api/lessons/{lesson_id}")
@@ -462,6 +473,7 @@ async def generate_plan(lesson_id: int, lang: str = "ja"):
                 plan_json=plan_json_str,
                 director_json=director_json_str,
                 plan_generations=generations_str,
+                generator="gemini",
             )
             # 後方互換: lessons テーブルにも保存
             db.update_lesson(
@@ -575,9 +587,9 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
     student_config = characters.get("student")
 
     async def event_stream():
-        # 指定言語のスクリプトとTTSキャッシュを削除
+        # 指定言語のGemini生成スクリプトとTTSキャッシュを削除
         clear_tts_cache(lesson_id, lang=lang)
-        db.delete_lesson_sections(lesson_id, lang=lang)
+        db.delete_lesson_sections(lesson_id, lang=lang, generator="gemini")
 
         progress_queue = asyncio.Queue()
 
@@ -662,6 +674,7 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
                     lang=lang,
                     dialogues=s.get("dialogues", ""),
                     dialogue_directions=dd_str,
+                    generator="gemini",
                 )
                 saved.append(sec)
             logger.info("スクリプト生成完了: lesson=%d, sections=%d", lesson_id, len(saved))
@@ -767,6 +780,90 @@ async def generate_script(lesson_id: int, lang: str = "ja"):
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+# --- セクション インポート ---
+
+
+VALID_SECTION_TYPES = {"introduction", "explanation", "example", "question", "summary"}
+VALID_EMOTIONS = {"joy", "excited", "surprise", "thinking", "sad", "embarrassed", "neutral"}
+
+
+@router.post("/api/lessons/{lesson_id}/import-sections")
+async def import_sections(
+    lesson_id: int, body: SectionImport,
+    lang: str = "ja", generator: str = "claude"
+):
+    """外部生成されたセクションをインポートする"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    if not body.sections:
+        return {"ok": False, "error": "セクションが空です"}
+
+    # フォーマット検証
+    errors = []
+    for i, s in enumerate(body.sections):
+        if not s.get("section_type"):
+            errors.append(f"セクション{i}: section_type が必須です")
+        elif s["section_type"] not in VALID_SECTION_TYPES:
+            errors.append(f"セクション{i}: 不明な section_type: {s['section_type']}")
+        if not s.get("content"):
+            errors.append(f"セクション{i}: content が必須です")
+        if not s.get("tts_text"):
+            errors.append(f"セクション{i}: tts_text が必須です")
+        if not s.get("display_text"):
+            errors.append(f"セクション{i}: display_text が必須です")
+        emotion = s.get("emotion", "neutral")
+        if emotion not in VALID_EMOTIONS:
+            errors.append(f"セクション{i}: 不明な emotion: {emotion}")
+    if errors:
+        return {"ok": False, "error": "検証エラー", "details": errors}
+
+    # 該当 (lesson_id, lang, generator) のセクションを削除
+    db.delete_lesson_sections(lesson_id, lang=lang, generator=generator)
+
+    # DB保存
+    saved = []
+    for i, s in enumerate(body.sections):
+        # dialogues/dialogue_directions: dictやlistならJSON文字列に変換
+        dialogues = s.get("dialogues", "")
+        if isinstance(dialogues, (list, dict)):
+            dialogues = _json.dumps(dialogues, ensure_ascii=False)
+        dialogue_directions = s.get("dialogue_directions", "")
+        if isinstance(dialogue_directions, (list, dict)):
+            dialogue_directions = _json.dumps(dialogue_directions, ensure_ascii=False)
+
+        sec = db.add_lesson_section(
+            lesson_id, order_index=i,
+            section_type=s["section_type"],
+            title=s.get("title", ""),
+            content=s["content"],
+            tts_text=s["tts_text"],
+            display_text=s["display_text"],
+            emotion=s.get("emotion", "neutral"),
+            question=s.get("question", ""),
+            answer=s.get("answer", ""),
+            wait_seconds=s.get("wait_seconds", 3),
+            lang=lang,
+            dialogues=dialogues,
+            dialogue_directions=dialogue_directions,
+            generator=generator,
+        )
+        saved.append(sec)
+
+    # plan_summary があればプランとして保存
+    if body.plan_summary:
+        db.upsert_lesson_plan(
+            lesson_id, lang,
+            knowledge=body.plan_summary,
+            generator=generator,
+        )
+
+    logger.info("セクションインポート: lesson=%d, lang=%s, generator=%s, sections=%d",
+                lesson_id, lang, generator, len(saved))
+    return {"ok": True, "sections": saved, "count": len(saved)}
+
+
 # --- セクション編集 ---
 
 
@@ -811,13 +908,13 @@ async def delete_section(lesson_id: int, section_id: int):
 
 
 @router.post("/api/lessons/{lesson_id}/start")
-async def start_lesson(lesson_id: int, lang: str = "ja"):
+async def start_lesson(lesson_id: int, lang: str = "ja", generator: str = "gemini"):
     """授業を開始する"""
     runner = _get_lesson_runner()
     # 授業再生中は配信言語も一時的に合わせる
     _with_lang(lang)
     try:
-        await runner.start(lesson_id, lang=lang)
+        await runner.start(lesson_id, lang=lang, generator=generator)
     except ValueError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "status": runner.get_status()}

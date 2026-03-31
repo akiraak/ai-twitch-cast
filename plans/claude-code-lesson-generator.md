@@ -1,6 +1,6 @@
 # Claude Code CLIによる授業生成機能の追加
 
-**ステータス: 進行中（Step 2 完了）**
+**ステータス: 進行中（Step 3 完了）**
 
 ## Context
 
@@ -160,15 +160,10 @@ async def import_sections(
 
 **ファイル: `src/lesson_runner.py`**
 
-### 4-1. `start()` に `generator` パラメータ追加
+### 4-1. `start()` に `generator` パラメータ追加 — **Step 3で実施済み**
 
-```python
-# 現在: async def start(self, lesson_id: int, lang: str = "ja")
-# 変更:
-async def start(self, lesson_id: int, lang: str = "ja", generator: str = "gemini"):
-    sections = db.get_lesson_sections(lesson_id, lang=lang, generator=generator)
-    self._generator = generator  # TTS キャッシュパスで使用
-```
+`start(self, lesson_id, lang="ja", generator="gemini")` に変更済み。`get_lesson_sections` に `generator` フィルタを渡す。
+残り: `self._generator` の保存（4-2以降のキャッシュパスで使用）。
 
 ### 4-2. TTS キャッシュパスに generator を含める
 

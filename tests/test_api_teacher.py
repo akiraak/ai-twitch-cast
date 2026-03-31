@@ -535,6 +535,144 @@ class TestLessonPlan:
         assert "system_prompt" in dlgs[0]["generation"]
 
 
+class TestImportSections:
+    """セクションインポートAPIのテスト"""
+
+    def _make_sections(self):
+        return [
+            {
+                "section_type": "introduction",
+                "title": "導入",
+                "content": "今日は英語を学びます",
+                "tts_text": "今日は英語を学びます",
+                "display_text": "英語の基礎",
+                "emotion": "excited",
+                "dialogues": [
+                    {"speaker": "teacher", "content": "こんにちは！", "tts_text": "こんにちは！", "emotion": "excited"},
+                    {"speaker": "student", "content": "よろしく！", "tts_text": "よろしく！", "emotion": "joy"},
+                ],
+                "dialogue_directions": [
+                    {"speaker": "teacher", "direction": "挨拶する", "key_content": ""},
+                ],
+            },
+            {
+                "section_type": "summary",
+                "title": "まとめ",
+                "content": "今日の復習です",
+                "tts_text": "今日の復習です",
+                "display_text": "まとめ",
+                "emotion": "joy",
+                "dialogues": [],
+            },
+        ]
+
+    def test_import_sections(self, api_client, test_db):
+        """正常なセクションインポート"""
+        r = api_client.post("/api/lessons", json={"name": "ImportTest"})
+        lid = r.json()["lesson"]["id"]
+
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": self._make_sections(), "plan_summary": "テスト授業"},
+        )
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["count"] == 2
+        assert data["sections"][0]["generator"] == "claude"
+        assert data["sections"][0]["section_type"] == "introduction"
+        assert data["sections"][1]["section_type"] == "summary"
+
+        # dialoguesがJSON文字列として保存されている
+        dlgs = json.loads(data["sections"][0]["dialogues"])
+        assert len(dlgs) == 2
+        assert dlgs[0]["speaker"] == "teacher"
+
+    def test_import_sections_not_found(self, api_client):
+        """存在しないレッスンへのインポート"""
+        resp = api_client.post(
+            "/api/lessons/9999/import-sections?generator=claude",
+            json={"sections": [{"section_type": "introduction", "content": "x", "tts_text": "x", "display_text": "x"}]},
+        )
+        assert resp.json()["ok"] is False
+
+    def test_import_sections_empty(self, api_client):
+        """空セクションのインポート"""
+        r = api_client.post("/api/lessons", json={"name": "EmptyImport"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": []},
+        )
+        assert resp.json()["ok"] is False
+
+    def test_import_sections_validation_error(self, api_client):
+        """必須フィールド不足のインポート"""
+        r = api_client.post("/api/lessons", json={"name": "ValErr"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": [{"section_type": "introduction"}]},
+        )
+        data = resp.json()
+        assert data["ok"] is False
+        assert "details" in data
+
+    def test_import_replaces_same_generator(self, api_client, test_db):
+        """同じgeneratorで再インポートすると置き換わる"""
+        r = api_client.post("/api/lessons", json={"name": "ReplaceTest"})
+        lid = r.json()["lesson"]["id"]
+
+        sections = self._make_sections()
+        api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": sections},
+        )
+        # 再インポート（1セクションだけ）
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": [sections[0]]},
+        )
+        assert resp.json()["count"] == 1
+
+        # GETで確認: claudeセクションは1つだけ
+        r2 = api_client.get(f"/api/lessons/{lid}")
+        claude_sections = r2.json()["sections_by_generator"].get("claude", [])
+        assert len(claude_sections) == 1
+
+    def test_import_does_not_affect_gemini(self, api_client, test_db):
+        """claudeインポートがgeminiセクションに影響しない"""
+        r = api_client.post("/api/lessons", json={"name": "CoexistTest"})
+        lid = r.json()["lesson"]["id"]
+
+        # geminiセクションを追加
+        test_db.add_lesson_section(lid, 0, "introduction", "geminiの導入", generator="gemini")
+
+        # claudeセクションをインポート
+        api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": self._make_sections()},
+        )
+
+        r2 = api_client.get(f"/api/lessons/{lid}")
+        by_gen = r2.json()["sections_by_generator"]
+        assert len(by_gen.get("gemini", [])) == 1
+        assert len(by_gen.get("claude", [])) == 2
+
+    def test_sections_by_generator_in_get(self, api_client, test_db):
+        """GET /api/lessons/{id} に sections_by_generator が含まれる"""
+        r = api_client.post("/api/lessons", json={"name": "ByGenTest"})
+        lid = r.json()["lesson"]["id"]
+
+        test_db.add_lesson_section(lid, 0, "introduction", "gemini", generator="gemini")
+        test_db.add_lesson_section(lid, 0, "introduction", "claude", generator="claude")
+
+        resp = api_client.get(f"/api/lessons/{lid}")
+        data = resp.json()
+        assert "sections_by_generator" in data
+        assert "gemini" in data["sections_by_generator"]
+        assert "claude" in data["sections_by_generator"]
+
+
 class TestPaceScale:
     def test_get_default_pace_scale(self, api_client):
         """デフォルトのpace_scaleは1.0"""
