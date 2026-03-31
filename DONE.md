@@ -1,5 +1,13 @@
 # DONE
 
+## Claude Code授業生成: 動作確認・バグ修正
+
+- [x] `teacher.js` インポート成功トーストの `res.imported` → `res.count` バグ修正
+- [x] Step 2a（プラン生成）をGeminiタブのみ表示に変更
+- [x] QA（品質分析）をGeminiタブのみ表示に変更
+- [x] Step 2bラベルのtypo修正（「スクリプ生成」→「スクリプト生成」）
+- [x] プランステータスを「完了」に更新
+
 ## Claude Code授業生成 Step 5: フロントエンド変更（全Step完了）
 
 - [x] ジェネレータ切り替えタブ追加（言語タブの下に `[Gemini (N)] [Claude Code (N)]`）

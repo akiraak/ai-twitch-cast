@@ -307,9 +307,10 @@ async function buildLessonItem(lessonId) {
   genTabsDiv.innerHTML = _buildGeneratorTabs(lessonId, langFilteredByGen);
   body.appendChild(genTabsDiv);
 
-  // === STEP 2a: プラン生成（三者視点） ===
+  // === STEP 2a: プラン生成（三者視点） — Geminiのみ表示 ===
   const langPlan = plans[lang] || {};
   const hasPlan = !!(langPlan.plan_json);
+ if (generator === 'gemini') {
   const step2a = document.createElement('div');
   step2a.className = 'lesson-step' + (hasPlan ? ' step-done' : hasExtractedText ? ' step-active' : ' step-disabled');
   const step2aBody = document.createElement('div');
@@ -465,8 +466,9 @@ async function buildLessonItem(lessonId) {
   step2a.innerHTML = '<div class="lesson-step-num">2a</div>';
   step2a.appendChild(step2aBody);
   body.appendChild(step2a);
+ } // end generator === 'gemini' (Step 2a)
 
-  // === STEP 2b: スクリプ��生成 ===
+  // === STEP 2b: スクリプト生成 ===
   // キャラ設定取得
   const charsRes = await api('GET', '/api/characters');
   const charList = Array.isArray(charsRes) ? charsRes : [];
@@ -564,8 +566,8 @@ async function buildLessonItem(lessonId) {
   step2b.appendChild(step2bBody);
   body.appendChild(step2b);
 
-  // === 品質分析 ===
-  if (hasSections) {
+  // === 品質分析 === (Geminiタブのみ)
+  if (hasSections && generator === 'gemini') {
     const qaDiv = document.createElement('div');
     qaDiv.className = 'lesson-step step-active';
     qaDiv.innerHTML = `<div class="lesson-step-num" style="background:#1565c0;">QA</div>`;
@@ -1428,7 +1430,7 @@ async function importClaudeSections(lessonId, lang) {
   if (planSummary) body.plan_summary = planSummary;
   const res = await api('POST', `/api/lessons/${lessonId}/import-sections?lang=${lang}&generator=claude`, body);
   if (res && res.ok) {
-    showToast(`インポート完了: ${res.imported}セクション`, 'success');
+    showToast(`インポート完了: ${res.count}セクション`, 'success');
     _lessonGeneratorTab[lessonId] = 'claude';
     _openLessonIds.add(lessonId);
     await loadLessons();
