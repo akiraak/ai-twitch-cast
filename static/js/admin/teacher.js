@@ -290,17 +290,47 @@ async function buildLessonItem(lessonId) {
   step2bHtml += `<div style="margin-bottom:4px; padding:4px 8px; background:#f3e5f5; border-radius:4px; font-size:0.72rem; font-weight:600; color:#6a1b9a;">🧠 Claude Code: ${lang === 'en' ? 'Imported Sections' : 'インポートセクション'}</div>`;
   step2bHtml += `<div class="lesson-step-title">🧠 Claude Code ${lang === 'en' ? 'Script' : 'スクリプト'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ', ' + totalDlgs + (lang === 'en' ? ' utterances' : '発話') + ')' : ''}</div>`;
 
-  // Claude Code: JSONインポート
+  // Claude Code: JSONインポート + ガイド + プロンプト管理
   step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
       <button onclick="importClaudeSections(${lessonId}, '${lang}')" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">📋 JSONインポート</button>
       <span class="import-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
     </div>
-    <div style="margin-bottom:8px; padding:6px 10px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; font-size:0.72rem; color:#555;">
-      <div style="font-weight:600; color:#6a1b9a; margin-bottom:2px;">使い方:</div>
-      <div>1. Claude Code CLIで <code>prompts/lesson_generate.md</code> に従い授業を生成</div>
-      <div>2. 出力されたJSONをコピーして「JSONインポート」で貼り付け</div>
-    </div>`;
+    <details style="margin-bottom:8px;">
+      <summary style="cursor:pointer; font-weight:600; font-size:0.75rem; color:#6a1b9a; padding:4px 0;">📖 授業生成ガイド</summary>
+      <div style="padding:6px 10px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; font-size:0.72rem; color:#555; margin-top:4px;">
+        <div>1. 教材画像をClaude Codeに読み込ませる</div>
+        <div>2. キャラクター情報を確認（先生・生徒の性格設定）</div>
+        <div>3. 授業プランを設計（セクション構成・目標）</div>
+        <div>4. <code>prompts/lesson_generate.md</code> に従いJSON生成</div>
+        <div>5. 「JSONインポート」で貼り付け</div>
+      </div>
+    </details>
+    <details style="margin-bottom:8px;" class="prompt-details-${lessonId}-${lang}">
+      <summary style="cursor:pointer; font-weight:600; font-size:0.75rem; color:#6a1b9a; padding:4px 0;">📝 生成プロンプト</summary>
+      <div class="prompt-content-area" style="margin-top:4px;">
+        <div class="prompt-display" style="padding:8px 10px; background:#faf7ff; border:1px solid #d0c0e8; border-radius:4px; font-size:0.72rem; max-height:300px; overflow-y:auto; margin-bottom:6px;"><span class="lesson-spinner">読み込み中...</span></div>
+        <div style="border:1px solid #d0c0e8; border-radius:4px; padding:8px; background:#f5f0ff;">
+          <div style="font-weight:600; font-size:0.72rem; color:#6a1b9a; margin-bottom:4px;">AI編集</div>
+          <div style="display:flex; gap:6px; margin-bottom:6px;">
+            <input type="text" class="prompt-ai-instruction" placeholder="編集指示を入力..." style="flex:1; padding:4px 8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem;">
+            <button class="prompt-ai-run-btn" style="padding:4px 12px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem; white-space:nowrap;">実行</button>
+          </div>
+          <div class="prompt-ai-status" style="display:none;"></div>
+          <div class="prompt-diff-area" style="display:none;">
+            <div class="diff-container prompt-diff-display"></div>
+            <div style="display:flex; gap:6px; margin-top:6px;">
+              <button class="prompt-apply-btn" style="padding:4px 10px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">適用</button>
+              <button class="prompt-retry-btn" style="padding:4px 10px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">やり直す</button>
+              <button class="prompt-cancel-btn" style="padding:4px 10px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">キャンセル</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>`;
   step2bBody.innerHTML = step2bHtml;
+
+  // プロンプト表示・AI編集のイベント設定
+  _setupPromptUI(step2bBody);
 
   // TTSキャッシュ情報取得
   let ttsCacheMap = {};
@@ -1073,4 +1103,108 @@ let _lessonStatusTimer = null;
 function startLessonStatusPolling() {}
 function stopLessonStatusPolling() {
   if (_lessonStatusTimer) { clearInterval(_lessonStatusTimer); _lessonStatusTimer = null; }
+}
+
+// --- プロンプト管理UI ---
+
+const PROMPT_FILE = 'lesson_generate.md';
+
+async function _loadPromptContent(displayEl) {
+  try {
+    const res = await fetch('/api/prompts/' + PROMPT_FILE);
+    if (!res.ok) { displayEl.textContent = 'プロンプト読み込みエラー'; return; }
+    const md = await res.text();
+    displayEl.innerHTML = simpleMarkdownToHtml(md);
+  } catch(e) {
+    displayEl.textContent = 'プロンプト読み込みエラー: ' + e.message;
+  }
+}
+
+function _setupPromptUI(container) {
+  const details = container.querySelector('details[class*="prompt-details"]');
+  if (!details) return;
+
+  const displayEl = container.querySelector('.prompt-display');
+  const instructionInput = container.querySelector('.prompt-ai-instruction');
+  const runBtn = container.querySelector('.prompt-ai-run-btn');
+  const statusEl = container.querySelector('.prompt-ai-status');
+  const diffArea = container.querySelector('.prompt-diff-area');
+  const diffDisplay = container.querySelector('.prompt-diff-display');
+  const applyBtn = container.querySelector('.prompt-apply-btn');
+  const retryBtn = container.querySelector('.prompt-retry-btn');
+  const cancelBtn = container.querySelector('.prompt-cancel-btn');
+
+  let _modifiedContent = null;
+
+  // 折りたたみ展開時にプロンプトを読み込む
+  details.addEventListener('toggle', () => {
+    if (details.open) _loadPromptContent(displayEl);
+  });
+
+  // AI編集 実行
+  runBtn.addEventListener('click', async () => {
+    const instruction = instructionInput.value.trim();
+    if (!instruction) { showToast('編集指示を入力してください', 'error'); return; }
+
+    statusEl.style.display = '';
+    statusEl.innerHTML = '<span class="lesson-spinner">AI編集中...</span>';
+    diffArea.style.display = 'none';
+    _modifiedContent = null;
+
+    try {
+      const res = await api('POST', '/api/prompts/ai-edit', {
+        name: PROMPT_FILE,
+        instruction: instruction,
+      });
+      statusEl.style.display = 'none';
+      if (res && res.ok) {
+        _modifiedContent = res.modified;
+        diffDisplay.innerHTML = res.diff_html;
+        diffArea.style.display = '';
+      } else {
+        showToast('AI編集エラー: ' + (res && res.error ? res.error : '不明'), 'error');
+      }
+    } catch(e) {
+      statusEl.style.display = 'none';
+      showToast('AI編集エラー: ' + e.message, 'error');
+    }
+  });
+
+  // 適用
+  applyBtn.addEventListener('click', async () => {
+    if (!_modifiedContent) return;
+    try {
+      const res = await fetch('/api/prompts/' + PROMPT_FILE, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain' },
+        body: _modifiedContent,
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast('プロンプト更新完了', 'success');
+        _loadPromptContent(displayEl);
+        diffArea.style.display = 'none';
+        _modifiedContent = null;
+        instructionInput.value = '';
+      } else {
+        showToast('保存エラー: ' + (data.error || ''), 'error');
+      }
+    } catch(e) {
+      showToast('保存エラー: ' + e.message, 'error');
+    }
+  });
+
+  // やり直す
+  retryBtn.addEventListener('click', () => {
+    diffArea.style.display = 'none';
+    _modifiedContent = null;
+    instructionInput.focus();
+  });
+
+  // キャンセル
+  cancelBtn.addEventListener('click', () => {
+    diffArea.style.display = 'none';
+    _modifiedContent = null;
+    instructionInput.value = '';
+  });
 }

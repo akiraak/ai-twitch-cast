@@ -375,3 +375,11 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
   }
+
+  /* diff表示 */
+  .diff-line-add { background: #e8f5e9; color: #1b5e20; }
+  .diff-line-del { background: #ffebee; color: #b71c1c; }
+  .diff-line-ctx { background: #fafafa; color: #666; }
+  .diff-container { font-family: monospace; font-size: 0.75rem;
+                    max-height: 400px; overflow-y: auto;
+                    border: 1px solid #d0c0e8; border-radius: 4px; }

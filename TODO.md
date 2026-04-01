@@ -4,8 +4,6 @@
 - [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
 - [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
 - [>] Claude Codeでの生成の手順をまとめる → [plans/claude-code-lesson-docs.md](plans/claude-code-lesson-docs.md)
-  - [ ] Step 2-1: teacher.js Step 2 にガイド折りたたみ + プロンプト表示・AI編集UI
-  - [ ] Step 2-2: diff表示用CSS（`static/css/index.css`）
   - [ ] Step 3-1: `docs/speech-generation-flow.md` から削除済みGeminiフロー除去 + Claude Codeフロー記述
   - [ ] Step 3-2: `prompts/lesson_generate.md` のGemini共存記述削除
   - [ ] テスト実行 + 管理画面で動作確認

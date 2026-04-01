@@ -1,9 +1,11 @@
 # DONE
 
-## プロンプト管理API（Step 1）
+## プロンプト管理API + UI（Step 1-2）
 
 - [x] `scripts/routes/prompts.py` 新規作成（GET一覧/GET取得/PUT更新/POST AI編集の4エンドポイント）
 - [x] `scripts/web.py` にルーター登録
+- [x] teacher.js Step 2 にガイド折りたたみ + プロンプト表示・AI編集UI
+- [x] diff表示用CSS（`static/css/index.css`）
 
 ## アバターパラメータ保存抜け根本修正
 
