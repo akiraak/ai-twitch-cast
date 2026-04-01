@@ -598,6 +598,7 @@ users       1──N  comments      (user_id)</div>
     <!-- サブタブ -->
     <div class="char-subtabs">
       <div class="char-subtab active" onclick="switchConvSubtab('teacher', this)">教師モード</div>
+      <div class="char-subtab" onclick="switchConvSubtab('learnings', this)">学習</div>
       <div class="char-subtab" onclick="switchConvSubtab('casual', this)">雑談モード</div>
     </div>
 
@@ -610,6 +611,14 @@ users       1──N  comments      (user_id)</div>
         </div>
         <!-- コンテンツ一覧（JS で各コンテンツを折りたたみブロックとして生成） -->
         <div id="lesson-list"></div>
+      </div>
+    </div>
+
+    <!-- 学習ダッシュボード -->
+    <div class="char-subcontent" id="conv-sub-learnings">
+      <div class="card">
+        <h2>学習ダッシュボード</h2>
+        <div id="learnings-dashboard"><button onclick="loadLearningsDashboard()" style="padding:6px 16px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">読み込み</button></div>
       </div>
     </div>
 
@@ -642,7 +651,7 @@ users       1──N  comments      (user_id)</div>
 <script src="/static/js/admin/debug.js"></script>
 <script src="/static/js/admin/layout.js"></script>
 <script src="/static/js/admin/files.js"></script>
-<script src="/static/js/admin/teacher.js?v=19"></script>
+<script src="/static/js/admin/teacher.js?v=20"></script>
 <script src="/static/js/admin/init.js"></script>
 </body>
 </html>

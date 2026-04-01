@@ -15,6 +15,12 @@ let _openLessonIds = new Set();
 // 言語タブ状態（lesson_id → 'ja' or 'en'）
 let _lessonLangTab = {};
 
+// バージョン選択状態（`${lessonId}_${lang}` → version_number）
+let _lessonVersionTab = {};
+
+// カテゴリ一覧キャッシュ
+let _lessonCategories = null;
+
 
 function _getLessonLang(lessonId) {
   return _lessonLangTab[lessonId] || 'ja';
@@ -42,11 +48,27 @@ async function _switchLessonLang(lessonId, lang) {
   await loadLessons();
 }
 
+function _getLessonVersion(lessonId, lang) {
+  return _lessonVersionTab[`${lessonId}_${lang}`] || null;
+}
+
+async function _switchLessonVersion(lessonId, lang, vn) {
+  _lessonVersionTab[`${lessonId}_${lang}`] = vn;
+  _openLessonIds.add(lessonId);
+  await loadLessons();
+}
+
+async function _loadCategories() {
+  const res = await api('GET', '/api/lesson-categories');
+  _lessonCategories = (res && res.ok) ? res.categories : [];
+}
+
 function switchConvSubtab(name, el) {
   document.querySelectorAll('#tab-convmode .char-subtab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('#tab-convmode .char-subcontent').forEach(t => t.classList.remove('active'));
   document.getElementById('conv-sub-' + name).classList.add('active');
   if (el) el.classList.add('active');
+  if (name === 'learnings') loadLearningsDashboard();
 }
 
 // --- コンテンツ一覧（各コンテンツを縦に並べる） ---
@@ -56,13 +78,16 @@ let _cachedLessonStatus = null;
 async function loadLessons() {
   const res = await api('GET', '/api/lessons');
   if (!res || !res.ok) return;
-  // ステータスを1回だけ取得
+  // カテゴリとステータスを取得
+  if (!_lessonCategories) await _loadCategories();
   const statusRes = await api('GET', '/api/lessons/status');
   _cachedLessonStatus = statusRes;
   const list = document.getElementById('lesson-list');
   list.innerHTML = '';
   // 間のスケールスライダー
   await _renderPaceScaleSlider(list);
+  // カテゴリ管理
+  _renderCategoryManager(list);
   for (const l of res.lessons) {
     const item = await buildLessonItem(l.id);
     if (item) list.appendChild(item);
@@ -92,17 +117,31 @@ async function updatePaceScale(value) {
 }
 
 async function buildLessonItem(lessonId) {
-  const res = await api('GET', '/api/lessons/' + lessonId);
+  const lang = _getLessonLang(lessonId);
+  const generator = 'claude';
+
+  // バージョン解決: 選択中のバージョンがあればそれを使い、なければ最新
+  let selectedVersion = _getLessonVersion(lessonId, lang);
+  let apiUrl = '/api/lessons/' + lessonId;
+  if (selectedVersion) apiUrl += '?version=' + selectedVersion;
+
+  const res = await api('GET', apiUrl);
   if (!res || !res.ok) return null;
 
   const lesson = res.lesson;
   const sources = res.sources;
   const allSections = res.sections;
+  const allVersions = res.versions || [];
   const sectionsByGenerator = res.sections_by_generator || {};
   const plans = res.plans || {};
-  const lang = _getLessonLang(lessonId);
-  const generator = 'claude';
+
+  // 現在の lang+generator に対応するバージョン一覧
+  const langVersions = allVersions.filter(v => v.lang === lang && v.generator === generator);
   const sections = allSections.filter(s => (s.lang || 'ja') === lang && (s.generator || 'claude') === generator);
+
+  // バージョン番号確定（未選択なら最新）
+  const currentVersion = selectedVersion || (langVersions.length ? langVersions[langVersions.length - 1].version_number : 1);
+
   const hasSources = sources.length > 0;
   const hasSections = sections.length > 0;
 
@@ -153,11 +192,18 @@ async function buildLessonItem(lessonId) {
   const body = document.createElement('div');
   body.style.marginTop = '12px';
 
-  // コンテンツ名編集
-  body.innerHTML = `<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+  // コンテンツ名編集 + カテゴリ選択
+  const catOptions = (_lessonCategories || []).map(c =>
+    `<option value="${esc(c.slug)}"${lesson.category === c.slug ? ' selected' : ''}>${esc(c.name)}</option>`
+  ).join('');
+  body.innerHTML = `<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
     <span style="font-weight:600; font-size:0.85rem; color:#2a1f40;">コンテンツ名:</span>
-    <input type="text" class="lesson-name-input" value="${esc(lesson.name)}" style="flex:1; padding:4px 8px; background:#faf7ff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:4px;">
+    <input type="text" class="lesson-name-input" value="${esc(lesson.name)}" style="flex:1; min-width:120px; padding:4px 8px; background:#faf7ff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:4px;">
     <button onclick="saveLessonName(${lessonId}, this)" style="padding:4px 12px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">保存</button>
+    <select onchange="saveLessonCategory(${lessonId}, this.value)" style="padding:4px 8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.78rem; background:#faf7ff; color:#2a1f40;">
+      <option value=""${!lesson.category ? ' selected' : ''}>カテゴリなし</option>
+      ${catOptions}
+    </select>
   </div>`;
 
   const hasExtractedText = !!(lesson.extracted_text);
@@ -326,9 +372,16 @@ async function buildLessonItem(lessonId) {
   step3Body.className = 'lesson-step-body';
   step3Body.innerHTML = `<div class="lesson-step-title">セクション確認・編集${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>`;
 
+  // バージョンセレクタ
+  if (langVersions.length > 0) {
+    const verDiv = document.createElement('div');
+    verDiv.innerHTML = _buildVersionSelector(lessonId, lang, generator, langVersions, currentVersion, sections);
+    step3Body.appendChild(verDiv);
+  }
+
   let ttsCacheMap = {};
   if (hasSections) {
-    const cacheRes = await api('GET', '/api/lessons/' + lessonId + '/tts-cache?lang=' + lang + '&generator=' + generator);
+    const cacheRes = await api('GET', '/api/lessons/' + lessonId + '/tts-cache?lang=' + lang + '&generator=' + generator + '&version=' + currentVersion);
     if (cacheRes && cacheRes.ok) {
       for (const c of cacheRes.sections) {
         ttsCacheMap[c.order_index] = c.parts;
@@ -336,7 +389,7 @@ async function buildLessonItem(lessonId) {
     }
   }
   const secContainer = document.createElement('div');
-  renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap, {teacher: teacherChar, student: studentChar}, plans[lang]);
+  renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap, {teacher: teacherChar, student: studentChar}, plans[lang], currentVersion);
   step3Body.appendChild(secContainer);
 
   step3.innerHTML = '<div class="lesson-step-num">3</div>';
@@ -354,7 +407,7 @@ async function buildLessonItem(lessonId) {
   const progressInfo = isActive ? `${statusRes.status.current_index + 1} / ${statusRes.status.total_sections} セクション` : '';
   step4Body.innerHTML = `<div class="lesson-step-title">授業再生${isActive ? '（実行中）' : ''}</div>
     <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-      <button onclick="startLesson(${lessonId}, '${lang}')" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">${lang === 'en' ? 'Start Lesson' : '授業開始'}</button>
+      <button onclick="startLesson(${lessonId}, '${lang}', ${currentVersion})" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">${lang === 'en' ? 'Start Lesson' : '授業開始'} (v${currentVersion})</button>
       <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isRunning ? '' : ' display:none;'}">一時停止</button>
       <button onclick="resumeLesson()" class="btn-lesson-resume" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isPaused ? '' : ' display:none;'}">再開</button>
       <button onclick="stopLesson()" class="btn-lesson-stop" style="padding:5px 14px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? '' : ' display:none;'}">終了</button>
@@ -541,7 +594,7 @@ function _findStatusEl(lessonId) {
   return item ? item.querySelector('.lesson-upload-status') : null;
 }
 
-function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo, langPlan) {
+function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo, langPlan, versionNumber) {
   container.innerHTML = '';
   if (!sections || !sections.length) {
     container.innerHTML = '<div style="color:#8a7a9a; font-size:0.8rem; padding:8px;">スクリプトがありません。「JSONインポート」でセクションを追加してください。</div>';
@@ -569,7 +622,7 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
         <span style="font-weight:600; font-size:0.8rem; margin-left:4px; color:#2a1f40;">${i + 1}. ${esc(s.section_type)}</span>
         <span style="font-size:0.7rem; color:#7b1fa2; margin-left:8px;">[${esc(s.emotion)}]</span>
         ${hasCacheFlag ? '<span style="font-size:0.65rem; color:#2e7d32; margin-left:6px; background:#e8f5e9; padding:1px 5px; border-radius:3px;">TTS cached</span>' : ''}
-        ${hasCacheFlag ? `<button onclick="playSectionAudio(this, ${s.order_index}, ${lessonId})" style="width:26px; height:26px; background:#1565c0; color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.75rem; line-height:26px; text-align:center;" title="セクション再生">\u25B6</button>` : ''}
+        ${hasCacheFlag ? `<button onclick="playSectionAudio(this, ${s.order_index}, ${lessonId}, ${versionNumber || 1})" style="width:26px; height:26px; background:#1565c0; color:#fff; border:none; border-radius:50%; cursor:pointer; font-size:0.75rem; line-height:26px; text-align:center;" title="セクション再生">\u25B6</button>` : ''}
       </div>
       <div style="display:flex; gap:4px;">
         <button onclick="moveSectionUp(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#f0ecf5; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.7rem;" ${i === 0 ? 'disabled' : ''}>\u25B2</button>
@@ -577,6 +630,9 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
         <button onclick="deleteSection(${lessonId}, ${s.id})" style="width:24px; height:24px; background:#c62828; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.7rem;">\u00D7</button>
       </div>
     </div>`;
+
+    // 注釈UI
+    html += _buildAnnotationUI(lessonId, s);
 
     // 対話モード: dialoguesがあれば発話一覧を表示
     let _dlgs = [];
@@ -834,9 +890,11 @@ async function _reorderSection(lessonId, sectionId, direction) {
 
 // --- 授業制御 ---
 
-async function startLesson(lessonId, lang) {
+async function startLesson(lessonId, lang, version) {
   lang = lang || _getLessonLang(lessonId);
-  const res = await api('POST', `/api/lessons/${lessonId}/start?lang=${lang}&generator=claude`);
+  let url = `/api/lessons/${lessonId}/start?lang=${lang}&generator=claude`;
+  if (version) url += `&version=${version}`;
+  const res = await api('POST', url);
   if (res && res.ok) {
     showToast(lang === 'en' ? 'Lesson started' : '授業開始', 'success');
     await loadLessons();
@@ -904,11 +962,13 @@ function playAudioInline(btn, url) {
   };
 }
 
-async function playSectionAudio(btn, orderIndex, lessonId) {
+async function playSectionAudio(btn, orderIndex, lessonId, version) {
   // セクション全パートを連続再生
   _stopCurrentAudio();
   const lang = _getLessonLang(lessonId);
-  const cacheRes = await api('GET', `/api/lessons/${lessonId}/tts-cache?lang=${lang}&generator=claude`);
+  let cacheUrl = `/api/lessons/${lessonId}/tts-cache?lang=${lang}&generator=claude`;
+  if (version) cacheUrl += `&version=${version}`;
+  const cacheRes = await api('GET', cacheUrl);
   if (!cacheRes || !cacheRes.ok) return;
   const section = (cacheRes.sections || []).find(s => s.order_index === orderIndex);
   if (!section || !section.parts || !section.parts.length) { showToast('TTSキャッシュなし', 'error'); return; }
@@ -1175,4 +1235,637 @@ function _setupPromptUI(container) {
     _modifiedContent = null;
     instructionInput.value = '';
   });
+}
+
+// =============================================================
+// カテゴリ管理
+// =============================================================
+
+function _renderCategoryManager(container) {
+  const cats = _lessonCategories || [];
+  const div = document.createElement('div');
+  div.style.cssText = 'margin-bottom:12px;';
+  let catListHtml = cats.map(c =>
+    `<div style="display:flex; align-items:center; gap:6px; padding:3px 6px; background:#f5f0ff; border:1px solid #e0d4f0; border-radius:3px;">
+      <span style="font-size:0.75rem; font-weight:600; color:#2a1f40;">${esc(c.name)}</span>
+      <span style="font-size:0.65rem; color:#8a7a9a;">(${esc(c.slug)})</span>
+      ${c.description ? `<span style="font-size:0.65rem; color:#6a5590;" title="${esc(c.description)}">i</span>` : ''}
+      <button onclick="deleteCategory(${c.id})" style="padding:1px 5px; background:#c62828; color:#fff; border:none; border-radius:2px; cursor:pointer; font-size:0.6rem; margin-left:auto;">\u00D7</button>
+    </div>`
+  ).join('');
+  div.innerHTML = `<details style="font-size:0.78rem;">
+    <summary style="cursor:pointer; color:#7b1fa2; font-weight:600;">カテゴリ管理 (${cats.length}件)</summary>
+    <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px;">
+      ${catListHtml}
+      <button onclick="createCategory()" style="padding:4px 10px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem; align-self:flex-start;">+ 新規カテゴリ</button>
+    </div>
+  </details>`;
+  container.appendChild(div);
+}
+
+async function createCategory() {
+  const slug = await showModal('カテゴリslug (例: english_natgeo)', {
+    title: '新規カテゴリ', input: 'programming_python', okLabel: '次へ',
+  });
+  if (!slug) return;
+  const name = await showModal('表示名', {
+    title: '新規カテゴリ', input: 'プログラミング（Python）', okLabel: '次へ',
+  });
+  if (!name) return;
+  const desc = await showModal('説明（任意）', {
+    title: '新規カテゴリ', input: '', okLabel: '作成',
+  });
+  const res = await api('POST', '/api/lesson-categories', { slug, name, description: desc || '' });
+  if (res && res.ok) {
+    _lessonCategories = null;
+    showToast('カテゴリ作成: ' + name, 'success');
+    await loadLessons();
+  }
+}
+
+async function deleteCategory(categoryId) {
+  const ok = await showConfirm('このカテゴリを削除しますか？', { danger: true, title: 'カテゴリ削除' });
+  if (!ok) return;
+  await api('DELETE', '/api/lesson-categories/' + categoryId);
+  _lessonCategories = null;
+  showToast('カテゴリ削除', 'success');
+  await loadLessons();
+}
+
+async function saveLessonCategory(lessonId, category) {
+  await api('PUT', '/api/lessons/' + lessonId, { category });
+  showToast('カテゴリ更新', 'success');
+}
+
+// =============================================================
+// バージョンセレクタ
+// =============================================================
+
+function _buildVersionSelector(lessonId, lang, generator, versions, currentVersion, sections) {
+  if (!versions || versions.length === 0) return '';
+
+  const currentVer = versions.find(v => v.version_number === currentVersion);
+  let btns = versions.map(v => {
+    const sel = v.version_number === currentVersion;
+    const hasImprove = v.improve_source_version ? '\u2605' : '';
+    const bg = sel ? 'background:#7b1fa2; color:#fff;' : 'background:#faf7ff; color:#7b1fa2;';
+    return `<button onclick="_switchLessonVersion(${lessonId}, '${lang}', ${v.version_number})" style="padding:3px 10px; border:1px solid #d0c0e8; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:600; ${bg}">v${v.version_number}${hasImprove}</button>`;
+  }).join('');
+
+  let metaHtml = '';
+  if (currentVer) {
+    if (currentVer.note) {
+      metaHtml += `<span style="font-size:0.7rem; color:#6a5590; margin-left:6px;">${esc(currentVer.note)}</span>`;
+    }
+    if (currentVer.improve_source_version) {
+      metaHtml += `<span style="font-size:0.65rem; color:#1565c0; margin-left:6px;">v${currentVer.improve_source_version}から改善</span>`;
+    }
+    if (currentVer.improve_summary) {
+      metaHtml += `<div style="font-size:0.65rem; color:#555; margin-top:2px;">${esc(currentVer.improve_summary)}</div>`;
+    }
+  }
+
+  // 検証結果（既存）
+  let verifyHtml = '';
+  if (currentVer && currentVer.verify_json) {
+    try {
+      const vj = JSON.parse(currentVer.verify_json);
+      verifyHtml = `<details style="margin-top:6px;"><summary style="cursor:pointer; font-size:0.7rem; color:#1565c0; font-weight:500;">前回の検証結果</summary>
+        <div style="margin-top:4px;">${_buildVerifyResultsHtml(vj)}</div></details>`;
+    } catch(e) {}
+  }
+
+  return `<div style="margin-bottom:10px; padding:8px 10px; background:#f5f0ff; border:1px solid #d0c0e8; border-radius:6px;">
+    <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+      <span style="font-size:0.75rem; font-weight:600; color:#2a1f40;">バージョン:</span>
+      ${btns}
+      ${metaHtml}
+    </div>
+    <div style="display:flex; gap:4px; margin-top:6px; flex-wrap:wrap;">
+      <button onclick="_editVersionNote(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">メモ編集</button>
+      <button onclick="_copyVersion(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">コピー</button>
+      <button onclick="verifyVersion(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#1565c0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">検証</button>
+      <button onclick="showImprovePanel(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#e65100; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">改善</button>
+      <button onclick="showVersionDiff(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">比較...</button>
+      ${versions.length > 1 ? `<button onclick="_deleteVersion(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#c62828; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">削除</button>` : ''}
+    </div>
+    ${verifyHtml}
+    <div class="verify-results-${lessonId}-${currentVersion}"></div>
+    <div class="improve-panel-${lessonId}-${currentVersion}" style="display:none;"></div>
+    <div class="diff-panel-${lessonId}" style="display:none;"></div>
+  </div>`;
+}
+
+async function _editVersionNote(lessonId, vn, lang, generator) {
+  const note = await showModal('バージョンメモ', {
+    title: `v${vn} メモ編集`, input: '', okLabel: '保存',
+  });
+  if (note === null) return;
+  await api('PUT', `/api/lessons/${lessonId}/versions/${vn}?lang=${lang}&generator=${generator}`, { note });
+  showToast('メモ更新', 'success');
+  _openLessonIds.add(lessonId);
+  await loadLessons();
+}
+
+async function _copyVersion(lessonId, vn, lang, generator) {
+  const res = await api('POST', `/api/lessons/${lessonId}/versions`, { lang, generator, copy_from: vn });
+  if (res && res.ok) {
+    _lessonVersionTab[`${lessonId}_${lang}`] = res.version.version_number;
+    showToast(`v${res.version.version_number} 作成（v${vn}からコピー）`, 'success');
+    _openLessonIds.add(lessonId);
+    await loadLessons();
+  }
+}
+
+async function _deleteVersion(lessonId, vn, lang, generator) {
+  const ok = await showConfirm(`v${vn} を削除しますか？`, { danger: true, title: 'バージョン削除' });
+  if (!ok) return;
+  await api('DELETE', `/api/lessons/${lessonId}/versions/${vn}?lang=${lang}&generator=${generator}`);
+  delete _lessonVersionTab[`${lessonId}_${lang}`];
+  showToast(`v${vn} 削除`, 'success');
+  _openLessonIds.add(lessonId);
+  await loadLessons();
+}
+
+// =============================================================
+// セクション注釈UI
+// =============================================================
+
+function _buildAnnotationUI(lessonId, section) {
+  const rating = section.annotation_rating || '';
+  const comment = section.annotation_comment || '';
+  const sid = section.id;
+
+  const btnStyle = (r, color, label) => {
+    const sel = rating === r;
+    const bg = sel ? color : '#faf7ff';
+    const fg = sel ? '#fff' : color;
+    const bw = sel ? '2px' : '1px';
+    return `<button onclick="setAnnotationRating(${lessonId}, ${sid}, '${r}')" style="padding:2px 8px; background:${bg}; color:${fg}; border:${bw} solid ${color}; border-radius:3px; cursor:pointer; font-size:0.7rem; font-weight:${sel ? '700' : '400'};">${label}</button>`;
+  };
+
+  return `<div style="display:flex; align-items:center; gap:4px; margin:4px 0; flex-wrap:wrap;">
+    ${btnStyle('good', '#2e7d32', '\u25CE良い')}
+    ${btnStyle('needs_improvement', '#e65100', '\u25B3要改善')}
+    ${btnStyle('redo', '#c62828', '\u2715作り直し')}
+    <input type="text" value="${esc(comment)}" placeholder="コメント..."
+      onblur="saveAnnotationComment(${lessonId}, ${sid}, this.value)"
+      style="flex:1; min-width:100px; padding:2px 6px; border:1px solid #d0c0e8; border-radius:3px; font-size:0.7rem; background:#fff; color:#2a1f40;">
+  </div>`;
+}
+
+async function setAnnotationRating(lessonId, sectionId, rating) {
+  await api('PUT', `/api/lessons/${lessonId}/sections/${sectionId}/annotation`, { rating });
+  _openLessonIds.add(lessonId);
+  await loadLessons();
+}
+
+async function saveAnnotationComment(lessonId, sectionId, comment) {
+  await api('PUT', `/api/lessons/${lessonId}/sections/${sectionId}/annotation`, { comment });
+}
+
+// =============================================================
+// 整合性チェック（検証）
+// =============================================================
+
+async function verifyVersion(lessonId, lang, generator, versionNumber) {
+  const el = document.querySelector(`.verify-results-${lessonId}-${versionNumber}`);
+  if (!el) return;
+  el.innerHTML = '<span class="lesson-spinner">検証中...</span>';
+
+  const res = await api('POST', `/api/lessons/${lessonId}/verify`, {
+    lang, generator, version_number: versionNumber,
+  });
+
+  if (!res || !res.ok) {
+    el.innerHTML = `<div style="color:#c62828; font-size:0.75rem;">検証エラー: ${esc(res && res.error ? res.error : '不明')}</div>`;
+    return;
+  }
+
+  let html = _buildVerifyResultsHtml(res.verify_result);
+
+  // プロンプト・出力表示（CLAUDE.md準拠）
+  html += _buildLlmCallDisplay('検証', res.prompt, res.raw_output);
+
+  el.innerHTML = `<details open style="margin-top:6px;">
+    <summary style="cursor:pointer; font-size:0.75rem; font-weight:600; color:#1565c0;">検証結果</summary>
+    <div style="margin-top:4px;">${html}</div>
+  </details>`;
+}
+
+function _buildVerifyResultsHtml(result) {
+  if (!result) return '<div style="font-size:0.7rem; color:#888;">結果なし</div>';
+  let html = '';
+  const coverage = result.coverage || [];
+  const contradictions = result.contradictions || [];
+
+  const counts = { covered: 0, weak: 0, missing: 0 };
+  for (const c of coverage) counts[c.status] = (counts[c.status] || 0) + 1;
+
+  html += `<div style="font-size:0.72rem; margin-bottom:4px;">
+    <span style="color:#2e7d32;">カバー: ${counts.covered}</span> /
+    <span style="color:#e65100;">弱い: ${counts.weak}</span> /
+    <span style="color:#c62828;">抜け: ${counts.missing}</span> /
+    <span style="color:#6a1b9a;">矛盾: ${contradictions.length}</span>
+  </div>`;
+
+  if (coverage.length) {
+    html += '<div style="max-height:200px; overflow-y:auto;">';
+    for (const c of coverage) {
+      const colors = { covered: '#e8f5e9', weak: '#fff3e0', missing: '#fbe9e7' };
+      const borders = { covered: '#a5d6a7', weak: '#ffcc80', missing: '#ef9a9a' };
+      html += `<div style="padding:3px 6px; margin-bottom:2px; background:${colors[c.status] || '#f5f5f5'}; border-left:3px solid ${borders[c.status] || '#ccc'}; border-radius:2px; font-size:0.68rem;">
+        <span style="font-weight:600;">[${c.status}]</span> ${esc(c.source_item || '')}
+        ${c.detail ? `<div style="color:#555; margin-top:1px;">${esc(c.detail)}</div>` : ''}
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  if (contradictions.length) {
+    html += '<div style="margin-top:4px;">';
+    for (const c of contradictions) {
+      html += `<div style="padding:3px 6px; margin-bottom:2px; background:#fce4ec; border-left:3px solid #ef9a9a; border-radius:2px; font-size:0.68rem;">
+        <span style="font-weight:600; color:#c62828;">矛盾</span> sec${c.section_index}: ${esc(c.issue || '')}
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  return html;
+}
+
+// =============================================================
+// 部分改善
+// =============================================================
+
+async function showImprovePanel(lessonId, lang, generator, currentVersion) {
+  const el = document.querySelector(`.improve-panel-${lessonId}-${currentVersion}`);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+
+  // バージョン一覧とセクション取得
+  const res = await api('GET', `/api/lessons/${lessonId}?version=${currentVersion}`);
+  if (!res || !res.ok) return;
+  const sections = (res.sections || []).filter(s => (s.lang || 'ja') === lang && (s.generator || 'claude') === generator);
+  const versions = (res.versions || []).filter(v => v.lang === lang && v.generator === generator);
+
+  let versionOptions = versions.map(v =>
+    `<option value="${v.version_number}"${v.version_number === currentVersion ? ' selected' : ''}>v${v.version_number}${v.note ? ' - ' + v.note : ''}</option>`
+  ).join('');
+
+  let sectionChecks = sections.map((s, i) => {
+    const autoCheck = s.annotation_rating === 'needs_improvement' || s.annotation_rating === 'redo';
+    const ratingLabel = s.annotation_rating ? ` [${s.annotation_rating === 'good' ? '\u25CE' : s.annotation_rating === 'needs_improvement' ? '\u25B3' : '\u2715'}]` : '';
+    return `<label style="display:flex; align-items:center; gap:4px; font-size:0.72rem; padding:2px 0;">
+      <input type="checkbox" class="improve-sec-check" value="${s.order_index}"${autoCheck ? ' checked' : ''}>
+      ${i + 1}. ${esc(s.section_type)}${ratingLabel}
+      ${s.annotation_comment ? `<span style="color:#888; font-size:0.65rem;">${esc(s.annotation_comment.substring(0, 30))}</span>` : ''}
+    </label>`;
+  }).join('');
+
+  el.innerHTML = `<div style="margin-top:8px; padding:8px; background:#fff3e0; border:1px solid #ffcc80; border-radius:4px;">
+    <div style="font-weight:600; font-size:0.78rem; color:#e65100; margin-bottom:6px;">部分改善</div>
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+      <span style="font-size:0.72rem;">改善元:</span>
+      <select class="improve-source-version" style="padding:2px 6px; border:1px solid #ffcc80; border-radius:3px; font-size:0.72rem;">${versionOptions}</select>
+    </div>
+    <div style="margin-bottom:6px;">
+      <div style="font-size:0.72rem; font-weight:500; margin-bottom:3px;">対象セクション:</div>
+      ${sectionChecks}
+    </div>
+    <textarea class="improve-instructions" rows="2" placeholder="追加の改善指示（任意）..." style="width:100%; padding:4px 6px; border:1px solid #ffcc80; border-radius:3px; font-size:0.72rem; margin-bottom:6px; box-sizing:border-box;"></textarea>
+    <div style="display:flex; gap:6px;">
+      <button onclick="executeImprove(${lessonId}, '${lang}', '${generator}', this)" style="padding:4px 12px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">改善を実行</button>
+      <button onclick="this.closest('.improve-panel-${lessonId}-${currentVersion}').style.display='none'" style="padding:4px 12px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">キャンセル</button>
+    </div>
+    <div class="improve-status" style="margin-top:6px;"></div>
+  </div>`;
+  el.style.display = '';
+}
+
+async function executeImprove(lessonId, lang, generator, btn) {
+  const panel = btn.closest('div[class*="improve-panel"]');
+  const statusEl = panel.querySelector('.improve-status');
+  const sourceVersion = parseInt(panel.querySelector('.improve-source-version').value);
+  const checks = panel.querySelectorAll('.improve-sec-check:checked');
+  const targetSections = Array.from(checks).map(c => parseInt(c.value));
+  const instructions = panel.querySelector('.improve-instructions').value.trim();
+
+  if (targetSections.length === 0) {
+    showToast('改善対象セクションを選択してください', 'error');
+    return;
+  }
+
+  statusEl.innerHTML = '<span class="lesson-spinner">改善中（数分かかります）...</span>';
+  btn.disabled = true;
+
+  const res = await api('POST', `/api/lessons/${lessonId}/improve`, {
+    source_version: sourceVersion,
+    lang, generator,
+    target_sections: targetSections,
+    user_instructions: instructions,
+  });
+
+  btn.disabled = false;
+
+  if (res && res.ok) {
+    // プロンプト・出力表示
+    let resultHtml = `<div style="color:#2e7d32; font-weight:600; font-size:0.75rem; margin-bottom:4px;">改善完了 → v${res.version_number}</div>`;
+    resultHtml += _buildLlmCallDisplay('改善', res.prompt, res.raw_output);
+    statusEl.innerHTML = resultHtml;
+
+    _lessonVersionTab[`${lessonId}_${lang}`] = res.version_number;
+    showToast(`改善完了: v${res.version_number} 作成`, 'success');
+    _openLessonIds.add(lessonId);
+    setTimeout(() => loadLessons(), 1500);
+  } else {
+    let errHtml = `<div style="color:#c62828; font-size:0.75rem;">改善エラー: ${esc(res && res.error ? res.error : '不明')}</div>`;
+    if (res && res.prompt) errHtml += _buildLlmCallDisplay('改善', res.prompt, res.raw_output);
+    statusEl.innerHTML = errHtml;
+  }
+}
+
+// =============================================================
+// バージョン差分比較
+// =============================================================
+
+async function showVersionDiff(lessonId, lang, generator, versionA) {
+  const versionsRes = await api('GET', `/api/lessons/${lessonId}/versions?lang=${lang}&generator=${generator}`);
+  if (!versionsRes || !versionsRes.ok || versionsRes.versions.length < 2) {
+    showToast('比較するバージョンが2つ以上必要です', 'error');
+    return;
+  }
+  const others = versionsRes.versions.filter(v => v.version_number !== versionA);
+  const hint = others.map(v => `${v.version_number}`).join(', ');
+  const input = await showModal(`比較先バージョン番号を入力 (${hint})`, {
+    title: `v${versionA} と比較`,
+    input: String(others[0].version_number),
+    okLabel: '比較',
+  });
+  if (!input) return;
+  const versionB = parseInt(input);
+  if (!others.find(v => v.version_number === versionB)) {
+    showToast('無効なバージョン番号です', 'error');
+    return;
+  }
+
+  // 両バージョンのセクション取得
+  const [resA, resB] = await Promise.all([
+    api('GET', `/api/lessons/${lessonId}?version=${versionA}`),
+    api('GET', `/api/lessons/${lessonId}?version=${versionB}`),
+  ]);
+  if (!resA || !resA.ok || !resB || !resB.ok) return;
+
+  const secsA = (resA.sections || []).filter(s => (s.lang || 'ja') === lang && (s.generator || 'claude') === generator);
+  const secsB = (resB.sections || []).filter(s => (s.lang || 'ja') === lang && (s.generator || 'claude') === generator);
+  const verB = (resB.versions || []).find(v => v.version_number === versionB);
+  const improvedIdxs = new Set();
+  if (verB && verB.improved_sections) {
+    try { JSON.parse(verB.improved_sections).forEach(idx => improvedIdxs.add(idx)); } catch(e) {}
+  }
+
+  // 差分表示
+  const panel = document.querySelector(`.diff-panel-${lessonId}`);
+  if (!panel) return;
+
+  let html = `<div style="margin-top:8px; padding:8px; background:#e3f2fd; border:1px solid #90caf9; border-radius:4px;">
+    <div style="font-weight:600; font-size:0.78rem; color:#1565c0; margin-bottom:6px;">v${versionA} \u2194 v${versionB} 差分</div>`;
+
+  const maxLen = Math.max(secsA.length, secsB.length);
+  for (let i = 0; i < maxLen; i++) {
+    const a = secsA[i];
+    const b = secsB[i];
+    const aContent = a ? (a.content || '') : '';
+    const bContent = b ? (b.content || '') : '';
+    const changed = aContent !== bContent;
+    const isImproved = improvedIdxs.has(i);
+    const label = a ? `${i + 1}. ${a.section_type}` : `${i + 1}. (新規)`;
+    const tag = isImproved ? ' <span style="color:#e65100; font-size:0.6rem;">[AI改善]</span>' : '';
+
+    if (!changed) {
+      html += `<details style="margin-bottom:3px;">
+        <summary style="cursor:pointer; font-size:0.7rem; color:#888;">${esc(label)} — 変更なし</summary>
+        <pre style="font-size:0.65rem; color:#888; max-height:80px; overflow-y:auto; white-space:pre-wrap; padding:4px;">${esc(aContent.substring(0, 200))}</pre>
+      </details>`;
+    } else {
+      html += `<details open style="margin-bottom:4px;">
+        <summary style="cursor:pointer; font-size:0.72rem; font-weight:600; color:#1565c0;">${esc(label)} — 変更あり${tag}</summary>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:3px;">
+          <div style="padding:4px; background:#fce4ec; border:1px solid #ef9a9a; border-radius:3px;">
+            <div style="font-size:0.6rem; color:#c62828; font-weight:600;">v${versionA}</div>
+            <pre style="font-size:0.65rem; white-space:pre-wrap; max-height:120px; overflow-y:auto;">${esc(aContent)}</pre>
+          </div>
+          <div style="padding:4px; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:3px;">
+            <div style="font-size:0.6rem; color:#2e7d32; font-weight:600;">v${versionB}</div>
+            <pre style="font-size:0.65rem; white-space:pre-wrap; max-height:120px; overflow-y:auto;">${esc(bContent)}</pre>
+          </div>
+        </div>
+      </details>`;
+    }
+  }
+
+  html += `<button onclick="this.closest('.diff-panel-${lessonId}').style.display='none'" style="margin-top:6px; padding:3px 10px; background:#888; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.7rem;">閉じる</button>`;
+  html += '</div>';
+  panel.innerHTML = html;
+  panel.style.display = '';
+}
+
+// =============================================================
+// LLM呼び出し表示（共通ヘルパー）
+// =============================================================
+
+function _buildLlmCallDisplay(label, prompt, rawOutput) {
+  if (!prompt && !rawOutput) return '';
+  let html = `<details style="margin-top:4px;">
+    <summary style="cursor:pointer; font-size:0.65rem; color:#6a1b9a;">\u{1F50D} ${esc(label)} プロンプト・出力</summary>
+    <div style="padding:4px 8px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; margin-top:2px;">`;
+  if (prompt) {
+    html += `<details style="margin-bottom:4px;">
+      <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F4AC} プロンプト</summary>
+      <pre style="font-size:0.6rem; max-height:300px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(typeof prompt === 'string' ? prompt : JSON.stringify(prompt, null, 2))}</pre>
+    </details>`;
+  }
+  if (rawOutput) {
+    html += `<details>
+      <summary style="cursor:pointer; color:#888; font-size:0.62rem;">\u{1F4DD} Raw Output</summary>
+      <pre style="font-size:0.6rem; max-height:300px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:2px 0; padding:4px; background:#fafafa; border-radius:3px;">${esc(rawOutput)}</pre>
+    </details>`;
+  }
+  html += '</div></details>';
+  return html;
+}
+
+// =============================================================
+// 学習ダッシュボード
+// =============================================================
+
+async function loadLearningsDashboard() {
+  const container = document.getElementById('learnings-dashboard');
+  if (!container) return;
+  container.innerHTML = '<span class="lesson-spinner">読み込み中...</span>';
+
+  const [statsRes, catsRes] = await Promise.all([
+    api('GET', '/api/lessons/learnings'),
+    api('GET', '/api/lesson-categories'),
+  ]);
+
+  if (!statsRes || !statsRes.ok) {
+    container.innerHTML = '<div style="color:#888; font-size:0.8rem;">学習データの読み込みに失敗しました</div>';
+    return;
+  }
+
+  const stats = statsRes.stats || [];
+  const categories = (catsRes && catsRes.ok) ? catsRes.categories : [];
+  const catMap = {};
+  for (const c of categories) catMap[c.slug] = c;
+
+  let html = '';
+
+  for (const st of stats) {
+    const cat = catMap[st.category] || {};
+    const ac = st.annotation_counts || {};
+    const good = ac.good || 0;
+    const ni = ac.needs_improvement || 0;
+    const redo = ac.redo || 0;
+    const total = good + ni + redo;
+    const lessonCount = st.lesson_count || 0;
+    const lastAnalysis = st.latest_learning ? st.latest_learning.created_at : 'なし';
+
+    const catName = st.category_name || st.category || '未分類';
+    const promptFile = cat.prompt_file || '';
+
+    html += `<div style="margin-bottom:12px; padding:10px; background:#faf7ff; border:1px solid #d0c0e8; border-radius:6px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span style="font-weight:600; font-size:0.85rem; color:#2a1f40;">${esc(catName)}</span>
+        <span style="font-size:0.7rem; color:#8a7a9a;">${lessonCount}授業 / 注釈${total}件</span>
+      </div>
+      <div style="font-size:0.72rem; margin-bottom:4px;">
+        <span style="color:#2e7d32;">\u25CE ${good}</span> /
+        <span style="color:#e65100;">\u25B3 ${ni}</span> /
+        <span style="color:#c62828;">\u2715 ${redo}</span>
+        <span style="color:#8a7a9a; margin-left:8px;">最終分析: ${esc(lastAnalysis)}</span>
+      </div>
+      <div style="display:flex; gap:4px; flex-wrap:wrap;">
+        <button onclick="executeLearningAnalysis('${esc(st.category)}')" style="padding:3px 10px; background:#1565c0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem;">分析を実行</button>
+        <button onclick="executePromptImprove('${esc(st.category)}')" style="padding:3px 10px; background:#6a1b9a; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem;">プロンプトを改善</button>
+        ${st.category && !promptFile ? `<button onclick="createCategoryPrompt('${esc(st.category)}')" style="padding:3px 10px; background:#e65100; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem;">専用プロンプト作成</button>` : ''}
+        ${promptFile ? `<span style="font-size:0.65rem; color:#6a5590; padding:3px 6px; background:#f0ecf5; border-radius:3px;">${esc(promptFile)}</span>` : ''}
+      </div>`;
+
+    // 学習結果表示
+    if (st.learnings_md) {
+      html += `<details style="margin-top:6px;">
+        <summary style="cursor:pointer; font-size:0.72rem; color:#6a1b9a; font-weight:500;">学習結果</summary>
+        <div style="padding:6px; background:#fff; border:1px solid #e0d4f0; border-radius:4px; margin-top:3px; font-size:0.72rem; max-height:250px; overflow-y:auto;">
+          ${simpleMarkdownToHtml(st.learnings_md)}
+        </div>
+      </details>`;
+    }
+
+    html += `<div class="learning-status-${st.category}" style="margin-top:4px;"></div>`;
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+async function executeLearningAnalysis(category) {
+  const statusEl = document.querySelector(`.learning-status-${category || ''}`);
+  if (statusEl) statusEl.innerHTML = '<span class="lesson-spinner">分析中（数分かかります）...</span>';
+
+  const res = await api('POST', '/api/lessons/analyze-learnings', { category });
+
+  if (res && res.ok) {
+    let html = `<div style="color:#2e7d32; font-weight:600; font-size:0.75rem;">分析完了</div>`;
+    html += _buildLlmCallDisplay('学習分析', res.prompt, res.raw_output);
+    if (statusEl) statusEl.innerHTML = html;
+    showToast('学習分析完了', 'success');
+    setTimeout(() => loadLearningsDashboard(), 2000);
+  } else {
+    let errHtml = `<div style="color:#c62828; font-size:0.75rem;">分析エラー: ${esc(res && res.error ? res.error : '不明')}</div>`;
+    if (res && res.prompt) errHtml += _buildLlmCallDisplay('学習分析', res.prompt, res.raw_output);
+    if (statusEl) statusEl.innerHTML = errHtml;
+  }
+}
+
+async function executePromptImprove(category) {
+  const statusEl = document.querySelector(`.learning-status-${category || ''}`);
+  if (statusEl) statusEl.innerHTML = '<span class="lesson-spinner">プロンプト改善案を生成中...</span>';
+
+  const res = await api('POST', '/api/lessons/improve-prompt', { category });
+
+  if (!res || !res.ok) {
+    let errHtml = `<div style="color:#c62828; font-size:0.75rem;">エラー: ${esc(res && res.error ? res.error : '不明')}</div>`;
+    if (res && res.prompt) errHtml += _buildLlmCallDisplay('プロンプト改善', res.prompt, res.raw_output);
+    if (statusEl) statusEl.innerHTML = errHtml;
+    return;
+  }
+
+  // diff表示 + 適用/却下ボタン
+  const diffInstructions = res.diff_instructions || [];
+  const promptFile = res.prompt_file || '';
+  let html = `<div style="padding:8px; background:#fff; border:1px solid #ce93d8; border-radius:4px; margin-top:4px;">
+    <div style="font-weight:600; font-size:0.75rem; color:#6a1b9a; margin-bottom:4px;">プロンプト改善提案 (${esc(promptFile)})</div>`;
+
+  if (res.summary) {
+    html += `<div style="font-size:0.72rem; color:#333; margin-bottom:6px;">${esc(res.summary)}</div>`;
+  }
+
+  for (const di of diffInstructions) {
+    const actionColor = di.action === 'add' ? '#2e7d32' : di.action === 'replace' ? '#e65100' : '#c62828';
+    html += `<div style="padding:4px 6px; margin-bottom:3px; background:#f5f0ff; border-left:3px solid ${actionColor}; border-radius:2px; font-size:0.68rem;">
+      <span style="font-weight:600; color:${actionColor};">[${esc(di.action)}]</span>
+      ${di.location ? `<span style="color:#888;"> at: ${esc(di.location)}</span>` : ''}
+      ${di.find ? `<div style="color:#c62828; margin-top:2px;">- ${esc(di.find)}</div>` : ''}
+      ${di.content ? `<div style="color:#2e7d32; margin-top:1px;">+ ${esc(di.content)}</div>` : ''}
+    </div>`;
+  }
+
+  html += _buildLlmCallDisplay('プロンプト改善', res.prompt, res.raw_output);
+
+  html += `<div style="display:flex; gap:6px; margin-top:6px;">
+    <button onclick="applyPromptDiff('${esc(promptFile)}', this)" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">適用</button>
+    <button onclick="this.closest('.learning-status-${category || ''}').innerHTML=''" style="padding:4px 12px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">却下</button>
+  </div>`;
+  html += '</div>';
+
+  if (statusEl) {
+    statusEl.innerHTML = html;
+    // diffInstructionsをdata属性に保持
+    statusEl._diffInstructions = diffInstructions;
+  }
+}
+
+async function applyPromptDiff(promptFile, btn) {
+  const statusEl = btn.closest('div[class*="learning-status"]');
+  const diffInstructions = statusEl ? statusEl._diffInstructions : null;
+  if (!diffInstructions) { showToast('diff指示がありません', 'error'); return; }
+
+  const res = await api('POST', '/api/lessons/apply-prompt-diff', {
+    prompt_file: promptFile,
+    diff_instructions: diffInstructions,
+  });
+
+  if (res && res.ok) {
+    showToast('プロンプト更新完了', 'success');
+    if (statusEl) statusEl.innerHTML = '<div style="color:#2e7d32; font-size:0.75rem;">適用完了</div>';
+  } else {
+    showToast('適用エラー: ' + (res && res.error ? res.error : '不明'), 'error');
+  }
+}
+
+async function createCategoryPrompt(slug) {
+  const ok = await showConfirm(`カテゴリ「${slug}」の専用プロンプトを作成しますか？`, { title: '専用プロンプト作成' });
+  if (!ok) return;
+
+  showToast('専用プロンプト生成中...', 'info');
+  const res = await api('POST', `/api/lesson-categories/${slug}/create-prompt`);
+  if (res && res.ok) {
+    _lessonCategories = null;
+    showToast('専用プロンプト作成完了: ' + (res.prompt_file || ''), 'success');
+    await loadLearningsDashboard();
+  } else {
+    showToast('作成エラー: ' + (res && res.error ? res.error : '不明'), 'error');
+  }
 }
