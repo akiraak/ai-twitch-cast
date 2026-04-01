@@ -1,5 +1,17 @@
 # DONE
 
+## 授業コンテンツ バージョニング — Step 2: API実装
+
+- [x] カテゴリCRUD API（GET/POST/DELETE /api/lesson-categories）
+- [x] バージョンCRUD API（GET/POST/PUT/DELETE /api/lessons/{id}/versions/...、copy_from対応）
+- [x] セクション注釈API（PUT /api/lessons/{id}/sections/{sid}/annotation）
+- [x] GET /api/lessons/{id} に versions 一覧追加 + ?version=N フィルタ
+- [x] import-sections: version未指定→新バージョン自動作成、指定→置換
+- [x] start: version省略時は最新バージョン自動選択（後方互換維持）
+- [x] lesson/lesson_update に category フィールド対応
+- [x] lesson_runner.start() に version_number パラメータ追加
+- [x] テスト +27件追加（全651通過）
+
 ## 授業コンテンツ バージョニング — Step 1: DBスキーマ & マイグレーション
 
 - [x] `lesson_categories` テーブル作成（slug, name, description, prompt_file）

@@ -211,8 +211,12 @@ class LessonRunner:
     def set_episode(self, episode_id: int | None):
         self._episode_id = episode_id
 
-    async def start(self, lesson_id: int, lang: str = "ja", generator: str = "gemini"):
-        """授業を開始する"""
+    async def start(self, lesson_id: int, lang: str = "ja", generator: str = "gemini",
+                    version_number: int | None = None):
+        """授業を開始する
+
+        version_number: 再生するバージョン。省略時は全セクション（後方互換）。
+        """
         if self._state == LessonState.RUNNING:
             await self.stop()
 
@@ -220,7 +224,8 @@ class LessonRunner:
         if not lesson:
             raise ValueError("コンテンツが見つかりません")
 
-        sections = db.get_lesson_sections(lesson_id, lang=lang, generator=generator)
+        sections = db.get_lesson_sections(lesson_id, lang=lang, generator=generator,
+                                          version_number=version_number)
         if not sections:
             raise ValueError("スクリプトがありません。先にスクリプトを生成してください。")
 

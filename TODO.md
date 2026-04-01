@@ -2,7 +2,6 @@
 
 ## 実装
 - [ ] 授業コンテンツのバージョニング機能 → [plans/lesson-versioning.md](plans/lesson-versioning.md)
-  - [ ] Step 2: API実装（バージョンCRUD, カテゴリCRUD, 注釈API, 既存APIのversion対応, APIテスト）
   - [ ] Step 3: 検証&部分改善API（元教材整合性チェック, source_version指定の部分再生成, 学習結果注入, プロンプト作成）
   - [ ] Step 4: 授業横断の学習ループAPI（カテゴリ別パターン分析, 学習結果書き出し, プロンプト改善diff生成+承認）
   - [ ] Step 5: 授業再生エンジン対応（version_numberパラメータ, TTSキャッシュパス変更, 旧互換）

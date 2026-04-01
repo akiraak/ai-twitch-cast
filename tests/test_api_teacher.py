@@ -348,7 +348,7 @@ class TestImportSections:
         ]
 
     def test_import_sections(self, api_client, test_db):
-        """正常なセクションインポート"""
+        """正常なセクションインポート（version未指定で新バージョン自動作成）"""
         r = api_client.post("/api/lessons", json={"name": "ImportTest"})
         lid = r.json()["lesson"]["id"]
 
@@ -359,6 +359,8 @@ class TestImportSections:
         data = resp.json()
         assert data["ok"] is True
         assert data["count"] == 2
+        assert "version_number" in data
+        assert data["version_number"] >= 1
         assert data["sections"][0]["generator"] == "claude"
         assert data["sections"][0]["section_type"] == "introduction"
         assert data["sections"][1]["section_type"] == "summary"
@@ -398,25 +400,26 @@ class TestImportSections:
         assert data["ok"] is False
         assert "details" in data
 
-    def test_import_replaces_same_generator(self, api_client, test_db):
-        """同じgeneratorで再インポートすると置き換わる"""
+    def test_import_replaces_same_version(self, api_client, test_db):
+        """同じversionで再インポートすると置き換わる"""
         r = api_client.post("/api/lessons", json={"name": "ReplaceTest"})
         lid = r.json()["lesson"]["id"]
 
         sections = self._make_sections()
-        api_client.post(
+        resp1 = api_client.post(
             f"/api/lessons/{lid}/import-sections?generator=claude",
             json={"sections": sections},
         )
-        # 再インポート（1セクションだけ）
+        v = resp1.json()["version_number"]
+        # 同じバージョンに再インポート（1セクションだけ）
         resp = api_client.post(
-            f"/api/lessons/{lid}/import-sections?generator=claude",
+            f"/api/lessons/{lid}/import-sections?generator=claude&version={v}",
             json={"sections": [sections[0]]},
         )
         assert resp.json()["count"] == 1
 
-        # GETで確認: claudeセクションは1つだけ
-        r2 = api_client.get(f"/api/lessons/{lid}")
+        # GETで確認: そのバージョンのclaudeセクションは1つだけ
+        r2 = api_client.get(f"/api/lessons/{lid}?version={v}")
         claude_sections = r2.json()["sections_by_generator"].get("claude", [])
         assert len(claude_sections) == 1
 
@@ -425,15 +428,17 @@ class TestImportSections:
         r = api_client.post("/api/lessons", json={"name": "CoexistTest"})
         lid = r.json()["lesson"]["id"]
 
-        # geminiセクションを追加
-        test_db.add_lesson_section(lid, 0, "introduction", "geminiの導入", generator="gemini")
+        # geminiセクションを追加（version_number=1）
+        test_db.add_lesson_section(lid, 0, "introduction", "geminiの導入",
+                                   generator="gemini", version_number=1)
 
-        # claudeセクションをインポート
+        # claudeセクションをインポート（新バージョンが自動作成される）
         api_client.post(
             f"/api/lessons/{lid}/import-sections?generator=claude",
             json={"sections": self._make_sections()},
         )
 
+        # バージョン指定なしで全セクション取得
         r2 = api_client.get(f"/api/lessons/{lid}")
         by_gen = r2.json()["sections_by_generator"]
         assert len(by_gen.get("gemini", [])) == 1
@@ -613,3 +618,457 @@ class TestTtsCacheAPI:
         )
         assert resp.json()["ok"] is True
         assert not cache_file.exists()
+
+
+class TestCategoryAPI:
+    """カテゴリCRUD APIのテスト"""
+
+    def test_list_empty(self, api_client):
+        """初期状態でカテゴリ一覧は空"""
+        resp = api_client.get("/api/lesson-categories")
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["categories"] == []
+
+    def test_create_category(self, api_client):
+        """カテゴリ作成"""
+        resp = api_client.post("/api/lesson-categories", json={
+            "slug": "english_natgeo",
+            "name": "英語（ナショジオ）",
+            "description": "ナショジオの英語教材",
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["category"]["slug"] == "english_natgeo"
+        assert data["category"]["name"] == "英語（ナショジオ）"
+
+    def test_create_duplicate_slug(self, api_client):
+        """重複slugはエラー"""
+        api_client.post("/api/lesson-categories", json={
+            "slug": "dup", "name": "Dup1",
+        })
+        resp = api_client.post("/api/lesson-categories", json={
+            "slug": "dup", "name": "Dup2",
+        })
+        assert resp.json()["ok"] is False
+
+    def test_delete_category(self, api_client, test_db):
+        """カテゴリ削除で関連授業のcategoryがリセットされる"""
+        r = api_client.post("/api/lesson-categories", json={
+            "slug": "to_del", "name": "削除テスト",
+        })
+        cat_id = r.json()["category"]["id"]
+
+        # 授業にカテゴリを設定
+        r2 = api_client.post("/api/lessons", json={
+            "name": "CatLesson", "category": "to_del",
+        })
+        lid = r2.json()["lesson"]["id"]
+
+        # カテゴリ削除
+        resp = api_client.delete(f"/api/lesson-categories/{cat_id}")
+        assert resp.json()["ok"] is True
+
+        # 授業のcategoryが空になっている
+        r3 = api_client.get(f"/api/lessons/{lid}")
+        assert r3.json()["lesson"]["category"] == ""
+
+    def test_lesson_create_with_category(self, api_client):
+        """授業作成時にカテゴリを指定できる"""
+        resp = api_client.post("/api/lessons", json={
+            "name": "WithCat", "category": "math",
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["lesson"]["category"] == "math"
+
+    def test_lesson_update_category(self, api_client):
+        """授業のカテゴリを更新できる"""
+        r = api_client.post("/api/lessons", json={"name": "UpdateCat"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.put(f"/api/lessons/{lid}", json={"category": "science"})
+        assert resp.json()["ok"] is True
+
+        r2 = api_client.get(f"/api/lessons/{lid}")
+        assert r2.json()["lesson"]["category"] == "science"
+
+
+class TestVersionAPI:
+    """バージョンCRUD APIのテスト"""
+
+    def test_list_versions_empty(self, api_client):
+        """セクションなしの授業のバージョン一覧"""
+        r = api_client.post("/api/lessons", json={"name": "VerListTest"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.get(f"/api/lessons/{lid}/versions")
+        data = resp.json()
+        assert data["ok"] is True
+        assert isinstance(data["versions"], list)
+
+    def test_create_version(self, api_client):
+        """バージョン作成"""
+        r = api_client.post("/api/lessons", json={"name": "VerCreateTest"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude", "note": "初版",
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["version"]["version_number"] >= 1
+        assert data["version"]["note"] == "初版"
+
+    def test_create_version_auto_increment(self, api_client):
+        """バージョン番号は自動インクリメント"""
+        r = api_client.post("/api/lessons", json={"name": "VerAutoInc"})
+        lid = r.json()["lesson"]["id"]
+
+        r1 = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude",
+        })
+        v1 = r1.json()["version"]["version_number"]
+
+        r2 = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude",
+        })
+        v2 = r2.json()["version"]["version_number"]
+        assert v2 == v1 + 1
+
+    def test_update_version_note(self, api_client):
+        """バージョンメモ更新"""
+        r = api_client.post("/api/lessons", json={"name": "VerNoteTest"})
+        lid = r.json()["lesson"]["id"]
+        r1 = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude", "note": "old",
+        })
+        vn = r1.json()["version"]["version_number"]
+
+        resp = api_client.put(
+            f"/api/lessons/{lid}/versions/{vn}?lang=ja&generator=claude",
+            json={"note": "updated note"},
+        )
+        assert resp.json()["ok"] is True
+
+    def test_update_version_not_found(self, api_client):
+        """存在しないバージョンの更新はエラー"""
+        r = api_client.post("/api/lessons", json={"name": "VerNotFound"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.put(
+            f"/api/lessons/{lid}/versions/999?lang=ja&generator=claude",
+            json={"note": "x"},
+        )
+        assert resp.json()["ok"] is False
+
+    def test_delete_version(self, api_client, test_db):
+        """バージョン削除（セクション・プランも一緒に削除される）"""
+        r = api_client.post("/api/lessons", json={"name": "VerDelTest"})
+        lid = r.json()["lesson"]["id"]
+
+        # バージョン作成 + セクション追加
+        r1 = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude",
+        })
+        vn = r1.json()["version"]["version_number"]
+        test_db.add_lesson_section(lid, 0, "introduction", "テスト",
+                                   lang="ja", generator="claude", version_number=vn)
+
+        # 削除
+        resp = api_client.delete(
+            f"/api/lessons/{lid}/versions/{vn}?lang=ja&generator=claude",
+        )
+        assert resp.json()["ok"] is True
+
+        # セクションも消えている
+        sections = test_db.get_lesson_sections(lid, lang="ja", generator="claude",
+                                                version_number=vn)
+        assert len(sections) == 0
+
+    def test_delete_version_not_found(self, api_client):
+        """存在しないバージョンの削除はエラー"""
+        r = api_client.post("/api/lessons", json={"name": "VerDelNF"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.delete(
+            f"/api/lessons/{lid}/versions/999?lang=ja&generator=claude",
+        )
+        assert resp.json()["ok"] is False
+
+    def test_create_version_copy_from(self, api_client, test_db):
+        """copy_fromでセクションがコピーされる"""
+        r = api_client.post("/api/lessons", json={"name": "CopyTest"})
+        lid = r.json()["lesson"]["id"]
+
+        # v1作成 + セクション追加
+        r1 = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude", "note": "v1",
+        })
+        v1 = r1.json()["version"]["version_number"]
+        test_db.add_lesson_section(lid, 0, "introduction", "導入",
+                                   tts_text="導入TTS", display_text="導入表示",
+                                   lang="ja", generator="claude", version_number=v1)
+        test_db.add_lesson_section(lid, 1, "summary", "まとめ",
+                                   tts_text="まとめTTS", display_text="まとめ表示",
+                                   lang="ja", generator="claude", version_number=v1)
+
+        # v2をv1からコピー
+        r2 = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude", "note": "v2 from v1",
+            "copy_from": v1,
+        })
+        v2 = r2.json()["version"]["version_number"]
+        assert v2 == v1 + 1
+
+        # v2のセクション確認
+        sections = test_db.get_lesson_sections(lid, lang="ja", generator="claude",
+                                                version_number=v2)
+        assert len(sections) == 2
+        assert sections[0]["content"] == "導入"
+        assert sections[1]["content"] == "まとめ"
+
+    def test_copy_from_invalid_version(self, api_client):
+        """存在しないバージョンからコピーはエラー"""
+        r = api_client.post("/api/lessons", json={"name": "CopyErrTest"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude", "copy_from": 999,
+        })
+        assert resp.json()["ok"] is False
+
+    def test_versions_in_get_lesson(self, api_client, test_db):
+        """GET /api/lessons/{id} にversions一覧が含まれる"""
+        r = api_client.post("/api/lessons", json={"name": "VerInGetTest"})
+        lid = r.json()["lesson"]["id"]
+
+        api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude",
+        })
+        api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude",
+        })
+
+        resp = api_client.get(f"/api/lessons/{lid}")
+        data = resp.json()
+        assert "versions" in data
+        assert len(data["versions"]) == 2
+
+    def test_get_lesson_with_version_filter(self, api_client, test_db):
+        """GET /api/lessons/{id}?version=N でそのバージョンのセクションのみ返る"""
+        r = api_client.post("/api/lessons", json={"name": "VerFilterTest"})
+        lid = r.json()["lesson"]["id"]
+
+        # v1にセクション2つ、v2にセクション1つ
+        test_db.create_lesson_version(lid, lang="ja", generator="claude",
+                                       version_number=1, note="v1")
+        test_db.add_lesson_section(lid, 0, "introduction", "v1導入",
+                                   lang="ja", generator="claude", version_number=1)
+        test_db.add_lesson_section(lid, 1, "summary", "v1まとめ",
+                                   lang="ja", generator="claude", version_number=1)
+
+        test_db.create_lesson_version(lid, lang="ja", generator="claude",
+                                       version_number=2, note="v2")
+        test_db.add_lesson_section(lid, 0, "introduction", "v2導入",
+                                   lang="ja", generator="claude", version_number=2)
+
+        # v1のセクション
+        r1 = api_client.get(f"/api/lessons/{lid}?version=1")
+        assert len(r1.json()["sections"]) == 2
+
+        # v2のセクション
+        r2 = api_client.get(f"/api/lessons/{lid}?version=2")
+        assert len(r2.json()["sections"]) == 1
+
+        # バージョン指定なしは全セクション
+        r3 = api_client.get(f"/api/lessons/{lid}")
+        assert len(r3.json()["sections"]) == 3
+
+    def test_list_versions_with_filter(self, api_client):
+        """バージョン一覧をlang/generatorでフィルタ"""
+        r = api_client.post("/api/lessons", json={"name": "VerFilterList"})
+        lid = r.json()["lesson"]["id"]
+
+        api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude",
+        })
+        api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "en", "generator": "claude",
+        })
+
+        resp_ja = api_client.get(f"/api/lessons/{lid}/versions?lang=ja")
+        assert len(resp_ja.json()["versions"]) == 1
+
+        resp_all = api_client.get(f"/api/lessons/{lid}/versions")
+        assert len(resp_all.json()["versions"]) == 2
+
+
+class TestImportWithVersioning:
+    """インポートとバージョニングの統合テスト"""
+
+    def _make_sections(self, n=2):
+        secs = []
+        for i in range(n):
+            secs.append({
+                "section_type": "explanation",
+                "title": f"セクション{i}",
+                "content": f"内容{i}",
+                "tts_text": f"TTS{i}",
+                "display_text": f"表示{i}",
+                "emotion": "neutral",
+            })
+        return secs
+
+    def test_import_creates_new_version(self, api_client, test_db):
+        """version未指定のインポートは新バージョンを自動作成"""
+        r = api_client.post("/api/lessons", json={"name": "AutoVerTest"})
+        lid = r.json()["lesson"]["id"]
+
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": self._make_sections()},
+        )
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["version_number"] >= 1
+
+        # バージョンが作成されている
+        versions = test_db.get_lesson_versions(lid, lang="ja", generator="claude")
+        assert len(versions) >= 1
+
+    def test_import_twice_creates_two_versions(self, api_client, test_db):
+        """version未指定で2回インポートすると2バージョンできる"""
+        r = api_client.post("/api/lessons", json={"name": "TwiceVerTest"})
+        lid = r.json()["lesson"]["id"]
+
+        r1 = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": self._make_sections(2)},
+        )
+        v1 = r1.json()["version_number"]
+
+        r2 = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": self._make_sections(3)},
+        )
+        v2 = r2.json()["version_number"]
+        assert v2 > v1
+
+        # 各バージョンのセクション数が正しい
+        s1 = test_db.get_lesson_sections(lid, lang="ja", generator="claude",
+                                          version_number=v1)
+        s2 = test_db.get_lesson_sections(lid, lang="ja", generator="claude",
+                                          version_number=v2)
+        assert len(s1) == 2
+        assert len(s2) == 3
+
+    def test_import_with_version_replaces(self, api_client, test_db):
+        """version指定のインポートは既存セクションを置き換え"""
+        r = api_client.post("/api/lessons", json={"name": "ReplaceVerTest"})
+        lid = r.json()["lesson"]["id"]
+
+        # 最初のインポート
+        r1 = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": self._make_sections(3)},
+        )
+        v = r1.json()["version_number"]
+
+        # 同じバージョンに再インポート（1セクション）
+        r2 = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude&version={v}",
+            json={"sections": self._make_sections(1)},
+        )
+        assert r2.json()["count"] == 1
+
+        # セクション数が置き換わっている
+        sections = test_db.get_lesson_sections(lid, lang="ja", generator="claude",
+                                                version_number=v)
+        assert len(sections) == 1
+
+    def test_import_invalid_version(self, api_client):
+        """存在しないバージョンへのインポートはエラー"""
+        r = api_client.post("/api/lessons", json={"name": "BadVerImport"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude&version=999",
+            json={"sections": [{
+                "section_type": "introduction", "content": "x",
+                "tts_text": "x", "display_text": "x",
+            }]},
+        )
+        assert resp.json()["ok"] is False
+
+
+class TestAnnotationAPI:
+    """セクション注釈APIのテスト"""
+
+    def test_update_annotation(self, api_client, test_db):
+        """注釈を更新できる"""
+        r = api_client.post("/api/lessons", json={"name": "AnnotTest"})
+        lid = r.json()["lesson"]["id"]
+        sec = test_db.add_lesson_section(lid, 0, "introduction", "テスト")
+
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}/annotation",
+            json={"rating": "good", "comment": "わかりやすい"},
+        )
+        assert resp.json()["ok"] is True
+
+        # DB確認
+        sections = test_db.get_lesson_sections(lid)
+        assert sections[0]["annotation_rating"] == "good"
+        assert sections[0]["annotation_comment"] == "わかりやすい"
+
+    def test_update_annotation_needs_improvement(self, api_client, test_db):
+        """needs_improvement注釈"""
+        r = api_client.post("/api/lessons", json={"name": "AnnotNI"})
+        lid = r.json()["lesson"]["id"]
+        sec = test_db.add_lesson_section(lid, 0, "explanation", "長い説明")
+
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}/annotation",
+            json={"rating": "needs_improvement", "comment": "説明が長すぎる"},
+        )
+        assert resp.json()["ok"] is True
+
+    def test_update_annotation_redo(self, api_client, test_db):
+        """redo注釈"""
+        r = api_client.post("/api/lessons", json={"name": "AnnotRedo"})
+        lid = r.json()["lesson"]["id"]
+        sec = test_db.add_lesson_section(lid, 0, "explanation", "ダメな説明")
+
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}/annotation",
+            json={"rating": "redo", "comment": "作り直し"},
+        )
+        assert resp.json()["ok"] is True
+
+    def test_clear_annotation(self, api_client, test_db):
+        """注釈をクリアできる"""
+        r = api_client.post("/api/lessons", json={"name": "AnnotClear"})
+        lid = r.json()["lesson"]["id"]
+        sec = test_db.add_lesson_section(lid, 0, "introduction", "テスト")
+
+        # 設定
+        api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}/annotation",
+            json={"rating": "good", "comment": "良い"},
+        )
+        # クリア
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}/annotation",
+            json={"rating": "", "comment": ""},
+        )
+        assert resp.json()["ok"] is True
+
+        sections = test_db.get_lesson_sections(lid)
+        assert sections[0]["annotation_rating"] == ""
+        assert sections[0]["annotation_comment"] == ""
+
+    def test_invalid_rating(self, api_client, test_db):
+        """不正なrating値はエラー"""
+        r = api_client.post("/api/lessons", json={"name": "AnnotBad"})
+        lid = r.json()["lesson"]["id"]
+        sec = test_db.add_lesson_section(lid, 0, "introduction", "テスト")
+
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}/annotation",
+            json={"rating": "invalid_value"},
+        )
+        assert resp.json()["ok"] is False

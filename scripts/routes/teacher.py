@@ -56,10 +56,12 @@ def _sanitize_filename(name: str) -> str:
 
 class LessonCreate(BaseModel):
     name: str
+    category: str = ""
 
 
 class LessonUpdate(BaseModel):
     name: str | None = None
+    category: str | None = None
 
 
 class SectionUpdate(BaseModel):
@@ -95,9 +97,45 @@ async def list_lessons():
 @router.post("/api/lessons")
 async def create_lesson(body: LessonCreate):
     """コンテンツ新規作成"""
-    lesson = db.create_lesson(body.name)
+    lesson = db.create_lesson(body.name, category=body.category)
     logger.info("コンテンツ作成: %s (id=%d)", body.name, lesson["id"])
     return {"ok": True, "lesson": lesson}
+
+
+# --- カテゴリ CRUD ---
+
+
+class CategoryCreate(BaseModel):
+    slug: str
+    name: str
+    description: str = ""
+    prompt_file: str = ""
+
+
+@router.get("/api/lesson-categories")
+async def list_categories():
+    """カテゴリ一覧"""
+    categories = db.get_categories()
+    return {"ok": True, "categories": categories}
+
+
+@router.post("/api/lesson-categories")
+async def create_category(body: CategoryCreate):
+    """カテゴリ作成"""
+    existing = db.get_category_by_slug(body.slug)
+    if existing:
+        return {"ok": False, "error": f"slug '{body.slug}' は既に存在します"}
+    cat = db.create_category(body.slug, body.name,
+                             description=body.description, prompt_file=body.prompt_file)
+    logger.info("カテゴリ作成: %s (%s)", body.name, body.slug)
+    return {"ok": True, "category": cat}
+
+
+@router.delete("/api/lesson-categories/{category_id}")
+async def delete_category(category_id: int):
+    """カテゴリ削除（関連授業のcategoryは空文字にリセット）"""
+    db.delete_category(category_id)
+    return {"ok": True}
 
 
 # --- 授業制御（{lesson_id}パスより前に定義する必要あり） ---
@@ -162,13 +200,22 @@ async def set_pace_scale(body: PaceScaleUpdate):
 
 
 @router.get("/api/lessons/{lesson_id}")
-async def get_lesson(lesson_id: int):
-    """コンテンツ詳細（ソース＋セクション＋言語別プラン付き）"""
+async def get_lesson(lesson_id: int, version: int | None = None):
+    """コンテンツ詳細（ソース＋セクション＋言語別プラン＋バージョン一覧付き）
+
+    version パラメータ指定時はそのバージョンのセクションのみ返す。
+    省略時は全セクション返す（後方互換）。
+    """
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
     sources = db.get_lesson_sources(lesson_id)
-    sections = db.get_lesson_sections(lesson_id)
+    sections = db.get_lesson_sections(
+        lesson_id,
+        version_number=version,
+    )
+    # バージョン一覧
+    versions = db.get_lesson_versions(lesson_id)
     # 言語別プラン
     plans_list = db.get_lesson_plans(lesson_id)
     plans = {}
@@ -190,7 +237,8 @@ async def get_lesson(lesson_id: int):
         gen = s.get("generator", "gemini")
         sections_by_generator.setdefault(gen, []).append(s)
     return {"ok": True, "lesson": lesson, "sources": sources, "sections": sections,
-            "sections_by_generator": sections_by_generator, "plans": plans}
+            "sections_by_generator": sections_by_generator, "plans": plans,
+            "versions": versions}
 
 
 @router.put("/api/lessons/{lesson_id}")
@@ -202,6 +250,8 @@ async def update_lesson(lesson_id: int, body: LessonUpdate):
     updates = {}
     if body.name is not None:
         updates["name"] = body.name
+    if body.category is not None:
+        updates["category"] = body.category
     if updates:
         db.update_lesson(lesson_id, **updates)
     return {"ok": True}
@@ -439,9 +489,15 @@ VALID_EMOTIONS = {"joy", "excited", "surprise", "thinking", "sad", "embarrassed"
 @router.post("/api/lessons/{lesson_id}/import-sections")
 async def import_sections(
     lesson_id: int, body: SectionImport,
-    lang: str = "ja", generator: str = "claude"
+    lang: str = "ja", generator: str = "claude",
+    version: int | None = None,
 ):
-    """外部生成されたセクションをインポートする"""
+    """外部生成されたセクションをインポートする
+
+    version パラメータ:
+    - 指定あり → そのバージョンのセクションを置換
+    - 省略（None） → 新バージョン（max+1）を自動作成してインポート
+    """
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
@@ -468,8 +524,20 @@ async def import_sections(
     if errors:
         return {"ok": False, "error": "検証エラー", "details": errors}
 
-    # 該当 (lesson_id, lang, generator) のセクションを削除
-    db.delete_lesson_sections(lesson_id, lang=lang, generator=generator)
+    # バージョン決定
+    if version is not None:
+        # 指定バージョンのセクションを置換
+        ver = db.get_lesson_version(lesson_id, lang, generator, version)
+        if not ver:
+            return {"ok": False, "error": f"バージョン {version} が見つかりません"}
+        version_number = version
+        db.delete_lesson_sections(lesson_id, lang=lang, generator=generator,
+                                  version_number=version_number)
+    else:
+        # 新バージョンを自動作成
+        ver = db.create_lesson_version(lesson_id, lang=lang, generator=generator,
+                                       note="インポート")
+        version_number = ver["version_number"]
 
     # DB保存
     saved = []
@@ -497,6 +565,7 @@ async def import_sections(
             dialogues=dialogues,
             dialogue_directions=dialogue_directions,
             generator=generator,
+            version_number=version_number,
         )
         saved.append(sec)
 
@@ -506,11 +575,13 @@ async def import_sections(
             lesson_id, lang,
             knowledge=body.plan_summary,
             generator=generator,
+            version_number=version_number,
         )
 
-    logger.info("セクションインポート: lesson=%d, lang=%s, generator=%s, sections=%d",
-                lesson_id, lang, generator, len(saved))
-    return {"ok": True, "sections": saved, "count": len(saved)}
+    logger.info("セクションインポート: lesson=%d, lang=%s, gen=%s, v=%d, sections=%d",
+                lesson_id, lang, generator, version_number, len(saved))
+    return {"ok": True, "sections": saved, "count": len(saved),
+            "version_number": version_number}
 
 
 # --- セクション編集 ---
@@ -557,13 +628,23 @@ async def delete_section(lesson_id: int, section_id: int):
 
 
 @router.post("/api/lessons/{lesson_id}/start")
-async def start_lesson(lesson_id: int, lang: str = "ja", generator: str = "claude"):
-    """授業を開始する"""
+async def start_lesson(lesson_id: int, lang: str = "ja", generator: str = "claude",
+                       version: int | None = None):
+    """授業を開始する
+
+    version パラメータでバージョンを指定。省略時は最新バージョンを使用。
+    """
+    # バージョン解決: 省略時は最新
+    if version is None:
+        versions = db.get_lesson_versions(lesson_id, lang=lang, generator=generator)
+        version = versions[-1]["version_number"] if versions else 1
+
     runner = _get_lesson_runner()
     # 授業再生中は配信言語も一時的に合わせる
     _with_lang(lang)
     try:
-        await runner.start(lesson_id, lang=lang, generator=generator)
+        await runner.start(lesson_id, lang=lang, generator=generator,
+                           version_number=version)
     except ValueError as e:
         return {"ok": False, "error": str(e)}
     return {"ok": True, "status": runner.get_status()}
@@ -573,7 +654,8 @@ async def start_lesson(lesson_id: int, lang: str = "ja", generator: str = "claud
 
 
 @router.get("/api/lessons/{lesson_id}/tts-cache")
-async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "claude"):
+async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "claude",
+                        version: int | None = None):
     """TTSキャッシュ状況を取得する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
@@ -584,7 +666,8 @@ async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "clau
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache")
-async def delete_tts_cache(lesson_id: int, lang: str | None = None, generator: str | None = None):
+async def delete_tts_cache(lesson_id: int, lang: str | None = None, generator: str | None = None,
+                           version: int | None = None):
     """全TTSキャッシュを削除する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
@@ -595,11 +678,135 @@ async def delete_tts_cache(lesson_id: int, lang: str | None = None, generator: s
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache/{order_index}")
-async def delete_tts_cache_section(lesson_id: int, order_index: int, lang: str = "ja", generator: str | None = None):
+async def delete_tts_cache_section(lesson_id: int, order_index: int, lang: str = "ja",
+                                   generator: str | None = None, version: int | None = None):
     """特定セクションのTTSキャッシュを削除する"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
     clear_tts_cache(lesson_id, order_index=order_index, lang=lang, generator=generator)
     logger.info("TTSキャッシュ削除: lesson=%d, section=%d, lang=%s, generator=%s", lesson_id, order_index, lang, generator or "all")
+    return {"ok": True}
+
+
+# --- バージョン CRUD ---
+
+
+class VersionCreate(BaseModel):
+    lang: str = "ja"
+    generator: str = "claude"
+    note: str = ""
+    copy_from: int | None = None  # コピー元バージョン番号
+
+
+class VersionUpdate(BaseModel):
+    note: str | None = None
+
+
+class AnnotationUpdate(BaseModel):
+    rating: str = ""   # "good" | "needs_improvement" | "redo" | ""
+    comment: str = ""
+
+
+VALID_RATINGS = {"good", "needs_improvement", "redo", ""}
+
+
+@router.get("/api/lessons/{lesson_id}/versions")
+async def list_versions(lesson_id: int, lang: str | None = None, generator: str | None = None):
+    """バージョン一覧取得"""
+    versions = db.get_lesson_versions(lesson_id, lang=lang, generator=generator)
+    return {"ok": True, "versions": versions}
+
+
+@router.post("/api/lessons/{lesson_id}/versions")
+async def create_version(lesson_id: int, body: VersionCreate):
+    """新バージョン作成（copy_from指定でセクション・プランをコピー）"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    ver = db.create_lesson_version(lesson_id, lang=body.lang, generator=body.generator,
+                                   note=body.note)
+    version_number = ver["version_number"]
+
+    # copy_from でセクション・プランをコピー
+    if body.copy_from is not None:
+        src_ver = db.get_lesson_version(lesson_id, body.lang, body.generator, body.copy_from)
+        if not src_ver:
+            return {"ok": False, "error": f"コピー元バージョン {body.copy_from} が見つかりません"}
+        # セクションコピー
+        src_sections = db.get_lesson_sections(
+            lesson_id, lang=body.lang, generator=body.generator,
+            version_number=body.copy_from,
+        )
+        for s in src_sections:
+            db.add_lesson_section(
+                lesson_id, order_index=s["order_index"],
+                section_type=s["section_type"], title=s.get("title", ""),
+                content=s["content"], tts_text=s.get("tts_text", ""),
+                display_text=s.get("display_text", ""),
+                emotion=s.get("emotion", "neutral"),
+                question=s.get("question", ""), answer=s.get("answer", ""),
+                wait_seconds=s.get("wait_seconds", 8),
+                lang=body.lang, dialogues=s.get("dialogues", ""),
+                dialogue_directions=s.get("dialogue_directions", ""),
+                generator=body.generator, version_number=version_number,
+            )
+        # プランコピー
+        src_plan = db.get_lesson_plan(lesson_id, body.lang, generator=body.generator,
+                                      version_number=body.copy_from)
+        if src_plan:
+            db.upsert_lesson_plan(
+                lesson_id, body.lang,
+                knowledge=src_plan.get("knowledge", ""),
+                entertainment=src_plan.get("entertainment", ""),
+                plan_json=src_plan.get("plan_json", ""),
+                director_json=src_plan.get("director_json", ""),
+                plan_generations=src_plan.get("plan_generations", ""),
+                generator=body.generator, version_number=version_number,
+            )
+
+    logger.info("バージョン作成: lesson=%d, lang=%s, gen=%s, v=%d%s",
+                lesson_id, body.lang, body.generator, version_number,
+                f" (copy from v{body.copy_from})" if body.copy_from else "")
+    return {"ok": True, "version": ver}
+
+
+@router.put("/api/lessons/{lesson_id}/versions/{version_number}")
+async def update_version(lesson_id: int, version_number: int, body: VersionUpdate,
+                         lang: str = "ja", generator: str = "claude"):
+    """バージョンメモ更新"""
+    ver = db.get_lesson_version(lesson_id, lang, generator, version_number)
+    if not ver:
+        return {"ok": False, "error": "バージョンが見つかりません"}
+    updates = {}
+    if body.note is not None:
+        updates["note"] = body.note
+    if updates:
+        db.update_lesson_version(ver["id"], **updates)
+    return {"ok": True}
+
+
+@router.delete("/api/lessons/{lesson_id}/versions/{version_number}")
+async def delete_version(lesson_id: int, version_number: int,
+                         lang: str = "ja", generator: str = "claude"):
+    """バージョン削除（セクション・プランも削除）"""
+    ver = db.get_lesson_version(lesson_id, lang, generator, version_number)
+    if not ver:
+        return {"ok": False, "error": "バージョンが見つかりません"}
+    db.delete_lesson_version(lesson_id, lang, generator, version_number)
+    logger.info("バージョン削除: lesson=%d, lang=%s, gen=%s, v=%d",
+                lesson_id, lang, generator, version_number)
+    return {"ok": True}
+
+
+# --- セクション注釈 ---
+
+
+@router.put("/api/lessons/{lesson_id}/sections/{section_id}/annotation")
+async def update_annotation(lesson_id: int, section_id: int, body: AnnotationUpdate):
+    """セクションの注釈（◎/△/✕ + コメント）を更新する"""
+    if body.rating and body.rating not in VALID_RATINGS:
+        return {"ok": False, "error": f"不正な rating: {body.rating}（good/needs_improvement/redo のいずれか）"}
+    db.update_section_annotation(section_id, rating=body.rating, comment=body.comment)
     return {"ok": True}
