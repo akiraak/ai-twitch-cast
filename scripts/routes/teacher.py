@@ -18,6 +18,11 @@ from src.lesson_generator import (
     verify_lesson,
     improve_sections,
     load_learnings,
+    analyze_learnings,
+    save_learnings_to_files,
+    improve_prompt,
+    apply_prompt_diff,
+    create_category_prompt,
     _format_character_for_prompt,
     _format_main_content_for_prompt,
 )
@@ -202,6 +207,258 @@ async def set_pace_scale(body: PaceScaleUpdate):
     scale = max(0.5, min(2.0, body.pace_scale))
     db.set_setting("lesson.pace_scale", str(scale))
     return {"ok": True, "pace_scale": scale}
+
+
+# --- 学習ループ（{lesson_id}パスより前に定義する必要あり） ---
+
+
+class AnalyzeLearningsRequest(BaseModel):
+    category: str = ""  # 空 = 全カテゴリ
+
+
+class ImprovePromptRequest(BaseModel):
+    category: str = ""  # 空 = 共通プロンプト lesson_generate.md
+
+
+class ApplyPromptDiffRequest(BaseModel):
+    prompt_file: str
+    diff_instructions: list[dict]
+
+
+class CreateCategoryPromptRequest(BaseModel):
+    base_prompt_file: str = "lesson_generate.md"
+
+
+@router.post("/api/lessons/analyze-learnings")
+async def api_analyze_learnings(body: AnalyzeLearningsRequest):
+    """カテゴリ別に注釈を収集→AIがパターン抽出→学習結果をファイル＆DBに保存"""
+    category = body.category
+
+    # カテゴリ情報取得
+    cat_name = ""
+    cat_desc = ""
+    if category:
+        cat = db.get_category_by_slug(category)
+        if cat:
+            cat_name = cat.get("name", "")
+            cat_desc = cat.get("description", "")
+
+    try:
+        result = await analyze_learnings(
+            category=category,
+            category_name=cat_name,
+            category_description=cat_desc,
+        )
+    except Exception as e:
+        logger.exception("学習分析エラー")
+        return {"ok": False, "error": f"学習分析中にエラーが発生しました: {e}"}
+
+    if result.get("error"):
+        return {"ok": False, "error": result["error"],
+                "prompt": result.get("prompt"), "raw_output": result.get("raw_output")}
+
+    # ファイルに書き出し
+    save_learnings_to_files(
+        category=category,
+        category_learnings=result["category_learnings"],
+        common_learnings=result["common_learnings"],
+    )
+
+    # DBに保存
+    analysis_input = _json.dumps({
+        "category": category,
+        "section_count": result["section_count"],
+    }, ensure_ascii=False)
+
+    learning = db.save_learning(
+        category=category,
+        analysis_input=analysis_input,
+        analysis_output=result["raw_output"],
+        learnings_md=result["category_learnings"],
+        section_count=result["section_count"],
+    )
+
+    logger.info("学習分析完了: category=%s, sections=%d", category or "(all)", result["section_count"])
+
+    return {
+        "ok": True,
+        "category": category,
+        "category_learnings": result["category_learnings"],
+        "common_learnings": result["common_learnings"],
+        "section_count": result["section_count"],
+        "learning_id": learning["id"],
+        "prompt": result["prompt"],
+        "raw_output": result["raw_output"],
+    }
+
+
+@router.get("/api/lessons/learnings")
+async def api_get_learnings(category: str | None = None):
+    """カテゴリ別の学習結果・注釈統計を返す"""
+    categories = db.get_categories()
+
+    # カテゴリ別の統計を構築
+    stats = []
+    all_lessons = db.get_all_lessons()
+
+    target_categories = [{"slug": c["slug"], "name": c["name"], "description": c.get("description", "")}
+                         for c in categories]
+    # 未分類も含める
+    target_categories.append({"slug": "", "name": "未分類", "description": ""})
+
+    for cat in target_categories:
+        slug = cat["slug"]
+        if category is not None and slug != category:
+            continue
+
+        # このカテゴリの授業
+        cat_lessons = [l for l in all_lessons if l.get("category", "") == slug]
+        if not cat_lessons:
+            stats.append({
+                "category": slug,
+                "category_name": cat["name"],
+                "lesson_count": 0,
+                "annotation_counts": {"good": 0, "needs_improvement": 0, "redo": 0},
+                "latest_learning": None,
+                "learnings_md": "",
+            })
+            continue
+
+        # 注釈カウント
+        good_count = 0
+        ni_count = 0
+        redo_count = 0
+        for lesson in cat_lessons:
+            sections = db.get_lesson_sections(lesson["id"])
+            for s in sections:
+                r = s.get("annotation_rating", "")
+                if r == "good":
+                    good_count += 1
+                elif r == "needs_improvement":
+                    ni_count += 1
+                elif r == "redo":
+                    redo_count += 1
+
+        # 最新の学習結果
+        latest = db.get_latest_learning(slug)
+
+        # ファイルから学習結果を読み込み
+        learnings_md = load_learnings(slug)
+
+        stats.append({
+            "category": slug,
+            "category_name": cat["name"],
+            "lesson_count": len(cat_lessons),
+            "annotation_counts": {
+                "good": good_count,
+                "needs_improvement": ni_count,
+                "redo": redo_count,
+            },
+            "latest_learning": {
+                "id": latest["id"],
+                "created_at": latest["created_at"],
+                "section_count": latest["section_count"],
+            } if latest else None,
+            "learnings_md": learnings_md,
+        })
+
+    return {"ok": True, "stats": stats}
+
+
+@router.post("/api/lessons/improve-prompt")
+async def api_improve_prompt(body: ImprovePromptRequest):
+    """学習結果をもとに生成プロンプトの改善案をdiff生成"""
+    category = body.category
+
+    # カテゴリ情報
+    cat_name = ""
+    cat_desc = ""
+    prompt_file = ""
+    if category:
+        cat = db.get_category_by_slug(category)
+        if cat:
+            cat_name = cat.get("name", "")
+            cat_desc = cat.get("description", "")
+            prompt_file = cat.get("prompt_file", "")
+
+    try:
+        result = await improve_prompt(
+            category=category,
+            category_name=cat_name,
+            category_description=cat_desc,
+            prompt_file=prompt_file,
+        )
+    except Exception as e:
+        logger.exception("プロンプト改善エラー")
+        return {"ok": False, "error": f"プロンプト改善中にエラーが発生しました: {e}"}
+
+    if result.get("error"):
+        return {"ok": False, "error": result["error"]}
+
+    # prompt_diff をDBに保存
+    diff_json = _json.dumps(result.get("diff_instructions", []), ensure_ascii=False)
+    db.save_learning(
+        category=category,
+        analysis_input=_json.dumps({"action": "improve_prompt", "prompt_file": result.get("prompt_file", "")}, ensure_ascii=False),
+        analysis_output=result.get("raw_output", ""),
+        prompt_diff=diff_json,
+    )
+
+    logger.info("プロンプト改善提案: category=%s, file=%s, diffs=%d",
+                category or "(common)", result.get("prompt_file", ""),
+                len(result.get("diff_instructions", [])))
+
+    return {
+        "ok": True,
+        "summary": result["summary"],
+        "diff_instructions": result["diff_instructions"],
+        "learnings_to_graduate": result["learnings_to_graduate"],
+        "prompt_file": result["prompt_file"],
+        "prompt": result["prompt"],
+        "raw_output": result["raw_output"],
+    }
+
+
+@router.post("/api/lessons/apply-prompt-diff")
+async def api_apply_prompt_diff(body: ApplyPromptDiffRequest):
+    """プロンプト改善diffを適用する（ユーザー承認後に呼ばれる）"""
+    result = apply_prompt_diff(body.prompt_file, body.diff_instructions)
+    if result.get("error"):
+        return {"ok": False, "error": result["error"]}
+    logger.info("プロンプトdiff適用: %s, applied=%d", body.prompt_file, result["applied"])
+    return {"ok": True, **result}
+
+
+@router.post("/api/lesson-categories/{slug}/create-prompt")
+async def api_create_category_prompt(slug: str, body: CreateCategoryPromptRequest):
+    """カテゴリ専用プロンプトを生成する"""
+    cat = db.get_category_by_slug(slug)
+    if not cat:
+        return {"ok": False, "error": f"カテゴリ '{slug}' が見つかりません"}
+
+    try:
+        result = await create_category_prompt(
+            base_prompt_file=body.base_prompt_file,
+            category_slug=slug,
+            category_name=cat["name"],
+            category_description=cat.get("description", ""),
+        )
+    except Exception as e:
+        logger.exception("カテゴリ専用プロンプト作成エラー")
+        return {"ok": False, "error": f"プロンプト作成中にエラーが発生しました: {e}"}
+
+    if result.get("error"):
+        return {"ok": False, "error": result["error"]}
+
+    # カテゴリの prompt_file を更新
+    from src.db.core import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE lesson_categories SET prompt_file = ? WHERE slug = ?",
+                 (result["prompt_file"], slug))
+    conn.commit()
+
+    logger.info("カテゴリ専用プロンプト作成: %s → %s", slug, result["prompt_file"])
+    return {"ok": True, "prompt_file": result["prompt_file"], "content": result["content"]}
 
 
 @router.get("/api/lessons/{lesson_id}")

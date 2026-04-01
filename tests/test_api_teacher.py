@@ -1495,3 +1495,552 @@ class TestLoadLearnings:
         result = improver.load_learnings("python")
         assert "共通" in result
         assert "Python学習" in result
+
+
+class TestAnalyzeLearningsAPI:
+    """学習分析APIのテスト"""
+
+    def _setup_lessons_with_annotations(self, api_client, test_db):
+        """テスト用: カテゴリ付き授業 + 注釈付きセクションを作成"""
+        # カテゴリ作成
+        api_client.post("/api/lesson-categories", json={
+            "slug": "python", "name": "Python", "description": "Python教材",
+        })
+        # 授業作成
+        r = api_client.post("/api/lessons", json={"name": "Python入門", "category": "python"})
+        lid = r.json()["lesson"]["id"]
+        test_db.update_lesson(lid, extracted_text="変数とfor文の基礎")
+
+        # セクション作成（バージョン1）
+        sections = [
+            {"section_type": "introduction", "title": "導入", "content": "Python入門",
+             "tts_text": "Python入門", "display_text": "Python入門", "emotion": "joy"},
+            {"section_type": "explanation", "title": "変数", "content": "変数は箱",
+             "tts_text": "変数は箱", "display_text": "変数=箱", "emotion": "neutral"},
+            {"section_type": "summary", "title": "まとめ", "content": "今日の復習",
+             "tts_text": "復習", "display_text": "復習", "emotion": "neutral"},
+        ]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": sections},
+        )
+        vn = resp.json()["version_number"]
+
+        # 注釈を付ける
+        secs = test_db.get_lesson_sections(lid, lang="ja", generator="claude", version_number=vn)
+        # 導入に◎
+        test_db.update_section_annotation(secs[0]["id"], rating="good", comment="掴みが良い")
+        # 変数に✕
+        test_db.update_section_annotation(secs[1]["id"], rating="redo", comment="説明が長い")
+
+        return lid, vn
+
+    def test_analyze_success(self, api_client, test_db, mock_gemini):
+        """正常な学習分析"""
+        self._setup_lessons_with_annotations(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "category_learnings": "## Python 学習結果\n- ◎ 掴みが良い導入",
+            "common_learnings": "## 共通パターン\n- ◎ テンポが良い",
+        })
+
+        resp = api_client.post("/api/lessons/analyze-learnings", json={"category": "python"})
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["section_count"] == 2
+        assert "Python" in data["category_learnings"]
+        assert data["learning_id"] is not None
+        assert "prompt" in data
+        assert "raw_output" in data
+
+    def test_analyze_no_annotations(self, api_client, test_db, mock_gemini):
+        """注釈なしの場合エラー"""
+        # カテゴリだけ作成
+        api_client.post("/api/lesson-categories", json={
+            "slug": "empty_cat", "name": "Empty",
+        })
+        resp = api_client.post("/api/lessons/analyze-learnings", json={"category": "empty_cat"})
+        data = resp.json()
+        assert data["ok"] is False
+        assert "注釈" in data["error"]
+
+    def test_analyze_saves_to_db(self, api_client, test_db, mock_gemini):
+        """分析結果がDBに保存される"""
+        self._setup_lessons_with_annotations(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "category_learnings": "## Python 学習結果",
+            "common_learnings": "## 共通",
+        })
+
+        resp = api_client.post("/api/lessons/analyze-learnings", json={"category": "python"})
+        learning_id = resp.json()["learning_id"]
+
+        # DBから取得
+        learnings = test_db.get_learnings(category="python")
+        assert len(learnings) >= 1
+        found = next((l for l in learnings if l["id"] == learning_id), None)
+        assert found is not None
+        assert found["section_count"] == 2
+
+    def test_analyze_saves_to_files(self, api_client, test_db, mock_gemini, tmp_path, monkeypatch):
+        """分析結果がファイルに書き出される"""
+        from src.lesson_generator import improver
+        learnings_dir = tmp_path / "learnings"
+        learnings_dir.mkdir()
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        self._setup_lessons_with_annotations(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "category_learnings": "## Python 学習結果\nテストパターン",
+            "common_learnings": "## 共通パターン\nテンポ",
+        })
+
+        resp = api_client.post("/api/lessons/analyze-learnings", json={"category": "python"})
+        assert resp.json()["ok"] is True
+
+        # ファイル確認
+        cat_file = learnings_dir / "python.md"
+        assert cat_file.exists()
+        assert "テストパターン" in cat_file.read_text(encoding="utf-8")
+        common_file = learnings_dir / "_common.md"
+        assert common_file.exists()
+        assert "テンポ" in common_file.read_text(encoding="utf-8")
+
+    def test_analyze_all_categories(self, api_client, test_db, mock_gemini):
+        """カテゴリ未指定で全体分析"""
+        self._setup_lessons_with_annotations(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "category_learnings": "## 全体学習結果",
+            "common_learnings": "## 共通",
+        })
+
+        resp = api_client.post("/api/lessons/analyze-learnings", json={"category": ""})
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["section_count"] == 2
+
+    def test_analyze_gemini_error(self, api_client, test_db, mock_gemini):
+        """Gemini APIエラー時"""
+        self._setup_lessons_with_annotations(api_client, test_db)
+        mock_gemini.models.generate_content.side_effect = Exception("API Error")
+
+        resp = api_client.post("/api/lessons/analyze-learnings", json={"category": "python"})
+        data = resp.json()
+        assert data["ok"] is False
+        assert "エラー" in data["error"]
+
+
+class TestLearningsDashboardAPI:
+    """学習ダッシュボードAPIのテスト"""
+
+    def test_get_learnings_empty(self, api_client):
+        """学習データなし"""
+        resp = api_client.get("/api/lessons/learnings")
+        data = resp.json()
+        assert data["ok"] is True
+        assert isinstance(data["stats"], list)
+
+    def test_get_learnings_with_data(self, api_client, test_db):
+        """カテゴリ + 注釈データありの統計"""
+        # カテゴリ作成
+        api_client.post("/api/lesson-categories", json={
+            "slug": "english", "name": "英語",
+        })
+        # 授業作成
+        r = api_client.post("/api/lessons", json={"name": "英語1", "category": "english"})
+        lid = r.json()["lesson"]["id"]
+
+        # セクション + 注釈
+        sections = [
+            {"section_type": "introduction", "title": "intro", "content": "hello",
+             "tts_text": "hello", "display_text": "hello", "emotion": "joy"},
+            {"section_type": "explanation", "title": "vocab", "content": "vocab",
+             "tts_text": "vocab", "display_text": "vocab", "emotion": "neutral"},
+        ]
+        api_client.post(f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+                        json={"sections": sections})
+        secs = test_db.get_lesson_sections(lid)
+        test_db.update_section_annotation(secs[0]["id"], rating="good", comment="OK")
+        test_db.update_section_annotation(secs[1]["id"], rating="needs_improvement", comment="要改善")
+
+        resp = api_client.get("/api/lessons/learnings")
+        data = resp.json()
+        assert data["ok"] is True
+        # 英語カテゴリの統計を見つける
+        eng_stat = next((s for s in data["stats"] if s["category"] == "english"), None)
+        assert eng_stat is not None
+        assert eng_stat["lesson_count"] == 1
+        assert eng_stat["annotation_counts"]["good"] == 1
+        assert eng_stat["annotation_counts"]["needs_improvement"] == 1
+
+    def test_get_learnings_filter_category(self, api_client, test_db):
+        """カテゴリフィルタ"""
+        api_client.post("/api/lesson-categories", json={"slug": "math", "name": "数学"})
+        api_client.post("/api/lesson-categories", json={"slug": "sci", "name": "科学"})
+
+        resp = api_client.get("/api/lessons/learnings?category=math")
+        data = resp.json()
+        assert data["ok"] is True
+        assert all(s["category"] == "math" for s in data["stats"])
+
+    def test_get_learnings_with_latest_learning(self, api_client, test_db):
+        """最新の学習結果が含まれる"""
+        api_client.post("/api/lesson-categories", json={"slug": "hist", "name": "歴史"})
+        # 授業も作成（カテゴリにひもづく授業がないとstatsに含まれない）
+        api_client.post("/api/lessons", json={"name": "歴史1", "category": "hist"})
+        # 学習結果を手動保存
+        test_db.save_learning(
+            category="hist", analysis_input="test", analysis_output="result",
+            learnings_md="## 歴史学習", section_count=5,
+        )
+
+        resp = api_client.get("/api/lessons/learnings?category=hist")
+        data = resp.json()
+        hist = next((s for s in data["stats"] if s["category"] == "hist"), None)
+        assert hist is not None
+        assert hist["latest_learning"] is not None
+        assert hist["latest_learning"]["section_count"] == 5
+
+
+class TestImprovePromptAPI:
+    """プロンプト改善APIのテスト"""
+
+    def test_improve_prompt_success(self, api_client, test_db, mock_gemini, tmp_path, monkeypatch):
+        """正常なプロンプト改善提案"""
+        from src.lesson_generator import improver
+        # 学習ファイルを用意
+        learnings_dir = tmp_path / "learnings"
+        learnings_dir.mkdir()
+        (learnings_dir / "_common.md").write_text("## 共通パターン\n- テンポを良くする", encoding="utf-8")
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "summary": "テンポに関するルールを追加",
+            "diff_instructions": [
+                {"action": "add", "location": "末尾", "content": "- テンポを良くする"},
+            ],
+            "learnings_to_graduate": ["テンポパターン"],
+        })
+
+        resp = api_client.post("/api/lessons/improve-prompt", json={"category": ""})
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["summary"] == "テンポに関するルールを追加"
+        assert len(data["diff_instructions"]) == 1
+        assert "prompt" in data
+        assert "raw_output" in data
+
+    def test_improve_prompt_no_learnings(self, api_client, test_db, tmp_path, monkeypatch):
+        """学習結果がない場合エラー"""
+        from src.lesson_generator import improver
+        learnings_dir = tmp_path / "empty_learnings"
+        learnings_dir.mkdir()
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        resp = api_client.post("/api/lessons/improve-prompt", json={"category": ""})
+        data = resp.json()
+        assert data["ok"] is False
+        assert "学習結果" in data["error"]
+
+    def test_improve_prompt_with_category(self, api_client, test_db, mock_gemini, tmp_path, monkeypatch):
+        """カテゴリ専用プロンプトの改善"""
+        from src.lesson_generator import improver
+        learnings_dir = tmp_path / "learnings"
+        learnings_dir.mkdir()
+        (learnings_dir / "python.md").write_text("## Python\n- コード例を入れる", encoding="utf-8")
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        # カテゴリ作成（prompt_fileあり）
+        prompts_dir = tmp_path / "prompts"
+        prompts_dir.mkdir()
+        (prompts_dir / "lesson_generate_python.md").write_text("# Pythonプロンプト", encoding="utf-8")
+        # improve_promptが読むシステムプロンプトもコピー
+        (prompts_dir / "lesson_improve_prompt.md").write_text("# テスト用改善プロンプト", encoding="utf-8")
+        monkeypatch.setattr(improver, "PROMPTS_DIR", prompts_dir)
+
+        api_client.post("/api/lesson-categories", json={
+            "slug": "python", "name": "Python",
+            "description": "Python教材", "prompt_file": "lesson_generate_python.md",
+        })
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "summary": "コード例の品質基準を追加",
+            "diff_instructions": [
+                {"action": "add", "location": "末尾", "content": "- コード例を必ず含める"},
+            ],
+            "learnings_to_graduate": [],
+        })
+
+        resp = api_client.post("/api/lessons/improve-prompt", json={"category": "python"})
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["prompt_file"] == "lesson_generate_python.md"
+
+    def test_improve_prompt_saves_to_db(self, api_client, test_db, mock_gemini, tmp_path, monkeypatch):
+        """改善提案がDBに保存される"""
+        from src.lesson_generator import improver
+        learnings_dir = tmp_path / "learnings"
+        learnings_dir.mkdir()
+        (learnings_dir / "_common.md").write_text("## 共通\n- パターン", encoding="utf-8")
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "summary": "テスト改善",
+            "diff_instructions": [],
+            "learnings_to_graduate": [],
+        })
+
+        api_client.post("/api/lessons/improve-prompt", json={"category": ""})
+
+        learnings = test_db.get_learnings(category="")
+        assert any(l.get("prompt_diff") for l in learnings)
+
+
+class TestApplyPromptDiffAPI:
+    """プロンプトdiff適用APIのテスト"""
+
+    def test_apply_add(self, api_client, tmp_path, monkeypatch):
+        """addアクションの適用"""
+        from src.lesson_generator import improver
+        prompts_dir = tmp_path / "prompts"
+        prompts_dir.mkdir()
+        (prompts_dir / "test_prompt.md").write_text("# テストプロンプト\n\n基本ルール", encoding="utf-8")
+        monkeypatch.setattr(improver, "PROMPTS_DIR", prompts_dir)
+
+        resp = api_client.post("/api/lessons/apply-prompt-diff", json={
+            "prompt_file": "test_prompt.md",
+            "diff_instructions": [
+                {"action": "add", "location": "末尾", "content": "- 追加ルール"},
+            ],
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["applied"] == 1
+        # ファイル確認
+        content = (prompts_dir / "test_prompt.md").read_text(encoding="utf-8")
+        assert "追加ルール" in content
+
+    def test_apply_replace(self, api_client, tmp_path, monkeypatch):
+        """replaceアクションの適用"""
+        from src.lesson_generator import improver
+        prompts_dir = tmp_path / "prompts"
+        prompts_dir.mkdir()
+        (prompts_dir / "test_prompt.md").write_text("# プロンプト\n\n古いルール", encoding="utf-8")
+        monkeypatch.setattr(improver, "PROMPTS_DIR", prompts_dir)
+
+        resp = api_client.post("/api/lessons/apply-prompt-diff", json={
+            "prompt_file": "test_prompt.md",
+            "diff_instructions": [
+                {"action": "replace", "location": "ルール部分",
+                 "old_text": "古いルール", "new_text": "新しいルール"},
+            ],
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["applied"] == 1
+        content = (prompts_dir / "test_prompt.md").read_text(encoding="utf-8")
+        assert "新しいルール" in content
+        assert "古いルール" not in content
+
+    def test_apply_file_not_found(self, api_client, tmp_path, monkeypatch):
+        """存在しないファイル"""
+        from src.lesson_generator import improver
+        monkeypatch.setattr(improver, "PROMPTS_DIR", tmp_path / "prompts")
+
+        resp = api_client.post("/api/lessons/apply-prompt-diff", json={
+            "prompt_file": "nonexistent.md",
+            "diff_instructions": [],
+        })
+        data = resp.json()
+        assert data["ok"] is False
+
+    def test_apply_replace_not_found(self, api_client, tmp_path, monkeypatch):
+        """old_textが見つからない場合"""
+        from src.lesson_generator import improver
+        prompts_dir = tmp_path / "prompts"
+        prompts_dir.mkdir()
+        (prompts_dir / "test.md").write_text("# Test", encoding="utf-8")
+        monkeypatch.setattr(improver, "PROMPTS_DIR", prompts_dir)
+
+        resp = api_client.post("/api/lessons/apply-prompt-diff", json={
+            "prompt_file": "test.md",
+            "diff_instructions": [
+                {"action": "replace", "old_text": "存在しないテキスト", "new_text": "新"},
+            ],
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["applied"] == 0
+        assert len(data["errors"]) == 1
+
+
+class TestCreateCategoryPromptAPI:
+    """カテゴリ専用プロンプト作成APIのテスト"""
+
+    def test_create_success(self, api_client, test_db, mock_gemini, tmp_path, monkeypatch):
+        """正常なカテゴリ専用プロンプト作成"""
+        from src.lesson_generator import improver
+        prompts_dir = tmp_path / "prompts"
+        prompts_dir.mkdir()
+        (prompts_dir / "lesson_generate.md").write_text("# ベースプロンプト\n\nルール", encoding="utf-8")
+        monkeypatch.setattr(improver, "PROMPTS_DIR", prompts_dir)
+
+        # カテゴリ作成
+        api_client.post("/api/lesson-categories", json={
+            "slug": "english", "name": "英語", "description": "英語教材",
+        })
+
+        mock_gemini.models.generate_content.return_value.text = "# 英語専用プロンプト\n\n英語に特化したルール"
+
+        resp = api_client.post("/api/lesson-categories/english/create-prompt", json={
+            "base_prompt_file": "lesson_generate.md",
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["prompt_file"] == "lesson_generate_english.md"
+        assert "英語" in data["content"]
+        # ファイル存在確認
+        assert (prompts_dir / "lesson_generate_english.md").exists()
+
+    def test_create_updates_category(self, api_client, test_db, mock_gemini, tmp_path, monkeypatch):
+        """作成後にカテゴリのprompt_fileが更新される"""
+        from src.lesson_generator import improver
+        prompts_dir = tmp_path / "prompts"
+        prompts_dir.mkdir()
+        (prompts_dir / "lesson_generate.md").write_text("# Base", encoding="utf-8")
+        monkeypatch.setattr(improver, "PROMPTS_DIR", prompts_dir)
+
+        api_client.post("/api/lesson-categories", json={
+            "slug": "math", "name": "数学",
+        })
+
+        mock_gemini.models.generate_content.return_value.text = "# 数学プロンプト"
+
+        api_client.post("/api/lesson-categories/math/create-prompt", json={})
+
+        cat = test_db.get_category_by_slug("math")
+        assert cat["prompt_file"] == "lesson_generate_math.md"
+
+    def test_create_category_not_found(self, api_client):
+        """存在しないカテゴリ"""
+        resp = api_client.post("/api/lesson-categories/nonexistent/create-prompt", json={})
+        assert resp.json()["ok"] is False
+
+    def test_create_base_not_found(self, api_client, test_db, tmp_path, monkeypatch):
+        """ベースプロンプトが存在しない"""
+        from src.lesson_generator import improver
+        monkeypatch.setattr(improver, "PROMPTS_DIR", tmp_path / "empty_prompts")
+
+        api_client.post("/api/lesson-categories", json={
+            "slug": "test", "name": "Test",
+        })
+
+        resp = api_client.post("/api/lesson-categories/test/create-prompt", json={
+            "base_prompt_file": "nonexistent.md",
+        })
+        data = resp.json()
+        assert data["ok"] is False
+
+
+class TestCollectAnnotatedSections:
+    """_collect_annotated_sections のテスト"""
+
+    def test_collect_basic(self, api_client, test_db):
+        """基本的な注釈収集"""
+        from src.lesson_generator.improver import _collect_annotated_sections
+
+        # カテゴリ + 授業 + セクション
+        api_client.post("/api/lesson-categories", json={"slug": "collect_test", "name": "CT"})
+        r = api_client.post("/api/lessons", json={"name": "CollectTest", "category": "collect_test"})
+        lid = r.json()["lesson"]["id"]
+
+        sections = [
+            {"section_type": "introduction", "title": "intro", "content": "hello",
+             "tts_text": "hello", "display_text": "hello", "emotion": "joy"},
+        ]
+        api_client.post(f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+                        json={"sections": sections})
+        secs = test_db.get_lesson_sections(lid)
+        test_db.update_section_annotation(secs[0]["id"], rating="good", comment="Great!")
+
+        data = _collect_annotated_sections("collect_test")
+        assert len(data["good"]) == 1
+        assert data["good"][0]["comment"] == "Great!"
+        assert len(data["needs_improvement"]) == 0
+        assert len(data["redo"]) == 0
+
+    def test_collect_improvement_pairs(self, api_client, test_db):
+        """改善ペアの収集"""
+        from src.lesson_generator.improver import _collect_annotated_sections
+
+        api_client.post("/api/lesson-categories", json={"slug": "pair_test", "name": "PT"})
+        r = api_client.post("/api/lessons", json={"name": "PairTest", "category": "pair_test"})
+        lid = r.json()["lesson"]["id"]
+
+        # v1を作成
+        sections = [
+            {"section_type": "explanation", "title": "変数", "content": "悪い説明",
+             "tts_text": "x", "display_text": "x", "emotion": "neutral"},
+        ]
+        resp = api_client.post(f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+                               json={"sections": sections})
+        v1 = resp.json()["version_number"]
+
+        # v1のセクションに✕注釈
+        v1_secs = test_db.get_lesson_sections(lid, lang="ja", generator="claude", version_number=v1)
+        test_db.update_section_annotation(v1_secs[0]["id"], rating="redo", comment="ダメ")
+
+        # v2を手動作成（v1からの改善）
+        v2 = test_db.create_lesson_version(
+            lid, lang="ja", generator="claude",
+            note="改善", improve_source_version=v1,
+            improved_sections=json.dumps([0]),
+        )
+        test_db.add_lesson_section(
+            lid, order_index=0, section_type="explanation", title="変数改善",
+            content="良い説明", tts_text="y", display_text="y",
+            emotion="neutral", lang="ja", generator="claude",
+            version_number=v2["version_number"],
+        )
+        # v2セクションに◎注釈
+        v2_secs = test_db.get_lesson_sections(lid, lang="ja", generator="claude",
+                                               version_number=v2["version_number"])
+        test_db.update_section_annotation(v2_secs[0]["id"], rating="good", comment="良くなった")
+
+        data = _collect_annotated_sections("pair_test")
+        assert len(data["improvement_pairs"]) == 1
+        assert data["improvement_pairs"][0]["before"]["content"] == "悪い説明"
+        assert data["improvement_pairs"][0]["after"]["content"] == "良い説明"
+
+
+class TestSaveLearningsToFiles:
+    """save_learnings_to_files のテスト"""
+
+    def test_save_category(self, tmp_path, monkeypatch):
+        """カテゴリ別学習ファイル保存"""
+        from src.lesson_generator.improver import save_learnings_to_files
+        from src.lesson_generator import improver
+        learnings_dir = tmp_path / "learnings"
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        save_learnings_to_files("python", "## Python学習", "## 共通")
+
+        assert (learnings_dir / "python.md").exists()
+        assert (learnings_dir / "_common.md").exists()
+        assert "Python学習" in (learnings_dir / "python.md").read_text(encoding="utf-8")
+        assert "共通" in (learnings_dir / "_common.md").read_text(encoding="utf-8")
+
+    def test_save_empty_category(self, tmp_path, monkeypatch):
+        """カテゴリ空文字の場合はカテゴリファイルを書かない"""
+        from src.lesson_generator.improver import save_learnings_to_files
+        from src.lesson_generator import improver
+        learnings_dir = tmp_path / "learnings"
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        save_learnings_to_files("", "", "## 共通だけ")
+
+        assert not (learnings_dir / ".md").exists()  # 空slugファイルは作られない
+        assert (learnings_dir / "_common.md").exists()

@@ -31,4 +31,9 @@ from .improver import (
     verify_lesson,
     improve_sections,
     load_learnings,
+    analyze_learnings,
+    save_learnings_to_files,
+    improve_prompt,
+    apply_prompt_diff,
+    create_category_prompt,
 )

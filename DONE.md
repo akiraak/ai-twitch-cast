@@ -1,5 +1,19 @@
 # DONE
 
+## 授業コンテンツ バージョニング — Step 4: 学習ループAPI
+
+- [x] カテゴリ別パターン分析API（POST /api/lessons/analyze-learnings）— 注釈付きセクション収集→AIパターン抽出→学習ファイル＆DB保存
+- [x] プロンプト改善diff生成API（POST /api/lessons/improve-prompt）— 学習結果からプロンプト改善差分を生成
+- [x] プロンプト改善適用API（POST /api/lessons/apply-prompt-diff）— diff指示に従いプロンプトファイルを更新
+- [x] カテゴリ専用プロンプト作成API（POST /api/lessons/categories/{slug}/create-prompt）— 共通プロンプトをベースにカテゴリ特化版を生成
+- [x] 学習結果ファイル出力（prompts/learnings/配下にカテゴリ別・共通のMDファイル）
+- [x] 分析用・改善用プロンプトテンプレート追加（prompts/lesson_analyze.md, lesson_improve_prompt.md）
+- [x] テスト +45件追加（全696通過）
+
+## 授業コンテンツ バージョニング — Step 3: 検証&部分改善API
+
+- [x] verify/improveエンドポイント + improverモジュール + テスト20件追加
+
 ## 授業コンテンツ バージョニング — Step 2: API実装
 
 - [x] カテゴリCRUD API（GET/POST/DELETE /api/lesson-categories）
