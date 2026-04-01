@@ -346,7 +346,8 @@
     display: flex; gap: 12px; margin-bottom: 14px;
     padding: 12px; background: #faf7ff; border: 1px solid #d0c0e8; border-radius: 8px;
   }
-  .lesson-step.step-done { background: #f0faf0; border-color: #b5d8b5; }
+  .lesson-step.step-done { background: #f0faf0; border-color: #b5d8b5; border-left: 3px solid #4caf50; }
+  .lesson-step.step-active { border-left: 3px solid #7b1fa2; }
   .lesson-step.step-disabled { opacity: 0.45; pointer-events: none; }
   .lesson-step-num {
     flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
@@ -375,6 +376,16 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
   }
+
+  /* インラインインポートエリア */
+  .lesson-import-area { padding: 16px; background: #f3e5f5; border: 2px dashed #ce93d8; border-radius: 8px; margin-bottom: 12px; }
+  .lesson-import-area textarea { width: 100%; padding: 10px; font-family: monospace; font-size: 0.8rem; border: 1px solid #d0c0e8; border-radius: 6px; background: #fff; color: #2a1f40; resize: vertical; min-height: 120px; box-sizing: border-box; }
+  .lesson-import-area textarea:focus { border-color: #7b1fa2; outline: none; box-shadow: 0 0 0 2px rgba(123,31,162,0.15); }
+  /* CLIコマンドブロック */
+  .lesson-cli-command { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #1a1a2e; color: #e0d8f0; border-radius: 6px; font-family: monospace; font-size: 0.78rem; margin-bottom: 12px; }
+  .lesson-cli-command code { flex: 1; white-space: pre-wrap; word-break: break-all; }
+  /* 成功バナー */
+  .lesson-success-banner { padding: 10px 14px; background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 6px; color: #1b5e20; font-weight: 600; font-size: 0.85rem; margin-bottom: 10px; }
 
   /* diff表示 */
   .diff-line-add { background: #e8f5e9; color: #1b5e20; }

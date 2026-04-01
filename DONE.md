@@ -1,5 +1,14 @@
 # DONE
 
+## 教師モードUI一新 — 5ステップ化 + インライン生成フロー
+
+- [x] CSS追加（インポートエリア・CLIコマンド・成功バナー・ステップ左ボーダー）
+- [x] teacher.js: buildLessonItem()を5ステップに分割（生成/セクション確認/品質/再生）
+- [x] インラインJSONインポート（モーダル→textarea直貼り）
+- [x] CLIコマンドコピー機能
+- [x] モードA/B切替（未作成時=インポートUI、作成済み=成功バナー）
+- [x] index.html キャッシュバスト更新
+
 ## Claude Code授業生成ドキュメント化 + プロンプト管理UI
 
 - [x] `scripts/routes/prompts.py` 新規作成（GET一覧/GET取得/PUT更新/POST AI編集の4エンドポイント）

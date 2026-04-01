@@ -269,92 +269,74 @@ async function buildLessonItem(lessonId) {
   body.appendChild(langTabsDiv);
 
 
-  // === STEP 2: スクリプト（Claude Code） ===
-  // キャラ設定取得
+  // === STEP 2: スクリプト生成 ===
   const charsRes = await api('GET', '/api/characters');
   const charList = Array.isArray(charsRes) ? charsRes : [];
   const teacherChar = charList.find(c => c.role === 'teacher');
   const studentChar = charList.find(c => c.role === 'student');
-
-  const step2b = document.createElement('div');
-  step2b.className = 'lesson-step' + (hasSections ? ' step-done' : hasSources ? ' step-active' : ' step-disabled');
-  const step2bBody = document.createElement('div');
-  step2bBody.className = 'lesson-step-body';
 
   let totalDlgs = 0;
   for (const s of sections) {
     try { totalDlgs += JSON.parse(s.dialogues || '[]').length; } catch(e) {}
   }
 
-  let step2bHtml = '';
-  step2bHtml += `<div style="margin-bottom:4px; padding:4px 8px; background:#f3e5f5; border-radius:4px; font-size:0.72rem; font-weight:600; color:#6a1b9a;">🧠 Claude Code: ${lang === 'en' ? 'Imported Sections' : 'インポートセクション'}</div>`;
-  step2bHtml += `<div class="lesson-step-title">🧠 Claude Code ${lang === 'en' ? 'Script' : 'スクリプト'}${hasSections ? ' (' + sections.length + (lang === 'en' ? ' sections' : 'セクション') + ', ' + totalDlgs + (lang === 'en' ? ' utterances' : '発話') + ')' : ''}</div>`;
+  const step2 = document.createElement('div');
+  step2.className = 'lesson-step' + (hasSections ? ' step-done' : hasSources ? ' step-active' : ' step-disabled');
+  const step2Body = document.createElement('div');
+  step2Body.className = 'lesson-step-body';
 
-  // Claude Code: JSONインポート + ガイド + プロンプト管理
-  step2bHtml += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button onclick="importClaudeSections(${lessonId}, '${lang}')" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">📋 JSONインポート</button>
-      <span class="import-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
-    </div>
-    <details style="margin-bottom:8px;" open>
-      <summary style="cursor:pointer; font-weight:600; font-size:0.82rem; color:#6a1b9a; padding:6px 0;">📖 授業生成ガイド</summary>
-      <div style="padding:10px 12px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; font-size:0.78rem; color:#333; margin-top:4px; line-height:1.6;">
-        <div style="font-weight:600; color:#6a1b9a; margin-bottom:6px;">Claude Code CLIで授業スクリプトを生成する手順:</div>
-        <div style="margin-bottom:8px;">
-          <div style="font-weight:600; color:#4a148c;">Step 1: Claude Codeに指示を出す</div>
-          <div style="margin-left:8px; margin-top:2px;">
-            Claude Code CLIを開き、以下のように指示します:<br>
-            <code style="display:block; margin:4px 0; padding:6px 8px; background:#fff; border:1px solid #d0c0e8; border-radius:3px; font-size:0.75rem; white-space:pre-wrap;">授業ID ${lessonId} の教材画像を読み取って、prompts/lesson_generate.md に従って授業スクリプトを生成して</code>
-            Claude Codeが自動的に以下を行います:<br>
-            ・教材画像の読み取り（<code>resources/images/lessons/${lessonId}/</code>）<br>
-            ・キャラクター設定の取得（API経由）<br>
-            ・授業プランの設計<br>
-            ・セクションJSON の生成
-          </div>
-        </div>
-        <div style="margin-bottom:8px;">
-          <div style="font-weight:600; color:#4a148c;">Step 2: 生成されたJSONをインポート</div>
-          <div style="margin-left:8px; margin-top:2px;">
-            Claude Codeが出力したJSONをコピーして、上の「📋 JSONインポート」ボタンを押し、貼り付けます。<br>
-            または、Claude Codeに直接APIを叩かせることもできます:<br>
-            <code style="display:block; margin:4px 0; padding:6px 8px; background:#fff; border:1px solid #d0c0e8; border-radius:3px; font-size:0.75rem; white-space:pre-wrap;">生成したJSONを POST /api/lessons/${lessonId}/import-sections?lang=${lang}&generator=claude でインポートして</code>
-          </div>
-        </div>
-        <div>
-          <div style="font-weight:600; color:#4a148c;">Step 3: TTS生成 → 授業再生</div>
-          <div style="margin-left:8px; margin-top:2px;">
-            インポート後、下のセクション一覧から「TTS生成」→「授業開始」で再生できます。
-          </div>
-        </div>
-      </div>
-    </details>
-    <details style="margin-bottom:8px;" class="prompt-details-${lessonId}-${lang}">
-      <summary style="cursor:pointer; font-weight:600; font-size:0.75rem; color:#6a1b9a; padding:4px 0;">📝 生成プロンプト</summary>
-      <div class="prompt-content-area" style="margin-top:4px;">
-        <div class="prompt-display" style="padding:8px 10px; background:#faf7ff; border:1px solid #d0c0e8; border-radius:4px; font-size:0.72rem; max-height:300px; overflow-y:auto; margin-bottom:6px;"><span class="lesson-spinner">読み込み中...</span></div>
-        <div style="border:1px solid #d0c0e8; border-radius:4px; padding:8px; background:#f5f0ff;">
-          <div style="font-weight:600; font-size:0.72rem; color:#6a1b9a; margin-bottom:4px;">AI編集</div>
-          <div style="display:flex; gap:6px; margin-bottom:6px;">
-            <input type="text" class="prompt-ai-instruction" placeholder="編集指示を入力..." style="flex:1; padding:4px 8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem;">
-            <button class="prompt-ai-run-btn" style="padding:4px 12px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem; white-space:nowrap;">実行</button>
-          </div>
-          <div class="prompt-ai-status" style="display:none;"></div>
-          <div class="prompt-diff-area" style="display:none;">
-            <div class="diff-container prompt-diff-display"></div>
-            <div style="display:flex; gap:6px; margin-top:6px;">
-              <button class="prompt-apply-btn" style="padding:4px 10px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">適用</button>
-              <button class="prompt-retry-btn" style="padding:4px 10px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">やり直す</button>
-              <button class="prompt-cancel-btn" style="padding:4px 10px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">キャンセル</button>
-            </div>
-          </div>
-        </div>
-      </div>
+  let step2Html = `<div class="lesson-step-title">スクリプト生成</div>`;
+
+  if (hasSections) {
+    // モードB: インポート済み
+    step2Html += `<div class="lesson-success-banner">\u2705 ${sections.length} セクション、${totalDlgs} 発話をインポート済み</div>`;
+    step2Html += `<details style="margin-bottom:8px;">
+      <summary style="cursor:pointer; font-weight:600; font-size:0.78rem; color:#6a1b9a; padding:4px 0;">再インポート / 更新</summary>
+      <div style="margin-top:6px;">${_buildImportArea(lessonId, lang)}</div>
     </details>`;
-  step2bBody.innerHTML = step2bHtml;
+  } else {
+    // モードA: 未作成
+    step2Html += `<div style="font-size:0.82rem; color:#333; margin-bottom:10px; line-height:1.5;">Claude Code CLIで授業スクリプトを生成し、下のエリアにJSONを貼り付けてインポートしてください。</div>`;
+    step2Html += _buildImportArea(lessonId, lang);
+  }
 
-  // プロンプト表示・AI編集のイベント設定
-  _setupPromptUI(step2bBody);
+  // プロンプト折りたたみ（共通）
+  step2Html += `<details style="margin-bottom:8px;" class="prompt-details-${lessonId}-${lang}">
+    <summary style="cursor:pointer; font-weight:600; font-size:0.75rem; color:#6a1b9a; padding:4px 0;">\u{1F4DD} 生成プロンプト</summary>
+    <div class="prompt-content-area" style="margin-top:4px;">
+      <div class="prompt-display" style="padding:8px 10px; background:#faf7ff; border:1px solid #d0c0e8; border-radius:4px; font-size:0.72rem; max-height:300px; overflow-y:auto; margin-bottom:6px;"><span class="lesson-spinner">読み込み中...</span></div>
+      <div style="border:1px solid #d0c0e8; border-radius:4px; padding:8px; background:#f5f0ff;">
+        <div style="font-weight:600; font-size:0.72rem; color:#6a1b9a; margin-bottom:4px;">AI編集</div>
+        <div style="display:flex; gap:6px; margin-bottom:6px;">
+          <input type="text" class="prompt-ai-instruction" placeholder="編集指示を入力..." style="flex:1; padding:4px 8px; border:1px solid #d0c0e8; border-radius:4px; font-size:0.75rem;">
+          <button class="prompt-ai-run-btn" style="padding:4px 12px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem; white-space:nowrap;">実行</button>
+        </div>
+        <div class="prompt-ai-status" style="display:none;"></div>
+        <div class="prompt-diff-area" style="display:none;">
+          <div class="diff-container prompt-diff-display"></div>
+          <div style="display:flex; gap:6px; margin-top:6px;">
+            <button class="prompt-apply-btn" style="padding:4px 10px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">適用</button>
+            <button class="prompt-retry-btn" style="padding:4px 10px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">やり直す</button>
+            <button class="prompt-cancel-btn" style="padding:4px 10px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">キャンセル</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </details>`;
 
-  // TTSキャッシュ情報取得
+  step2Body.innerHTML = step2Html;
+  _setupPromptUI(step2Body);
+  step2.innerHTML = '<div class="lesson-step-num">2</div>';
+  step2.appendChild(step2Body);
+  body.appendChild(step2);
+
+  // === STEP 3: セクション確認・編集 ===
+  const step3 = document.createElement('div');
+  step3.className = 'lesson-step' + (hasSections ? ' step-active' : ' step-disabled');
+  const step3Body = document.createElement('div');
+  step3Body.className = 'lesson-step-body';
+  step3Body.innerHTML = `<div class="lesson-step-title">セクション確認・編集${hasSections ? ' (' + sections.length + 'セクション)' : ''}</div>`;
+
   let ttsCacheMap = {};
   if (hasSections) {
     const cacheRes = await api('GET', '/api/lessons/' + lessonId + '/tts-cache?lang=' + lang + '&generator=' + generator);
@@ -364,51 +346,46 @@ async function buildLessonItem(lessonId) {
       }
     }
   }
-
-  // セクション一覧
   const secContainer = document.createElement('div');
   renderSectionsInto(secContainer, sections, lessonId, ttsCacheMap, {teacher: teacherChar, student: studentChar}, plans[lang]);
-  step2bBody.appendChild(secContainer);
+  step3Body.appendChild(secContainer);
 
-  step2b.innerHTML = '<div class="lesson-step-num">2</div>';
-  step2b.appendChild(step2bBody);
-  body.appendChild(step2b);
+  step3.innerHTML = '<div class="lesson-step-num">3</div>';
+  step3.appendChild(step3Body);
+  body.appendChild(step3);
 
-  // === 品質分析 ===
-  if (hasSections) {
-    const qaDiv = document.createElement('div');
-    qaDiv.className = 'lesson-step step-active';
-    qaDiv.innerHTML = `<div class="lesson-step-num" style="background:#1565c0;">QA</div>`;
-    const qaBody = document.createElement('div');
-    qaBody.className = 'lesson-step-body';
-    qaBody.innerHTML = `<div class="lesson-step-title">品質分析</div>
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
-        <button onclick="analyzeLesson(${lessonId}, '${lang}')" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">アルゴリズム分析</button>
-        <span class="qa-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
-      </div>
-      <div class="qa-result" id="qa-result-${lessonId}"></div>`;
-    qaDiv.appendChild(qaBody);
-    body.appendChild(qaDiv);
-    // DB保存済み分析結果があれば自動表示
-    if (lesson.analysis_json) {
-      try {
-        const saved = JSON.parse(lesson.analysis_json);
-        const el = qaBody.querySelector('.qa-result');
-        if (el) _renderAnalysisResult(el, saved);
-      } catch(e) {}
-    }
+  // === STEP 4: 品質チェック ===
+  const step4 = document.createElement('div');
+  step4.className = 'lesson-step' + (hasSections ? ' step-active' : ' step-disabled');
+  const step4Body = document.createElement('div');
+  step4Body.className = 'lesson-step-body';
+  step4Body.innerHTML = `<div class="lesson-step-title">品質チェック</div>
+    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+      <button onclick="analyzeLesson(${lessonId}, '${lang}')" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">アルゴリズム分析</button>
+      <span class="qa-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
+    </div>
+    <div class="qa-result" id="qa-result-${lessonId}"></div>`;
+  step4.innerHTML = '<div class="lesson-step-num">4</div>';
+  step4.appendChild(step4Body);
+  body.appendChild(step4);
+  if (lesson.analysis_json) {
+    try {
+      const saved = JSON.parse(lesson.analysis_json);
+      const el = step4Body.querySelector('.qa-result');
+      if (el) _renderAnalysisResult(el, saved);
+    } catch(e) {}
   }
 
-  // === STEP 3: 授業開始 ===
+  // === STEP 5: 授業再生 ===
   const isRunning = runningThisLesson && lState === 'running';
   const isPaused = runningThisLesson && lState === 'paused';
   const isActive = isRunning || isPaused;
-  const step3 = document.createElement('div');
-  step3.className = 'lesson-step' + (isActive ? ' step-done' : hasSections ? ' step-active' : ' step-disabled');
-  const step3Body = document.createElement('div');
-  step3Body.className = 'lesson-step-body';
+  const step5 = document.createElement('div');
+  step5.className = 'lesson-step' + (isActive ? ' step-done' : hasSections ? ' step-active' : ' step-disabled');
+  const step5Body = document.createElement('div');
+  step5Body.className = 'lesson-step-body';
   const progressInfo = isActive ? `${statusRes.status.current_index + 1} / ${statusRes.status.total_sections} セクション` : '';
-  step3Body.innerHTML = `<div class="lesson-step-title">授業${isActive ? '（実行中）' : ''}</div>
+  step5Body.innerHTML = `<div class="lesson-step-title">授業再生${isActive ? '（実行中）' : ''}</div>
     <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
       <button onclick="startLesson(${lessonId}, '${lang}')" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">${lang === 'en' ? 'Start Lesson' : '授業開始'}</button>
       <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isRunning ? '' : ' display:none;'}">一時停止</button>
@@ -419,9 +396,9 @@ async function buildLessonItem(lessonId) {
     </div>
     <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:#8a7a9a;">${progressInfo}</div>`;
 
-  step3.innerHTML = '<div class="lesson-step-num">3</div>'; // Step 3: 授業開始
-  step3.appendChild(step3Body);
-  body.appendChild(step3);
+  step5.innerHTML = '<div class="lesson-step-num">5</div>';
+  step5.appendChild(step5Body);
+  body.appendChild(step5);
 
   // 削除ボタン
   const delRow = document.createElement('div');
@@ -501,7 +478,7 @@ async function addLessonSource(lessonId) {
     cancelLabel: 'URL',
   });
   if (choice === true) {
-    _clearDownstreamSteps(lessonId, ['2', '3']);
+    _clearDownstreamSteps(lessonId, ['2', '3', '4', '5']);
     // 既存データをクリア
     await api('POST', '/api/lessons/' + lessonId + '/clear-sources');
     // 画像: 複数ファイル選択
@@ -519,7 +496,7 @@ async function addLessonSource(lessonId) {
       okLabel: '追加',
     });
     if (url) {
-      _clearDownstreamSteps(lessonId, ['2', '3']);
+      _clearDownstreamSteps(lessonId, ['2', '3', '4', '5']);
       await doAddLessonUrl(lessonId, url);
     }
   }
@@ -555,7 +532,7 @@ async function uploadLessonImages(lessonId, input) {
 }
 
 async function extractLessonText(lessonId) {
-  _clearDownstreamSteps(lessonId, ['2', '3']);
+  _clearDownstreamSteps(lessonId, ['2', '3', '4', '5']);
   const item = _findLessonItem(lessonId);
   const statusEl = item ? item.querySelector('.extract-status') : null;
   const btn = item ? item.querySelector('.btn-extract') : null;
@@ -1116,6 +1093,83 @@ async function importClaudeSections(lessonId, lang) {
     _openLessonIds.add(lessonId);
     await loadLessons();
   } else {
+    showToast('インポート失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
+  }
+}
+
+// --- インラインJSONインポート ---
+
+function _buildImportArea(lessonId, lang) {
+  const cliCmd = `授業ID ${lessonId} の教材画像を読み取って、prompts/lesson_generate.md に従って授業スクリプトを生成して`;
+  return `<div class="lesson-cli-command">
+      <code>${esc(cliCmd)}</code>
+      <button onclick="_copyToClipboard('${esc(cliCmd.replace(/'/g, "\\'"))}', this)" style="padding:3px 10px; background:#6a1b9a; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem; white-space:nowrap;">コピー</button>
+    </div>
+    <div class="lesson-import-area">
+      <textarea rows="8" placeholder='Claude Codeが出力したJSONをここに貼り付け&#10;[{"section_type": "introduction", ...}]'></textarea>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <button onclick="importClaudeSectionsInline(${lessonId}, '${lang}', this)" style="padding:6px 18px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem; font-weight:600;">インポート</button>
+        <span class="import-inline-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
+      </div>
+    </div>`;
+}
+
+function _copyToClipboard(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '\u2713 Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+async function importClaudeSectionsInline(lessonId, lang, btnEl) {
+  const area = btnEl.closest('.lesson-import-area');
+  const textarea = area.querySelector('textarea');
+  const statusEl = area.querySelector('.import-inline-status');
+  const json = (textarea.value || '').trim();
+
+  if (!json) {
+    showToast('JSONを貼り付けてください', 'error');
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(json);
+  } catch(e) {
+    showToast('JSONパースエラー: ' + e.message, 'error');
+    return;
+  }
+
+  let sections;
+  let planSummary = null;
+  if (Array.isArray(parsed)) {
+    sections = parsed;
+  } else if (parsed.sections && Array.isArray(parsed.sections)) {
+    sections = parsed.sections;
+    planSummary = parsed.plan_summary || null;
+  } else {
+    showToast('不正なフォーマット: 配列または {sections: [...]} が必要です', 'error');
+    return;
+  }
+
+  const ok = await showConfirm(
+    `${sections.length}セクションをインポートします。既存のClaude Codeセクション（${lang}）は上書きされます。`,
+    { title: 'インポート確認' }
+  );
+  if (!ok) return;
+
+  if (statusEl) statusEl.innerHTML = '<span class="lesson-spinner">インポート中...</span>';
+
+  const body = { sections };
+  if (planSummary) body.plan_summary = planSummary;
+  const res = await api('POST', `/api/lessons/${lessonId}/import-sections?lang=${lang}&generator=claude`, body);
+  if (res && res.ok) {
+    showToast(`インポート完了: ${res.count}セクション`, 'success');
+    _openLessonIds.add(lessonId);
+    await loadLessons();
+  } else {
+    if (statusEl) statusEl.textContent = '';
     showToast('インポート失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
   }
 }
