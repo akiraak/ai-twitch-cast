@@ -865,12 +865,14 @@ async def update_section(lesson_id: int, section_id: int, body: SectionUpdate):
 
     # tts_text または content が変更された場合、該当セクションのTTSキャッシュを削除
     if "tts_text" in updates or "content" in updates:
-        # セクションの order_index を取得
+        # セクションの order_index, version_number を取得
         sections = db.get_lesson_sections(lesson_id)
         sec = next((s for s in sections if s["id"] == section_id), None)
         if sec:
-            clear_tts_cache(lesson_id, order_index=sec["order_index"])
-            logger.info("TTSキャッシュ削除: lesson=%d, section order=%d", lesson_id, sec["order_index"])
+            clear_tts_cache(lesson_id, order_index=sec["order_index"],
+                            version_number=sec.get("version_number", 1))
+            logger.info("TTSキャッシュ削除: lesson=%d, section order=%d, v%d",
+                        lesson_id, sec["order_index"], sec.get("version_number", 1))
 
     db.update_lesson_section(section_id, **updates)
     return {"ok": True}
@@ -883,7 +885,8 @@ async def delete_section(lesson_id: int, section_id: int):
     sections = db.get_lesson_sections(lesson_id)
     sec = next((s for s in sections if s["id"] == section_id), None)
     if sec:
-        clear_tts_cache(lesson_id, order_index=sec["order_index"])
+        clear_tts_cache(lesson_id, order_index=sec["order_index"],
+                        version_number=sec.get("version_number", 1))
 
     db.delete_lesson_section(section_id)
     return {"ok": True}
@@ -922,7 +925,8 @@ async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "clau
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    sections = get_tts_cache_info(lesson_id, lang=lang, generator=generator)
+    vn = version or 1
+    sections = get_tts_cache_info(lesson_id, lang=lang, generator=generator, version_number=vn)
     return {"ok": True, "sections": sections}
 
 
@@ -934,8 +938,8 @@ async def delete_tts_cache(lesson_id: int, lang: str | None = None, generator: s
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    clear_tts_cache(lesson_id, lang=lang, generator=generator)
-    logger.info("TTSキャッシュ全削除: lesson=%d, lang=%s, generator=%s", lesson_id, lang or "all", generator or "all")
+    clear_tts_cache(lesson_id, lang=lang, generator=generator, version_number=version)
+    logger.info("TTSキャッシュ全削除: lesson=%d, lang=%s, generator=%s, version=%s", lesson_id, lang or "all", generator or "all", version or "all")
     return {"ok": True}
 
 
@@ -946,8 +950,8 @@ async def delete_tts_cache_section(lesson_id: int, order_index: int, lang: str =
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
-    clear_tts_cache(lesson_id, order_index=order_index, lang=lang, generator=generator)
-    logger.info("TTSキャッシュ削除: lesson=%d, section=%d, lang=%s, generator=%s", lesson_id, order_index, lang, generator or "all")
+    clear_tts_cache(lesson_id, order_index=order_index, lang=lang, generator=generator, version_number=version)
+    logger.info("TTSキャッシュ削除: lesson=%d, section=%d, lang=%s, generator=%s, version=%s", lesson_id, order_index, lang, generator or "all", version or "all")
     return {"ok": True}
 
 

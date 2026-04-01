@@ -1,5 +1,14 @@
 # DONE
 
+## 授業コンテンツ バージョニング — Step 5: 授業再生エンジン対応
+
+- [x] TTSキャッシュパスをバージョン別サブディレクトリ `v{N}/` に変更（3段階フォールバック: v{N}/ → generator直下 → lang直下）
+- [x] `clear_tts_cache()` に `version_number` パラメータ追加（特定バージョンのみ削除可能）
+- [x] `get_tts_cache_info()` に `version_number` パラメータ追加
+- [x] `LessonRunner` に `_version_number` 保持、`get_status()` に含む
+- [x] TTSキャッシュAPI・セクション編集/削除で `version` パラメータ対応
+- [x] テスト +12件追加（全708通過）
+
 ## 授業コンテンツ バージョニング — Step 4: 学習ループAPI
 
 - [x] カテゴリ別パターン分析API（POST /api/lessons/analyze-learnings）— 注釈付きセクション収集→AIパターン抽出→学習ファイル＆DB保存

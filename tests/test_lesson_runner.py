@@ -115,16 +115,34 @@ class TestTtsCache:
     """TTSキャッシュ関連のテスト"""
 
     def test_cache_path(self):
-        """キャッシュパスの生成（generator別サブディレクトリ）"""
+        """キャッシュパスの生成（バージョン別サブディレクトリ）"""
         p = _cache_path(1, 0, 2)
         assert p.name == "section_00_part_02.wav"
-        assert "lessons/1/ja/gemini/" in str(p)
+        assert "lessons/1/ja/gemini/v1/" in str(p)
 
     def test_cache_path_with_generator(self):
         """claude generatorのキャッシュパス"""
         p = _cache_path(1, 0, 2, generator="claude")
-        assert "lessons/1/ja/claude/" in str(p)
+        assert "lessons/1/ja/claude/v1/" in str(p)
         assert p.name == "section_00_part_02.wav"
+
+    def test_cache_path_with_version(self):
+        """バージョン指定のキャッシュパス"""
+        p = _cache_path(1, 0, 2, version_number=3)
+        assert "lessons/1/ja/gemini/v3/" in str(p)
+        assert p.name == "section_00_part_02.wav"
+
+    def test_cache_path_v2_no_legacy_fallback(self, tmp_path, monkeypatch):
+        """v2以降ではレガシーパスにフォールバックしない"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        # generator直下にファイル（バージョニング前レガシー）
+        gen_dir = tmp_path / "1" / "ja" / "gemini"
+        gen_dir.mkdir(parents=True)
+        (gen_dir / "section_00_part_00.wav").write_bytes(b"legacy")
+
+        p = _cache_path(1, 0, 0, generator="gemini", version_number=2)
+        assert "v2" in str(p)
+        assert not p.exists()  # フォールバックしない
 
     def test_cache_path_legacy_fallback(self, tmp_path, monkeypatch):
         """geminiの場合、旧パス（lang直下）のキャッシュにフォールバック"""
@@ -150,14 +168,28 @@ class TestTtsCache:
         assert "claude" in str(p)
         assert not p.exists()
 
+    def test_cache_path_pre_versioning_fallback(self, tmp_path, monkeypatch):
+        """v1でgenerator直下のキャッシュにフォールバック（バージョニング導入前互換）"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        gen_dir = tmp_path / "1" / "ja" / "gemini"
+        gen_dir.mkdir(parents=True)
+        pre_ver_file = gen_dir / "section_00_part_00.wav"
+        pre_ver_file.write_bytes(b"pre-versioning")
+
+        p = _cache_path(1, 0, 0, generator="gemini", version_number=1)
+        assert p == pre_ver_file
+
     def test_cache_path_new_path_preferred(self, tmp_path, monkeypatch):
-        """新パスが存在する場合はそちらを優先"""
+        """v{N}パスが存在する場合はそちらを優先"""
         monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
         # 旧パスと新パスの両方にファイルを配置
         legacy_dir = tmp_path / "1" / "ja"
         legacy_dir.mkdir(parents=True)
         (legacy_dir / "section_00_part_00.wav").write_bytes(b"legacy")
-        new_dir = tmp_path / "1" / "ja" / "gemini"
+        gen_dir = tmp_path / "1" / "ja" / "gemini"
+        gen_dir.mkdir(parents=True)
+        (gen_dir / "section_00_part_00.wav").write_bytes(b"pre-ver")
+        new_dir = gen_dir / "v1"
         new_dir.mkdir(parents=True)
         new_file = new_dir / "section_00_part_00.wav"
         new_file.write_bytes(b"new")
@@ -169,7 +201,12 @@ class TestTtsCache:
         """dialogue用キャッシュパスの生成"""
         p = _dlg_cache_path(1, 3, 1, lang="en")
         assert p.name == "section_03_dlg_01.wav"
-        assert "lessons/1/en/gemini/" in str(p)
+        assert "lessons/1/en/gemini/v1/" in str(p)
+
+    def test_dlg_cache_path_with_version(self):
+        """dialogue用: バージョン指定のキャッシュパス"""
+        p = _dlg_cache_path(1, 3, 1, lang="en", version_number=2)
+        assert "lessons/1/en/gemini/v2/" in str(p)
 
     def test_dlg_cache_path_legacy_fallback(self, tmp_path, monkeypatch):
         """dialogue用: geminiの場合、旧パスにフォールバック"""
@@ -302,6 +339,125 @@ class TestTtsCache:
         assert info[0]["order_index"] == 0
         assert len(info[0]["parts"]) == 1
         assert info[0]["parts"][0]["size"] == 4
+
+
+class TestVersionedTtsCache:
+    """バージョン別TTSキャッシュのテスト"""
+
+    def test_cache_path_versioned(self, tmp_path, monkeypatch):
+        """バージョン別パスにキャッシュファイルが見つかる"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        v2_dir = tmp_path / "1" / "ja" / "gemini" / "v2"
+        v2_dir.mkdir(parents=True)
+        v2_file = v2_dir / "section_00_part_00.wav"
+        v2_file.write_bytes(b"v2data")
+
+        p = _cache_path(1, 0, 0, version_number=2)
+        assert p == v2_file
+
+    def test_clear_tts_cache_specific_version(self, tmp_path, monkeypatch):
+        """特定バージョンのキャッシュのみ削除"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        v1_dir = tmp_path / "1" / "ja" / "claude" / "v1"
+        v2_dir = tmp_path / "1" / "ja" / "claude" / "v2"
+        v1_dir.mkdir(parents=True)
+        v2_dir.mkdir(parents=True)
+        (v1_dir / "section_00_part_00.wav").write_bytes(b"v1")
+        (v2_dir / "section_00_part_00.wav").write_bytes(b"v2")
+
+        clear_tts_cache(1, lang="ja", generator="claude", version_number=2)
+        assert (v1_dir / "section_00_part_00.wav").exists()
+        assert not (v2_dir / "section_00_part_00.wav").exists()
+
+    def test_clear_tts_cache_version_with_section(self, tmp_path, monkeypatch):
+        """特定バージョン+特定セクションのキャッシュ削除"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        v1_dir = tmp_path / "1" / "ja" / "claude" / "v1"
+        v1_dir.mkdir(parents=True)
+        (v1_dir / "section_00_part_00.wav").write_bytes(b"x")
+        (v1_dir / "section_01_part_00.wav").write_bytes(b"x")
+
+        clear_tts_cache(1, order_index=0, lang="ja", generator="claude", version_number=1)
+        assert not (v1_dir / "section_00_part_00.wav").exists()
+        assert (v1_dir / "section_01_part_00.wav").exists()
+
+    def test_clear_v1_also_clears_legacy(self, tmp_path, monkeypatch):
+        """v1削除時はgenerator直下のレガシーファイルも削除"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        gen_dir = tmp_path / "1" / "ja" / "gemini"
+        gen_dir.mkdir(parents=True)
+        # バージョニング前レガシー（generator直下）
+        (gen_dir / "section_00_part_00.wav").write_bytes(b"legacy")
+        # v1サブディレクトリ
+        v1_dir = gen_dir / "v1"
+        v1_dir.mkdir()
+        (v1_dir / "section_01_part_00.wav").write_bytes(b"v1")
+        # lang直下レガシー（gemini + v1）
+        lang_dir = tmp_path / "1" / "ja"
+        (lang_dir / "section_02_part_00.wav").write_bytes(b"old-legacy")
+
+        clear_tts_cache(1, lang="ja", generator="gemini", version_number=1)
+        assert not (gen_dir / "section_00_part_00.wav").exists()
+        assert not (v1_dir / "section_01_part_00.wav").exists()
+        assert not (lang_dir / "section_02_part_00.wav").exists()
+
+    def test_clear_all_versions_none(self, tmp_path, monkeypatch):
+        """version_number=None: 全バージョン削除"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        gen_dir = tmp_path / "1" / "ja" / "claude"
+        v1_dir = gen_dir / "v1"
+        v2_dir = gen_dir / "v2"
+        v1_dir.mkdir(parents=True)
+        v2_dir.mkdir(parents=True)
+        (v1_dir / "section_00_part_00.wav").write_bytes(b"v1")
+        (v2_dir / "section_00_part_00.wav").write_bytes(b"v2")
+
+        clear_tts_cache(1, lang="ja", generator="claude", version_number=None)
+        assert not gen_dir.exists()
+
+    def test_get_tts_cache_info_versioned(self, tmp_path, monkeypatch, test_db):
+        """バージョン別のキャッシュ情報取得"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        monkeypatch.setattr("src.lesson_runner.PROJECT_DIR", tmp_path.parent)
+
+        lesson = test_db.create_lesson("VersionedCacheTest")
+        lid = lesson["id"]
+        test_db.add_lesson_section(lid, 0, "intro", "Hello", version_number=2)
+
+        # v2のキャッシュ
+        cache_dir = tmp_path / str(lid) / "ja" / "gemini" / "v2"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "section_00_part_00.wav").write_bytes(b"v2wav")
+
+        info = get_tts_cache_info(lid, version_number=2)
+        assert len(info) == 1
+        assert info[0]["order_index"] == 0
+        assert len(info[0]["parts"]) == 1
+        assert info[0]["parts"][0]["size"] == 5
+
+    def test_get_tts_cache_info_v1_legacy(self, tmp_path, monkeypatch, test_db):
+        """v1のキャッシュ情報取得ではレガシーパスも含む"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+        monkeypatch.setattr("src.lesson_runner.PROJECT_DIR", tmp_path.parent)
+
+        lesson = test_db.create_lesson("LegacyCacheTest")
+        lid = lesson["id"]
+        test_db.add_lesson_section(lid, 0, "intro", "Hello")
+
+        # レガシーパス（lang直下）
+        cache_dir = tmp_path / str(lid) / "ja"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "section_00_part_00.wav").write_bytes(b"legacy")
+
+        info = get_tts_cache_info(lid, version_number=1)
+        assert len(info) == 1
+        assert len(info[0]["parts"]) == 1
+
+    def test_get_status_includes_version(self, runner):
+        """get_statusにversion_numberが含まれる"""
+        status = runner.get_status()
+        assert "version_number" in status
+        assert status["version_number"] == 1
 
 
 class TestDialoguePlayback:

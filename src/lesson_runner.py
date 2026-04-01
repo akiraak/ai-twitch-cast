@@ -23,35 +23,50 @@ class LessonState(str, Enum):
     PAUSED = "paused"
 
 
-def _cache_path(lesson_id: int, order_index: int, part_index: int, lang: str = "ja", generator: str = "gemini") -> Path:
-    """TTSキャッシュファイルのパスを返す（generator別サブディレクトリ、旧パス互換あり）"""
+def _cache_path(lesson_id: int, order_index: int, part_index: int, lang: str = "ja", generator: str = "gemini", version_number: int = 1) -> Path:
+    """TTSキャッシュファイルのパスを返す（バージョン別サブディレクトリ、旧パス互換あり）
+
+    パス解決順序:
+    1. 新パス: {lesson_id}/{lang}/{generator}/v{N}/section_*.wav
+    2. バージョニング前互換: {lesson_id}/{lang}/{generator}/section_*.wav（v1のみ）
+    3. generator導入前互換: {lesson_id}/{lang}/section_*.wav（v1+geminiのみ）
+    """
     filename = f"section_{order_index:02d}_part_{part_index:02d}.wav"
-    new_path = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / filename
+    new_path = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / f"v{version_number}" / filename
     if new_path.exists():
         return new_path
-    # 旧パス互換（generator導入前のキャッシュ）
-    if generator == "gemini":
-        legacy = LESSON_AUDIO_DIR / str(lesson_id) / lang / filename
-        if legacy.exists():
-            return legacy
+    # 旧パス互換（バージョニング導入前: generator直下、v1のみ）
+    if version_number == 1:
+        pre_ver = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / filename
+        if pre_ver.exists():
+            return pre_ver
+        # generator導入前互換（lang直下、geminiのみ）
+        if generator == "gemini":
+            legacy = LESSON_AUDIO_DIR / str(lesson_id) / lang / filename
+            if legacy.exists():
+                return legacy
     return new_path
 
 
-def _dlg_cache_path(lesson_id: int, order_index: int, dlg_index: int, lang: str = "ja", generator: str = "gemini") -> Path:
-    """dialogue用TTSキャッシュファイルのパスを返す（generator別サブディレクトリ、旧パス互換あり）"""
+def _dlg_cache_path(lesson_id: int, order_index: int, dlg_index: int, lang: str = "ja", generator: str = "gemini", version_number: int = 1) -> Path:
+    """dialogue用TTSキャッシュファイルのパスを返す（バージョン別サブディレクトリ、旧パス互換あり）"""
     filename = f"section_{order_index:02d}_dlg_{dlg_index:02d}.wav"
-    new_path = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / filename
+    new_path = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / f"v{version_number}" / filename
     if new_path.exists():
         return new_path
-    # 旧パス互換（generator導入前のキャッシュ）
-    if generator == "gemini":
-        legacy = LESSON_AUDIO_DIR / str(lesson_id) / lang / filename
-        if legacy.exists():
-            return legacy
+    if version_number == 1:
+        pre_ver = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / filename
+        if pre_ver.exists():
+            return pre_ver
+        if generator == "gemini":
+            legacy = LESSON_AUDIO_DIR / str(lesson_id) / lang / filename
+            if legacy.exists():
+                return legacy
     return new_path
 
 
-def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | None = None, generator: str | None = None):
+def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | None = None,
+                    generator: str | None = None, version_number: int | None = None):
     """TTSキャッシュを削除する
 
     Args:
@@ -59,18 +74,64 @@ def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | 
         order_index: 指定時はそのセクションのみ、Noneなら全セクション
         lang: 指定時はその言語のみ、Noneなら全言語
         generator: 指定時はそのジェネレータのキャッシュのみ、Noneなら全ジェネレータ
+        version_number: 指定時はそのバージョンのみ、Noneなら全バージョン
     """
+
+    def _delete_files_in_dir(d: Path, oi: int | None):
+        """ディレクトリ内のセクションファイルを削除"""
+        if not d.exists():
+            return
+        if oi is not None:
+            for f in d.glob(f"section_{oi:02d}_*.wav"):
+                f.unlink(missing_ok=True)
+        else:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def _clear_gen_dir(gen_dir: Path, oi: int | None, vn: int | None):
+        """generator ディレクトリ配下のキャッシュ削除"""
+        if not gen_dir.exists():
+            return
+        if vn is not None:
+            # 特定バージョンのみ
+            _delete_files_in_dir(gen_dir / f"v{vn}", oi)
+            # v1 の場合はgenerator直下のレガシーファイルも削除
+            if vn == 1:
+                _delete_files_in_dir(gen_dir, oi) if oi is not None else None
+                if oi is not None:
+                    for f in gen_dir.glob(f"section_{oi:02d}_*.wav"):
+                        f.unlink(missing_ok=True)
+                else:
+                    # generator直下のwavファイルのみ削除（v*サブディレクトリは残す）
+                    for f in gen_dir.glob("section_*.wav"):
+                        f.unlink(missing_ok=True)
+        else:
+            # 全バージョン（generator配下ごと削除）
+            if oi is not None:
+                # generator直下のファイル
+                for f in gen_dir.glob(f"section_{oi:02d}_*.wav"):
+                    f.unlink(missing_ok=True)
+                # v*サブディレクトリ内のファイル
+                for sub in gen_dir.iterdir():
+                    if sub.is_dir() and sub.name.startswith("v"):
+                        for f in sub.glob(f"section_{oi:02d}_*.wav"):
+                            f.unlink(missing_ok=True)
+            else:
+                shutil.rmtree(gen_dir, ignore_errors=True)
+
     if generator is not None:
         # 特定generatorのキャッシュのみ削除
         if lang:
             gen_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator
-            if not gen_dir.exists():
-                return
-            if order_index is not None:
-                for f in gen_dir.glob(f"section_{order_index:02d}_*.wav"):
-                    f.unlink(missing_ok=True)
-            else:
-                shutil.rmtree(gen_dir, ignore_errors=True)
+            _clear_gen_dir(gen_dir, order_index, version_number)
+            # v1+gemini: lang直下のレガシーファイルも削除
+            if version_number in (None, 1) and generator == "gemini":
+                lang_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
+                if lang_dir.exists() and order_index is not None:
+                    for f in lang_dir.glob(f"section_{order_index:02d}_*.wav"):
+                        f.unlink(missing_ok=True)
+                elif lang_dir.exists():
+                    for f in lang_dir.glob("section_*.wav"):
+                        f.unlink(missing_ok=True)
         else:
             lesson_dir = LESSON_AUDIO_DIR / str(lesson_id)
             if not lesson_dir.exists():
@@ -78,15 +139,42 @@ def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | 
             for lang_dir in lesson_dir.iterdir():
                 if lang_dir.is_dir():
                     gen_dir = lang_dir / generator
-                    if gen_dir.exists():
-                        if order_index is not None:
-                            for f in gen_dir.glob(f"section_{order_index:02d}_*.wav"):
-                                f.unlink(missing_ok=True)
-                        else:
-                            shutil.rmtree(gen_dir, ignore_errors=True)
+                    _clear_gen_dir(gen_dir, order_index, version_number)
         return
 
-    # generator=None → 既存動作（全ジェネレータ削除）
+    # generator=None → 全ジェネレータ削除
+    if version_number is not None:
+        # 特定バージョンだけ削除（全generator内のv{N}を削除）
+        if lang:
+            lang_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
+        else:
+            lang_dir = LESSON_AUDIO_DIR / str(lesson_id)
+        if not lang_dir.exists():
+            return
+        if lang:
+            # lang直下のレガシーファイル（v1のみ）
+            if version_number == 1 and order_index is not None:
+                for f in lang_dir.glob(f"section_{order_index:02d}_part_*.wav"):
+                    f.unlink(missing_ok=True)
+            elif version_number == 1:
+                for f in lang_dir.glob("section_*_part_*.wav"):
+                    f.unlink(missing_ok=True)
+            # 各generator内のv{N}
+            for sub in lang_dir.iterdir():
+                if sub.is_dir() and not sub.name.startswith("v"):
+                    _clear_gen_dir(sub, order_index, version_number)
+        else:
+            for ld in lang_dir.iterdir():
+                if ld.is_dir():
+                    if version_number == 1 and order_index is not None:
+                        for f in ld.glob(f"section_{order_index:02d}_part_*.wav"):
+                            f.unlink(missing_ok=True)
+                    for sub in ld.iterdir():
+                        if sub.is_dir() and not sub.name.startswith("v"):
+                            _clear_gen_dir(sub, order_index, version_number)
+        return
+
+    # version_number=None, generator=None → 既存動作（全削除）
     if lang:
         lesson_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
     else:
@@ -101,32 +189,37 @@ def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | 
         if lang:
             for sub in lesson_dir.iterdir():
                 if sub.is_dir():
-                    for f in sub.glob(f"section_{order_index:02d}_*.wav"):
-                        f.unlink(missing_ok=True)
+                    _clear_gen_dir(sub, order_index, None)
     else:
         shutil.rmtree(lesson_dir, ignore_errors=True)
 
 
-def get_tts_cache_info(lesson_id: int, lang: str = "ja", generator: str = "gemini") -> list[dict]:
+def get_tts_cache_info(lesson_id: int, lang: str = "ja", generator: str = "gemini",
+                       version_number: int = 1) -> list[dict]:
     """TTSキャッシュの状況を返す（part形式 + dlg形式の両方を検索）
 
     Args:
         lesson_id: レッスンID
         lang: 言語
-        generator: ジェネレータ（新パス構造のサブディレクトリ、geminiの場合は旧パスもスキャン）
+        generator: ジェネレータ
+        version_number: バージョン番号
     """
     sections_map: dict[int, list[dict]] = {}
     seen: set[tuple[int, str, int]] = set()  # (order_index, type, index) 重複排除
 
-    # スキャン対象ディレクトリ: 新パス + レガシーパス（geminiのみ）
+    # スキャン対象ディレクトリ（優先順: 新パス → バージョニング前 → generator導入前）
     scan_dirs: list[Path] = []
-    gen_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator
-    if gen_dir.exists():
-        scan_dirs.append(gen_dir)
-    if generator == "gemini":
-        legacy_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
-        if legacy_dir.exists():
-            scan_dirs.append(legacy_dir)
+    ver_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / f"v{version_number}"
+    if ver_dir.exists():
+        scan_dirs.append(ver_dir)
+    if version_number == 1:
+        gen_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang / generator
+        if gen_dir.exists():
+            scan_dirs.append(gen_dir)
+        if generator == "gemini":
+            legacy_dir = LESSON_AUDIO_DIR / str(lesson_id) / lang
+            if legacy_dir.exists():
+                scan_dirs.append(legacy_dir)
 
     for scan_dir in scan_dirs:
         # part形式: section_00_part_00.wav
@@ -157,7 +250,8 @@ def get_tts_cache_info(lesson_id: int, lang: str = "ja", generator: str = "gemin
                 })
 
     # DB上のセクション数に合わせて返す
-    db_sections = db.get_lesson_sections(lesson_id, lang=lang, generator=generator)
+    db_sections = db.get_lesson_sections(lesson_id, lang=lang, generator=generator,
+                                          version_number=version_number)
     result = []
     for i, sec in enumerate(db_sections):
         result.append({
@@ -188,6 +282,7 @@ class LessonRunner:
         self._pause_event = asyncio.Event()
         self._pause_event.set()  # 初期状態は非一時停止
         self._generator: str = "gemini"
+        self._version_number: int = 1
         self._episode_id: int | None = None
         self._teacher_cfg: dict | None = None
         self._student_cfg: dict | None = None
@@ -233,6 +328,7 @@ class LessonRunner:
         self._lesson_name = lesson["name"]
         self._lang = lang
         self._generator = generator
+        self._version_number = version_number or 1
         self._sections = sections
         self._current_index = 0
         self._state = LessonState.RUNNING
@@ -294,6 +390,7 @@ class LessonRunner:
         self._sections = []
         self._current_index = 0
         self._generator = "gemini"
+        self._version_number = 1
         self._teacher_cfg = None
         self._student_cfg = None
         logger.info("授業停止")
@@ -334,6 +431,7 @@ class LessonRunner:
                 self._sections = []
                 self._current_index = 0
                 self._generator = "gemini"
+                self._version_number = 1
                 self._teacher_cfg = None
                 self._student_cfg = None
 
@@ -420,7 +518,7 @@ class LessonRunner:
                 break
             part_tts = tts_parts[i] if i < len(tts_parts) else part
 
-            cached = _cache_path(self._lesson_id, order_index, i, lang=self._lang, generator=self._generator)
+            cached = _cache_path(self._lesson_id, order_index, i, lang=self._lang, generator=self._generator, version_number=self._version_number)
             if cached.exists():
                 wav_paths.append(cached)
                 cache_hits += 1
@@ -464,7 +562,7 @@ class LessonRunner:
         style = cfg.get("tts_style")
         tts_text = dlg.get("tts_text", dlg.get("content", ""))
 
-        cached = _dlg_cache_path(self._lesson_id, order_index, index, lang=self._lang, generator=self._generator)
+        cached = _dlg_cache_path(self._lesson_id, order_index, index, lang=self._lang, generator=self._generator, version_number=self._version_number)
         if cached.exists():
             return cached
 
@@ -628,6 +726,7 @@ class LessonRunner:
             "lesson_id": self._lesson_id,
             "lang": self._lang,
             "generator": self._generator,
+            "version_number": self._version_number,
             "current_index": self._current_index,
             "total_sections": len(self._sections),
         }

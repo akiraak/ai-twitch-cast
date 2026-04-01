@@ -605,8 +605,8 @@ class TestTtsCacheAPI:
         lid = r.json()["lesson"]["id"]
         sec = test_db.add_lesson_section(lid, 0, "intro", "Hello")
 
-        # キャッシュファイルを作成
-        cache_dir = tmp_path / str(lid)
+        # キャッシュファイルを作成（バージョン別パス）
+        cache_dir = tmp_path / str(lid) / "ja" / "gemini" / "v1"
         cache_dir.mkdir(parents=True)
         cache_file = cache_dir / "section_00_part_00.wav"
         cache_file.write_bytes(b"fake_wav")
