@@ -295,14 +295,36 @@ async function buildLessonItem(lessonId) {
       <button onclick="importClaudeSections(${lessonId}, '${lang}')" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">📋 JSONインポート</button>
       <span class="import-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
     </div>
-    <details style="margin-bottom:8px;">
-      <summary style="cursor:pointer; font-weight:600; font-size:0.75rem; color:#6a1b9a; padding:4px 0;">📖 授業生成ガイド</summary>
-      <div style="padding:6px 10px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; font-size:0.72rem; color:#555; margin-top:4px;">
-        <div>1. 教材画像をClaude Codeに読み込ませる</div>
-        <div>2. キャラクター情報を確認（先生・生徒の性格設定）</div>
-        <div>3. 授業プランを設計（セクション構成・目標）</div>
-        <div>4. <code>prompts/lesson_generate.md</code> に従いJSON生成</div>
-        <div>5. 「JSONインポート」で貼り付け</div>
+    <details style="margin-bottom:8px;" open>
+      <summary style="cursor:pointer; font-weight:600; font-size:0.82rem; color:#6a1b9a; padding:6px 0;">📖 授業生成ガイド</summary>
+      <div style="padding:10px 12px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; font-size:0.78rem; color:#333; margin-top:4px; line-height:1.6;">
+        <div style="font-weight:600; color:#6a1b9a; margin-bottom:6px;">Claude Code CLIで授業スクリプトを生成する手順:</div>
+        <div style="margin-bottom:8px;">
+          <div style="font-weight:600; color:#4a148c;">Step 1: Claude Codeに指示を出す</div>
+          <div style="margin-left:8px; margin-top:2px;">
+            Claude Code CLIを開き、以下のように指示します:<br>
+            <code style="display:block; margin:4px 0; padding:6px 8px; background:#fff; border:1px solid #d0c0e8; border-radius:3px; font-size:0.75rem; white-space:pre-wrap;">授業ID ${lessonId} の教材画像を読み取って、prompts/lesson_generate.md に従って授業スクリプトを生成して</code>
+            Claude Codeが自動的に以下を行います:<br>
+            ・教材画像の読み取り（<code>resources/images/lessons/${lessonId}/</code>）<br>
+            ・キャラクター設定の取得（API経由）<br>
+            ・授業プランの設計<br>
+            ・セクションJSON の生成
+          </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <div style="font-weight:600; color:#4a148c;">Step 2: 生成されたJSONをインポート</div>
+          <div style="margin-left:8px; margin-top:2px;">
+            Claude Codeが出力したJSONをコピーして、上の「📋 JSONインポート」ボタンを押し、貼り付けます。<br>
+            または、Claude Codeに直接APIを叩かせることもできます:<br>
+            <code style="display:block; margin:4px 0; padding:6px 8px; background:#fff; border:1px solid #d0c0e8; border-radius:3px; font-size:0.75rem; white-space:pre-wrap;">生成したJSONを POST /api/lessons/${lessonId}/import-sections?lang=${lang}&generator=claude でインポートして</code>
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:600; color:#4a148c;">Step 3: TTS生成 → 授業再生</div>
+          <div style="margin-left:8px; margin-top:2px;">
+            インポート後、下のセクション一覧から「TTS生成」→「授業開始」で再生できます。
+          </div>
+        </div>
       </div>
     </details>
     <details style="margin-bottom:8px;" class="prompt-details-${lessonId}-${lang}">
