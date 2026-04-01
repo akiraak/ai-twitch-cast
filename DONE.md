@@ -1,11 +1,13 @@
 # DONE
 
-## プロンプト管理API + UI（Step 1-2）
+## Claude Code授業生成ドキュメント化 + プロンプト管理UI
 
 - [x] `scripts/routes/prompts.py` 新規作成（GET一覧/GET取得/PUT更新/POST AI編集の4エンドポイント）
 - [x] `scripts/web.py` にルーター登録
 - [x] teacher.js Step 2 にガイド折りたたみ + プロンプト表示・AI編集UI
 - [x] diff表示用CSS（`static/css/index.css`）
+- [x] `docs/speech-generation-flow.md` から削除済みGeminiフロー除去 + Claude Codeフロー記述
+- [x] `prompts/lesson_generate.md` のGemini共存記述削除
 
 ## アバターパラメータ保存抜け根本修正
 

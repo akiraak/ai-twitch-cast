@@ -168,87 +168,32 @@ comment_reader._respond()
 
 ### 2. 授業モード
 
-プラン設計 → セクション構造生成 → セリフ個別生成 → 監督レビュー → TTS事前生成 → 授業再生 の流れで構成。
-セリフは各キャラのペルソナ付きで個別にLLM生成する（v2方式）。
+Claude Codeで手動生成 → JSONインポート → TTS事前生成 → 授業再生 の流れで構成。
 
 #### 全体フロー
 
 ```
-画像 or URL
+教材画像 / URL
   │
   ▼
-[テキスト抽出]
+[テキスト抽出]（管理画面 Step 1）
   画像 → extract_text_from_image()（Gemini Vision）
   URL  → extract_text_from_url()（aiohttp + BeautifulSoup）
-  │
-  ▼
-[クリーニング]  ← clean_extracted_text()
-  HTMLエンティティ変換（&nbsp; &amp; &lt; 等）
-  装飾記号除去（---、===、★★★ 等の連続記号）
-  空行圧縮（4行以上 → 3行）
   → extracted_text（DB保存）
   │
   ▼
-[メインコンテンツ識別]  ← extract_main_content()（Gemini LLM）
-  テキストを構造化ブロックに分類:
-    content_type: conversation / passage / word_list / table
-    role: main（1つだけ）/ sub
-    read_aloud: true（主要コンテンツ）/ false（参照用）
-  → _normalize_roles() で role/read_aloud を正規化
-    - main が0個 → 先頭を main に昇格
-    - main が複数 → 先頭以外を sub に降格
-    - read_aloud 未設定 → main かつ conversation/passage なら true
-  → main_content（JSON配列、DB保存）
+[スクリプト生成]（Claude Code手動）
+  prompts/lesson_generate.md に従い、Claude Codeで授業スクリプトを生成
+  キャラクター設定・教材テキストを参照し、対話形式のJSONを作成
+  管理画面の「生成プロンプト」セクションでプロンプト閲覧・AI編集も可能
   │
   ▼
-教材テキスト（extracted_text）+ 画像 + メインコンテンツ（main_content）
+[JSONインポート]（管理画面 Step 2）
+  管理画面「JSONインポート」ボタン or POST /api/lessons/{id}/import-sections
+  → sections（DB保存、generator=claude）
   │
   ▼
-[Phase A: プラン生成]  ← キャラ設定は不使用（3人のエキスパートLLM）
-  知識エキスパート → 教材分析・重要概念抽出
-  エンタメエキスパート → 起承転結・物語構造設計
-  監督 → 統合してセクション構成を決定
-  → director_sections: [{section_type, title, display_text, emotion, wait_seconds,
-                         question, answer, dialogue_directions: [{speaker, direction, key_content}]}]
-  │
-  ▼
-[Phase B-1: セクション構造 + dialogue_plan 生成]  ← director_sectionsがあればスキップ
-  system_prompt = _build_structure_prompt()
-  入力: プランテキスト + 教材テキスト + 画像 + main_content（content_type別ルール + role別優先度）
-  出力: 各セクションの display_text / question / answer / dialogue_plan
-  → [{section_type, display_text, dialogue_plan: [{speaker, direction}], ...}]
-  │
-  ▼
-[Phase B-2: セリフ個別生成]  ← dialogue_plan/dialogue_directions の各エントリごとにLLM呼び出し
-  モデル: GEMINI_DIALOGUE_MODEL（→ GEMINI_CHAT_MODEL → gemini-3-flash-preview）
-  セクション間は最大3並列（ThreadPoolExecutor、generate_lesson_script_v2内）
-  セクション内は順次処理（会話履歴を蓄積するため）
-  各セリフ: _generate_single_dialogue()
-    system_prompt = build_lesson_dialogue_prompt(char, role, self_note, persona)
-    user_prompt = セクション情報 + 演出指示 + key_content + ここまでの会話 + 教材テキスト
-    → {content, tts_text, emotion, generation: {system_prompt, user_prompt, raw_output, model, temperature}}
-  │
-  ▼
-[Phase B-3: 監督レビュー]  ← _director_review()
-  8つのレビュー観点で品質検証:
-    基本観点（常時）:
-    1. display_text読み上げ網羅性（例文・会話・キーフレーズが話されているか）
-    2. キャラクター一貫性（先生/生徒が役割に合った発話か）
-    3. セクション間の流れ（文脈連続性・情報フロー）
-    4. 正確性・網羅性（教材の要点カバー・事実誤認なし）
-    追加観点（main_contentがある場合）:
-    5. コンテンツ種別準拠（main_contentのcontent_typeに応じた読み方）
-    6. 主要/補助の優先度（★主要は完全カバー必須、補助は部分カバー可）
-    7. 🔊読み上げ網羅性（🔊マーカー付きコンテンツが原文通りに読み上げ/演じられているか）
-    8. 🔊読み上げ導入チェック（🔊読み上げ開始前に文脈説明・役割分担の導入ターンがあるか）
-  → 各セクションに approved / feedback / revised_directions
-  │
-  ▼
-[Phase B-4: 再生成]  ← レビュー不合格セクションのみ
-  revised_directionsで再生成（1回限り、不合格セクションのみ）
-  │
-  ▼
-[Phase C: TTS事前生成]  ← スクリプト生成直後に実行（scripts/routes/teacher.py内）
+[TTS事前生成]（管理画面 Step 3）
   対話モード:
     各dialogue発話ごとに synthesize(
       tts_text,
@@ -264,7 +209,7 @@ comment_reader._respond()
   キャッシュ: resources/audio/lessons/{lesson_id}/{lang}/ に保存
   │
   ▼
-[Phase D: 授業再生]
+[授業再生]（管理画面 Step 4）
   LessonRunner → 各セクション順次再生
   対話モード:
     事前生成済みwavをキャッシュから読み込み（キャッシュミス時は動的生成）
@@ -278,231 +223,13 @@ comment_reader._respond()
 
 **キャラ個性の反映度: ★★★★★**
 
-- テキスト: 各セリフがキャラのペルソナ付きで個別生成 ✓
+- テキスト: Claude Codeがキャラ設定を参照して生成 ✓
 - 声: キャラ固有のvoice/style ✓
 - 表情: キャラのemotion_blendshapes ✓
-- self_note/persona も含む ✓
-- 言語モードに応じてプロンプト全体が適切な言語で構築される ✓
 
-#### Phase A: プラン生成の詳細（3人のエキスパート）
+#### TTS事前生成の詳細
 
-教材を3つの視点で分析し、最終プランを決定する。各エキスパートは独立したLLM呼び出し。
-
-```
-教材テキスト
-  │
-  ├─▶ 知識エキスパート（Knowledge Expert）
-  │     「教えるべき要点」「推奨学習順序」「注意すべき誤解・難所」「推奨セクション構成」
-  │     ※出力: マークダウン見出し付きの構造化テキスト（JSONではない）
-  │
-  ├─▶ エンタメエキスパート（Entertainment Expert）
-  │     「起承転結の構成」「オチの設計」「演出ポイント（クイズ・例え話・感情の起伏）」
-  │     ※出力: マークダウン見出し付きの構造化テキスト（JSONではない）
-  │
-  └─▶ 監督（Director）
-        知識 + エンタメの提案を統合し、最終セクション構成を決定
-        各セクションの構造を出力
-        → JSON配列: [{section_type, title, display_text, emotion, wait_seconds,
-                       question, answer, dialogue_directions}]
-```
-
-ファイル: `scripts/routes/teacher.py`（テキスト抽出・メインコンテンツ識別の呼び出し元）、`src/lesson_generator.py`（`clean_extracted_text`、`extract_main_content`、`_normalize_roles`、`generate_lesson_plan`）
-
-| エキスパート | モデル（環境変数） | 出力形式 |
-|-------------|-------------------|---------|
-| 知識 | `GEMINI_KNOWLEDGE_MODEL`（既定: gemini-3-flash-preview） | テキスト |
-| エンタメ | `GEMINI_ENTERTAINMENT_MODEL`（既定: gemini-3-flash-preview） | テキスト |
-| 監督 | `GEMINI_DIRECTOR_MODEL`（既定: gemini-3.1-pro-preview） | JSON |
-
-**監督の出力スキーマ**:
-
-```json
-{
-  "section_type": "introduction|explanation|example|question|summary",
-  "title": "10文字以内（日本語）/ 5語以内（英語）",
-  "display_text": "視聴者が配信画面で見る実際の内容",
-  "emotion": "joy|excited|surprise|thinking|sad|embarrassed|neutral",
-  "wait_seconds": 2,
-  "question": "",
-  "answer": "",
-  "dialogue_directions": [
-    {
-      "speaker": "teacher|student",
-      "direction": "2-3文の具体的な演出指示",
-      "key_content": "必ず言及すべき教材の具体的内容"
-    }
-  ]
-}
-```
-
-**wait_secondsのガイドライン**:
-- 自然な会話: 1-2秒
-- 重要ポイント: 3-4秒
-- 驚きの事実・ツイスト: 4-5秒
-- 問いかけ: 8-15秒
-- まとめ・オチ: 2-3秒
-
-**戻り値**: `generate_lesson_plan()` は `plan_sections`（レガシー互換）と `director_sections`（v3形式、dialogue_directions含む）の両方を返す。
-
-#### Phase B-1: セクション構造 + dialogue_plan 生成の詳細
-
-`_build_structure_prompt()` で構築されるシステムプロンプトの主要指示:
-
-- **display_text**: 視聴者が配信画面で見る唯一の視覚情報。タイトルだけはNG、実際のコンテンツ（例文・比較表・クイズ選択肢等）を含める
-- **dialogue_plan**: 各セクションの「誰が何を話すか」のフロー設計。1セクション2〜6ターン
-  - introduction/summaryには生徒を必ず入れる
-  - questionでは生徒が答える役
-- **出力形式**: JSON配列。各エントリに `dialogue_plan: [{speaker, direction}]` を含む
-
-**コンテンツ種別ルール**: `main_content` が提供された場合、content_type別の読み上げルールがプロンプトに追加される:
-- `conversation`: 先生/生徒で役割分担して会話文を読む
-- `passage`: 先生が読み+解説、生徒がリアクション
-- `word_list`: 先生が読み+解説、生徒が繰り返し/質問
-- `table`: 先生が行/列を説明、生徒がコメント
-
-**主要/補助の優先度**: `main_content` の各アイテムは `role` フィールド（`"main"` または `"sub"`）を持つ。`role: "main"` は教材の核となるコンテンツで必ず1つだけ存在する。
-- ★ 主要（`role: "main"`）: dialogue_planで完全カバー必須
-- 補助（`role: "sub"`）: 自然な箇所で取り入れるが優先度は低い
-
-**プロンプトへのコンテンツ埋め込みルール**（`_format_main_content_for_prompt()`）:
-
-`main_content` リストをプロンプト用テキストに整形する際、role と read_aloud の組み合わせでコンテンツの表示量を制御する:
-
-| 条件 | マーカー | コンテンツ上限 |
-|------|---------|--------------|
-| `read_aloud=true` かつ `role="main"` | 🔊 読み上げ対象 | 2000文字 |
-| それ以外 | なし | 200文字 |
-
-- **🔊マーカー**: `read_aloud=true` かつ `role="main"` のコンテンツにのみ付与される。LLMに「このテキストは授業中に読み上げる必要がある」ことを伝え、dialogue_planでの完全カバーを促す
-- **上限の理由**: 主要かつ読み上げ対象のコンテンツはLLMが全文を把握する必要があるため2000文字まで許容。それ以外は概要把握で十分なため200文字に制限し、プロンプト肥大化を防止する
-
-出力例:
-```
-1. [passage] (★ 主要) (🔊 読み上げ対象) "本文"
-   コンテンツ全文（最大2000文字）...
-
-2. [table] (補助) "単語表"
-   先頭200文字のみ...
-```
-
-**director_sectionsがある場合**: Phase B-1はスキップされ、監督の出力（`dialogue_directions`含む）がそのまま使われる（v3パス）。
-
-ユーザープロンプト:
-```
-# 授業タイトル: {lesson_name}
-
-# 教材テキスト:
-{extracted_text}
-```
-
-ファイル: `src/lesson_generator.py`（`_build_structure_prompt`）
-
-#### Phase B-2: セリフ個別生成の詳細
-
-`_generate_single_dialogue()` で各セリフを生成。`build_lesson_dialogue_prompt()`（`src/prompt_builder.py`）でシステムプロンプトを構築し、言語モードに応じて全セクションが適切な言語で生成される。
-
-**モデル**: `GEMINI_DIALOGUE_MODEL` 環境変数（フォールバック: `GEMINI_CHAT_MODEL` → `gemini-3-flash-preview`）。`_get_dialogue_model()` で取得。
-
-```python
-system_prompt = build_lesson_dialogue_prompt(
-    char=character_config,
-    role=role,
-    self_note=character_config.get("self_note"),
-    persona=character_config.get("persona"),
-)
-```
-
-**システムプロンプトの構成**（言語モードにより日本語/英語で構築）:
-
-1. **キャラ紹介** — "あなたは「{name}」です…" / "You are '{name}'…"
-2. **キャラ system_prompt** — `get_localized_field(char, "system_prompt")` で言語版を選択
-3. **ルール** — `get_localized_field(char, "rules")` で言語版を選択
-4. **自分の記憶メモ** — self_note（授業でも使用）
-5. **ペルソナ** — persona（授業でも使用）
-6. **言語ルール** — 言語モード別の発話言語指示（英語のみ/バイリンガル混ぜ）
-7. **感情ガイド** — emotion の使い分け
-8. **出力形式** — JSON `{content, tts_text, emotion}` + tts_text の言語タグルール
-
-**ユーザープロンプト**:
-```
-# 授業: {lesson_name}
-# セクション: {section_type}
-# 画面表示: {display_text（先頭200文字）}
-# 問題: {question}（questionセクションのみ）
-# 回答: {answer}（questionセクションのみ）
-
-## 前後のセクション（隣接セクション情報）
-前: {prev_section_type} — {prev_title} ({prev_display_text先頭100文字})
-次: {next_section_type} — {next_title} ({next_display_text先頭100文字})
-
-## このターンの演出指示
-{dialogue_plan/dialogue_directionsのdirection}
-
-## 重要コンテンツ（key_content、v3のみ）
-{dialogue_directionsのkey_content}
-
-## ここまでの会話（2ターン目以降）
-teacher: {前のセリフ}
-student: {前のセリフ}
-...
-
-## 教材テキスト（参考）
-{extracted_text（先頭2000文字）}
-```
-
-**隣接セクション情報**: `_build_adjacent_sections()` が前後セクションのタイトル・display_text・section_typeを取得し、ユーザープロンプトに含める。これにより各セリフが前後の文脈を意識した自然なつながりになる。
-
-**dialogue_plan vs dialogue_directions**: 2つの形式が並存する。
-- v2（レガシー）: `dialogue_plan: [{speaker, direction}]` — key_contentなし
-- v3（現行）: `dialogue_directions: [{speaker, direction, key_content}]` — key_content付き
-
-**キャラメモリの取得**: `get_lesson_characters()`（`src/lesson_generator.py`）でキャラ設定に加え、`self_note` と `persona` もDBから取得し、プロンプトに含める。
-
-**生成メタデータ**: 各セリフに `generation` フィールドが付与され、`system_prompt`・`user_prompt`・`raw_output`・`model`・`temperature` が記録される。管理画面で全文表示可能。
-
-**会話履歴の蓄積**: セクション内で順次処理し、前のセリフが「ここまでの会話」に追加される。これにより自然な対話の流れが維持される。
-
-ファイル: `src/prompt_builder.py`（`build_lesson_dialogue_prompt`）、`src/lesson_generator.py`（`_generate_single_dialogue`、`_generate_section_dialogues`、`get_lesson_characters`）
-
-#### Phase B-3: 監督レビューの詳細
-
-`_director_review()` で生成されたセリフの品質を検証する。
-
-**レビュー観点**:
-
-基本観点（常時）:
-
-1. **display_text読み上げ網羅性（最重要）**: 画面に表示されている例文・会話・キーフレーズが実際にセリフ内で話されているか
-2. **キャラクター一貫性**: 先生/生徒がそれぞれの役割に合った発話をしているか
-3. **セクション間の流れ**: 文脈の連続性、自然な情報フロー
-4. **正確性・網羅性**: 教材の要点がカバーされているか、事実誤認がないか
-
-追加観点（main_contentがある場合）:
-
-5. **コンテンツ種別準拠**: content_typeに応じた読み方になっているか（conversation→役割分担、passage→読み上げ+解説、word_list→読み上げ+説明、table→重要行を解説）
-6. **主要/補助の優先度**: ★主要（`role: "main"`）の未カバーは不合格、補助（`role: "sub"`）は部分カバーで可
-7. **🔊読み上げ網羅性（最重要）**: 🔊マーカー付きコンテンツがセリフ内で原文通りに読み上げ/演じられているか。省略・大幅な意訳・軽い言及のみは不合格
-8. **🔊読み上げ導入チェック（最重要）**: 🔊コンテンツの読み上げが導入なしに始まっていないか。最初の🔊セリフの直前に文脈説明・役割分担のターンが必要
-
-**出力**: 各セクションに `approved`（合格/不合格）、`feedback`（具体的な指摘）、`revised_directions`（不合格時の修正指示）を付与。
-
-**モデル**: 監督と同じ `GEMINI_DIRECTOR_MODEL`（gemini-3.1-pro-preview）を使用。
-
-ファイル: `src/lesson_generator.py`（`_director_review`）
-
-#### Phase B-4: 再生成
-
-レビューで不合格となったセクションのみ、`revised_directions` を使って再生成する。
-
-- 不合格セクションの `dialogue_directions` を `revised_directions` で差し替え
-- `_generate_section_dialogues()` を再度呼び出し（ThreadPoolExecutor(max_workers=3)で並列）
-- **1回限り**: カスケードする再生成は行わない
-
-ファイル: `src/lesson_generator.py`（`generate_lesson_script_v2` 内）
-
-#### Phase C: TTS事前生成の詳細
-
-スクリプト生成完了直後に `scripts/routes/teacher.py` 内で実行される。
+管理画面 Step 3 または TTS生成ボタンで実行される。
 
 **対話モード**:
 - 各dialogue発話ごとに `synthesize(tts_text, cached_path, voice=voice, style=style)`
@@ -515,60 +242,7 @@ student: {前のセリフ}
 
 **キャッシュディレクトリ**: `resources/audio/lessons/{lesson_id}/{lang}/`（言語別キャッシュ）
 
-ファイル: `scripts/routes/teacher.py`（スクリプト生成エンドポイント内）、`src/lesson_runner.py`（`_cache_path`、`_dlg_cache_path`）
-
-#### 生成フローの具体例（Lesson #20 日本語 introduction）
-
-LLM呼び出し5回（構造1回 + セリフ4回）で1セクションが完成する。
-
-```
-Phase B-1: セクション構造生成（1回のLLM呼び出し）
-  → display_text: "今日のテーマ: 英語の挨拶\n\n『How are you?』の本当の意味とは？..."
-  → dialogue_plan:
-      [0] teacher: "視聴者に挨拶し、テーマを紹介"
-      [1] teacher: "視聴者へ問いかけ: How are you?と聞かれたら..."
-      [2] student: "先生の問いかけに反応し、自分の経験を述べる"
-      [3] teacher: "授業で秘密を紐解くことをプレビュー"
-
-Phase B-2: セリフ個別生成（4回のLLM呼び出し、順次処理）
-  │
-  ├─ [0] ちょビ（teacher）ペルソナ + 演出指示 + 教材テキスト
-  │   → content: "みんな、いらっしゃい！ちょビだよ〜。..."
-  │   → tts_text: "...[lang:en]How are you?[/lang]って、本当はどんな意味..."
-  │   → emotion: neutral
-  │
-  ├─ [1] ちょビ（teacher）ペルソナ + 演出指示 + 会話[0]
-  │   → content: "みんなは『How are you?』って聞かれたら、いつもどう答えてる？..."
-  │   → emotion: thinking
-  │
-  ├─ [2] なるこ（student）ペルソナ + 演出指示 + 会話[0,1]
-  │   → content: "あー！ちょビ先生！私、やっちゃってたかも〜！..."
-  │   → emotion: surprise
-  │
-  └─ [3] ちょビ（teacher）ペルソナ + 演出指示 + 会話[0,1,2]
-      → content: "あ〜！やっぱやっちゃってたか〜！..."
-      → emotion: surprise
-
-Phase B-3: 監督レビュー
-  → display_textの内容が各セリフで触れられているか確認
-  → 全セクション approved → Phase B-4はスキップ
-
-Phase C: TTS事前生成（4回）
-  [0] voice=Despina style=にこにこ柔らか → section_00_dlg_00.wav
-  [1] voice=Despina style=にこにこ柔らか → section_00_dlg_01.wav
-  [2] voice=Kore   style=少年テンション高め → section_00_dlg_02.wav
-  [3] voice=Despina style=にこにこ柔らか → section_00_dlg_03.wav
-```
-
-#### 生成方式の選択ロジック
-
-`scripts/routes/teacher.py` のスクリプト生成エンドポイントで、キャラ設定の有無により自動選択:
-
-| 条件 | 方式 | 説明 |
-|------|------|------|
-| teacher + student キャラあり | `generate_lesson_script_v2()` | セリフ個別LLM生成（推奨） |
-| プランあり、キャラなし | `generate_lesson_script_from_plan()` | プランベース一括生成 |
-| どちらもなし | `generate_lesson_script()` | 教材テキストから直接一括生成 |
+ファイル: `scripts/routes/teacher.py`、`src/lesson_runner.py`（`_cache_path`、`_dlg_cache_path`）
 
 ---
 
@@ -699,44 +373,11 @@ speech_pipeline.speak(text, voice, style, subtitle, chat_result, tts_text,
 | 授業スクリプト | キャラ個別LLM生成（v2） | ✓ | ✓ | ✓ | ✓ | ★★★★★ |
 | 直接発話 | キャラプロンプトでAI生成 | ✓ | ✓ | - | - | ★★★★☆ |
 
-## 授業モードの実装履歴
-
-### v3/v4（現行・推奨）: 監督主導 + セリフ個別LLM生成 + 監督レビュー
-
-`generate_lesson_script_v2()` — Phase Aで監督が `director_sections`（`dialogue_directions` + `key_content` 含む）を出力し、Phase B-2で各セリフをキャラのペルソナ付きで個別にLLM生成、Phase B-3で監督がレビュー・Phase B-4で不合格セクションを再生成する方式。
-
-- セクション間は最大3並列（ThreadPoolExecutor）で高速化
-- セクション内は会話履歴を蓄積するため順次処理
-- 各セリフに `generation` メタデータ（プロンプト全文・raw_output）が付与され、管理画面で検証可能
-- teacher/student キャラが両方DBに存在する場合に自動選択
-- **言語モード対応**: `build_lesson_dialogue_prompt()` でプロンプト全体が言語モードに応じた言語で構築される（日本語/英語/バイリンガル）
-- **self_note/persona対応**: `get_lesson_characters()` でキャラメモリを取得し、セリフ生成プロンプトに含める
-- **コンテンツ種別対応**: `extract_main_content()` でcontent_typeを識別し、構造生成・レビューに反映
-- **監督レビュー**: 8観点（基本4 + main_content時4）で検証。🔊読み上げ網羅性・🔊導入チェックを含む。不合格セクションを再生成
-- **v4データ形式**: dialogues + review メタデータを含む `{dialogues: [...], review: {...}}` 形式
-
-### 旧方式（フォールバック）
-
-キャラ未設定時に使用される:
-
-- `generate_lesson_script_from_plan()` — プランベースの一括生成
-- `generate_lesson_script()` — 教材テキストからの直接一括生成
-
-いずれも1回のLLM呼び出しで全セリフを生成するため、キャラの個性反映度は低い（★★★☆☆）。
-
 ## 環境変数一覧（モデル選択）
 
 各LLM呼び出しで使用するモデルは環境変数で切替可能。すべて多段フォールバックチェーンを持つ。
 
 | 環境変数 | 用途 | フォールバックチェーン | 使用箇所 |
 |---------|------|----------------------|---------|
-| `GEMINI_CHAT_MODEL` | チャット・イベント応答・ユーザーメモ生成 | → `gemini-3-flash-preview` | `ai_responder.py`（全生成関数）、`avatar.py`（デモ会話） |
+| `GEMINI_CHAT_MODEL` | チャット・イベント応答・ユーザーメモ生成・プロンプトAI編集 | → `gemini-3-flash-preview` | `ai_responder.py`（全生成関数）、`avatar.py`（デモ会話）、`prompts.py`（AI編集） |
 | `GEMINI_TTS_MODEL` | TTS音声合成 | → `gemini-2.5-flash-preview-tts` | `tts.py`（`generate_audio`） |
-| `GEMINI_DIALOGUE_MODEL` | 授業セリフ個別生成（Phase B-2） | → `GEMINI_CHAT_MODEL` → `gemini-3-flash-preview` | `lesson_generator.py`（`_get_dialogue_model`） |
-| `GEMINI_KNOWLEDGE_MODEL` | 授業 知識エキスパート（Phase A） | → `GEMINI_CHAT_MODEL` → `gemini-3-flash-preview` | `lesson_generator.py`（`_get_knowledge_model`） |
-| `GEMINI_ENTERTAINMENT_MODEL` | 授業 エンタメエキスパート（Phase A） | → `GEMINI_CHAT_MODEL` → `gemini-3-flash-preview` | `lesson_generator.py`（`_get_entertainment_model`） |
-| `GEMINI_DIRECTOR_MODEL` | 授業 監督（Phase A/B-3） | → `GEMINI_CHAT_MODEL` → `gemini-3.1-pro-preview` | `lesson_generator.py`（`_get_director_model`）、`content_analyzer.py`（`_get_director_model`） |
-
-**フォールバックの読み方**: `→` は「未設定なら次を参照」を意味する。例えば `GEMINI_DIALOGUE_MODEL` が未設定の場合、`GEMINI_CHAT_MODEL` を参照し、それも未設定なら `gemini-3-flash-preview` を使用する。
-
-**設計意図**: `GEMINI_CHAT_MODEL` を設定するだけで大半のモデルが切り替わる。個別のモデルを変えたい場合（例: 監督だけProモデルにする）のみ専用環境変数を設定する。
