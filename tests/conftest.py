@@ -60,6 +60,8 @@ def mock_gemini(monkeypatch):
     monkeypatch.setattr(lg, "get_client", getter)
     from src.lesson_generator import utils as _lg_utils
     monkeypatch.setattr(_lg_utils, "get_client", getter)
+    from src.lesson_generator import improver as _lg_improver
+    monkeypatch.setattr(_lg_improver, "get_client", getter)
     return client
 
 

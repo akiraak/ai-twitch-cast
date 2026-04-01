@@ -15,6 +15,11 @@ from src.lesson_generator import (
     extract_text_from_image,
     extract_text_from_url,
     get_lesson_characters,
+    verify_lesson,
+    improve_sections,
+    load_learnings,
+    _format_character_for_prompt,
+    _format_main_content_for_prompt,
 )
 from src.lesson_runner import clear_tts_cache, get_tts_cache_info
 from src.prompt_builder import get_stream_language, set_stream_language
@@ -810,3 +815,260 @@ async def update_annotation(lesson_id: int, section_id: int, body: AnnotationUpd
         return {"ok": False, "error": f"不正な rating: {body.rating}（good/needs_improvement/redo のいずれか）"}
     db.update_section_annotation(section_id, rating=body.rating, comment=body.comment)
     return {"ok": True}
+
+
+# --- 検証 & 改善 ---
+
+
+class VerifyRequest(BaseModel):
+    lang: str = "ja"
+    generator: str = "claude"
+    version_number: int | None = None  # 省略時は最新バージョン
+
+
+class ImproveRequest(BaseModel):
+    source_version: int
+    lang: str = "ja"
+    generator: str = "claude"
+    target_sections: list[int]  # order_index のリスト
+    verify_result: dict | None = None
+    user_instructions: str = ""
+
+
+@router.post("/api/lessons/{lesson_id}/verify")
+async def verify_content(lesson_id: int, body: VerifyRequest):
+    """元教材との整合性チェック（coverage/contradictions）"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    # バージョン決定
+    version_number = body.version_number
+    if version_number is None:
+        versions = db.get_lesson_versions(lesson_id, lang=body.lang, generator=body.generator)
+        if not versions:
+            return {"ok": False, "error": "バージョンが見つかりません"}
+        version_number = versions[-1]["version_number"]
+
+    ver = db.get_lesson_version(lesson_id, body.lang, body.generator, version_number)
+    if not ver:
+        return {"ok": False, "error": f"バージョン {version_number} が見つかりません"}
+
+    sections = db.get_lesson_sections(
+        lesson_id, lang=body.lang, generator=body.generator,
+        version_number=version_number,
+    )
+    if not sections:
+        return {"ok": False, "error": "セクションがありません"}
+
+    # 元教材
+    extracted_text = lesson.get("extracted_text", "")
+    main_content_raw = lesson.get("main_content", "")
+    main_content = []
+    if main_content_raw:
+        try:
+            main_content = _json.loads(main_content_raw) if isinstance(main_content_raw, str) else main_content_raw
+        except (_json.JSONDecodeError, TypeError):
+            pass
+
+    if not extracted_text and not main_content:
+        return {"ok": False, "error": "元教材テキストがありません（extracted_text/main_content が空）"}
+
+    en = body.lang == "en"
+
+    try:
+        result = await verify_lesson(
+            extracted_text=extracted_text,
+            main_content=main_content,
+            sections=sections,
+            en=en,
+        )
+    except Exception as e:
+        logger.exception("検証エラー: lesson=%d", lesson_id)
+        return {"ok": False, "error": f"検証中にエラーが発生しました: {e}"}
+
+    # 結果をDBに保存
+    verify_json = _json.dumps(result["result"], ensure_ascii=False)
+    db.save_version_verify(ver["id"], verify_json)
+
+    logger.info("検証完了: lesson=%d, v=%d, coverage=%d, contradictions=%d",
+                lesson_id, version_number,
+                len(result["result"].get("coverage", [])),
+                len(result["result"].get("contradictions", [])))
+
+    return {
+        "ok": True,
+        "version_number": version_number,
+        "verify_result": result["result"],
+        "prompt": result["prompt"],
+        "raw_output": result["raw_output"],
+    }
+
+
+@router.post("/api/lessons/{lesson_id}/improve")
+async def improve_content(lesson_id: int, body: ImproveRequest):
+    """指定バージョンから部分改善 → 新バージョン作成"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    if not body.target_sections:
+        return {"ok": False, "error": "target_sections が空です"}
+
+    # ソースバージョン確認
+    src_ver = db.get_lesson_version(lesson_id, body.lang, body.generator, body.source_version)
+    if not src_ver:
+        return {"ok": False, "error": f"ソースバージョン {body.source_version} が見つかりません"}
+
+    src_sections = db.get_lesson_sections(
+        lesson_id, lang=body.lang, generator=body.generator,
+        version_number=body.source_version,
+    )
+    if not src_sections:
+        return {"ok": False, "error": "ソースバージョンにセクションがありません"}
+
+    # target_sections の検証
+    existing_indices = {s["order_index"] for s in src_sections}
+    invalid = [i for i in body.target_sections if i not in existing_indices]
+    if invalid:
+        return {"ok": False, "error": f"存在しない order_index: {invalid}"}
+
+    # 元教材
+    extracted_text = lesson.get("extracted_text", "")
+    main_content_raw = lesson.get("main_content", "")
+    main_content = []
+    if main_content_raw:
+        try:
+            main_content = _json.loads(main_content_raw) if isinstance(main_content_raw, str) else main_content_raw
+        except (_json.JSONDecodeError, TypeError):
+            pass
+
+    # キャラクター情報
+    en = body.lang == "en"
+    chars = get_lesson_characters()
+    char_lines = []
+    if chars.get("teacher"):
+        char_lines.append(_format_character_for_prompt(chars["teacher"], "teacher", en))
+    if chars.get("student"):
+        char_lines.append(_format_character_for_prompt(chars["student"], "student", en))
+    character_info = "\n\n".join(char_lines)
+
+    # カテゴリ
+    category = lesson.get("category", "")
+
+    # 検証結果（リクエストから or DB保存分）
+    verify_result = body.verify_result
+    if verify_result is None and src_ver.get("verify_json"):
+        try:
+            verify_result = _json.loads(src_ver["verify_json"])
+        except (_json.JSONDecodeError, TypeError):
+            pass
+
+    try:
+        result = await improve_sections(
+            extracted_text=extracted_text,
+            main_content=main_content,
+            all_sections=src_sections,
+            target_indices=body.target_sections,
+            verify_result=verify_result,
+            user_instructions=body.user_instructions,
+            category=category,
+            character_info=character_info,
+            en=en,
+        )
+    except Exception as e:
+        logger.exception("改善エラー: lesson=%d", lesson_id)
+        return {"ok": False, "error": f"改善中にエラーが発生しました: {e}"}
+
+    improved = result["sections"]
+    if not improved:
+        return {"ok": False, "error": "AIが改善セクションを生成できませんでした",
+                "prompt": result["prompt"], "raw_output": result["raw_output"]}
+
+    # 新バージョン作成
+    improved_indices = [s.get("order_index", -1) for s in improved]
+    new_ver = db.create_lesson_version(
+        lesson_id, lang=body.lang, generator=body.generator,
+        note=f"v{body.source_version}から改善",
+        improve_source_version=body.source_version,
+        improve_summary=body.user_instructions or "部分改善",
+        improved_sections=_json.dumps(improved_indices),
+    )
+    new_version_number = new_ver["version_number"]
+
+    # セクション保存: 改善対象は新セクション、それ以外はソースからコピー
+    improved_by_index = {s.get("order_index", -1): s for s in improved}
+    saved = []
+    for src_sec in src_sections:
+        idx = src_sec["order_index"]
+        if idx in improved_by_index:
+            s = improved_by_index[idx]
+            dialogues = s.get("dialogues", "")
+            if isinstance(dialogues, (list, dict)):
+                dialogues = _json.dumps(dialogues, ensure_ascii=False)
+            dialogue_directions = s.get("dialogue_directions", "")
+            if isinstance(dialogue_directions, (list, dict)):
+                dialogue_directions = _json.dumps(dialogue_directions, ensure_ascii=False)
+            sec = db.add_lesson_section(
+                lesson_id, order_index=idx,
+                section_type=s.get("section_type", src_sec["section_type"]),
+                title=s.get("title", src_sec.get("title", "")),
+                content=s.get("content", ""),
+                tts_text=s.get("tts_text", ""),
+                display_text=s.get("display_text", ""),
+                emotion=s.get("emotion", "neutral"),
+                question=s.get("question", ""),
+                answer=s.get("answer", ""),
+                wait_seconds=s.get("wait_seconds", 3),
+                lang=body.lang,
+                dialogues=dialogues,
+                dialogue_directions=dialogue_directions,
+                generator=body.generator,
+                version_number=new_version_number,
+            )
+        else:
+            # ソースからコピー
+            sec = db.add_lesson_section(
+                lesson_id, order_index=idx,
+                section_type=src_sec["section_type"],
+                title=src_sec.get("title", ""),
+                content=src_sec["content"],
+                tts_text=src_sec.get("tts_text", ""),
+                display_text=src_sec.get("display_text", ""),
+                emotion=src_sec.get("emotion", "neutral"),
+                question=src_sec.get("question", ""),
+                answer=src_sec.get("answer", ""),
+                wait_seconds=src_sec.get("wait_seconds", 8),
+                lang=body.lang,
+                dialogues=src_sec.get("dialogues", ""),
+                dialogue_directions=src_sec.get("dialogue_directions", ""),
+                generator=body.generator,
+                version_number=new_version_number,
+            )
+        saved.append(sec)
+
+    # プランもコピー
+    src_plan = db.get_lesson_plan(lesson_id, body.lang, generator=body.generator,
+                                  version_number=body.source_version)
+    if src_plan:
+        db.upsert_lesson_plan(
+            lesson_id, body.lang,
+            knowledge=src_plan.get("knowledge", ""),
+            entertainment=src_plan.get("entertainment", ""),
+            plan_json=src_plan.get("plan_json", ""),
+            director_json=src_plan.get("director_json", ""),
+            plan_generations=src_plan.get("plan_generations", ""),
+            generator=body.generator, version_number=new_version_number,
+        )
+
+    logger.info("改善完了: lesson=%d, v%d→v%d, improved=%s",
+                lesson_id, body.source_version, new_version_number, improved_indices)
+
+    return {
+        "ok": True,
+        "version_number": new_version_number,
+        "improved_sections": improved_indices,
+        "sections": saved,
+        "prompt": result["prompt"],
+        "raw_output": result["raw_output"],
+    }

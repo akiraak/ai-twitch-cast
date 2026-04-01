@@ -25,3 +25,10 @@ from .extractor import (
     extract_text_from_image,
     extract_text_from_url,
 )
+
+# --- improver ---
+from .improver import (
+    verify_lesson,
+    improve_sections,
+    load_learnings,
+)

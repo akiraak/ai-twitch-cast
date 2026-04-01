@@ -1879,6 +1879,14 @@
 
 - [x] SendWsResponseにSemaphoreSlimによる排他制御を追加（起動時の同時リクエストによるSendAsync競合を解消）
 
+## バージョニング Step 3: 検証&部分改善API
+
+- [x] `src/lesson_generator/improver.py`: 検証・改善・学習結果注入のコアロジック（verify_lesson, improve_sections, load_learnings）
+- [x] `POST /api/lessons/{id}/verify`: 元教材との整合性チェック（coverage/contradictions JSON）、最新バージョン自動選択、プロンプト全文+raw_output返却
+- [x] `POST /api/lessons/{id}/improve`: source_version→target_sectionsのみ再生成→新バージョン作成、未変更セクション・プランはソースからコピー
+- [x] `prompts/lesson_verify.md`, `prompts/lesson_improve.md`: 検証用・改善用プロンプト
+- [x] テスト+20件追加（TestVerifyAPI 8件、TestImproveAPI 9件、TestLoadLearnings 3件）、全670通過
+
 ## Phase 0: 環境構築・基盤
 
 - [x] GitHubリポジトリ作成

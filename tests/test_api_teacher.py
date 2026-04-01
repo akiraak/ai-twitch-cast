@@ -1072,3 +1072,426 @@ class TestAnnotationAPI:
             json={"rating": "invalid_value"},
         )
         assert resp.json()["ok"] is False
+
+
+class TestVerifyAPI:
+    """POST /api/lessons/{id}/verify のテスト"""
+
+    def _setup_lesson_with_sections(self, api_client, test_db):
+        """テスト用のlesson + extracted_text + セクション付きバージョンを作成"""
+        r = api_client.post("/api/lessons", json={"name": "VerifyTest"})
+        lid = r.json()["lesson"]["id"]
+
+        # extracted_text を設定
+        test_db.update_lesson(lid, extracted_text="変数とは値を格納する箱です。for文でループ処理を行います。")
+
+        # セクション付きバージョンを作成
+        sections = [
+            {
+                "section_type": "introduction",
+                "title": "導入",
+                "content": "今日は変数を学びます",
+                "tts_text": "今日は変数を学びます",
+                "display_text": "変数の学習",
+                "emotion": "joy",
+                "dialogues": [{"speaker": "teacher", "content": "変数を勉強しよう", "tts_text": "変数を勉強しよう", "emotion": "joy"}],
+            },
+            {
+                "section_type": "explanation",
+                "title": "変数",
+                "content": "変数は値を入れる箱です",
+                "tts_text": "変数は値を入れる箱です",
+                "display_text": "変数 = 箱",
+                "emotion": "neutral",
+                "dialogues": [],
+            },
+        ]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": sections},
+        )
+        version_number = resp.json()["version_number"]
+        return lid, version_number
+
+    def test_verify_success(self, api_client, test_db, mock_gemini):
+        """正常な整合性チェック"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        # Gemini応答を設定
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "coverage": [
+                {"source_item": "変数の説明", "status": "covered", "section_index": 1, "detail": None},
+                {"source_item": "for文の説明", "status": "missing", "detail": "セクションで触れていない"},
+            ],
+            "contradictions": [],
+        })
+
+        resp = api_client.post(f"/api/lessons/{lid}/verify", json={
+            "lang": "ja", "generator": "claude", "version_number": vn,
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["version_number"] == vn
+        assert len(data["verify_result"]["coverage"]) == 2
+        assert data["verify_result"]["coverage"][0]["status"] == "covered"
+        assert data["verify_result"]["coverage"][1]["status"] == "missing"
+        assert data["verify_result"]["contradictions"] == []
+        # プロンプト全文が返る
+        assert "prompt" in data
+        assert "system" in data["prompt"]
+        assert "user" in data["prompt"]
+        assert "raw_output" in data
+
+    def test_verify_saves_to_db(self, api_client, test_db, mock_gemini):
+        """検証結果がDBに保存される"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "coverage": [{"source_item": "テスト", "status": "covered", "section_index": 0, "detail": None}],
+            "contradictions": [],
+        })
+
+        api_client.post(f"/api/lessons/{lid}/verify", json={
+            "lang": "ja", "generator": "claude", "version_number": vn,
+        })
+
+        # DB確認
+        ver = test_db.get_lesson_version(lid, "ja", "claude", vn)
+        assert ver["verify_json"] != ""
+        saved = json.loads(ver["verify_json"])
+        assert "coverage" in saved
+
+    def test_verify_auto_latest_version(self, api_client, test_db, mock_gemini):
+        """version_number省略時は最新バージョンを使う"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps({
+            "coverage": [], "contradictions": [],
+        })
+
+        resp = api_client.post(f"/api/lessons/{lid}/verify", json={
+            "lang": "ja", "generator": "claude",
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["version_number"] == vn
+
+    def test_verify_not_found(self, api_client):
+        """存在しないlesson"""
+        resp = api_client.post("/api/lessons/9999/verify", json={
+            "lang": "ja", "generator": "claude",
+        })
+        assert resp.json()["ok"] is False
+
+    def test_verify_no_extracted_text(self, api_client, test_db, mock_gemini):
+        """元教材テキストがない場合はエラー"""
+        r = api_client.post("/api/lessons", json={"name": "NoText"})
+        lid = r.json()["lesson"]["id"]
+        # セクションは作るがextracted_textなし
+        sections = [{
+            "section_type": "introduction", "content": "x",
+            "tts_text": "x", "display_text": "x",
+        }]
+        api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": sections},
+        )
+
+        resp = api_client.post(f"/api/lessons/{lid}/verify", json={
+            "lang": "ja", "generator": "claude",
+        })
+        assert resp.json()["ok"] is False
+        assert "元教材" in resp.json()["error"]
+
+    def test_verify_no_sections(self, api_client, test_db, mock_gemini):
+        """セクションがない場合はエラー"""
+        r = api_client.post("/api/lessons", json={"name": "NoSections"})
+        lid = r.json()["lesson"]["id"]
+        test_db.update_lesson(lid, extracted_text="何かテキスト")
+        # バージョンは作るがセクションなし
+        test_db.create_lesson_version(lid, lang="ja", generator="claude")
+
+        resp = api_client.post(f"/api/lessons/{lid}/verify", json={
+            "lang": "ja", "generator": "claude",
+        })
+        assert resp.json()["ok"] is False
+
+    def test_verify_version_not_found(self, api_client, test_db):
+        """存在しないバージョン番号"""
+        r = api_client.post("/api/lessons", json={"name": "VerNoVer"})
+        lid = r.json()["lesson"]["id"]
+        test_db.update_lesson(lid, extracted_text="テスト")
+
+        resp = api_client.post(f"/api/lessons/{lid}/verify", json={
+            "lang": "ja", "generator": "claude", "version_number": 99,
+        })
+        assert resp.json()["ok"] is False
+
+
+class TestImproveAPI:
+    """POST /api/lessons/{id}/improve のテスト"""
+
+    def _setup_lesson_with_sections(self, api_client, test_db):
+        """テスト用のlesson + セクション + バージョンを作成"""
+        r = api_client.post("/api/lessons", json={"name": "ImproveTest"})
+        lid = r.json()["lesson"]["id"]
+
+        test_db.update_lesson(lid, extracted_text="変数は値を格納する箱。for文でループ。配列は0始まり。")
+
+        sections = [
+            {
+                "section_type": "introduction",
+                "title": "導入",
+                "content": "プログラミングを学ぼう",
+                "tts_text": "プログラミングを学ぼう",
+                "display_text": "プログラミング入門",
+                "emotion": "excited",
+                "dialogues": [{"speaker": "teacher", "content": "始めよう", "tts_text": "始めよう", "emotion": "excited"}],
+            },
+            {
+                "section_type": "explanation",
+                "title": "変数",
+                "content": "変数は箱です",
+                "tts_text": "変数は箱です",
+                "display_text": "変数 = 箱",
+                "emotion": "neutral",
+                "dialogues": [],
+            },
+            {
+                "section_type": "summary",
+                "title": "まとめ",
+                "content": "今日の復習",
+                "tts_text": "今日の復習",
+                "display_text": "まとめ",
+                "emotion": "joy",
+                "dialogues": [],
+            },
+        ]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": sections},
+        )
+        vn = resp.json()["version_number"]
+        return lid, vn
+
+    def test_improve_success(self, api_client, test_db, mock_gemini):
+        """正常な部分改善 → 新バージョン作成"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        # AIの改善結果
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {
+                "order_index": 1,
+                "section_type": "explanation",
+                "title": "変数とは",
+                "content": "変数はデータを入れる箱のようなものです。ゲームのスコアを覚えるときに使います。",
+                "tts_text": "変数はデータを入れる箱のようなものです",
+                "display_text": "変数 = データの箱",
+                "emotion": "thinking",
+                "question": "",
+                "answer": "",
+                "wait_seconds": 5,
+                "dialogues": [
+                    {"speaker": "teacher", "content": "変数って知ってる？", "tts_text": "変数って知ってる？", "emotion": "thinking"},
+                    {"speaker": "student", "content": "箱みたいなもの？", "tts_text": "箱みたいなもの？", "emotion": "surprise"},
+                ],
+                "dialogue_directions": [],
+            }
+        ])
+
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn,
+            "lang": "ja",
+            "generator": "claude",
+            "target_sections": [1],
+            "user_instructions": "変数の説明を具体例付きで短くして",
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["version_number"] == vn + 1
+        assert data["improved_sections"] == [1]
+        assert len(data["sections"]) == 3  # 全3セクション（コピー+改善）
+        # プロンプト全文
+        assert "prompt" in data
+        assert "raw_output" in data
+
+    def test_improve_copies_unchanged_sections(self, api_client, test_db, mock_gemini):
+        """改善対象外のセクションはソースからコピーされる"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {
+                "order_index": 1,
+                "section_type": "explanation",
+                "title": "改善版",
+                "content": "改善された内容",
+                "tts_text": "改善された内容",
+                "display_text": "改善",
+                "emotion": "neutral",
+                "dialogues": [],
+                "dialogue_directions": [],
+            }
+        ])
+
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [1],
+        })
+        new_vn = resp.json()["version_number"]
+
+        # 新バージョンのセクションを確認
+        new_sections = test_db.get_lesson_sections(lid, lang="ja", generator="claude",
+                                                    version_number=new_vn)
+        assert len(new_sections) == 3
+        # sec0（導入）はコピー
+        assert new_sections[0]["content"] == "プログラミングを学ぼう"
+        # sec1（変数）は改善済み
+        assert new_sections[1]["content"] == "改善された内容"
+        # sec2（まとめ）はコピー
+        assert new_sections[2]["content"] == "今日の復習"
+
+    def test_improve_version_metadata(self, api_client, test_db, mock_gemini):
+        """改善で作成されたバージョンにメタ情報が入る"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {
+                "order_index": 1, "section_type": "explanation", "title": "x",
+                "content": "x", "tts_text": "x", "display_text": "x",
+                "emotion": "neutral", "dialogues": [], "dialogue_directions": [],
+            }
+        ])
+
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [1],
+            "user_instructions": "短くして",
+        })
+        new_vn = resp.json()["version_number"]
+
+        ver = test_db.get_lesson_version(lid, "ja", "claude", new_vn)
+        assert ver["improve_source_version"] == vn
+        assert ver["improve_summary"] == "短くして"
+        assert json.loads(ver["improved_sections"]) == [1]
+
+    def test_improve_not_found(self, api_client):
+        """存在しないlesson"""
+        resp = api_client.post("/api/lessons/9999/improve", json={
+            "source_version": 1, "target_sections": [0],
+        })
+        assert resp.json()["ok"] is False
+
+    def test_improve_empty_targets(self, api_client, test_db):
+        """target_sectionsが空"""
+        r = api_client.post("/api/lessons", json={"name": "EmptyTarget"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": 1, "target_sections": [],
+        })
+        assert resp.json()["ok"] is False
+
+    def test_improve_source_version_not_found(self, api_client, test_db):
+        """存在しないソースバージョン"""
+        r = api_client.post("/api/lessons", json={"name": "NoSrcVer"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": 99, "target_sections": [0],
+        })
+        assert resp.json()["ok"] is False
+
+    def test_improve_invalid_target_index(self, api_client, test_db, mock_gemini):
+        """存在しないorder_indexを指定"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [99],
+        })
+        data = resp.json()
+        assert data["ok"] is False
+        assert "99" in str(data["error"])
+
+    def test_improve_with_verify_result(self, api_client, test_db, mock_gemini):
+        """verify_resultを渡して改善"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {
+                "order_index": 1, "section_type": "explanation", "title": "変数改善",
+                "content": "改善済み", "tts_text": "改善済み", "display_text": "改善",
+                "emotion": "neutral", "dialogues": [], "dialogue_directions": [],
+            }
+        ])
+
+        verify = {
+            "coverage": [
+                {"source_item": "for文", "status": "missing", "detail": "未カバー"},
+            ],
+            "contradictions": [],
+        }
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [1],
+            "verify_result": verify,
+        })
+        assert resp.json()["ok"] is True
+
+    def test_improve_copies_plan(self, api_client, test_db, mock_gemini):
+        """改善時にプランもコピーされる"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        # ソースバージョンにプランを追加
+        test_db.upsert_lesson_plan(lid, "ja", knowledge="テスト知識",
+                                    generator="claude", version_number=vn)
+
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {
+                "order_index": 0, "section_type": "introduction", "title": "改善導入",
+                "content": "改善", "tts_text": "改善", "display_text": "改善",
+                "emotion": "neutral", "dialogues": [], "dialogue_directions": [],
+            }
+        ])
+
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [0],
+        })
+        new_vn = resp.json()["version_number"]
+
+        plan = test_db.get_lesson_plan(lid, "ja", generator="claude", version_number=new_vn)
+        assert plan is not None
+        assert plan["knowledge"] == "テスト知識"
+
+
+class TestLoadLearnings:
+    """学習結果注入のテスト"""
+
+    def test_load_empty(self, tmp_path, monkeypatch):
+        """学習ファイルがない場合は空文字列"""
+        from src.lesson_generator import improver
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", tmp_path / "learnings")
+        result = improver.load_learnings("test_category")
+        assert result == ""
+
+    def test_load_common_only(self, tmp_path, monkeypatch):
+        """共通学習のみ"""
+        from src.lesson_generator import improver
+        learnings_dir = tmp_path / "learnings"
+        learnings_dir.mkdir()
+        (learnings_dir / "_common.md").write_text("共通パターン", encoding="utf-8")
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        result = improver.load_learnings("nonexistent")
+        assert "共通パターン" in result
+
+    def test_load_category_and_common(self, tmp_path, monkeypatch):
+        """カテゴリ別 + 共通"""
+        from src.lesson_generator import improver
+        learnings_dir = tmp_path / "learnings"
+        learnings_dir.mkdir()
+        (learnings_dir / "_common.md").write_text("共通", encoding="utf-8")
+        (learnings_dir / "python.md").write_text("Python学習", encoding="utf-8")
+        monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
+
+        result = improver.load_learnings("python")
+        assert "共通" in result
+        assert "Python学習" in result
