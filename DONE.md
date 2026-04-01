@@ -1,5 +1,17 @@
 # DONE
 
+## 授業コンテンツ バージョニング — Step 1: DBスキーマ & マイグレーション
+
+- [x] `lesson_categories` テーブル作成（slug, name, description, prompt_file）
+- [x] `lessons` に `category` カラム追加
+- [x] `lesson_versions` テーブル作成（verify_json, improve_source_version 等含む）
+- [x] `lesson_sections` に `version_number`, `annotation_rating`, `annotation_comment` 追加
+- [x] `lesson_plans` に `version_number` 追加 + UNIQUE制約変更（テーブル再作成方式）
+- [x] `lesson_learnings` テーブル作成
+- [x] 既存データから `lesson_versions` v1 自動生成マイグレーション
+- [x] CRUD関数追加（カテゴリ・バージョン・注釈・学習）+ 既存関数に version_number 対応
+- [x] テスト追加（+30テスト、全624通過）
+
 ## 品質チェック機能削除
 - [x] content_analyzer.py・テスト・プランファイル削除
 - [x] teacher.py: analyzeエンドポイント・import削除

@@ -18,6 +18,7 @@ class TestSchema:
             "bgm_tracks", "se_tracks",
             "custom_texts", "character_memory",
             "lessons", "lesson_sources", "lesson_sections", "lesson_plans",
+            "lesson_categories", "lesson_versions", "lesson_learnings",
         }
         assert expected.issubset(names)
 
@@ -42,6 +43,23 @@ class TestSchema:
         conn = test_db.get_connection()
         cols = {r[1] for r in conn.execute("PRAGMA table_info(characters)").fetchall()}
         assert "updated_at" in cols
+
+    def test_lessons_has_category(self, test_db):
+        conn = test_db.get_connection()
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(lessons)").fetchall()}
+        assert "category" in cols
+
+    def test_lesson_sections_has_versioning_columns(self, test_db):
+        conn = test_db.get_connection()
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(lesson_sections)").fetchall()}
+        assert "version_number" in cols
+        assert "annotation_rating" in cols
+        assert "annotation_comment" in cols
+
+    def test_lesson_plans_has_version_number(self, test_db):
+        conn = test_db.get_connection()
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(lesson_plans)").fetchall()}
+        assert "version_number" in cols
 
 
 class TestChannels:
@@ -906,3 +924,241 @@ class TestLessonPlans:
         test_db.upsert_lesson_plan(lesson["id"], "en")
         test_db.delete_lesson_plans(lesson["id"])
         assert len(test_db.get_lesson_plans(lesson["id"])) == 0
+
+    def test_version_number_separate(self, test_db):
+        """同じlesson_id/lang/generatorでもversion_numberが異なれば別プラン"""
+        lesson = test_db.create_lesson("PlanVer")
+        test_db.upsert_lesson_plan(lesson["id"], "ja", knowledge="v1知識", version_number=1)
+        test_db.upsert_lesson_plan(lesson["id"], "ja", knowledge="v2知識", version_number=2)
+        p1 = test_db.get_lesson_plan(lesson["id"], "ja", version_number=1)
+        p2 = test_db.get_lesson_plan(lesson["id"], "ja", version_number=2)
+        assert p1["knowledge"] == "v1知識"
+        assert p2["knowledge"] == "v2知識"
+        all_plans = test_db.get_lesson_plans(lesson["id"])
+        assert len(all_plans) == 2
+
+
+class TestLessonCategories:
+    def test_create_and_get(self, test_db):
+        cat = test_db.create_category("english_natgeo", "英語（ナショジオ）", description="英語教材")
+        assert cat["slug"] == "english_natgeo"
+        assert cat["name"] == "英語（ナショジオ）"
+        assert cat["description"] == "英語教材"
+        cats = test_db.get_categories()
+        assert len(cats) == 1
+
+    def test_get_by_slug(self, test_db):
+        test_db.create_category("python", "Python")
+        cat = test_db.get_category_by_slug("python")
+        assert cat is not None
+        assert cat["name"] == "Python"
+        assert test_db.get_category_by_slug("nonexistent") is None
+
+    def test_unique_slug(self, test_db):
+        import sqlite3
+        import pytest
+        test_db.create_category("unique", "First")
+        with pytest.raises(sqlite3.IntegrityError):
+            test_db.create_category("unique", "Second")
+
+    def test_delete(self, test_db):
+        cat = test_db.create_category("to_delete", "削除対象")
+        # カテゴリを授業に設定
+        lesson = test_db.create_lesson("CatLesson", category="to_delete")
+        assert lesson["category"] == "to_delete"
+        # 削除するとカテゴリが空文字にリセットされる
+        test_db.delete_category(cat["id"])
+        assert len(test_db.get_categories()) == 0
+        updated = test_db.get_lesson(lesson["id"])
+        assert updated["category"] == ""
+
+    def test_lesson_with_category(self, test_db):
+        test_db.create_category("math", "数学")
+        lesson = test_db.create_lesson("数学基礎", category="math")
+        assert lesson["category"] == "math"
+        # カテゴリを更新
+        test_db.update_lesson(lesson["id"], category="")
+        updated = test_db.get_lesson(lesson["id"])
+        assert updated["category"] == ""
+
+
+class TestLessonVersions:
+    def test_create_and_get(self, test_db):
+        lesson = test_db.create_lesson("VerTest")
+        v = test_db.create_lesson_version(lesson["id"], "ja", "gemini", note="初版")
+        assert v["version_number"] == 1
+        assert v["note"] == "初版"
+        versions = test_db.get_lesson_versions(lesson["id"])
+        assert len(versions) == 1
+
+    def test_auto_increment(self, test_db):
+        lesson = test_db.create_lesson("AutoInc")
+        v1 = test_db.create_lesson_version(lesson["id"], "ja", "gemini")
+        v2 = test_db.create_lesson_version(lesson["id"], "ja", "gemini")
+        v3 = test_db.create_lesson_version(lesson["id"], "ja", "gemini")
+        assert v1["version_number"] == 1
+        assert v2["version_number"] == 2
+        assert v3["version_number"] == 3
+
+    def test_explicit_version_number(self, test_db):
+        lesson = test_db.create_lesson("Explicit")
+        v = test_db.create_lesson_version(lesson["id"], "ja", "gemini", version_number=5)
+        assert v["version_number"] == 5
+
+    def test_filter_by_lang_generator(self, test_db):
+        lesson = test_db.create_lesson("Filter")
+        test_db.create_lesson_version(lesson["id"], "ja", "gemini")
+        test_db.create_lesson_version(lesson["id"], "en", "gemini")
+        test_db.create_lesson_version(lesson["id"], "ja", "claude")
+        ja = test_db.get_lesson_versions(lesson["id"], lang="ja")
+        assert len(ja) == 2
+        en_gemini = test_db.get_lesson_versions(lesson["id"], lang="en", generator="gemini")
+        assert len(en_gemini) == 1
+
+    def test_get_specific_version(self, test_db):
+        lesson = test_db.create_lesson("Specific")
+        test_db.create_lesson_version(lesson["id"], "ja", "gemini", note="v1")
+        test_db.create_lesson_version(lesson["id"], "ja", "gemini", note="v2")
+        v = test_db.get_lesson_version(lesson["id"], "ja", "gemini", 2)
+        assert v is not None
+        assert v["note"] == "v2"
+        assert test_db.get_lesson_version(lesson["id"], "ja", "gemini", 99) is None
+
+    def test_update(self, test_db):
+        lesson = test_db.create_lesson("UpdVer")
+        v = test_db.create_lesson_version(lesson["id"], note="旧")
+        test_db.update_lesson_version(v["id"], note="新", verify_json='{"ok":true}')
+        updated = test_db.get_lesson_version(lesson["id"], "ja", "gemini", v["version_number"])
+        assert updated["note"] == "新"
+        assert updated["verify_json"] == '{"ok":true}'
+
+    def test_delete(self, test_db):
+        lesson = test_db.create_lesson("DelVer")
+        test_db.create_lesson_version(lesson["id"], "ja", "gemini", version_number=1)
+        # セクションとプランも作成
+        test_db.add_lesson_section(lesson["id"], 0, "intro", "導入", version_number=1)
+        test_db.upsert_lesson_plan(lesson["id"], "ja", knowledge="知識", version_number=1)
+        # 削除
+        test_db.delete_lesson_version(lesson["id"], "ja", "gemini", 1)
+        assert test_db.get_lesson_version(lesson["id"], "ja", "gemini", 1) is None
+        assert len(test_db.get_lesson_sections(lesson["id"], version_number=1)) == 0
+        assert test_db.get_lesson_plan(lesson["id"], "ja", version_number=1) is None
+
+    def test_improve_fields(self, test_db):
+        lesson = test_db.create_lesson("Improve")
+        v = test_db.create_lesson_version(
+            lesson["id"], improve_source_version=1,
+            improve_summary="セクション2を短縮", improved_sections="[2, 5]",
+        )
+        assert v["improve_source_version"] == 1
+        assert v["improve_summary"] == "セクション2を短縮"
+        assert v["improved_sections"] == "[2, 5]"
+
+    def test_save_verify(self, test_db):
+        lesson = test_db.create_lesson("Verify")
+        v = test_db.create_lesson_version(lesson["id"])
+        test_db.save_version_verify(v["id"], '{"coverage":[]}')
+        updated = test_db.get_lesson_version(lesson["id"], "ja", "gemini", v["version_number"])
+        assert updated["verify_json"] == '{"coverage":[]}'
+
+    def test_cascade_on_lesson_delete(self, test_db):
+        lesson = test_db.create_lesson("Cascade")
+        test_db.create_lesson_version(lesson["id"])
+        test_db.delete_lesson(lesson["id"])
+        assert len(test_db.get_lesson_versions(lesson["id"])) == 0
+
+
+class TestSectionAnnotations:
+    def test_update_annotation(self, test_db):
+        lesson = test_db.create_lesson("AnnTest")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "テスト")
+        test_db.update_section_annotation(s["id"], rating="good", comment="良い例え")
+        sections = test_db.get_lesson_sections(lesson["id"])
+        assert sections[0]["annotation_rating"] == "good"
+        assert sections[0]["annotation_comment"] == "良い例え"
+
+    def test_annotation_default_empty(self, test_db):
+        lesson = test_db.create_lesson("AnnDefault")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "テスト")
+        assert s["annotation_rating"] == ""
+        assert s["annotation_comment"] == ""
+
+    def test_clear_annotation(self, test_db):
+        lesson = test_db.create_lesson("AnnClear")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "テスト")
+        test_db.update_section_annotation(s["id"], rating="redo", comment="やり直し")
+        test_db.update_section_annotation(s["id"], rating="", comment="")
+        sections = test_db.get_lesson_sections(lesson["id"])
+        assert sections[0]["annotation_rating"] == ""
+        assert sections[0]["annotation_comment"] == ""
+
+
+class TestSectionVersionNumber:
+    def test_default_version(self, test_db):
+        lesson = test_db.create_lesson("SecVer")
+        s = test_db.add_lesson_section(lesson["id"], 0, "intro", "導入")
+        assert s["version_number"] == 1
+
+    def test_explicit_version(self, test_db):
+        lesson = test_db.create_lesson("SecVerEx")
+        s = test_db.add_lesson_section(lesson["id"], 0, "intro", "v2導入", version_number=2)
+        assert s["version_number"] == 2
+
+    def test_filter_by_version(self, test_db):
+        lesson = test_db.create_lesson("SecFilter")
+        test_db.add_lesson_section(lesson["id"], 0, "intro", "v1", version_number=1)
+        test_db.add_lesson_section(lesson["id"], 0, "intro", "v2", version_number=2)
+        v1 = test_db.get_lesson_sections(lesson["id"], version_number=1)
+        v2 = test_db.get_lesson_sections(lesson["id"], version_number=2)
+        assert len(v1) == 1
+        assert v1[0]["content"] == "v1"
+        assert len(v2) == 1
+        assert v2[0]["content"] == "v2"
+
+    def test_delete_by_version(self, test_db):
+        lesson = test_db.create_lesson("SecDelVer")
+        test_db.add_lesson_section(lesson["id"], 0, "intro", "v1", version_number=1)
+        test_db.add_lesson_section(lesson["id"], 0, "intro", "v2", version_number=2)
+        test_db.delete_lesson_sections(lesson["id"], version_number=1)
+        remaining = test_db.get_lesson_sections(lesson["id"])
+        assert len(remaining) == 1
+        assert remaining[0]["version_number"] == 2
+
+
+class TestLessonLearnings:
+    def test_save_and_get(self, test_db):
+        lr = test_db.save_learning("english_natgeo", learnings_md="## 学習結果", section_count=5)
+        assert lr["category"] == "english_natgeo"
+        assert lr["learnings_md"] == "## 学習結果"
+        assert lr["section_count"] == 5
+
+    def test_get_latest(self, test_db):
+        test_db.save_learning("python", learnings_md="旧")
+        test_db.save_learning("python", learnings_md="新")
+        latest = test_db.get_latest_learning("python")
+        assert latest["learnings_md"] == "新"
+
+    def test_get_latest_nonexistent(self, test_db):
+        assert test_db.get_latest_learning("nonexistent") is None
+
+    def test_get_learnings_all(self, test_db):
+        test_db.save_learning("a", learnings_md="A")
+        test_db.save_learning("b", learnings_md="B")
+        all_lr = test_db.get_learnings()
+        assert len(all_lr) == 2
+
+    def test_get_learnings_by_category(self, test_db):
+        test_db.save_learning("cat1", learnings_md="1")
+        test_db.save_learning("cat2", learnings_md="2")
+        cat1 = test_db.get_learnings("cat1")
+        assert len(cat1) == 1
+        assert cat1[0]["learnings_md"] == "1"
+
+    def test_all_fields(self, test_db):
+        lr = test_db.save_learning(
+            "test", analysis_input='{"data":"in"}', analysis_output="分析結果",
+            learnings_md="## 結果", prompt_diff="+ added", section_count=10,
+        )
+        assert lr["analysis_input"] == '{"data":"in"}'
+        assert lr["analysis_output"] == "分析結果"
+        assert lr["prompt_diff"] == "+ added"

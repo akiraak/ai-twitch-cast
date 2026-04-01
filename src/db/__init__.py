@@ -80,6 +80,24 @@ from .lessons import (
     get_lesson_plans,
     upsert_lesson_plan,
     delete_lesson_plans,
+    # カテゴリ
+    get_categories,
+    create_category,
+    get_category_by_slug,
+    delete_category,
+    # バージョン
+    get_lesson_versions,
+    get_lesson_version,
+    create_lesson_version,
+    update_lesson_version,
+    delete_lesson_version,
+    save_version_verify,
+    # 注釈
+    update_section_annotation,
+    # 学習
+    save_learning,
+    get_latest_learning,
+    get_learnings,
 )
 
 # --- items ---

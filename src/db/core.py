@@ -485,6 +485,133 @@ def _create_tables(conn):
     except Exception:
         pass
 
+    # --- バージョニング機能 (Step 1) ---
+
+    # Migration: lesson_categories テーブル作成
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS lesson_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            prompt_file TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+
+    # Migration: lessons に category カラム追加
+    try:
+        conn.execute("ALTER TABLE lessons ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
+    # Migration: lesson_versions テーブル作成
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS lesson_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lesson_id INTEGER NOT NULL,
+            lang TEXT NOT NULL DEFAULT 'ja',
+            generator TEXT NOT NULL DEFAULT 'gemini',
+            version_number INTEGER NOT NULL DEFAULT 1,
+            note TEXT DEFAULT '',
+            verify_json TEXT DEFAULT '',
+            improve_source_version INTEGER,
+            improve_summary TEXT DEFAULT '',
+            improved_sections TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE,
+            UNIQUE(lesson_id, lang, generator, version_number)
+        )
+    """)
+    conn.commit()
+
+    # Migration: lesson_sections に version_number, annotation カラム追加
+    for col, typedef in [
+        ("version_number", "INTEGER NOT NULL DEFAULT 1"),
+        ("annotation_rating", "TEXT DEFAULT ''"),
+        ("annotation_comment", "TEXT DEFAULT ''"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE lesson_sections ADD COLUMN {col} {typedef}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+    # Migration: lesson_plans に version_number 追加 + UNIQUE制約変更
+    # 既存は UNIQUE(lesson_id, lang, generator) → UNIQUE(lesson_id, lang, generator, version_number)
+    try:
+        conn.execute("SELECT version_number FROM lesson_plans LIMIT 1")
+    except sqlite3.OperationalError:
+        # version_number が存在しない → マイグレーション実行
+        conn.execute("""CREATE TABLE lesson_plans_v2 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+            lang TEXT NOT NULL DEFAULT 'ja',
+            knowledge TEXT NOT NULL DEFAULT '',
+            entertainment TEXT NOT NULL DEFAULT '',
+            plan_json TEXT NOT NULL DEFAULT '',
+            director_json TEXT NOT NULL DEFAULT '',
+            plan_generations TEXT NOT NULL DEFAULT '',
+            generator TEXT NOT NULL DEFAULT 'gemini',
+            version_number INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(lesson_id, lang, generator, version_number)
+        )""")
+        conn.execute("""INSERT INTO lesson_plans_v2
+            (id, lesson_id, lang, knowledge, entertainment, plan_json,
+             director_json, plan_generations, generator, version_number, created_at, updated_at)
+            SELECT id, lesson_id, lang, knowledge, entertainment, plan_json,
+                   director_json, plan_generations, generator, 1, created_at, updated_at
+            FROM lesson_plans""")
+        conn.execute("DROP TABLE lesson_plans")
+        conn.execute("ALTER TABLE lesson_plans_v2 RENAME TO lesson_plans")
+        conn.commit()
+
+    # Migration: lesson_learnings テーブル作成
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS lesson_learnings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL DEFAULT '',
+            analysis_input TEXT DEFAULT '',
+            analysis_output TEXT DEFAULT '',
+            learnings_md TEXT DEFAULT '',
+            prompt_diff TEXT DEFAULT '',
+            section_count INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+
+    # Migration: 既存データから lesson_versions v1 を自動生成
+    try:
+        _migrate_lesson_versions_v1(conn)
+    except Exception:
+        pass
+
+
+def _migrate_lesson_versions_v1(conn):
+    """既存の lesson_sections から lesson_versions v1 レコードを自動生成する（冪等）"""
+    # 既にバージョンレコードがあればスキップ
+    existing = conn.execute("SELECT COUNT(*) as cnt FROM lesson_versions").fetchone()
+    if existing["cnt"] > 0:
+        return
+    # 各 (lesson_id, lang, generator) の組み合わせに v1 を作成
+    rows = conn.execute(
+        "SELECT DISTINCT lesson_id, lang, generator FROM lesson_sections"
+    ).fetchall()
+    now = _now()
+    for row in rows:
+        conn.execute(
+            "INSERT OR IGNORE INTO lesson_versions "
+            "(lesson_id, lang, generator, version_number, note, created_at) "
+            "VALUES (?, ?, ?, 1, '初版（自動生成）', ?)",
+            (row["lesson_id"], row["lang"], row["generator"], now),
+        )
+    conn.commit()
+
 
 def _migrate_vrm_to_character_config(conn):
     """settings の files.active_avatar* を characters.config.vrm に移行（冪等）"""
