@@ -398,13 +398,6 @@ def _create_tables(conn):
     except Exception:
         pass
 
-    # Migration: lessons テーブルに analysis_json カラム追加（品質分析結果保存）
-    try:
-        conn.execute("ALTER TABLE lessons ADD COLUMN analysis_json TEXT NOT NULL DEFAULT ''")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-
     # Migration: VRM設定を settings → characters.config.vrm に移行
     try:
         _migrate_vrm_to_character_config(conn)

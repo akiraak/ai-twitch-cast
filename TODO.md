@@ -1,10 +1,5 @@
 # TODO
 
-## 教師モード
-- [ ] 教師モードUI一新 — 管理画面で動作確認
-- [ ] AIによるキャラクタープロンプト編集 → [plans/character-prompt-editor.md](plans/character-prompt-editor.md)
-- [ ] 品質評価の数値が体感と違って高すぎる。80%が30%くらいにしか感じないので改善する
-
 ## 実装
 
 ## バグ

@@ -10,7 +10,6 @@ from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel
 
 from src import db
-from src.content_analyzer import analyze_content
 from src.lesson_generator import (
     extract_main_content,
     extract_text_from_image,
@@ -582,25 +581,6 @@ async def get_tts_cache(lesson_id: int, lang: str = "ja", generator: str = "clau
     sections = get_tts_cache_info(lesson_id, lang=lang, generator=generator)
     return {"ok": True, "sections": sections}
 
-
-@router.post("/api/lessons/{lesson_id}/analyze")
-async def analyze_lesson(lesson_id: int, lang: str = "ja"):
-    """コンテンツ品質分析（アルゴリズム指標）"""
-    lesson = db.get_lesson(lesson_id)
-    if not lesson:
-        return {"ok": False, "error": "コンテンツが見つかりません"}
-
-    sections = db.get_lesson_sections(lesson_id, lang=lang)
-    if not sections:
-        return {"ok": False, "error": "セクションがありません。先にスクリプトを生成してください"}
-
-    section_dicts = [dict(s) for s in sections]
-    result = analyze_content(section_dicts, lang=lang)
-
-    result.lesson_id = lesson_id
-    analysis_dict = result.to_dict()
-    db.update_lesson(lesson_id, analysis_json=_json.dumps(analysis_dict, ensure_ascii=False))
-    return {"ok": True, "analysis": analysis_dict}
 
 
 @router.delete("/api/lessons/{lesson_id}/tts-cache")

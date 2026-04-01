@@ -130,16 +130,6 @@ async function buildLessonItem(lessonId) {
   }
   const badgeText = badges.length ? ' (' + badges.join(' / ') + ')' : '';
 
-  // スコアバッジ
-  let scoreBadge = '';
-  if (lesson.analysis_json) {
-    try {
-      const a = JSON.parse(lesson.analysis_json);
-      const rc = (RANK_COLORS[a.rank] || '#888');
-      const score = Math.round(a.total_score);
-      scoreBadge = `<span style="font-size:0.85rem; font-weight:700; color:#fff; background:${rc}; border-radius:4px; padding:1px 7px; letter-spacing:0.5px;">${a.rank} ${score}点</span>`;
-    } catch (_) {}
-  }
 
   const details = document.createElement('details');
   details.className = 'lesson-item';
@@ -156,7 +146,6 @@ async function buildLessonItem(lessonId) {
   summary.innerHTML = `<span class="lesson-arrow" style="color:#7b1fa2; font-size:0.75rem;">&#9660;</span>`
     + `<span style="font-size:0.65rem; color:#aaa; min-width:28px;">#${lessonId}</span>`
     + `<span>${esc(lesson.name)}</span>`
-    + scoreBadge
     + `<span style="font-size:0.7rem; color:#8a7a9a;">${esc(badgeText)}</span>`;
   details.appendChild(summary);
 
@@ -354,38 +343,16 @@ async function buildLessonItem(lessonId) {
   step3.appendChild(step3Body);
   body.appendChild(step3);
 
-  // === STEP 4: 品質チェック ===
-  const step4 = document.createElement('div');
-  step4.className = 'lesson-step' + (hasSections ? ' step-active' : ' step-disabled');
-  const step4Body = document.createElement('div');
-  step4Body.className = 'lesson-step-body';
-  step4Body.innerHTML = `<div class="lesson-step-title">品質チェック</div>
-    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
-      <button onclick="analyzeLesson(${lessonId}, '${lang}')" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">アルゴリズム分析</button>
-      <span class="qa-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
-    </div>
-    <div class="qa-result" id="qa-result-${lessonId}"></div>`;
-  step4.innerHTML = '<div class="lesson-step-num">4</div>';
-  step4.appendChild(step4Body);
-  body.appendChild(step4);
-  if (lesson.analysis_json) {
-    try {
-      const saved = JSON.parse(lesson.analysis_json);
-      const el = step4Body.querySelector('.qa-result');
-      if (el) _renderAnalysisResult(el, saved);
-    } catch(e) {}
-  }
-
-  // === STEP 5: 授業再生 ===
+  // === STEP 4: 授業再生 ===
   const isRunning = runningThisLesson && lState === 'running';
   const isPaused = runningThisLesson && lState === 'paused';
   const isActive = isRunning || isPaused;
-  const step5 = document.createElement('div');
-  step5.className = 'lesson-step' + (isActive ? ' step-done' : hasSections ? ' step-active' : ' step-disabled');
-  const step5Body = document.createElement('div');
-  step5Body.className = 'lesson-step-body';
+  const step4 = document.createElement('div');
+  step4.className = 'lesson-step' + (isActive ? ' step-done' : hasSections ? ' step-active' : ' step-disabled');
+  const step4Body = document.createElement('div');
+  step4Body.className = 'lesson-step-body';
   const progressInfo = isActive ? `${statusRes.status.current_index + 1} / ${statusRes.status.total_sections} セクション` : '';
-  step5Body.innerHTML = `<div class="lesson-step-title">授業再生${isActive ? '（実行中）' : ''}</div>
+  step4Body.innerHTML = `<div class="lesson-step-title">授業再生${isActive ? '（実行中）' : ''}</div>
     <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
       <button onclick="startLesson(${lessonId}, '${lang}')" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">${lang === 'en' ? 'Start Lesson' : '授業開始'}</button>
       <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isRunning ? '' : ' display:none;'}">一時停止</button>
@@ -396,9 +363,9 @@ async function buildLessonItem(lessonId) {
     </div>
     <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:#8a7a9a;">${progressInfo}</div>`;
 
-  step5.innerHTML = '<div class="lesson-step-num">5</div>';
-  step5.appendChild(step5Body);
-  body.appendChild(step5);
+  step4.innerHTML = '<div class="lesson-step-num">4</div>';
+  step4.appendChild(step4Body);
+  body.appendChild(step4);
 
   // 削除ボタン
   const delRow = document.createElement('div');
@@ -863,81 +830,6 @@ async function _reorderSection(lessonId, sectionId, direction) {
   await api('PUT', '/api/lessons/' + lessonId + '/sections/reorder', { section_ids: ids });
   _openLessonIds.add(lessonId);
   await loadLessons();
-}
-
-// --- 品質分析 ---
-
-const RANK_COLORS = { S: '#d4af37', A: '#2e7d32', B: '#1565c0', C: '#e65100', D: '#c62828' };
-
-function _renderAnalysisResult(resultEl, a) {
-  const rankColor = RANK_COLORS[a.rank] || '#888';
-
-  let html = `<div style="display:flex; align-items:center; gap:12px; margin-bottom:10px; padding:8px 12px; background:#faf7ff; border:2px solid ${rankColor}; border-radius:8px;">
-    <div style="font-size:2rem; font-weight:700; color:${rankColor};">${a.rank}</div>
-    <div>
-      <div style="font-size:1.1rem; font-weight:600;">${a.total_score} / ${a.max_score}</div>
-      <div style="font-size:0.7rem; color:#8a7a9a;">総合スコア</div>
-    </div>
-  </div>`;
-
-  // アルゴリズム指標
-  html += `<div style="font-size:0.8rem; font-weight:600; margin-bottom:4px;">アルゴリズム指標</div>`;
-  const algoLabels = {
-    display_text_coverage: 'カバー率',
-    dialogue_balance: '対話バランス',
-    section_diversity: '構成多様性',
-    question_richness: 'クイズ充実度',
-    pacing: 'ペーシング',
-  };
-  for (const [key, sd] of Object.entries(a.algorithmic_scores)) {
-    html += _renderScoreBar(algoLabels[key] || key, sd);
-  }
-
-  // 改善提案
-  if (a.suggestions && a.suggestions.length > 0) {
-    html += `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:0.75rem; color:#1565c0; font-weight:600;">改善提案（${a.suggestions.length}件）</summary>
-      <ul style="font-size:0.72rem; margin:4px 0 0 16px; color:#2a1f40;">`;
-    for (const s of a.suggestions) {
-      html += `<li style="margin-bottom:2px;">${esc(s)}</li>`;
-    }
-    html += `</ul></details>`;
-  }
-
-  resultEl.innerHTML = html;
-}
-
-async function analyzeLesson(lessonId, lang) {
-  const statusEl = document.querySelector(`#qa-result-${lessonId}`)?.closest('.lesson-step-body')?.querySelector('.qa-status');
-  const resultEl = document.getElementById('qa-result-' + lessonId);
-  if (!resultEl) return;
-  if (statusEl) statusEl.textContent = '分析中...';
-  resultEl.innerHTML = '';
-
-  const res = await api('POST', '/api/lessons/' + lessonId + '/analyze?lang=' + lang);
-  if (statusEl) statusEl.textContent = '';
-  if (!res || !res.ok) {
-    resultEl.innerHTML = `<div style="color:#c62828; font-size:0.8rem;">${res?.error || 'エラーが発生しました'}</div>`;
-    return;
-  }
-  _renderAnalysisResult(resultEl, res.analysis);
-}
-
-function _renderScoreBar(label, sd) {
-  const pct = sd.max_score > 0 ? Math.round(sd.score / sd.max_score * 100) : 0;
-  const barColor = pct >= 80 ? '#2e7d32' : pct >= 60 ? '#1565c0' : pct >= 40 ? '#e65100' : '#c62828';
-  let html = `<div style="margin-bottom:6px;">
-    <div style="display:flex; justify-content:space-between; font-size:0.72rem; margin-bottom:1px;">
-      <span>${esc(label)}</span>
-      <span style="font-weight:600;">${sd.score} / ${sd.max_score}</span>
-    </div>
-    <div style="background:#e8e0f0; border-radius:3px; height:8px; overflow:hidden;">
-      <div style="background:${barColor}; height:100%; width:${pct}%; border-radius:3px; transition:width 0.3s;"></div>
-    </div>`;
-  if (sd.details) {
-    html += `<div style="font-size:0.65rem; color:#8a7a9a; margin-top:1px;">${esc(sd.details)}</div>`;
-  }
-  html += `</div>`;
-  return html;
 }
 
 // --- 授業制御 ---

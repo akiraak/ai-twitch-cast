@@ -1,9 +1,15 @@
 # DONE
 
-## 教師モードUI一新 — 5ステップ化 + インライン生成フロー
+## 品質チェック機能削除
+- [x] content_analyzer.py・テスト・プランファイル削除
+- [x] teacher.py: analyzeエンドポイント・import削除
+- [x] db: analysis_jsonカラムのマイグレーション・allowed削除
+- [x] teacher.js: Step 4（品質チェック）UI・関数・ランクバッジ削除、旧Step 5→新Step 4に繰り上げ
+
+## 教師モードUI一新 — 4ステップ化 + インライン生成フロー
 
 - [x] CSS追加（インポートエリア・CLIコマンド・成功バナー・ステップ左ボーダー）
-- [x] teacher.js: buildLessonItem()を5ステップに分割（生成/セクション確認/品質/再生）
+- [x] teacher.js: buildLessonItem()を4ステップに分割（生成/セクション確認/再生）
 - [x] インラインJSONインポート（モーダル→textarea直貼り）
 - [x] CLIコマンドコピー機能
 - [x] モードA/B切替（未作成時=インポートUI、作成済み=成功バナー）

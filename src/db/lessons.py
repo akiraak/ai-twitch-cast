@@ -34,7 +34,7 @@ def get_all_lessons():
 def update_lesson(lesson_id, **fields):
     """授業コンテンツを更新する"""
     conn = get_connection()
-    allowed = {"name", "extracted_text", "main_content", "plan_knowledge", "plan_entertainment", "plan_json", "analysis_json"}
+    allowed = {"name", "extracted_text", "main_content", "plan_knowledge", "plan_entertainment", "plan_json"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
