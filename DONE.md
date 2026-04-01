@@ -1,5 +1,10 @@
 # DONE
 
+## プロンプト管理API（Step 1）
+
+- [x] `scripts/routes/prompts.py` 新規作成（GET一覧/GET取得/PUT更新/POST AI編集の4エンドポイント）
+- [x] `scripts/web.py` にルーター登録
+
 ## アバターパラメータ保存抜け根本修正
 
 - [x] `GET /api/overlay/settings`がDBの全プロパティをマージするよう修正（`_OVERLAY_DEFAULTS`に無いキーも返す）

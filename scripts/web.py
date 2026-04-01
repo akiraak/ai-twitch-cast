@@ -35,6 +35,7 @@ from scripts.routes.character import router as character_router
 from scripts.routes.db_viewer import router as db_viewer_router
 from scripts.routes.docs_viewer import router as docs_viewer_router
 from scripts.routes.overlay import router as overlay_router
+from scripts.routes.prompts import router as prompts_router
 from scripts.routes.stream_control import router as stream_control_router
 from scripts.routes.files import router as files_router
 from scripts.routes.items import router as items_router
@@ -98,6 +99,7 @@ app.include_router(docs_viewer_router)
 app.include_router(files_router)
 app.include_router(items_router)
 app.include_router(overlay_router)
+app.include_router(prompts_router)
 app.include_router(teacher_router)
 app.include_router(twitch_router)
 
