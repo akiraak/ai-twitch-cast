@@ -2,7 +2,6 @@
 
 ## 実装
 - [ ] claude code の履歴を常に取得して一定間隔で二人で会話するようにする → [plans/claude-watcher-conversation.md](plans/claude-watcher-conversation.md)
-  - [ ] Step 5: long-execution-timerとの共存（フラグチェック追加）
   - [ ] Step 6: 管理画面UI（ステータス・設定）
   - [ ] Step 7: テスト
 

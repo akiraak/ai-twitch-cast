@@ -1,6 +1,6 @@
 # Claude Code 作業実況会話プラン
 
-## ステータス: Step 4 完了
+## ステータス: Step 5 完了
 
 ## 背景
 
@@ -232,7 +232,7 @@ class CommentReader:
 
 **優先度**: コメント応答 > 授業 > ClaudeWatcher会話 > long-execution-timer
 
-### Step 5: long-execution-timer.py との共存
+### Step 5: long-execution-timer.py との共存 ✅
 
 **変更ファイル**: `~/.claude/hooks/long-execution-timer.py`（最小限の変更）
 
@@ -264,10 +264,10 @@ def speak(message):
 **ファイル**: `tests/test_claude_watcher.py`
 
 TranscriptParser（19テスト）とClaudeWatcherサービス（20テスト）はStep 1・2で実装済み。
+CommentReader統合テスト（6テスト）はStep 4で実装済み。
 Step 7 では以下の残りテストを追加する:
 
 - **会話生成**: LLMモック経由でJSON配列の検証（Step 3実装後）
-- **CommentReader統合**: ClaudeWatcherの起動・停止がCommentReaderと連動（Step 4実装後）
 
 ## 設定
 
@@ -301,4 +301,4 @@ Step 7 では以下の残りテストを追加する:
 | `scripts/routes/avatar.py` | `/api/claude-watcher/*` エンドポイント追加 |
 | `static/index.html` | 監視ステータスUI |
 | `~/.claude/hooks/long-execution-timer.py` | フラグチェック追加（ACTIVE_FLAG存在時はスキップ） |
-| `tests/test_claude_watcher.py` | TranscriptParser 19テスト（Step 1済）+ ClaudeWatcher 20テスト（Step 2済）+ 残りはStep 7 |
+| `tests/test_claude_watcher.py` | TranscriptParser 19テスト（Step 1済）+ ClaudeWatcher 20テスト（Step 2済）+ CommentReader統合 6テスト（Step 4済）+ 残りはStep 7 |
