@@ -1,9 +1,5 @@
 # TODO
 
-## 実装
-- [ ] 授業コンテンツのバージョニング機能 → [plans/lesson-versioning.md](plans/lesson-versioning.md)
-  - [ ] Step 7: テスト&動作確認（全テスト通過, カテゴリ→注釈→検証→改善→学習分析→プロンプト改善の手動テスト）
-
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）
