@@ -930,8 +930,13 @@ async def import_sections(
 
     logger.info("セクションインポート: lesson=%d, lang=%s, gen=%s, v=%d, sections=%d",
                 lesson_id, lang, generator, version_number, len(saved))
+
+    # TTS事前生成をバックグラウンドで開始
+    _start_tts_pregeneration(lesson_id, lang, generator, version_number)
+
     return {"ok": True, "sections": saved, "count": len(saved),
-            "version_number": version_number}
+            "version_number": version_number,
+            "tts_pregeneration_started": True}
 
 
 # --- セクション編集 ---
@@ -1413,6 +1418,9 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
     logger.info("改善完了: lesson=%d, v%d→v%d, improved=%s",
                 lesson_id, body.source_version, new_version_number, improved_indices)
 
+    # TTS事前生成をバックグラウンドで開始
+    _start_tts_pregeneration(lesson_id, body.lang, body.generator, new_version_number)
+
     return {
         "ok": True,
         "version_number": new_version_number,
@@ -1420,4 +1428,5 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
         "sections": saved,
         "prompt": result["prompt"],
         "raw_output": result["raw_output"],
+        "tts_pregeneration_started": True,
     }

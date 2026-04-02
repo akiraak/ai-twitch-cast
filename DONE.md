@@ -1,5 +1,12 @@
 # DONE
 
+## TTS事前生成 Step 3: import_sections / improve_content に統合
+
+- [x] `import_sections` のreturn前に `_start_tts_pregeneration()` 呼び出し追加
+- [x] `improve_content` のreturn前に `_start_tts_pregeneration()` 呼び出し追加
+- [x] 両APIレスポンスに `"tts_pregeneration_started": True` を追加
+- [x] 全112教師モードテスト通過
+
 ## TTS事前生成 Step 1: `src/tts_pregenerate.py` 新規作成
 
 - [x] TTS事前生成コアモジュール作成（`src/tts_pregenerate.py`）
