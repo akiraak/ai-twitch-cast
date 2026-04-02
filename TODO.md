@@ -3,7 +3,12 @@
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）
-
+- [ ] 授業モード: TTS事前生成 → [plans/tts-pregenerate.md](plans/tts-pregenerate.md)
+  - [ ] Step 2: `scripts/routes/teacher.py` にタスク管理追加
+  - [ ] Step 3: import_sections / improve_content に統合
+  - [ ] Step 4: 新APIエンドポイント追加（status/trigger/cancel）
+  - [ ] Step 5: フロントエンド進捗表示・手動トリガー/キャンセルUI
+  - [ ] Step 6: テスト
 
 ## 検討
 - [ ] 遅延が大きく発生した場合にスキップしてでも最新の配信内容に追いつく機能の検証 → [plans/latency-skip-catchup.md](plans/latency-skip-catchup.md)

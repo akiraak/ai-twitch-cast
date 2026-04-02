@@ -1,5 +1,13 @@
 # DONE
 
+## TTS事前生成 Step 1: `src/tts_pregenerate.py` 新規作成
+
+- [x] TTS事前生成コアモジュール作成（`src/tts_pregenerate.py`）
+- [x] `pregenerate_lesson_tts()` — 全セクション一括生成（キャンセル・進捗コールバック対応）
+- [x] `pregenerate_section_tts()` — 単話者/対話モード分岐、キャッシュ判定、1回リトライ
+- [x] LessonRunnerと同じキャッシュパス・voice/style処理で互換性保証
+- [x] 全708テスト通過
+
 ## 教師モード カテゴリUI再設計 — Step 4: テスト・動作確認 + UX改善（プラン完了）
 
 - [x] 全708テスト通過（教師モード112テスト含む）
