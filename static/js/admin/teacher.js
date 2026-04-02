@@ -84,10 +84,14 @@ async function loadLessons() {
   if (!_lessonCategories) await _loadCategories();
   const statusRes = await api('GET', '/api/lessons/status');
   _cachedLessonStatus = statusRes;
+  // カテゴリタブバー（専用カードに描画）
+  const catContainer = document.getElementById('category-tabs-container');
+  if (catContainer) {
+    catContainer.innerHTML = '';
+    _renderCategoryTabs(catContainer);
+  }
   const list = document.getElementById('lesson-list');
   list.innerHTML = '';
-  // カテゴリタブバー
-  _renderCategoryTabs(list);
   // 間のスケールスライダー
   await _renderPaceScaleSlider(list);
   // カテゴリでフィルタ
@@ -439,18 +443,75 @@ async function buildLessonItem(lessonId) {
 }
 
 async function createLesson() {
-  const name = await showModal('コンテンツ名を入力してください', {
-    title: '新規コンテンツ',
-    input: '例: English 1-1',
-    okLabel: '作成',
-  });
-  if (!name) return;
-  const res = await api('POST', '/api/lessons', { name });
+  // カテゴリがないと授業を作成できない
+  if (!_lessonCategories || _lessonCategories.length === 0) {
+    const ok = await showConfirm('授業を作成するには、まずカテゴリを作成してください。\n今すぐカテゴリを作成しますか？', {
+      title: 'カテゴリが必要です',
+      okLabel: 'カテゴリを作成',
+    });
+    if (ok) createCategory();
+    return;
+  }
+  const cats = _lessonCategories || [];
+  const result = await _showCreateLessonModal(cats);
+  if (!result) return;
+  const res = await api('POST', '/api/lessons', { name: result.name, category: result.category });
   if (res && res.ok) {
     _openLessonIds.add(res.lesson.id);
-    showToast('コンテンツ作成: ' + name, 'success');
+    showToast('コンテンツ作成: ' + result.name, 'success');
     await loadLessons();
   }
+}
+
+function _showCreateLessonModal(cats) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    const options = cats.map(c => `<option value="${esc(c.slug)}">${esc(c.name)}</option>`).join('');
+    overlay.innerHTML = `<div class="modal-box">
+      <h3>新規コンテンツ</h3>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <select id="_lesson_cat" class="modal-input" style="padding:6px 8px;">
+          <option value="" disabled selected>カテゴリを選択</option>
+          ${options}
+        </select>
+        <input type="text" id="_lesson_name" class="modal-input" placeholder="コンテンツ名">
+      </div>
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="primary" data-action="ok">作成</button>
+        <button class="secondary" data-action="cancel">キャンセル</button>
+      </div>
+    </div>`;
+
+    const catEl = overlay.querySelector('#_lesson_cat');
+    const nameEl = overlay.querySelector('#_lesson_name');
+
+    const doResolve = (action) => {
+      if (action === 'ok') {
+        const category = catEl.value;
+        const name = nameEl.value.trim();
+        if (!category) { catEl.style.borderColor = '#c62828'; catEl.focus(); return; }
+        if (!name) { nameEl.style.borderColor = '#c62828'; nameEl.focus(); return; }
+        overlay.remove();
+        resolve({ name, category });
+      } else {
+        overlay.remove();
+        resolve(null);
+      }
+    };
+
+    overlay.addEventListener('click', e => {
+      const action = e.target.dataset?.action;
+      if (action) doResolve(action);
+    });
+    nameEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') doResolve('ok');
+      if (e.key === 'Escape') doResolve('cancel');
+    });
+
+    document.body.appendChild(overlay);
+    catEl.focus();
+  });
 }
 
 async function saveLessonName(lessonId, btn) {
@@ -1254,21 +1315,29 @@ function _renderCategoryTabs(container) {
   const div = document.createElement('div');
   div.className = 'cat-tabs';
 
-  // 「全て」タブ
-  const allActive = _selectedCategory === null;
-  let html = `<button onclick="selectCategory(null)" class="cat-tab${allActive ? ' active' : ''}">全て</button>`;
+  let html = '';
 
-  // 各カテゴリタブ
-  for (const c of cats) {
-    const isActive = _selectedCategory === c.slug;
-    html += `<button onclick="selectCategory('${esc(c.slug)}')" class="cat-tab${isActive ? ' active' : ''}">${esc(c.name)}</button>`;
+  if (cats.length === 0) {
+    // カテゴリなし — 目立つ追加ボタン
+    html += `<span class="cat-tabs-empty">カテゴリがありません</span>`;
+    html += `<button onclick="createCategory()" class="cat-tab cat-tab--add">+ カテゴリを追加</button>`;
+  } else {
+    // 「全て」タブ
+    const allActive = _selectedCategory === null;
+    html += `<button onclick="selectCategory(null)" class="cat-tab${allActive ? ' active' : ''}">全て</button>`;
+
+    // 各カテゴリタブ
+    for (const c of cats) {
+      const isActive = _selectedCategory === c.slug;
+      html += `<button onclick="selectCategory('${esc(c.slug)}')" class="cat-tab${isActive ? ' active' : ''}">${esc(c.name)}</button>`;
+    }
+
+    // 「+ 新規」ボタン
+    html += `<button onclick="createCategory()" class="cat-tab cat-tab--add">+ 新規</button>`;
+
+    // 「⚙ 管理」ボタン
+    html += `<button onclick="openCategoryManager()" class="cat-tab cat-tab--manage">\u2699 管理</button>`;
   }
-
-  // 「+ 新規」ボタン
-  html += `<button onclick="createCategory()" class="cat-tab cat-tab--action">+ 新規</button>`;
-
-  // 「⚙ 管理」ボタン
-  html += `<button onclick="openCategoryManager()" class="cat-tab cat-tab--manage">\u2699 管理</button>`;
 
   div.innerHTML = html;
   container.appendChild(div);
@@ -1321,38 +1390,66 @@ async function deleteCategoryFromManager(categoryId) {
   }
 }
 
+function _nameToSlug(name) {
+  return name.trim().toLowerCase()
+    .replace(/[\s\u3000]+/g, '_')
+    .replace(/[^a-z0-9_\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/g, '')
+    .slice(0, 50) || 'category';
+}
+
 async function createCategory() {
-  try {
-    console.log('[createCategory] 開始');
-    const slug = await showModal('カテゴリslug (例: english_natgeo)', {
-      title: '新規カテゴリ', input: 'programming_python', okLabel: '次へ',
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal-box">
+      <h3>新規カテゴリ</h3>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <input type="text" id="_cat_name" class="modal-input" placeholder="カテゴリ名">
+      </div>
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="primary" data-action="ok">作成</button>
+        <button class="secondary" data-action="cancel">キャンセル</button>
+      </div>
+    </div>`;
+
+    const nameEl = overlay.querySelector('#_cat_name');
+
+    const doResolve = async (action) => {
+      if (action === 'ok') {
+        const name = nameEl.value.trim();
+        const slug = _nameToSlug(name);
+        if (!name) { nameEl.style.borderColor = '#c62828'; nameEl.focus(); return; }
+        overlay.remove();
+        try {
+          const res = await api('POST', '/api/lesson-categories', { slug, name, description: '' });
+          if (res && res.ok) {
+            _lessonCategories = null;
+            showToast('カテゴリ作成: ' + name, 'success');
+            await loadLessons();
+          } else {
+            showToast('カテゴリ作成失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
+          }
+        } catch (e) {
+          showToast('カテゴリ作成エラー: ' + e.message, 'error');
+        }
+      } else {
+        overlay.remove();
+      }
+      resolve();
+    };
+
+    overlay.addEventListener('click', e => {
+      const action = e.target.dataset?.action;
+      if (action) doResolve(action);
     });
-    console.log('[createCategory] slug=', JSON.stringify(slug));
-    if (!slug) return;
-    const name = await showModal('表示名', {
-      title: '新規カテゴリ', input: 'プログラミング（Python）', okLabel: '次へ',
+    nameEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') doResolve('ok');
+      if (e.key === 'Escape') doResolve('cancel');
     });
-    console.log('[createCategory] name=', JSON.stringify(name));
-    if (!name) return;
-    const desc = await showModal('説明（任意）', {
-      title: '新規カテゴリ', input: '', okLabel: '作成',
-    });
-    console.log('[createCategory] desc=', JSON.stringify(desc));
-    const body = { slug, name, description: desc || '' };
-    console.log('[createCategory] POST body=', JSON.stringify(body));
-    const res = await api('POST', '/api/lesson-categories', body);
-    console.log('[createCategory] res=', JSON.stringify(res));
-    if (res && res.ok) {
-      _lessonCategories = null;
-      showToast('カテゴリ作成: ' + name, 'success');
-      await loadLessons();
-    } else {
-      showToast('カテゴリ作成失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
-    }
-  } catch (e) {
-    console.error('[createCategory] エラー:', e);
-    showToast('カテゴリ作成エラー: ' + e.message, 'error');
-  }
+
+    document.body.appendChild(overlay);
+    nameEl.focus();
+  });
 }
 
 async function deleteCategory(categoryId) {

@@ -404,10 +404,17 @@
   .cat-tab:hover { background: #f0e6fa; }
   .cat-tab.active { background: #7b1fa2; color: #fff; }
   .cat-tab.active:hover { background: #6a1090; }
-  .cat-tab--action {
-    background: transparent; color: #7b1fa2; border-style: dashed;
+  .cat-tabs-label {
+    font-size: 0.78rem; font-weight: 700; color: #2a1f40; white-space: nowrap;
+    padding-right: 4px;
   }
-  .cat-tab--action:hover { background: #f5eefa; }
+  .cat-tabs-empty {
+    font-size: 0.75rem; color: #8a7a9a; white-space: nowrap;
+  }
+  .cat-tab--add {
+    background: #7b1fa2; color: #fff; border-color: #7b1fa2;
+  }
+  .cat-tab--add:hover { background: #6a1090; border-color: #6a1090; }
   .cat-tab--manage { background: transparent; color: #8a7a9a; border-style: dashed; }
   .cat-tab--manage:hover { background: #f5f0f8; }
 
