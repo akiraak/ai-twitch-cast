@@ -184,6 +184,12 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 - **音量制御**: broadcast.html内のJavaScriptで `master × tts` / `master × bgm × 曲音量` を計算
 - **保存先**: マスター・TTS・BGM音量 → SQLite DB（`volume.*`キー）、デフォルト → `scenes.json` の `audio_volumes`、曲別音量 → SQLite DB
 
+## 授業生成コマンド
+
+管理画面からコピーされる `授業生成「#ID 名前 (Nソース)」` 形式のプロンプトを受け取ったら、`prompts/lesson_generate.md` のワークフローに従って授業スクリプトを生成すること。
+
+例: `授業生成「#175 English 1-1 (2ソース)」` → 授業ID 175の教材画像を読み取り、スクリプトを生成してAPIでインポート。
+
 ## テスト
 
 ### 実行方法

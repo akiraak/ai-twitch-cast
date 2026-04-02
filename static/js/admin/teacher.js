@@ -258,13 +258,15 @@ async function buildLessonItem(lessonId) {
       </div>`;
 
   if (!hasSources) {
-    step1Html += `<div style="margin-top:8px; color:#7b1fa2; font-size:0.78rem;">画像またはURLを追加してください</div>`;
+    step1Html += `<div style="margin-top:8px; padding:6px 10px; background:#f3e5f5; border-radius:4px; font-size:0.78rem; color:#6a1b9a;">→ 「ソース追加」から教材画像をアップロードしてください</div>`;
   } else if (hasImageSources) {
     step1Html += `<div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
       <button onclick="extractLessonText(${lessonId})" class="btn-extract" style="padding:5px 14px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">${hasExtractedText ? 'テキスト再抽出' : 'テキスト抽出'}</button>
       <span class="extract-status"></span>`;
     if (!hasExtractedText) {
-      step1Html += `<span style="color:#1565c0; font-size:0.78rem;">画像からテキストを読み取ります</span>`;
+      step1Html += `<span style="color:#1565c0; font-size:0.78rem;">→ テキスト抽出で画像を読み取り、Step 2へ</span>`;
+    } else {
+      step1Html += `<span style="color:#2e7d32; font-size:0.78rem;">✅ 抽出済み → Step 2でスクリプト生成</span>`;
     }
     step1Html += `</div>`;
   }
@@ -342,12 +344,11 @@ async function buildLessonItem(lessonId) {
     step2Html += `<div class="lesson-success-banner">\u2705 ${sections.length} セクション、${totalDlgs} 発話をインポート済み</div>`;
     step2Html += `<details style="margin-bottom:8px;">
       <summary style="cursor:pointer; font-weight:600; font-size:0.78rem; color:#6a1b9a; padding:4px 0;">再インポート / 更新</summary>
-      <div style="margin-top:6px;">${_buildImportArea(lessonId, lang)}</div>
+      <div style="margin-top:6px;">${_buildImportArea(lessonId, lang, lesson.name, sources.length)}</div>
     </details>`;
   } else {
-    // モードA: 未作成
-    step2Html += `<div style="font-size:0.82rem; color:#333; margin-bottom:10px; line-height:1.5;">Claude Code CLIで授業スクリプトを生成し、下のエリアにJSONを貼り付けてインポートしてください。</div>`;
-    step2Html += _buildImportArea(lessonId, lang);
+    // モードA: 未作成 — 手順ガイド付き
+    step2Html += _buildImportArea(lessonId, lang, lesson.name, sources.length);
   }
 
   // プロンプト折りたたみ（共通）
@@ -1134,14 +1135,31 @@ async function importClaudeSections(lessonId, lang) {
 
 // --- インラインJSONインポート ---
 
-function _buildImportArea(lessonId, lang) {
-  const cliCmd = `授業ID ${lessonId} の教材画像を読み取って、prompts/lesson_generate.md に従って授業スクリプトを生成して`;
-  return `<div class="lesson-cli-command">
-      <code>${esc(cliCmd)}</code>
-      <button onclick="_copyToClipboard('${esc(cliCmd.replace(/'/g, "\\'"))}', this)" style="padding:3px 10px; background:#6a1b9a; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem; white-space:nowrap;">コピー</button>
+function _buildImportArea(lessonId, lang, lessonName, sourceCount) {
+  const cliCmd = `授業生成「#${lessonId} ${lessonName || ''} (${sourceCount || 0}ソース)」`;
+  const stepStyle = 'display:flex; align-items:flex-start; gap:6px; margin-bottom:6px;';
+  const numStyle = 'flex-shrink:0; width:20px; height:20px; background:#7b1fa2; color:#fff; border-radius:50%; font-size:0.7rem; font-weight:700; display:flex; align-items:center; justify-content:center;';
+  const textStyle = 'font-size:0.8rem; color:#333; line-height:1.5;';
+  return `<div style="margin-bottom:10px;">
+      <div style="${stepStyle}">
+        <span style="${numStyle}">1</span>
+        <span style="${textStyle}">下のコマンドをコピー</span>
+      </div>
+      <div class="lesson-cli-command" style="margin-left:26px; margin-bottom:8px;">
+        <code>${esc(cliCmd)}</code>
+        <button onclick="_copyToClipboard('${esc(cliCmd.replace(/'/g, "\\'"))}', this)" style="padding:3px 10px; background:#6a1b9a; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem; white-space:nowrap;">コピー</button>
+      </div>
+      <div style="${stepStyle}">
+        <span style="${numStyle}">2</span>
+        <span style="${textStyle}">Claude Codeに貼り付けて実行 → スクリプトが自動生成される</span>
+      </div>
+      <div style="${stepStyle}">
+        <span style="${numStyle}">3</span>
+        <span style="${textStyle}">生成されたJSONを下に貼り付けて「インポート」</span>
+      </div>
     </div>
     <div class="lesson-import-area">
-      <textarea rows="8" placeholder='Claude Codeが出力したJSONをここに貼り付け&#10;[{"section_type": "introduction", ...}]'></textarea>
+      <textarea rows="6" placeholder='Claude Codeが出力したJSONをここに貼り付け&#10;[{"section_type": "introduction", ...}]'></textarea>
       <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
         <button onclick="importClaudeSectionsInline(${lessonId}, '${lang}', this)" style="padding:6px 18px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem; font-weight:600;">インポート</button>
         <span class="import-inline-status" style="font-size:0.75rem; color:#8a7a9a;"></span>
