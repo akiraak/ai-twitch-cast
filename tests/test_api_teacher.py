@@ -2044,3 +2044,129 @@ class TestSaveLearningsToFiles:
 
         assert not (learnings_dir / ".md").exists()  # 空slugファイルは作られない
         assert (learnings_dir / "_common.md").exists()
+
+
+class TestTtsPregenAPI:
+    """TTS事前生成APIのテスト"""
+
+    def setup_method(self):
+        """各テスト前にグローバルタスク辞書をクリア"""
+        from scripts.routes import teacher as teacher_mod
+        teacher_mod._tts_pregen_tasks.clear()
+
+    def _create_lesson_with_sections(self, api_client, test_db):
+        """テスト用レッスン+セクション作成"""
+        resp = api_client.post("/api/lessons", json={"name": "TTS Test"})
+        lid = resp.json()["lesson"]["id"]
+        test_db.add_lesson_section(
+            lid, order_index=0, section_type="explanation",
+            title="S1", content="テスト内容", tts_text="テスト内容",
+            display_text="テスト", emotion="neutral",
+            lang="ja", generator="claude", version_number=1,
+        )
+        return lid
+
+    def test_status_idle(self, api_client, test_db):
+        """タスクなし → idle"""
+        resp = api_client.post("/api/lessons", json={"name": "Idle"})
+        lid = resp.json()["lesson"]["id"]
+        resp = api_client.get(f"/api/lessons/{lid}/tts-pregen-status?lang=ja&generator=claude&version=1")
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["state"] == "idle"
+
+    def test_status_not_found(self, api_client):
+        """存在しないレッスン"""
+        resp = api_client.get("/api/lessons/9999/tts-pregen-status")
+        data = resp.json()
+        assert data["ok"] is False
+
+    def test_trigger(self, api_client, test_db):
+        """手動トリガーでタスク開始"""
+        lid = self._create_lesson_with_sections(api_client, test_db)
+
+        with patch("scripts.routes.teacher.pregenerate_lesson_tts", new_callable=AsyncMock) as mock_pregen:
+            mock_pregen.return_value = {
+                "total": 1, "generated": 1, "cached": 0, "failed": 0, "cancelled": False,
+            }
+            resp = api_client.post(f"/api/lessons/{lid}/tts-pregen?lang=ja&generator=claude&version=1")
+            data = resp.json()
+            assert data["ok"] is True
+            assert data["tts_pregeneration_started"] is True
+            assert "key" in data
+
+    def test_trigger_not_found(self, api_client):
+        """存在しないレッスンへのトリガー"""
+        resp = api_client.post("/api/lessons/9999/tts-pregen?version=1")
+        data = resp.json()
+        assert data["ok"] is False
+
+    def test_cancel_no_task(self, api_client, test_db):
+        """タスクなしでキャンセル → cancelled=False"""
+        resp = api_client.post("/api/lessons", json={"name": "NoTask"})
+        lid = resp.json()["lesson"]["id"]
+        resp = api_client.post(f"/api/lessons/{lid}/tts-pregen-cancel?version=1")
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["cancelled"] is False
+
+    def test_cancel_not_found(self, api_client):
+        """存在しないレッスンのキャンセル"""
+        resp = api_client.post("/api/lessons/9999/tts-pregen-cancel")
+        data = resp.json()
+        assert data["ok"] is False
+
+    def test_cancel_without_version(self, api_client, test_db):
+        """version未指定でキャンセル → lesson_id全タスク対象"""
+        resp = api_client.post("/api/lessons", json={"name": "CancelAll"})
+        lid = resp.json()["lesson"]["id"]
+        # タスクなしでversion未指定
+        resp = api_client.post(f"/api/lessons/{lid}/tts-pregen-cancel")
+        data = resp.json()
+        assert data["ok"] is True
+        assert "cancelled_count" in data
+
+    def test_trigger_and_status_running(self, api_client, test_db):
+        """トリガー後にstatus確認 → running状態"""
+        lid = self._create_lesson_with_sections(api_client, test_db)
+
+        # pregenerate_lesson_ttsを永遠に待たせる（runningを確認するため）
+        async def slow_pregen(*args, **kwargs):
+            await asyncio.sleep(100)
+            return {"total": 1, "generated": 0, "cached": 0, "failed": 0, "cancelled": False}
+
+        with patch("scripts.routes.teacher.pregenerate_lesson_tts", side_effect=slow_pregen):
+            resp = api_client.post(f"/api/lessons/{lid}/tts-pregen?lang=ja&generator=claude&version=1")
+            assert resp.json()["ok"] is True
+
+            # statusを確認
+            resp = api_client.get(f"/api/lessons/{lid}/tts-pregen-status?lang=ja&generator=claude&version=1")
+            data = resp.json()
+            assert data["ok"] is True
+            assert data["state"] == "running"
+
+    def test_trigger_and_cancel(self, api_client, test_db):
+        """_tts_pregen_tasksに実行中タスクがあればキャンセルできる"""
+        lid = self._create_lesson_with_sections(api_client, test_db)
+
+        from scripts.routes import teacher as teacher_mod
+        cancel_event = asyncio.Event()
+        # 未完了のタスクを直接登録
+        fake_task = MagicMock()
+        fake_task.done.return_value = False
+        key = f"{lid}_ja_claude_1"
+        teacher_mod._tts_pregen_tasks[key] = {
+            "task": fake_task,
+            "cancel_event": cancel_event,
+            "status": {"state": "running", "total": 1, "completed": 0,
+                       "generated": 0, "cached": 0, "failed": 0, "error": None},
+        }
+
+        try:
+            resp = api_client.post(f"/api/lessons/{lid}/tts-pregen-cancel?lang=ja&generator=claude&version=1")
+            data = resp.json()
+            assert data["ok"] is True
+            assert data["cancelled"] is True
+            assert cancel_event.is_set()
+        finally:
+            teacher_mod._tts_pregen_tasks.pop(key, None)

@@ -1,5 +1,19 @@
 # DONE
 
+## TTS事前生成 Step 6: テスト（プラン完了）
+
+- [x] `tests/test_tts_pregenerate.py` 新規作成（18テスト）
+  - _generate_one: 正常生成・失敗・voice/style渡し
+  - _parse_dialogues: v4形式・リスト形式・空・student_cfgなし・不正JSON
+  - pregenerate_section_tts: 単話者・キャッシュヒット・対話モード・キャンセル・空content・リトライ・tts_textオーバーライド
+  - pregenerate_lesson_tts: 全セクション一括・進捗コールバック・キャンセル・セクション0件
+- [x] `tests/test_api_teacher.py` にTTS事前生成APIテスト追加（10テスト）
+  - tts-pregen-status: idle・not found・running状態
+  - tts-pregen: 手動トリガー・not found
+  - tts-pregen-cancel: タスクなし・not found・version未指定・実行中キャンセル
+- [x] 全736テスト通過
+- [x] プランステータスを「完了」に更新
+
 ## TTS事前生成 Step 5: フロントエンド進捗表示・手動トリガー/キャンセルUI
 
 - [x] TTS一括生成ボタンをバージョンセレクターに追加
