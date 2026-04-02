@@ -1,6 +1,6 @@
 # Claude Code 作業実況会話プラン
 
-## ステータス: Step 5 完了
+## ステータス: Step 6 完了
 
 ## 背景
 
@@ -251,7 +251,7 @@ def speak(message):
 - long-execution-timerは削除せず、フラグチェックのみ追加
 - サーバーが落ちた場合 → フラグが消える → long-execution-timerが自動的にフォールバック
 
-### Step 6: 管理画面UI
+### Step 6: 管理画面UI ✅
 
 **ファイル**: `scripts/routes/avatar.py`, `static/index.html`
 

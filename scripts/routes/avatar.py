@@ -461,6 +461,38 @@ async def conversation_demo_play():
     return {"ok": True, "dialogues_count": len(dialogues)}
 
 
+class ClaudeWatcherConfigRequest(BaseModel):
+    enabled: bool | None = None
+    interval_seconds: int | None = None
+    min_actions: int | None = None
+    max_utterances: int | None = None
+
+
+@router.get("/api/claude-watcher/status")
+async def claude_watcher_status():
+    """Claude Watcher の現在の監視状態を返す"""
+    watcher = state.reader.claude_watcher
+    return watcher.status
+
+
+@router.post("/api/claude-watcher/config")
+async def claude_watcher_config(body: ClaudeWatcherConfigRequest):
+    """Claude Watcher の設定を変更する"""
+    watcher = state.reader.claude_watcher
+    if body.interval_seconds is not None:
+        watcher.INTERVAL = max(60, body.interval_seconds)
+    if body.min_actions is not None:
+        watcher.MIN_ACTIONS = max(1, body.min_actions)
+    if body.max_utterances is not None:
+        watcher.MAX_UTTERANCES = max(2, min(8, body.max_utterances))
+    if body.enabled is not None:
+        if body.enabled and not watcher._running:
+            await watcher.start()
+        elif not body.enabled and watcher._running:
+            await watcher.stop()
+    return {"ok": True, **watcher.status}
+
+
 class ChatMessage(BaseModel):
     message: str
 

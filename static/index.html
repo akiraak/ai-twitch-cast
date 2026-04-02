@@ -580,6 +580,23 @@ users       1──N  comments      (user_id)</div>
         <div id="conv-demo-log" style="margin-top:8px; max-height:200px; overflow-y:auto; padding:6px; background:#f8f5ff; border-radius:4px; border:1px solid #e0d8f0;"></div>
       </div>
       <div class="card">
+        <h2>Claude Watcher</h2>
+        <p style="font-size:0.75rem; color:#9a88b5; margin-bottom:8px;">Claude Code作業の自動実況（二人会話）</p>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+          <span style="font-size:0.8rem;">状態:</span>
+          <span id="cw-status-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ccc;"></span>
+          <span id="cw-status-text" style="font-size:0.8rem; color:#9a88b5;">読み込み中...</span>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
+          <span style="font-size:0.8rem; min-width:50px;">間隔:</span>
+          <input type="number" id="cw-interval" value="480" min="60" max="3600" step="60" style="width:70px; padding:4px; border:1px solid #d0c8e0; border-radius:4px; font-size:0.8rem;">
+          <span style="font-size:0.75rem; color:#9a88b5;">秒</span>
+          <button onclick="cwApplyConfig()" style="font-size:0.75rem; padding:4px 10px; margin-left:auto;">適用</button>
+        </div>
+        <div id="cw-session" style="font-size:0.75rem; color:#6a5590; margin-bottom:6px;"></div>
+        <div id="cw-last-conv" style="max-height:120px; overflow-y:auto; padding:4px; background:#f8f5ff; border-radius:4px; border:1px solid #e0d8f0; font-size:0.75rem;"></div>
+      </div>
+      <div class="card">
         <h2>スクリーンショット</h2>
         <div class="btn-row">
           <button onclick="takeScreenshot()" id="btn-screenshot">スクリーンショット撮影</button>

@@ -471,4 +471,7 @@ class ClaudeWatcher:
             "start_time": self._start_time,
             "elapsed_seconds": elapsed,
             "last_conversation": self._last_conversation,
+            "interval": self.INTERVAL,
+            "min_actions": self.MIN_ACTIONS,
+            "max_utterances": self.MAX_UTTERANCES,
         }

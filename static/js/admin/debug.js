@@ -131,6 +131,66 @@ async function convDemoPlay() {
   }
 }
 
+// Claude Watcher ステータス
+async function cwRefreshStatus() {
+  try {
+    const res = await api('GET', '/api/claude-watcher/status');
+    const dot = document.getElementById('cw-status-dot');
+    const text = document.getElementById('cw-status-text');
+    const session = document.getElementById('cw-session');
+    const conv = document.getElementById('cw-last-conv');
+    const interval = document.getElementById('cw-interval');
+
+    if (res.active) {
+      dot.style.background = '#4caf50';
+      const min = Math.floor((res.elapsed_seconds || 0) / 60);
+      text.textContent = `監視中（${min}分経過）`;
+      text.style.color = '#2e7d32';
+    } else if (res.running) {
+      dot.style.background = '#ff9800';
+      text.textContent = '待機中（セッションなし）';
+      text.style.color = '#e65100';
+    } else {
+      dot.style.background = '#ccc';
+      text.textContent = '停止中';
+      text.style.color = '#9a88b5';
+    }
+
+    if (interval && res.interval !== undefined) {
+      interval.value = res.interval;
+    }
+
+    if (res.transcript_path) {
+      const fname = res.transcript_path.split('/').pop();
+      session.textContent = `transcript: ${fname}`;
+    } else {
+      session.textContent = '';
+    }
+
+    if (res.last_conversation && res.last_conversation.length > 0) {
+      conv.innerHTML = res.last_conversation.map(t =>
+        `<div style="margin:1px 0;">${esc(t)}</div>`
+      ).join('');
+    } else {
+      conv.innerHTML = '<span style="color:#9a88b5;">直近の会話なし</span>';
+    }
+  } catch (e) {
+    document.getElementById('cw-status-text').textContent = 'エラー';
+    document.getElementById('cw-status-text').style.color = '#c62828';
+  }
+}
+
+async function cwApplyConfig() {
+  const interval = parseInt(document.getElementById('cw-interval').value) || 480;
+  try {
+    await api('POST', '/api/claude-watcher/config', { interval_seconds: interval });
+    cwRefreshStatus();
+  } catch (e) {}
+}
+
+// 定期更新（30秒ごと）
+setInterval(cwRefreshStatus, 30000);
+
 // スクリーンショット
 
 async function takeScreenshot() {
