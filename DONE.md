@@ -1,5 +1,17 @@
 # DONE
 
+## Claude Watcher 完了（全7ステップ）
+
+- [x] Claude Code作業実況の二人会話機能 → [plans/claude-watcher-conversation.md](plans/claude-watcher-conversation.md)
+  - Step 1: TranscriptParser（JSONL差分解析・サマリ生成）
+  - Step 2: ClaudeWatcherサービス（監視ループ・再生・割り込み対応）
+  - Step 3: 会話生成プロンプト（作業実況→二人会話スクリプト生成）
+  - Step 4: CommentReader統合（コメント割り込み対応）
+  - Step 5: long-execution-timerとの共存（フラグチェック追加）
+  - Step 6: 管理画面UI（ステータス表示・間隔設定）
+  - Step 7: テスト（会話生成12テスト追加、合計57テスト）
+- [x] 全793テスト通過
+
 ## Claude Watcher Step 4: CommentReader統合
 
 - [x] `src/comment_reader.py` にClaudeWatcher統合

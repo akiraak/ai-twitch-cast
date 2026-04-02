@@ -1,9 +1,5 @@
 # TODO
 
-## 実装
-- [ ] claude code の履歴を常に取得して一定間隔で二人で会話するようにする → [plans/claude-watcher-conversation.md](plans/claude-watcher-conversation.md)
-  - [ ] Step 7: テスト
-
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）

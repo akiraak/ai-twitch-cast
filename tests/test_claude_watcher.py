@@ -906,3 +906,227 @@ class TestCommentReaderIntegration:
             # キューにメッセージを追加
             reader._queue.append(("user", "hello"))
             assert reader._claude_watcher._comment_reader.queue_size == 1
+
+
+# ── 会話生成テスト ──────────────────────────────
+
+
+_CHARACTERS = {
+    "teacher": {
+        "name": "ちょビ",
+        "system_prompt": "あなたは配信者のちょビです。",
+        "emotions": {"neutral": "通常", "joy": "嬉しい"},
+        "tts_voice": "Despina",
+        "tts_style": "にこにこ",
+    },
+    "student": {
+        "name": "なるこ",
+        "system_prompt": "あなたは生徒のなるこです。",
+        "emotions": {"neutral": "通常", "surprise": "驚き"},
+        "tts_voice": "Kore",
+        "tts_style": "",
+    },
+}
+
+_VALID_LLM_RESPONSE = json.dumps([
+    {"speaker": "teacher", "speech": "テストを実行してるよ", "tts_text": "テストを実行してるよ", "emotion": "neutral"},
+    {"speaker": "student", "speech": "どんなテスト？", "tts_text": "どんなテスト？", "emotion": "surprise"},
+    {"speaker": "teacher", "speech": "ユニットテストだよ", "tts_text": "ユニットテストだよ", "emotion": "joy"},
+], ensure_ascii=False)
+
+
+class TestGenerateClaudeWorkConversation:
+    """generate_claude_work_conversation のテスト"""
+
+    def _make_summary(self, **overrides):
+        base = {
+            "user_prompt": "テストを実行して",
+            "actions": ["コマンド実行: pytest", "ファイル編集: app.py", "ファイル読み取り: test.py"],
+            "assistant_texts": ["テストを実行します。"],
+            "elapsed_min": 5,
+        }
+        base.update(overrides)
+        return base
+
+    def test_returns_validated_dialogues(self, monkeypatch):
+        """LLMのJSON応答がパース・検証されて返る"""
+        client = MagicMock()
+        client.models.generate_content.return_value.text = _VALID_LLM_RESPONSE
+        monkeypatch.setattr("src.ai_responder.get_client", lambda: client)
+
+        from src.ai_responder import generate_claude_work_conversation
+        result = generate_claude_work_conversation(
+            self._make_summary(), _CHARACTERS,
+        )
+
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert result[0]["speaker"] == "teacher"
+        assert result[1]["speaker"] == "student"
+        assert result[2]["speaker"] == "teacher"
+        # _validate_multi_response が translation を付与
+        assert "translation" in result[0]
+
+    def test_no_student_returns_empty(self, monkeypatch):
+        """生徒キャラなし → 空リスト"""
+        from src.ai_responder import generate_claude_work_conversation
+        result = generate_claude_work_conversation(
+            self._make_summary(), {"teacher": _CHARACTERS["teacher"]},
+        )
+        assert result == []
+
+    def test_invalid_json_returns_empty(self, monkeypatch):
+        """LLMが不正JSONを返した場合 → 空リスト"""
+        client = MagicMock()
+        client.models.generate_content.return_value.text = "NOT JSON"
+        monkeypatch.setattr("src.ai_responder.get_client", lambda: client)
+
+        from src.ai_responder import generate_claude_work_conversation
+        result = generate_claude_work_conversation(
+            self._make_summary(), _CHARACTERS,
+        )
+        assert result == []
+
+    def test_single_dict_wrapped_in_list(self, monkeypatch):
+        """LLMが配列でなく辞書を返した場合 → リストに包まれる"""
+        single = json.dumps(
+            {"speaker": "teacher", "speech": "テスト", "tts_text": "テスト", "emotion": "neutral"},
+            ensure_ascii=False,
+        )
+        client = MagicMock()
+        client.models.generate_content.return_value.text = single
+        monkeypatch.setattr("src.ai_responder.get_client", lambda: client)
+
+        from src.ai_responder import generate_claude_work_conversation
+        result = generate_claude_work_conversation(
+            self._make_summary(), _CHARACTERS,
+        )
+        assert isinstance(result, list)
+        assert len(result) == 1
+
+    def test_max_utterances_truncation(self, monkeypatch):
+        """4発話を超える応答は切り詰められる"""
+        long_response = json.dumps([
+            {"speaker": "teacher", "speech": f"発話{i}", "tts_text": f"発話{i}", "emotion": "neutral"}
+            for i in range(6)
+        ], ensure_ascii=False)
+        client = MagicMock()
+        client.models.generate_content.return_value.text = long_response
+        monkeypatch.setattr("src.ai_responder.get_client", lambda: client)
+
+        from src.ai_responder import generate_claude_work_conversation
+        result = generate_claude_work_conversation(
+            self._make_summary(), _CHARACTERS,
+        )
+        assert len(result) == 4
+
+    def test_invalid_emotion_fallback_to_neutral(self, monkeypatch):
+        """不正な感情は neutral にフォールバックする"""
+        bad_emotion = json.dumps([
+            {"speaker": "teacher", "speech": "テスト", "tts_text": "テスト", "emotion": "rage"},
+        ], ensure_ascii=False)
+        client = MagicMock()
+        client.models.generate_content.return_value.text = bad_emotion
+        monkeypatch.setattr("src.ai_responder.get_client", lambda: client)
+
+        from src.ai_responder import generate_claude_work_conversation
+        result = generate_claude_work_conversation(
+            self._make_summary(), _CHARACTERS,
+        )
+        assert result[0]["emotion"] == "neutral"
+
+    def test_invalid_speaker_fallback_to_teacher(self, monkeypatch):
+        """不正なspeakerは teacher にフォールバックする"""
+        bad_speaker = json.dumps([
+            {"speaker": "unknown", "speech": "テスト", "tts_text": "テスト", "emotion": "neutral"},
+        ], ensure_ascii=False)
+        client = MagicMock()
+        client.models.generate_content.return_value.text = bad_speaker
+        monkeypatch.setattr("src.ai_responder.get_client", lambda: client)
+
+        from src.ai_responder import generate_claude_work_conversation
+        result = generate_claude_work_conversation(
+            self._make_summary(), _CHARACTERS,
+        )
+        assert result[0]["speaker"] == "teacher"
+
+    def test_last_conversation_passed_to_prompt(self, monkeypatch):
+        """last_conversationがプロンプトに含まれる"""
+        client = MagicMock()
+        client.models.generate_content.return_value.text = _VALID_LLM_RESPONSE
+        monkeypatch.setattr("src.ai_responder.get_client", lambda: client)
+
+        from src.ai_responder import generate_claude_work_conversation
+        generate_claude_work_conversation(
+            self._make_summary(), _CHARACTERS,
+            last_conversation=["前回の発話1", "前回の発話2"],
+        )
+
+        call_args = client.models.generate_content.call_args
+        system = call_args.kwargs["config"].system_instruction
+        assert "前回の発話1" in system
+
+    def test_actions_in_user_content(self, monkeypatch):
+        """アクション一覧がユーザープロンプトに含まれる"""
+        client = MagicMock()
+        client.models.generate_content.return_value.text = _VALID_LLM_RESPONSE
+        monkeypatch.setattr("src.ai_responder.get_client", lambda: client)
+
+        from src.ai_responder import generate_claude_work_conversation
+        generate_claude_work_conversation(
+            self._make_summary(actions=["ファイル編集: main.py"]),
+            _CHARACTERS,
+        )
+
+        call_args = client.models.generate_content.call_args
+        user_content = call_args.kwargs["contents"]
+        assert "ファイル編集: main.py" in user_content
+
+
+class TestClaudeWatcherGenerateIntegration:
+    """ClaudeWatcher._generate_conversation → generate_claude_work_conversation の結合"""
+
+    @pytest.mark.asyncio
+    async def test_generate_conversation_calls_llm(self, mock_speech, tmp_path):
+        """_generate_conversationがLLM経由で会話を生成する"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+
+        summary = TranscriptSummary(
+            user_prompt="テストして",
+            actions=["コマンド実行: pytest", "ファイル編集: a.py", "ファイル読み取り: b.py"],
+            assistant_texts=["テストを実行します。"],
+            line_count=5,
+        )
+
+        with patch("src.ai_responder.get_chat_characters", return_value=_CHARACTERS), \
+             patch("src.ai_responder.get_client") as mock_client:
+            mock_client.return_value.models.generate_content.return_value.text = _VALID_LLM_RESPONSE
+            result = await watcher._generate_conversation(summary, elapsed_min=5)
+
+        assert result is not None
+        assert len(result) == 3
+        assert result[0]["speaker"] == "teacher"
+
+    @pytest.mark.asyncio
+    async def test_generate_conversation_no_student_returns_none(self, mock_speech):
+        """生徒キャラなし → None"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        summary = TranscriptSummary(user_prompt="テスト", actions=["a", "b", "c"], line_count=3)
+
+        with patch("src.ai_responder.get_chat_characters", return_value={"teacher": _CHARACTERS["teacher"]}):
+            result = await watcher._generate_conversation(summary, elapsed_min=5)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_generate_conversation_llm_error_returns_none(self, mock_speech):
+        """LLM呼び出しエラー → None"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        summary = TranscriptSummary(user_prompt="テスト", actions=["a", "b", "c"], line_count=3)
+
+        with patch("src.ai_responder.get_chat_characters", return_value=_CHARACTERS), \
+             patch("src.ai_responder.get_client") as mock_client:
+            mock_client.return_value.models.generate_content.side_effect = RuntimeError("API error")
+            result = await watcher._generate_conversation(summary, elapsed_min=5)
+
+        assert result is None

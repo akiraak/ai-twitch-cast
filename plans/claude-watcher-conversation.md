@@ -1,6 +1,6 @@
 # Claude Code 作業実況会話プラン
 
-## ステータス: Step 6 完了
+## ステータス: 完了
 
 ## 背景
 
@@ -259,15 +259,13 @@ def speak(message):
 - `POST /api/claude-watcher/config` — 間隔・有効/無効の設定
 - 管理画面に監視ステータス表示
 
-### Step 7: テスト（残り）
+### Step 7: テスト（残り） ✅
 
 **ファイル**: `tests/test_claude_watcher.py`
 
 TranscriptParser（19テスト）とClaudeWatcherサービス（20テスト）はStep 1・2で実装済み。
 CommentReader統合テスト（6テスト）はStep 4で実装済み。
-Step 7 では以下の残りテストを追加する:
-
-- **会話生成**: LLMモック経由でJSON配列の検証（Step 3実装後）
+会話生成テスト（12テスト）をStep 7で追加。合計57テスト。
 
 ## 設定
 
