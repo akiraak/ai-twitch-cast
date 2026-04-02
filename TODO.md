@@ -1,7 +1,13 @@
 # TODO
 
 ## 実装
-- [ ] claude code の履歴を常に取得して一定間隔で二人で会話するようにする
+- [ ] claude code の履歴を常に取得して一定間隔で二人で会話するようにする → [plans/claude-watcher-conversation.md](plans/claude-watcher-conversation.md)
+  - [ ] Step 2: ClaudeWatcherサービス（監視ループ・マーカーファイル検出）
+  - [ ] Step 3: 会話生成プロンプト（build_multi_system_promptベース）
+  - [ ] Step 4: CommentReader統合（コメント割り込み対応）
+  - [ ] Step 5: long-execution-timerとの共存（フラグチェック追加）
+  - [ ] Step 6: 管理画面UI（ステータス・設定）
+  - [ ] Step 7: テスト
 
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)

@@ -1,5 +1,18 @@
 # DONE
 
+## Claude Watcher Step 1: TranscriptParser
+
+- [x] `src/claude_watcher.py` 新規作成 — TranscriptParser + TranscriptSummary
+  - JSONL差分解析（前回位置記憶、新しい行のみ処理）
+  - ユーザー指示抽出（isMeta/command/tool_resultスキップ）
+  - ツール使用を人間可読な説明に変換（Bash/Edit/Write/Read/Grep/Glob/Agent等）
+  - アシスタントテキスト応答抽出
+  - 不正JSON行の個別スキップ、パース成功率50%未満で警告+None
+  - 未知typeスキップ（フォーマット変更耐性）
+- [x] `tests/test_claude_watcher.py` 新規作成（19テスト）
+- [x] 全755テスト通過
+- [x] プランステータスを「Step 1 完了」に更新
+
 ## TTS事前生成 Step 6: テスト（プラン完了）
 
 - [x] `tests/test_tts_pregenerate.py` 新規作成（18テスト）
