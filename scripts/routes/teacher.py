@@ -28,6 +28,7 @@ from src.lesson_generator import (
 )
 from src.lesson_runner import clear_tts_cache, get_tts_cache_info
 from src.prompt_builder import get_stream_language, set_stream_language
+from src.tts_pregenerate import pregenerate_lesson_tts
 
 
 def _with_lang(lang: str):
@@ -53,6 +54,93 @@ LESSON_IMAGES_DIR = PROJECT_DIR / "resources" / "images" / "lessons"
 LESSON_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+# --- TTS事前生成タスクレジストリ ---
+# Key: "{lesson_id}_{lang}_{generator}_{version}"
+# Value: {"task": asyncio.Task, "cancel_event": asyncio.Event, "status": dict}
+_tts_pregen_tasks: dict[str, dict] = {}
+
+
+def _tts_pregen_key(lesson_id: int, lang: str, generator: str, version_number: int) -> str:
+    return f"{lesson_id}_{lang}_{generator}_{version_number}"
+
+
+def _start_tts_pregeneration(
+    lesson_id: int, lang: str, generator: str, version_number: int
+) -> str:
+    """TTS事前生成タスクをバックグラウンドで起動する。
+
+    既存タスクがあればキャンセルしてから新規起動。
+    Returns: タスクキー
+    """
+    key = _tts_pregen_key(lesson_id, lang, generator, version_number)
+
+    # 既存タスクがあればキャンセル
+    existing = _tts_pregen_tasks.get(key)
+    if existing and not existing["task"].done():
+        existing["cancel_event"].set()
+
+    cancel_event = asyncio.Event()
+    status = {
+        "state": "running",
+        "total": 0,
+        "completed": 0,
+        "generated": 0,
+        "cached": 0,
+        "failed": 0,
+        "error": None,
+    }
+
+    def on_progress(completed: int, total: int, result: dict):
+        status["total"] = total
+        status["completed"] = completed
+        status["generated"] = result["generated"]
+        status["cached"] = result["cached"]
+        status["failed"] = result["failed"]
+
+    async def run():
+        try:
+            result = await pregenerate_lesson_tts(
+                lesson_id, lang, generator, version_number,
+                cancel_event=cancel_event, on_progress=on_progress,
+            )
+            status["total"] = result["total"]
+            status["generated"] = result["generated"]
+            status["cached"] = result["cached"]
+            status["failed"] = result["failed"]
+            status["completed"] = result["total"] if not result["cancelled"] else status["completed"]
+            status["state"] = "completed"
+        except Exception as e:
+            logger.exception("[tts-pregen] タスクエラー: key=%s", key)
+            status["state"] = "error"
+            status["error"] = str(e)
+
+    task = asyncio.create_task(run())
+    _tts_pregen_tasks[key] = {
+        "task": task,
+        "cancel_event": cancel_event,
+        "status": status,
+    }
+    logger.info("[tts-pregen] タスク開始: %s", key)
+    return key
+
+
+def _get_tts_pregen_status(lesson_id: int, lang: str = "ja", generator: str = "claude",
+                            version_number: int | None = None) -> dict:
+    """TTS事前生成の進捗を返す。タスクがなければ idle を返す。"""
+    if version_number is None:
+        # 該当lesson_idのタスクを検索
+        prefix = f"{lesson_id}_"
+        for k, v in _tts_pregen_tasks.items():
+            if k.startswith(prefix):
+                return {**v["status"]}
+        return {"state": "idle"}
+
+    key = _tts_pregen_key(lesson_id, lang, generator, version_number)
+    entry = _tts_pregen_tasks.get(key)
+    if not entry:
+        return {"state": "idle"}
+    return {**entry["status"]}
 
 
 def _sanitize_filename(name: str) -> str:
