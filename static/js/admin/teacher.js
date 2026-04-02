@@ -71,7 +71,6 @@ function switchConvSubtab(name, el) {
   document.querySelectorAll('#tab-convmode .char-subcontent').forEach(t => t.classList.remove('active'));
   document.getElementById('conv-sub-' + name).classList.add('active');
   if (el) el.classList.add('active');
-  if (name === 'learnings') loadLearningsDashboard();
 }
 
 // --- コンテンツ一覧（各コンテンツを縦に並べる） ---
@@ -99,6 +98,8 @@ async function loadLessons() {
     const item = await buildLessonItem(l.id);
     if (item) list.appendChild(item);
   }
+  // 学習ダッシュボード（コンテンツ一覧の下に統合）
+  _renderLearningSection(list);
 }
 
 async function _renderPaceScaleSlider(container) {
@@ -1776,8 +1777,21 @@ function _buildLlmCallDisplay(label, prompt, rawOutput) {
 }
 
 // =============================================================
-// 学習ダッシュボード
+// 学習ダッシュボード（教師モード内に統合）
 // =============================================================
+
+function _renderLearningSection(container) {
+  const section = document.createElement('div');
+  section.id = 'learning-section';
+  section.style.cssText = 'margin-top:16px; padding-top:12px; border-top:2px solid #d0c0e8;';
+  section.innerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <h3 style="margin:0; font-size:0.9rem; color:#6a1b9a;">学習ダッシュボード</h3>
+      <button onclick="loadLearningsDashboard()" style="padding:3px 10px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">読み込み</button>
+    </div>
+    <div id="learnings-dashboard"></div>`;
+  container.appendChild(section);
+}
 
 async function loadLearningsDashboard() {
   const container = document.getElementById('learnings-dashboard');
@@ -1799,9 +1813,18 @@ async function loadLearningsDashboard() {
   const catMap = {};
   for (const c of categories) catMap[c.slug] = c;
 
+  // 選択カテゴリでフィルタ
+  const filtered = _selectedCategory === null
+    ? stats
+    : stats.filter(st => st.category === _selectedCategory);
+
   let html = '';
 
-  for (const st of stats) {
+  if (filtered.length === 0) {
+    html = '<div style="color:#8a7a9a; font-size:0.8rem;">該当する学習データがありません</div>';
+  }
+
+  for (const st of filtered) {
     const cat = catMap[st.category] || {};
     const ac = st.annotation_counts || {};
     const good = ac.good || 0;

@@ -4,7 +4,6 @@
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）
 - [ ] 教師モードのカテゴリUI構造の再設計 → [plans/teacher-mode-category-restructure.md](plans/teacher-mode-category-restructure.md)
-        - [ ] Step 2: 学習ダッシュボードを教師モード内に統合（サブタブ「学習」削除）
         - [ ] Step 3: CSSスタイリング（タブバー横スクロール対応等）
         - [ ] Step 4: テスト・動作確認
 

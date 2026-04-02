@@ -60,16 +60,14 @@
 - レッスン一覧を `_selectedCategory` でフィルタ表示
 - 旧 `_renderCategoryManager()` を削除済み
 
-### Step 2: 学習ダッシュボードの教師モード内統合
+### Step 2: 学習ダッシュボードの教師モード内統合 ✅
 
 **変更ファイル**: `static/index.html`, `static/js/admin/teacher.js`
 
 - HTML: サブタブから「学習」を削除、`div#conv-sub-learnings` を削除
-- HTML: 教師モード内（`div#conv-sub-teacher`）にダッシュボード用コンテナ追加
-- JS: `loadLessons()` 内でコンテンツ一覧の下に学習セクションを描画
-  - 選択カテゴリに絞った学習情報を表示
-  - カテゴリタブ切り替え時に連動して更新
-- JS: `switchConvSubtab('learnings', ...)` 関連コードを削除・調整
+- JS: `_renderLearningSection(container)` を新設 — `loadLessons()` 末尾でコンテンツ一覧の下に学習セクションを描画（`#learning-section` + `#learnings-dashboard`）
+- JS: `loadLearningsDashboard()` を修正 — `_selectedCategory` でフィルタして選択カテゴリに連動
+- JS: `switchConvSubtab()` から `learnings` 分岐を削除
 
 ### Step 3: CSSスタイリング（index.css）
 
