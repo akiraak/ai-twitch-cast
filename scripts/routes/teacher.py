@@ -1048,6 +1048,59 @@ async def delete_tts_cache_section(lesson_id: int, order_index: int, lang: str =
     return {"ok": True}
 
 
+# --- TTS事前生成 API ---
+
+
+@router.get("/api/lessons/{lesson_id}/tts-pregen-status")
+async def tts_pregen_status(lesson_id: int, lang: str = "ja", generator: str = "claude",
+                            version: int | None = None):
+    """TTS事前生成の進捗を返す"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+    status = _get_tts_pregen_status(lesson_id, lang=lang, generator=generator,
+                                     version_number=version)
+    return {"ok": True, **status}
+
+
+@router.post("/api/lessons/{lesson_id}/tts-pregen")
+async def tts_pregen_trigger(lesson_id: int, lang: str = "ja", generator: str = "claude",
+                              version: int | None = None):
+    """TTS事前生成を手動トリガーする"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+    vn = version or 1
+    key = _start_tts_pregeneration(lesson_id, lang, generator, vn)
+    return {"ok": True, "key": key, "tts_pregeneration_started": True}
+
+
+@router.post("/api/lessons/{lesson_id}/tts-pregen-cancel")
+async def tts_pregen_cancel(lesson_id: int, lang: str = "ja", generator: str = "claude",
+                             version: int | None = None):
+    """TTS事前生成をキャンセルする"""
+    lesson = db.get_lesson(lesson_id)
+    if not lesson:
+        return {"ok": False, "error": "コンテンツが見つかりません"}
+
+    if version is not None:
+        key = _tts_pregen_key(lesson_id, lang, generator, version)
+        entry = _tts_pregen_tasks.get(key)
+        if entry and not entry["task"].done():
+            entry["cancel_event"].set()
+            return {"ok": True, "cancelled": True}
+        return {"ok": True, "cancelled": False, "reason": "タスクが見つからないか既に完了"}
+
+    # version未指定: 該当lesson_idの全タスクをキャンセル
+    prefix = f"{lesson_id}_"
+    cancelled = 0
+    for k, v in _tts_pregen_tasks.items():
+        if k.startswith(prefix) and not v["task"].done():
+            v["cancel_event"].set()
+            cancelled += 1
+    return {"ok": True, "cancelled": cancelled > 0, "cancelled_count": cancelled}
+
+
 # --- バージョン CRUD ---
 
 
