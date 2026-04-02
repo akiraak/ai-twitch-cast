@@ -1,5 +1,16 @@
 # DONE
 
+## Claude Watcher Step 4: CommentReader統合
+
+- [x] `src/comment_reader.py` にClaudeWatcher統合
+  - `__init__` でClaudeWatcherインスタンス作成（SpeechPipeline共有、comment_reader=selfで割り込み判定）
+  - `claude_watcher` プロパティ追加
+  - `start()` で `asyncio.create_task(self._claude_watcher.start())` 起動
+  - `stop()` で `await self._claude_watcher.stop()` + タスクキャンセル
+- [x] `tests/test_claude_watcher.py` に統合テスト6件追加（合計45テスト）
+  - ClaudeWatcher保持・参照渡し・SpeechPipeline共有・start/stop連動・queue_size参照
+- [x] 全781テスト通過
+
 ## Claude Watcher Step 3: 会話生成プロンプト
 
 - [x] `src/ai_responder.py` に `generate_claude_work_conversation()` 追加

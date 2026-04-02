@@ -817,3 +817,92 @@ class TestClaudeWatcherStatus:
 
         watcher._transcript_path = "/tmp/test.jsonl"
         assert watcher.is_active is True
+
+
+# ── CommentReader統合テスト ──────────────────────────────
+
+
+class TestCommentReaderIntegration:
+    """CommentReaderとClaudeWatcherの統合テスト"""
+
+    @pytest.mark.asyncio
+    async def test_comment_reader_has_claude_watcher(self):
+        """CommentReaderがClaudeWatcherインスタンスを持つ"""
+        with patch("src.comment_reader.TwitchChat"):
+            reader = __import__("src.comment_reader", fromlist=["CommentReader"]).CommentReader()
+            assert hasattr(reader, "_claude_watcher")
+            assert isinstance(reader._claude_watcher, ClaudeWatcher)
+            assert reader.claude_watcher is reader._claude_watcher
+
+    @pytest.mark.asyncio
+    async def test_claude_watcher_receives_comment_reader_ref(self):
+        """ClaudeWatcherがCommentReaderへの参照を受け取る"""
+        with patch("src.comment_reader.TwitchChat"):
+            reader = __import__("src.comment_reader", fromlist=["CommentReader"]).CommentReader()
+            assert reader._claude_watcher._comment_reader is reader
+
+    @pytest.mark.asyncio
+    async def test_claude_watcher_receives_speech_pipeline(self):
+        """ClaudeWatcherがSpeechPipelineを共有する"""
+        with patch("src.comment_reader.TwitchChat"):
+            reader = __import__("src.comment_reader", fromlist=["CommentReader"]).CommentReader()
+            assert reader._claude_watcher._speech is reader._speech
+
+    @pytest.mark.asyncio
+    async def test_start_launches_watcher(self):
+        """CommentReader.start()でClaudeWatcherが起動する"""
+        with patch("src.comment_reader.TwitchChat") as mock_twitch:
+            mock_twitch_instance = MagicMock()
+            mock_twitch_instance.start = AsyncMock()
+            mock_twitch_instance.stop = AsyncMock()
+            mock_twitch.return_value = mock_twitch_instance
+
+            reader = __import__("src.comment_reader", fromlist=["CommentReader"]).CommentReader()
+            start_called = False
+
+            async def tracked_start():
+                nonlocal start_called
+                start_called = True
+
+            reader._claude_watcher.start = tracked_start
+            reader._claude_watcher.stop = AsyncMock()
+
+            with patch("src.comment_reader.get_chat_characters", return_value={"teacher": {"name": "test"}}):
+                await reader.start()
+
+            assert reader._watcher_task is not None
+            await asyncio.sleep(0)
+            assert start_called
+
+            await reader.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_stops_watcher(self):
+        """CommentReader.stop()でClaudeWatcherが停止する"""
+        with patch("src.comment_reader.TwitchChat") as mock_twitch:
+            mock_twitch_instance = MagicMock()
+            mock_twitch_instance.start = AsyncMock()
+            mock_twitch_instance.stop = AsyncMock()
+            mock_twitch.return_value = mock_twitch_instance
+
+            reader = __import__("src.comment_reader", fromlist=["CommentReader"]).CommentReader()
+            reader._claude_watcher.start = AsyncMock()
+            reader._claude_watcher.stop = AsyncMock()
+
+            with patch("src.comment_reader.get_chat_characters", return_value={"teacher": {"name": "test"}}):
+                await reader.start()
+            await reader.stop()
+
+            reader._claude_watcher.stop.assert_called_once()
+            assert reader._watcher_task is None
+
+    @pytest.mark.asyncio
+    async def test_queue_size_visible_to_watcher(self):
+        """ClaudeWatcherがCommentReaderのqueue_sizeを参照できる"""
+        with patch("src.comment_reader.TwitchChat"):
+            reader = __import__("src.comment_reader", fromlist=["CommentReader"]).CommentReader()
+            assert reader._claude_watcher._comment_reader.queue_size == 0
+
+            # キューにメッセージを追加
+            reader._queue.append(("user", "hello"))
+            assert reader._claude_watcher._comment_reader.queue_size == 1

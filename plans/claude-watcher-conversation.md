@@ -1,6 +1,6 @@
 # Claude Code 作業実況会話プラン
 
-## ステータス: Step 3 完了
+## ステータス: Step 4 完了
 
 ## 背景
 
@@ -199,7 +199,7 @@ def generate_claude_work_conversation(
 
 **繰り返し防止**: `last_conversation` の直近4発話をプロンプトに含め「同じ表現を避ける」指示
 
-### Step 4: CommentReaderとの統合（コメント割り込み対応）
+### Step 4: CommentReaderとの統合（コメント割り込み対応） ✅
 
 **ファイル**: `src/comment_reader.py`
 

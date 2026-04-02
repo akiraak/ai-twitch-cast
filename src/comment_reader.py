@@ -12,6 +12,7 @@ from src.ai_responder import (
     generate_persona, generate_response, generate_self_note, generate_user_notes,
     get_character, get_character_id, get_chat_characters,
 )
+from src.claude_watcher import ClaudeWatcher
 from src.lesson_runner import LessonRunner
 from src.speech_pipeline import SpeechPipeline
 from src.twitch_chat import TwitchChat
@@ -25,10 +26,16 @@ class CommentReader:
         self._on_overlay = on_overlay
         self._speech = SpeechPipeline(on_overlay=on_overlay)
         self._lesson_runner = LessonRunner(speech=self._speech, on_overlay=on_overlay)
+        self._claude_watcher = ClaudeWatcher(
+            speech=self._speech,
+            comment_reader=self,
+            on_overlay=on_overlay,
+        )
         self._queue = deque()
         self._segment_queue = deque()  # 長文分割の2文目以降/マルチキャラの後続エントリ
         self._process_task = None
         self._note_task = None
+        self._watcher_task = None
         self._running = False
         self._episode_id = None
         self._characters = None  # {"teacher": config, "student": config or None}
@@ -36,6 +43,10 @@ class CommentReader:
     @property
     def lesson_runner(self) -> LessonRunner:
         return self._lesson_runner
+
+    @property
+    def claude_watcher(self) -> ClaudeWatcher:
+        return self._claude_watcher
 
     def set_episode(self, episode_id):
         """現在のエピソードIDを設定する"""
@@ -63,6 +74,7 @@ class CommentReader:
         await self._chat.start(self._on_message)
         self._process_task = asyncio.create_task(self._process_loop())
         self._note_task = asyncio.create_task(self._note_update_loop())
+        self._watcher_task = asyncio.create_task(self._claude_watcher.start())
         logger.info("コメント読み上げを開始しました")
 
     async def stop(self):
@@ -70,8 +82,10 @@ class CommentReader:
         self._running = False
         # 授業実行中なら停止
         await self._lesson_runner.stop()
+        # ClaudeWatcher停止
+        await self._claude_watcher.stop()
         await self._chat.stop()
-        for task in [self._process_task, self._note_task]:
+        for task in [self._process_task, self._note_task, self._watcher_task]:
             if task:
                 task.cancel()
                 try:
@@ -80,6 +94,7 @@ class CommentReader:
                     pass
         self._process_task = None
         self._note_task = None
+        self._watcher_task = None
         self._queue.clear()
         self._segment_queue.clear()
         self._episode_id = None
