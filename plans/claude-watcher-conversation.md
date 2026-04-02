@@ -1,6 +1,6 @@
 # Claude Code 作業実況会話プラン
 
-## ステータス: Step 2 完了
+## ステータス: Step 3 完了
 
 ## 背景
 
@@ -160,11 +160,13 @@ class ClaudeWatcher:
             # DB保存（trigger_type="claude_work"、state.current_episode経由）
 ```
 
-### Step 3: 会話生成プロンプト
+### Step 3: 会話生成プロンプト ✅
 
-**ファイル**: `src/ai_responder.py` に関数追加
+**ファイル**: `src/ai_responder.py` に `generate_claude_work_conversation()` 追加
 
-既存の `build_multi_system_prompt()` をベースに、作業コンテキスト部分のみ追加する。
+`build_multi_system_prompt()` と同様のパターンで、作業実況専用のプロンプトを独自構築する。
+コメント応答用のプロンプト（ペルソナ・記憶・SE・応答分配ガイド等）とは要件が異なるため、
+`build_multi_system_prompt()` を直接呼ぶのではなく、同じ構造で必要なセクションのみ組み立てる。
 
 ```python
 def generate_claude_work_conversation(
@@ -172,17 +174,20 @@ def generate_claude_work_conversation(
     characters: dict,        # {"teacher": config, "student": config}
     last_conversation: list, # 前回会話の内容（繰り返し防止）
 ) -> list[dict]:
-    """Claude Codeの作業内容について二人が会話するスクリプトを生成
-    
-    Returns:
-        list[dict]: [{"speaker", "speech", "tts_text", "emotion"}, ...]
-    """
 ```
 
-**プロンプト構成**（既存資産の活用）:
-- `build_multi_system_prompt()` でキャラ設定・感情・ペルソナ・記憶を組み立て（**既存再利用**）
-- 作業コンテキストセクションを追加（ユーザーの指示 + アクション一覧 + 経過時間）
+**プロンプト構成**:
+- キャラクター設定・感情一覧を `build_multi_system_prompt()` と同じ形式で構築
+- 作業実況専用ルール（視聴者向け・カジュアル・技術的すぎない等）
+- 言語ルール（`build_language_rules()` 再利用）
+- 作業コンテキストはユーザープロンプトとして送信（指示・直近10アクション・Claudeメモ3件・経過時間）
 - `_validate_multi_response()` でspeaker/emotion検証（**既存再利用**）
+- 日本語/英語の両言語モード対応
+
+**`ClaudeWatcher._generate_conversation()` との接続**:
+- `get_chat_characters()` でキャラ設定取得
+- `asyncio.to_thread()` で同期LLM呼び出しを非ブロッキング実行
+- エラー時は `None` 返却（発話スキップ）
 
 **会話ルール**（プロンプトに含める）:
 - 2〜3往復（最大4発話）の自然な会話
@@ -192,7 +197,7 @@ def generate_claude_work_conversation(
 - 技術的すぎない、カジュアルな口調
 - 各発話は1〜2文、40文字以内
 
-**繰り返し防止**: `last_conversation` の直近発話をプロンプトに含め「同じ表現を避ける」指示
+**繰り返し防止**: `last_conversation` の直近4発話をプロンプトに含め「同じ表現を避ける」指示
 
 ### Step 4: CommentReaderとの統合（コメント割り込み対応）
 

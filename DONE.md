@@ -1,5 +1,20 @@
 # DONE
 
+## Claude Watcher Step 3: 会話生成プロンプト
+
+- [x] `src/ai_responder.py` に `generate_claude_work_conversation()` 追加
+  - 作業実況専用プロンプトを独自構築（キャラ設定・感情・言語ルール）
+  - 作業コンテキスト（ユーザー指示・直近10アクション・Claudeメモ3件・経過時間）をユーザープロンプトとして送信
+  - `_validate_multi_response()` でspeaker/emotion検証（既存再利用）
+  - 日本語/英語の両言語モード対応
+  - 前回会話の直近4発話で繰り返し防止
+- [x] `src/claude_watcher.py` の `_generate_conversation()` を実装接続
+  - `get_chat_characters()` でキャラ設定取得
+  - `asyncio.to_thread()` で同期LLM呼び出しを非ブロッキング実行
+  - エラー時は `None` 返却（発話スキップ）
+- [x] `plans/claude-watcher-conversation.md` ステータス更新（Step 3 完了）
+- [x] 全775テスト通過
+
 ## Claude Watcher Step 2: ClaudeWatcherサービス
 
 - [x] `src/claude_watcher.py` に `ClaudeWatcher` クラス追加

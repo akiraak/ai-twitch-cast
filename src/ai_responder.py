@@ -42,6 +42,7 @@ __all__ = [
     "_get_channel_id",
     "build_all_character_contexts",
     "build_character_context",
+    "generate_claude_work_conversation",
     "generate_event_response",
     "generate_multi_event_response",
     "generate_multi_response",
@@ -670,6 +671,187 @@ def generate_multi_response(author, message, characters, comment_count=0, timeli
 
     if not result:
         return [{"speaker": "teacher", "speech": message, "emotion": "neutral", "translation": "", "se": None}]
+
+    return _validate_multi_response(result, characters)
+
+
+def generate_claude_work_conversation(summary, characters, last_conversation=None):
+    """Claude Codeの作業内容について二人が会話するスクリプトを生成する
+
+    Args:
+        summary: {
+            "user_prompt": str,        # ユーザーの指示テキスト
+            "actions": list[str],      # 実行されたアクション一覧
+            "assistant_texts": list[str],  # アシスタントのテキスト応答
+            "elapsed_min": int,        # 経過時間（分）
+        }
+        characters: {"teacher": config, "student": config}
+        last_conversation: 前回会話の発話リスト（繰り返し防止）
+
+    Returns:
+        list[dict]: [{"speaker", "speech", "tts_text", "emotion"}, ...] or []
+    """
+    student_char = characters.get("student")
+    if not student_char:
+        return []
+
+    teacher_char = characters["teacher"]
+    teacher_name = teacher_char.get("name", "ちょビ")
+    student_name = student_char.get("name", "なるこ")
+    teacher_emotions = teacher_char.get("emotions", {})
+    student_emotions = student_char.get("emotions", {})
+
+    lang = get_stream_language()
+    is_en = lang["primary"] != "ja"
+    lang_rules = build_language_rules()
+
+    # 作業コンテキストを構築
+    user_prompt = summary.get("user_prompt", "")
+    actions = summary.get("actions", [])
+    assistant_texts = summary.get("assistant_texts", [])
+    elapsed_min = summary.get("elapsed_min", 0)
+
+    # アクション概要（最新10件）
+    recent_actions = actions[-10:]
+    actions_text = "\n".join(f"  - {a}" for a in recent_actions)
+    # アシスタントテキスト概要（最新3件、各100文字）
+    recent_texts = [t[:100] for t in assistant_texts[-3:]]
+
+    if is_en:
+        parts = [
+            teacher_char["system_prompt"],
+            "",
+            "## Characters",
+            f"### {teacher_name} (speaker: \"teacher\")",
+            f"Available emotions: {', '.join(teacher_emotions.keys())}",
+            f"### {student_name} (speaker: \"student\")",
+            student_char.get("system_prompt", ""),
+            f"Available emotions: {', '.join(student_emotions.keys())}",
+            "",
+            "## Rules",
+            "- You are commenting on Claude Code's current work for stream viewers",
+            f"- {teacher_name} understands programming and explains the work naturally",
+            f"- {student_name} asks questions or reacts with interest",
+            "- 2-3 exchanges (max 4 entries in the array)",
+            "- Each entry: 1-2 sentences, about 10 words",
+            "- Keep it casual and entertaining for viewers",
+            "- Don't be overly technical — explain so non-programmers can enjoy",
+            "- Vary reactions — don't repeat the same expressions",
+        ]
+        if last_conversation:
+            parts.extend(["", "## Previous conversation (avoid repeating)"])
+            for s in last_conversation[-4:]:
+                parts.append(f"- {s}")
+        parts.extend(["", "## Language rules"])
+        for rule in lang_rules:
+            parts.append(rule)
+        parts.extend([
+            "",
+            "## Output format",
+            "Reply ONLY in a JSON array.",
+            '[{"speaker": "teacher", "speech": "text", "tts_text": "TTS text", "emotion": "emotion"}]',
+            "- 2-4 entries (2-3 exchanges between the two characters)",
+            '- speaker: "teacher" or "student"',
+            "- Alternate speakers naturally",
+            "",
+            "## speech vs tts_text",
+            "- speech: Plain text for subtitles. No tags.",
+            "- tts_text: Same as speech, but add [lang:xx]...[/lang] tags for non-English parts.",
+        ])
+
+        # ユーザープロンプト
+        user_parts = [f"[Claude Code work report — {elapsed_min} minutes elapsed]"]
+        if user_prompt:
+            user_parts.append(f"User's instruction: {user_prompt[:200]}")
+        if actions_text:
+            user_parts.append(f"Recent actions:\n{actions_text}")
+        if recent_texts:
+            user_parts.append("Claude's notes:")
+            for t in recent_texts:
+                user_parts.append(f"  - {t}")
+        user_content = "\n".join(user_parts)
+    else:
+        parts = [
+            teacher_char["system_prompt"],
+            "",
+            "## キャラクター",
+            f"### {teacher_name}（speaker: \"teacher\"）",
+            f"使用可能な感情: {', '.join(teacher_emotions.keys())}",
+            f"### {student_name}（speaker: \"student\"）",
+            student_char.get("system_prompt", ""),
+            f"使用可能な感情: {', '.join(student_emotions.keys())}",
+            "",
+            "## ルール",
+            "- Claude Codeの作業内容について、配信の視聴者に向けて二人で会話してください",
+            f"- {teacher_name}はプログラミングに詳しく、作業内容を自然に説明する",
+            f"- {student_name}は興味深そうに質問したり感想を言う",
+            "- 2〜3往復（配列は最大4エントリ）",
+            "- 各発話: 1〜2文、40文字以内",
+            "- カジュアルで楽しい口調。視聴者にもわかるように",
+            "- 技術的すぎない。プログラミングを知らない人でも楽しめるように",
+            "- 毎回同じリアクションをしない。バリエーションを出す",
+        ]
+        if last_conversation:
+            parts.extend(["", "## 前回の会話（同じ表現を避けろ）"])
+            for s in last_conversation[-4:]:
+                parts.append(f"- {s}")
+        parts.extend(["", "## 言語ルール"])
+        for rule in lang_rules:
+            parts.append(rule)
+        parts.extend([
+            "",
+            "## 出力形式",
+            "必ずJSON配列で返答してください。",
+            '[{"speaker": "teacher", "speech": "返答", "tts_text": "読み上げ用", "emotion": "感情"}]',
+            "- 配列は2〜4エントリ（二人の2〜3往復）",
+            '- speaker: "teacher" または "student"',
+            "- 二人が自然に交互に話す",
+            "",
+            "## speechとtts_textの違い",
+            "- speech: 字幕表示用。タグなし。",
+            "- tts_text: TTS用。日本語以外に[lang:xx]タグを付ける。",
+            '  - 例: speech="Claude Codeすごい！" → tts_text="[lang:en]Claude Code[/lang]すごい！"',
+        ])
+
+        # ユーザープロンプト
+        user_parts = [f"【Claude Code作業報告 — {elapsed_min}分経過】"]
+        if user_prompt:
+            user_parts.append(f"ユーザーの指示: {user_prompt[:200]}")
+        if actions_text:
+            user_parts.append(f"直近のアクション:\n{actions_text}")
+        if recent_texts:
+            user_parts.append("Claudeのメモ:")
+            for t in recent_texts:
+                user_parts.append(f"  - {t}")
+        user_content = "\n".join(user_parts)
+
+    system_prompt = "\n".join(parts)
+
+    client = get_client()
+    response = client.models.generate_content(
+        model=os.environ.get("GEMINI_CHAT_MODEL", "gemini-3-flash-preview"),
+        contents=user_content,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+        ),
+    )
+
+    try:
+        result = parse_llm_json(response.text)
+    except (json.JSONDecodeError, AttributeError):
+        logger.warning("[watcher] 会話生成のJSONパース失敗")
+        return []
+
+    if isinstance(result, dict):
+        result.setdefault("speaker", "teacher")
+        result = [result]
+
+    if not result:
+        return []
+
+    # MAX_UTTERANCES制限
+    result = result[:4]
 
     return _validate_multi_response(result, characters)
 

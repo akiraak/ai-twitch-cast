@@ -338,14 +338,37 @@ class ClaudeWatcher:
         Returns:
             list[dict] | None: [{"speaker", "speech", "tts_text", "emotion"}, ...] or None
         """
-        # Step 3 で generate_claude_work_conversation() を実装する
-        logger.info(
-            "[watcher] 会話生成は未実装（Step 3待ち）: actions=%d, elapsed=%dm, prompt=%s",
-            len(summary.actions),
-            elapsed_min,
-            summary.user_prompt[:60],
-        )
-        return None
+        from src.ai_responder import generate_claude_work_conversation, get_chat_characters
+
+        try:
+            characters = get_chat_characters()
+        except Exception as e:
+            logger.warning("[watcher] キャラクター取得失敗: %s", e)
+            return None
+
+        if not characters.get("student"):
+            logger.debug("[watcher] 生徒キャラなし → スキップ")
+            return None
+
+        summary_dict = {
+            "user_prompt": summary.user_prompt,
+            "actions": summary.actions,
+            "assistant_texts": summary.assistant_texts,
+            "elapsed_min": elapsed_min,
+        }
+
+        try:
+            result = await asyncio.to_thread(
+                generate_claude_work_conversation,
+                summary_dict,
+                characters,
+                self._last_conversation,
+            )
+        except Exception as e:
+            logger.error("[watcher] 会話生成失敗: %s", e, exc_info=True)
+            return None
+
+        return result if result else None
 
     async def _play_conversation(self, dialogues):
         """会話を順次再生する（コメント割り込み対応）。
