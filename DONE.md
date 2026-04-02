@@ -1,5 +1,13 @@
 # DONE
 
+## 教師モード カテゴリUI再設計 — Step 3: CSSスタイリング + インラインスタイル→CSSクラス移行
+
+- [x] カテゴリタブバーのCSSクラス追加（`.cat-tabs`, `.cat-tab`, `.cat-tab.active`, `.cat-tab--action`, `.cat-tab--manage`）
+- [x] 学習セクション・ダッシュボードカードのCSSクラス追加（`#learning-section`, `.learning-header`, `.learning-card`, `.learning-btn--*`, `.learning-detail`）
+- [x] 横スクロール対応（薄いスクロールバー）、hover/active状態追加
+- [x] JS側インラインスタイルをCSSクラス参照に全面置換
+- [x] 全708テスト通過
+
 ## 教師モード カテゴリUI再設計 — Step 2: 学習ダッシュボードの教師モード内統合
 
 - [x] サブタブ「学習」を削除し、学習ダッシュボードを教師モード内コンテンツ一覧の下に統合

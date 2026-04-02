@@ -69,12 +69,15 @@
 - JS: `loadLearningsDashboard()` を修正 — `_selectedCategory` でフィルタして選択カテゴリに連動
 - JS: `switchConvSubtab()` から `learnings` 分岐を削除
 
-### Step 3: CSSスタイリング（index.css）
+### Step 3: CSSスタイリング（index.css）+ インラインスタイル→CSSクラス移行 ✅
 
-**変更ファイル**: `static/css/index.css`
+**変更ファイル**: `static/css/index.css`, `static/js/admin/teacher.js`
 
-- カテゴリタブバーのスタイル（横スクロール対応、activeタブのハイライト）
-- 学習セクションのスタイル（コンテンツ一覧と視覚的に区別）
+- カテゴリタブバーのスタイル（`.cat-tabs`, `.cat-tab`, `.cat-tab.active`, `.cat-tab--action`, `.cat-tab--manage`）
+  - 横スクロール対応（薄いスクロールバー）、hover/active状態、pill style
+- 学習セクションのスタイル（`#learning-section`, `.learning-header`, `.learning-card`, `.learning-btn--*`, `.learning-detail`）
+  - ダッシュボードカード、アクションボタン（hover付き）、学習結果折りたたみ
+- JS側: `_renderCategoryTabs`, `_renderLearningSection`, `loadLearningsDashboard` のインラインスタイルをCSSクラス参照に置換
 
 ### Step 4: テスト・動作確認
 

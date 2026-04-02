@@ -387,6 +387,84 @@
   /* 成功バナー */
   .lesson-success-banner { padding: 10px 14px; background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 6px; color: #1b5e20; font-weight: 600; font-size: 0.85rem; margin-bottom: 10px; }
 
+  /* カテゴリタブバー */
+  .cat-tabs {
+    margin-bottom: 12px; display: flex; align-items: center; gap: 4px;
+    overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: thin; scrollbar-color: #d0c0e8 transparent;
+  }
+  .cat-tabs::-webkit-scrollbar { height: 4px; }
+  .cat-tabs::-webkit-scrollbar-track { background: transparent; }
+  .cat-tabs::-webkit-scrollbar-thumb { background: #d0c0e8; border-radius: 2px; }
+  .cat-tab {
+    padding: 5px 14px; border: 1px solid #d0c0e8; border-radius: 16px;
+    cursor: pointer; font-size: 0.78rem; font-weight: 600; white-space: nowrap;
+    background: #faf7ff; color: #7b1fa2; transition: background 0.15s, color 0.15s;
+  }
+  .cat-tab:hover { background: #f0e6fa; }
+  .cat-tab.active { background: #7b1fa2; color: #fff; }
+  .cat-tab.active:hover { background: #6a1090; }
+  .cat-tab--action {
+    background: transparent; color: #7b1fa2; border-style: dashed;
+  }
+  .cat-tab--action:hover { background: #f5eefa; }
+  .cat-tab--manage { background: transparent; color: #8a7a9a; border-style: dashed; }
+  .cat-tab--manage:hover { background: #f5f0f8; }
+
+  /* 学習セクション */
+  #learning-section {
+    margin-top: 16px; padding-top: 12px; border-top: 2px solid #d0c0e8;
+  }
+  .learning-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  }
+  .learning-header h3 {
+    margin: 0; font-size: 0.9rem; color: #6a1b9a;
+  }
+  .learning-header button {
+    padding: 3px 10px; background: #7b1fa2; color: #fff;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+  }
+  .learning-header button:hover { background: #6a1090; }
+
+  /* 学習カード */
+  .learning-card {
+    margin-bottom: 12px; padding: 10px; background: #faf7ff;
+    border: 1px solid #d0c0e8; border-radius: 6px;
+  }
+  .learning-card-head {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
+  }
+  .learning-card-name { font-weight: 600; font-size: 0.85rem; color: #2a1f40; }
+  .learning-card-meta { font-size: 0.7rem; color: #8a7a9a; }
+  .learning-card-stats { font-size: 0.72rem; margin-bottom: 4px; }
+  .learning-card-stats .good { color: #2e7d32; }
+  .learning-card-stats .warn { color: #e65100; }
+  .learning-card-stats .bad  { color: #c62828; }
+  .learning-card-stats .last { color: #8a7a9a; margin-left: 8px; }
+  .learning-card-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+  .learning-btn {
+    padding: 3px 10px; border: none; border-radius: 3px;
+    cursor: pointer; font-size: 0.72rem; color: #fff;
+  }
+  .learning-btn--analyze  { background: #1565c0; }
+  .learning-btn--analyze:hover  { background: #0d47a1; }
+  .learning-btn--improve  { background: #6a1b9a; }
+  .learning-btn--improve:hover  { background: #4a148c; }
+  .learning-btn--create   { background: #e65100; }
+  .learning-btn--create:hover   { background: #bf360c; }
+  .learning-prompt-badge {
+    font-size: 0.65rem; color: #6a5590; padding: 3px 6px;
+    background: #f0ecf5; border-radius: 3px;
+  }
+  .learning-detail summary {
+    cursor: pointer; font-size: 0.72rem; color: #6a1b9a; font-weight: 500;
+  }
+  .learning-detail-body {
+    padding: 6px; background: #fff; border: 1px solid #e0d4f0; border-radius: 4px;
+    margin-top: 3px; font-size: 0.72rem; max-height: 250px; overflow-y: auto;
+  }
+
   /* diff表示 */
   .diff-line-add { background: #e8f5e9; color: #1b5e20; }
   .diff-line-del { background: #ffebee; color: #b71c1c; }

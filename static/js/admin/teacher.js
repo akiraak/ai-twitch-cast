@@ -1252,27 +1252,23 @@ function _setupPromptUI(container) {
 function _renderCategoryTabs(container) {
   const cats = _lessonCategories || [];
   const div = document.createElement('div');
-  div.style.cssText = 'margin-bottom:12px; display:flex; align-items:center; gap:4px; overflow-x:auto; padding-bottom:4px;';
-
-  const activeStyle = 'background:#7b1fa2; color:#fff;';
-  const inactiveStyle = 'background:#faf7ff; color:#7b1fa2;';
-  const baseStyle = 'padding:5px 14px; border:1px solid #d0c0e8; border-radius:16px; cursor:pointer; font-size:0.78rem; font-weight:600; white-space:nowrap;';
+  div.className = 'cat-tabs';
 
   // 「全て」タブ
   const allActive = _selectedCategory === null;
-  let html = `<button onclick="selectCategory(null)" style="${baseStyle} ${allActive ? activeStyle : inactiveStyle}">全て</button>`;
+  let html = `<button onclick="selectCategory(null)" class="cat-tab${allActive ? ' active' : ''}">全て</button>`;
 
   // 各カテゴリタブ
   for (const c of cats) {
     const isActive = _selectedCategory === c.slug;
-    html += `<button onclick="selectCategory('${esc(c.slug)}')" style="${baseStyle} ${isActive ? activeStyle : inactiveStyle}">${esc(c.name)}</button>`;
+    html += `<button onclick="selectCategory('${esc(c.slug)}')" class="cat-tab${isActive ? ' active' : ''}">${esc(c.name)}</button>`;
   }
 
   // 「+ 新規」ボタン
-  html += `<button onclick="createCategory()" style="${baseStyle} background:transparent; color:#7b1fa2; border-style:dashed;">+ 新規</button>`;
+  html += `<button onclick="createCategory()" class="cat-tab cat-tab--action">+ 新規</button>`;
 
   // 「⚙ 管理」ボタン
-  html += `<button onclick="openCategoryManager()" style="${baseStyle} background:transparent; color:#8a7a9a; border-style:dashed;">\u2699 管理</button>`;
+  html += `<button onclick="openCategoryManager()" class="cat-tab cat-tab--manage">\u2699 管理</button>`;
 
   div.innerHTML = html;
   container.appendChild(div);
@@ -1783,11 +1779,10 @@ function _buildLlmCallDisplay(label, prompt, rawOutput) {
 function _renderLearningSection(container) {
   const section = document.createElement('div');
   section.id = 'learning-section';
-  section.style.cssText = 'margin-top:16px; padding-top:12px; border-top:2px solid #d0c0e8;';
   section.innerHTML = `
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-      <h3 style="margin:0; font-size:0.9rem; color:#6a1b9a;">学習ダッシュボード</h3>
-      <button onclick="loadLearningsDashboard()" style="padding:3px 10px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">読み込み</button>
+    <div class="learning-header">
+      <h3>学習ダッシュボード</h3>
+      <button onclick="loadLearningsDashboard()">読み込み</button>
     </div>
     <div id="learnings-dashboard"></div>`;
   container.appendChild(section);
@@ -1837,29 +1832,29 @@ async function loadLearningsDashboard() {
     const catName = st.category_name || st.category || '未分類';
     const promptFile = cat.prompt_file || '';
 
-    html += `<div style="margin-bottom:12px; padding:10px; background:#faf7ff; border:1px solid #d0c0e8; border-radius:6px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-        <span style="font-weight:600; font-size:0.85rem; color:#2a1f40;">${esc(catName)}</span>
-        <span style="font-size:0.7rem; color:#8a7a9a;">${lessonCount}授業 / 注釈${total}件</span>
+    html += `<div class="learning-card">
+      <div class="learning-card-head">
+        <span class="learning-card-name">${esc(catName)}</span>
+        <span class="learning-card-meta">${lessonCount}授業 / 注釈${total}件</span>
       </div>
-      <div style="font-size:0.72rem; margin-bottom:4px;">
-        <span style="color:#2e7d32;">\u25CE ${good}</span> /
-        <span style="color:#e65100;">\u25B3 ${ni}</span> /
-        <span style="color:#c62828;">\u2715 ${redo}</span>
-        <span style="color:#8a7a9a; margin-left:8px;">最終分析: ${esc(lastAnalysis)}</span>
+      <div class="learning-card-stats">
+        <span class="good">\u25CE ${good}</span> /
+        <span class="warn">\u25B3 ${ni}</span> /
+        <span class="bad">\u2715 ${redo}</span>
+        <span class="last">最終分析: ${esc(lastAnalysis)}</span>
       </div>
-      <div style="display:flex; gap:4px; flex-wrap:wrap;">
-        <button onclick="executeLearningAnalysis('${esc(st.category)}')" style="padding:3px 10px; background:#1565c0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem;">分析を実行</button>
-        <button onclick="executePromptImprove('${esc(st.category)}')" style="padding:3px 10px; background:#6a1b9a; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem;">プロンプトを改善</button>
-        ${st.category && !promptFile ? `<button onclick="createCategoryPrompt('${esc(st.category)}')" style="padding:3px 10px; background:#e65100; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.72rem;">専用プロンプト作成</button>` : ''}
-        ${promptFile ? `<span style="font-size:0.65rem; color:#6a5590; padding:3px 6px; background:#f0ecf5; border-radius:3px;">${esc(promptFile)}</span>` : ''}
+      <div class="learning-card-actions">
+        <button onclick="executeLearningAnalysis('${esc(st.category)}')" class="learning-btn learning-btn--analyze">分析を実行</button>
+        <button onclick="executePromptImprove('${esc(st.category)}')" class="learning-btn learning-btn--improve">プロンプトを改善</button>
+        ${st.category && !promptFile ? `<button onclick="createCategoryPrompt('${esc(st.category)}')" class="learning-btn learning-btn--create">専用プロンプト作成</button>` : ''}
+        ${promptFile ? `<span class="learning-prompt-badge">${esc(promptFile)}</span>` : ''}
       </div>`;
 
     // 学習結果表示
     if (st.learnings_md) {
-      html += `<details style="margin-top:6px;">
-        <summary style="cursor:pointer; font-size:0.72rem; color:#6a1b9a; font-weight:500;">学習結果</summary>
-        <div style="padding:6px; background:#fff; border:1px solid #e0d4f0; border-radius:4px; margin-top:3px; font-size:0.72rem; max-height:250px; overflow-y:auto;">
+      html += `<details class="learning-detail" style="margin-top:6px;">
+        <summary>学習結果</summary>
+        <div class="learning-detail-body">
           ${simpleMarkdownToHtml(st.learnings_md)}
         </div>
       </details>`;
