@@ -2,7 +2,6 @@
 
 ## 実装
 - [ ] claude code の履歴を常に取得して一定間隔で二人で会話するようにする → [plans/claude-watcher-conversation.md](plans/claude-watcher-conversation.md)
-  - [ ] Step 2: ClaudeWatcherサービス（監視ループ・マーカーファイル検出）
   - [ ] Step 3: 会話生成プロンプト（build_multi_system_promptベース）
   - [ ] Step 4: CommentReader統合（コメント割り込み対応）
   - [ ] Step 5: long-execution-timerとの共存（フラグチェック追加）

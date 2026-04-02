@@ -1,12 +1,14 @@
-"""TranscriptParser テスト"""
+"""TranscriptParser / ClaudeWatcher テスト"""
 
+import asyncio
 import json
 import os
 import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.claude_watcher import TranscriptParser, TranscriptSummary
+from src.claude_watcher import ClaudeWatcher, TranscriptParser, TranscriptSummary
 
 
 # ── ヘルパー ────────────────────────────────────────
@@ -414,3 +416,404 @@ class TestTranscriptParserEdgeCases:
 
         parser = TranscriptParser()
         assert parser.parse(path) is None
+
+
+# ── ClaudeWatcher テスト ──────────────────────────────
+
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
+
+
+@pytest.fixture
+def mock_speech():
+    """SpeechPipelineモック"""
+    speech = MagicMock()
+    speech.apply_emotion = MagicMock()
+    speech.speak = AsyncMock()
+    speech.notify_overlay_end = AsyncMock()
+    return speech
+
+
+@pytest.fixture
+def mock_comment_reader():
+    """CommentReaderモック（queue_sizeプロパティ付き）"""
+    reader = MagicMock()
+    reader.queue_size = 0
+    return reader
+
+
+class TestClaudeWatcherLifecycle:
+    """ClaudeWatcher の起動・停止・フラグ管理"""
+
+    @pytest.mark.asyncio
+    async def test_start_creates_active_flag(self, mock_speech):
+        """start()でACTIVE_FLAGが作成される"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        try:
+            await watcher.start()
+            assert os.path.exists(ClaudeWatcher.ACTIVE_FLAG)
+            assert watcher._running is True
+        finally:
+            await watcher.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_removes_active_flag(self, mock_speech):
+        """stop()でACTIVE_FLAGが削除される"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        await watcher.start()
+        assert os.path.exists(ClaudeWatcher.ACTIVE_FLAG)
+        await watcher.stop()
+        assert not os.path.exists(ClaudeWatcher.ACTIVE_FLAG)
+        assert watcher._running is False
+
+    @pytest.mark.asyncio
+    async def test_stop_without_start(self, mock_speech):
+        """start()せずにstop()しても安全"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        await watcher.stop()  # エラーなし
+        assert watcher._running is False
+
+    @pytest.mark.asyncio
+    async def test_double_start(self, mock_speech):
+        """二重start()は無視される"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        try:
+            await watcher.start()
+            task1 = watcher._task
+            await watcher.start()  # 2回目
+            assert watcher._task is task1  # 同じタスク
+        finally:
+            await watcher.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_resets_state(self, mock_speech):
+        """stop()でパーサーと状態がリセットされる"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher._transcript_path = "/tmp/test.jsonl"
+        watcher._start_time = 1000.0
+        watcher._last_conversation = ["hello"]
+        await watcher.stop()
+        assert watcher._transcript_path is None
+        assert watcher._start_time is None
+
+
+class TestClaudeWatcherMarkerDetection:
+    """マーカーファイル検出"""
+
+    @pytest.mark.asyncio
+    async def test_marker_file_detected(self, mock_speech, tmp_path):
+        """マーカーファイルが存在すればtranscript_pathを取得する"""
+        marker_file = str(tmp_path / "claude_working")
+        transcript_path = str(tmp_path / "test.jsonl")
+        with open(transcript_path, "w") as f:
+            f.write("")
+
+        with open(marker_file, "w") as f:
+            json.dump({"start_time": 1000.0, "transcript_path": transcript_path}, f)
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher.MARKER_FILE = marker_file
+        watcher.POLL_INTERVAL = 0.01
+        watcher.INTERVAL = 9999  # 会話生成しない
+
+        try:
+            await watcher.start()
+            await asyncio.sleep(0.05)
+            assert watcher._transcript_path == transcript_path
+            assert watcher._start_time == 1000.0
+        finally:
+            await watcher.stop()
+
+    @pytest.mark.asyncio
+    async def test_marker_file_removed_resets_session(self, mock_speech, tmp_path):
+        """マーカーファイルが消えるとセッションリセット"""
+        marker_file = str(tmp_path / "claude_working")
+        with open(marker_file, "w") as f:
+            json.dump({"start_time": 1000.0, "transcript_path": "/tmp/t.jsonl"}, f)
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher.MARKER_FILE = marker_file
+        watcher.POLL_INTERVAL = 0.01
+        watcher.INTERVAL = 9999
+
+        try:
+            await watcher.start()
+            await asyncio.sleep(0.05)
+            assert watcher._transcript_path is not None
+
+            # マーカーファイルを削除
+            os.remove(marker_file)
+            await asyncio.sleep(0.05)
+            assert watcher._transcript_path is None
+        finally:
+            await watcher.stop()
+
+    @pytest.mark.asyncio
+    async def test_session_change_resets_parser(self, mock_speech, tmp_path):
+        """transcript_pathが変わるとパーサーがリセットされる"""
+        marker_file = str(tmp_path / "claude_working")
+        with open(marker_file, "w") as f:
+            json.dump({"start_time": 1000.0, "transcript_path": "/tmp/a.jsonl"}, f)
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher.MARKER_FILE = marker_file
+        watcher.POLL_INTERVAL = 0.01
+        watcher.INTERVAL = 9999
+        watcher._last_conversation = ["old"]
+
+        try:
+            await watcher.start()
+            await asyncio.sleep(0.05)
+            assert watcher._transcript_path == "/tmp/a.jsonl"
+
+            # パスを変更
+            with open(marker_file, "w") as f:
+                json.dump({"start_time": 2000.0, "transcript_path": "/tmp/b.jsonl"}, f)
+            await asyncio.sleep(0.05)
+            assert watcher._transcript_path == "/tmp/b.jsonl"
+            assert watcher._last_conversation == []
+        finally:
+            await watcher.stop()
+
+
+class TestClaudeWatcherCheckAndConverse:
+    """_check_and_converse の動作"""
+
+    @pytest.mark.asyncio
+    async def test_no_change_skips(self, mock_speech, tmp_path):
+        """transcript変化なし → 会話生成スキップ"""
+        path = str(tmp_path / "t.jsonl")
+        _write_jsonl(path, [_user_entry("テスト")])
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher._transcript_path = path
+        watcher._start_time = 1000.0
+
+        # 1回目で差分消費
+        watcher._parser.parse(path)
+        # 2回目は変化なし
+        await watcher._check_and_converse()
+        mock_speech.speak.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_insufficient_actions_skips(self, mock_speech, tmp_path):
+        """アクション数がMIN_ACTIONS未満 → スキップ"""
+        path = str(tmp_path / "t.jsonl")
+        _write_jsonl(
+            path,
+            [
+                _user_entry("テスト"),
+                _assistant_tool("Read", {"file_path": "/tmp/a.py"}),
+                _assistant_tool("Read", {"file_path": "/tmp/b.py"}),
+            ],
+        )
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher._transcript_path = path
+        watcher._start_time = 1000.0
+        watcher.MIN_ACTIONS = 3
+
+        await watcher._check_and_converse()
+        mock_speech.speak.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sufficient_actions_calls_generate(self, mock_speech, tmp_path):
+        """アクション数がMIN_ACTIONS以上 → _generate_conversation呼び出し"""
+        path = str(tmp_path / "t.jsonl")
+        _write_jsonl(
+            path,
+            [
+                _user_entry("テスト指示"),
+                _assistant_tool("Read", {"file_path": "/tmp/a.py"}),
+                _assistant_tool("Edit", {"file_path": "/tmp/b.py"}),
+                _assistant_tool("Bash", {"command": "pytest"}),
+            ],
+        )
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher._transcript_path = path
+        watcher._start_time = 1000.0
+        watcher.MIN_ACTIONS = 3
+
+        # _generate_conversation をモック化（Step 3 未実装のため）
+        watcher._generate_conversation = AsyncMock(return_value=None)
+        await watcher._check_and_converse()
+
+        watcher._generate_conversation.assert_called_once()
+        args = watcher._generate_conversation.call_args
+        summary = args[0][0]
+        assert isinstance(summary, TranscriptSummary)
+        assert len(summary.actions) >= 3
+
+    @pytest.mark.asyncio
+    async def test_generate_returns_dialogues_plays(self, mock_speech, tmp_path):
+        """_generate_conversationが会話を返す → _play_conversation実行"""
+        path = str(tmp_path / "t.jsonl")
+        _write_jsonl(
+            path,
+            [
+                _user_entry("テスト"),
+                _assistant_tool("Read", {"file_path": "/tmp/a.py"}),
+                _assistant_tool("Edit", {"file_path": "/tmp/b.py"}),
+                _assistant_tool("Bash", {"command": "pytest"}),
+            ],
+        )
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher._transcript_path = path
+        watcher._start_time = 1000.0
+        watcher.MIN_ACTIONS = 3
+
+        fake_dialogues = [
+            {"speaker": "teacher", "speech": "テスト中だよ", "emotion": "neutral"},
+        ]
+        watcher._generate_conversation = AsyncMock(return_value=fake_dialogues)
+        watcher._play_conversation = AsyncMock()
+
+        await watcher._check_and_converse()
+
+        watcher._play_conversation.assert_called_once_with(fake_dialogues)
+        assert watcher._last_conversation == ["テスト中だよ"]
+
+
+class TestClaudeWatcherPlayConversation:
+    """_play_conversation の再生・割り込みテスト"""
+
+    @pytest.mark.asyncio
+    async def test_play_all_utterances(self, mock_speech):
+        """全発話が順次再生される"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "テストを実行中だよ", "emotion": "neutral"},
+            {"speaker": "student", "speech": "どんなテスト？", "emotion": "joy"},
+        ]
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ", "tts_voice": "Despina", "tts_style": "にこにこ"},
+            "student": {"name": "なるこ", "tts_voice": "Kore", "tts_style": ""},
+        }):
+            await watcher._play_conversation(dialogues)
+
+        assert mock_speech.speak.call_count == 2
+        assert mock_speech.apply_emotion.call_count == 4  # emotion + neutral × 2
+        assert mock_speech.notify_overlay_end.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_comment_interrupt_skips_remaining(self, mock_speech, mock_comment_reader):
+        """コメント到着で残り発話をスキップする"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "1番目", "emotion": "neutral"},
+            {"speaker": "student", "speech": "2番目", "emotion": "joy"},
+            {"speaker": "teacher", "speech": "3番目", "emotion": "neutral"},
+        ]
+
+        # 2番目の発話前にコメント到着
+        call_count = 0
+
+        def queue_size_side_effect():
+            nonlocal call_count
+            call_count += 1
+            # 1回目(1番目の前): 0, 2回目(2番目の前): 1
+            return 0 if call_count <= 1 else 1
+
+        type(mock_comment_reader).queue_size = property(lambda self: queue_size_side_effect())
+
+        watcher = ClaudeWatcher(speech=mock_speech, comment_reader=mock_comment_reader)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ"},
+            "student": {"name": "なるこ"},
+        }):
+            await watcher._play_conversation(dialogues)
+
+        # 1番目だけ再生（2番目の前にコメント到着でスキップ）
+        assert mock_speech.speak.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_play_stores_to_db(self, mock_speech):
+        """発話がDB保存される"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "テスト発話", "emotion": "joy"},
+        ]
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ"},
+        }), patch.object(watcher, "_save_avatar_comment", new_callable=AsyncMock) as mock_save:
+            await watcher._play_conversation(dialogues)
+
+        mock_save.assert_called_once_with(
+            "claude_work", "[Claude Code実況]", "テスト発話", "joy", speaker="teacher",
+        )
+
+    @pytest.mark.asyncio
+    async def test_play_with_no_comment_reader(self, mock_speech):
+        """comment_reader=Noneでも正常動作"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "テスト", "emotion": "neutral"},
+        ]
+
+        watcher = ClaudeWatcher(speech=mock_speech, comment_reader=None)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ"},
+        }):
+            await watcher._play_conversation(dialogues)
+
+        assert mock_speech.speak.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_speak_error_breaks_loop(self, mock_speech):
+        """発話エラーでループが中断される"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "1番目", "emotion": "neutral"},
+            {"speaker": "student", "speech": "2番目", "emotion": "joy"},
+        ]
+        mock_speech.speak.side_effect = RuntimeError("TTS error")
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ"},
+            "student": {"name": "なるこ"},
+        }):
+            await watcher._play_conversation(dialogues)
+
+        # 1番目でエラー → 2番目は試行されない
+        assert mock_speech.speak.call_count == 1
+
+
+class TestClaudeWatcherStatus:
+    """statusプロパティ"""
+
+    def test_status_idle(self, mock_speech):
+        """アイドル時のステータス"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        status = watcher.status
+        assert status["running"] is False
+        assert status["active"] is False
+        assert status["transcript_path"] is None
+        assert status["elapsed_seconds"] is None
+
+    def test_status_active(self, mock_speech):
+        """監視中のステータス"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        watcher._running = True
+        watcher._transcript_path = "/tmp/test.jsonl"
+        watcher._start_time = time.time() - 300
+        watcher._last_conversation = ["hello", "world"]
+
+        status = watcher.status
+        assert status["running"] is True
+        assert status["active"] is True
+        assert status["transcript_path"] == "/tmp/test.jsonl"
+        assert 298 <= status["elapsed_seconds"] <= 302
+        assert status["last_conversation"] == ["hello", "world"]
+
+    def test_is_active_requires_both(self, mock_speech):
+        """is_activeはrunning AND transcript_path両方必要"""
+        watcher = ClaudeWatcher(speech=mock_speech)
+        assert watcher.is_active is False
+
+        watcher._running = True
+        assert watcher.is_active is False
+
+        watcher._transcript_path = "/tmp/test.jsonl"
+        assert watcher.is_active is True

@@ -1,6 +1,6 @@
 # Claude Code 作業実況会話プラン
 
-## ステータス: Step 1 完了
+## ステータス: Step 2 完了
 
 ## 背景
 
@@ -152,12 +152,12 @@ class ClaudeWatcher:
     async def _play_conversation(self, dialogues: list[dict]):
         """会話を順次再生する（コメント割り込み対応）"""
         for i, dlg in enumerate(dialogues):
-            # ★ 各発話の前にコメントキューを確認
-            if self._comment_reader and self._comment_reader.has_pending_comments():
+            # ★ 各発話の前にコメントキューを確認（既存 queue_size プロパティを利用）
+            if self._comment_reader and self._comment_reader.queue_size > 0:
                 logger.info("[watcher] コメント到着 → 残り%d発話をスキップ", len(dialogues) - i)
                 break
             # 感情適用 → speak() → 感情リセット → overlay end
-            # DB保存（trigger_type="claude_work"）
+            # DB保存（trigger_type="claude_work"、state.current_episode経由）
 ```
 
 ### Step 3: 会話生成プロンプト
@@ -204,13 +204,11 @@ class CommentReader:
         ...
         self._claude_watcher = ClaudeWatcher(
             speech=self._speech,
-            comment_reader=self,  # コメントキュー参照を渡す
+            comment_reader=self,  # コメントキュー参照を渡す（queue_sizeプロパティを利用）
             on_overlay=on_overlay,
         )
     
-    def has_pending_comments(self) -> bool:
-        """未処理コメントがあるか（ClaudeWatcherの割り込み判定用）"""
-        return len(self._queue) > 0
+    # has_pending_comments() は不要 — 既存の queue_size プロパティで判定
     
     async def start(self):
         ...
@@ -222,7 +220,7 @@ class CommentReader:
 ```
 
 **コメント割り込みの仕組み**:
-1. ClaudeWatcherの `_play_conversation()` は各発話の前に `has_pending_comments()` を確認
+1. ClaudeWatcherの `_play_conversation()` は各発話の前に `queue_size > 0` を確認
 2. コメントがあれば残りの発話をスキップし、SpeechPipelineのロックを解放
 3. CommentReaderの `_process_loop()` が次のイテレーションでコメントを処理
 4. **SpeechPipelineのロック自体は変更しない**（既存のシリアライズは維持）
@@ -256,24 +254,15 @@ def speak(message):
 - `POST /api/claude-watcher/config` — 間隔・有効/無効の設定
 - 管理画面に監視ステータス表示
 
-### Step 7: テスト
+### Step 7: テスト（残り）
 
 **ファイル**: `tests/test_claude_watcher.py`
 
-- **TranscriptParser**:
-  - 正常なJSONL解析、差分解析、サマリ生成
-  - 不正なJSON行が混在 → スキップして残りを処理
-  - 未知のtype → スキップ
-  - 空ファイル / ファイル不存在 → None返却
-  - パース成功率低下 → 警告
-- **ClaudeWatcher**:
-  - マーカーファイル検出 → 監視開始
-  - マーカーファイル消失 → 監視停止
-  - アクション数不足 → 会話スキップ
-  - コメント割り込み → 残り発話スキップ
-  - ACTIVE_FLAGのライフサイクル
-- **会話生成**: LLMモック経由でJSON配列の検証
-- **会話再生**: SpeechPipelineモック経由の発話確認
+TranscriptParser（19テスト）とClaudeWatcherサービス（20テスト）はStep 1・2で実装済み。
+Step 7 では以下の残りテストを追加する:
+
+- **会話生成**: LLMモック経由でJSON配列の検証（Step 3実装後）
+- **CommentReader統合**: ClaudeWatcherの起動・停止がCommentReaderと連動（Step 4実装後）
 
 ## 設定
 
@@ -301,10 +290,10 @@ def speak(message):
 
 | ファイル | 変更内容 |
 |---------|---------|
-| `src/claude_watcher.py` | **新規** TranscriptParser + ClaudeWatcher |
+| `src/claude_watcher.py` | TranscriptParser（Step 1済）+ ClaudeWatcher（Step 2済） |
 | `src/ai_responder.py` | `generate_claude_work_conversation()` 追加（`build_multi_system_prompt()` ベース） |
-| `src/comment_reader.py` | ClaudeWatcher統合 + `has_pending_comments()` 追加 |
+| `src/comment_reader.py` | ClaudeWatcher統合（既存 `queue_size` で割り込み判定） |
 | `scripts/routes/avatar.py` | `/api/claude-watcher/*` エンドポイント追加 |
 | `static/index.html` | 監視ステータスUI |
 | `~/.claude/hooks/long-execution-timer.py` | フラグチェック追加（ACTIVE_FLAG存在時はスキップ） |
-| `tests/test_claude_watcher.py` | **新規** テスト |
+| `tests/test_claude_watcher.py` | TranscriptParser 19テスト（Step 1済）+ ClaudeWatcher 20テスト（Step 2済）+ 残りはStep 7 |

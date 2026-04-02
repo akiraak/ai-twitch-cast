@@ -1,12 +1,17 @@
-"""Claude Code作業監視 — transcript解析・会話生成
+"""Claude Code作業監視 — transcript解析・会話生成・二人実況
 
 Claude Codeのtranscript（JSONL）を解析し、作業内容のサマリを生成する。
+ClaudeWatcherサービスが定期的に二人の会話を生成・再生する。
 """
 
+import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, field
+
+from src import db
 
 logger = logging.getLogger(__name__)
 
@@ -187,3 +192,260 @@ class TranscriptParser:
         elif tool:
             return f"{tool}を使用"
         return ""
+
+
+class ClaudeWatcher:
+    """Claude Codeの作業を監視し、定期的に二人で会話する。
+
+    /tmp/claude_working マーカーファイルをポーリングし、transcript JSONL を
+    定期的に解析して、十分な作業変化があれば二人の会話を生成・再生する。
+    """
+
+    MARKER_FILE = "/tmp/claude_working"
+    ACTIVE_FLAG = "/tmp/claude_watcher_active"  # long-execution-timer抑制用
+    INTERVAL = 480  # 会話生成間隔（秒、デフォルト8分）
+    POLL_INTERVAL = 10  # マーカーファイル監視間隔（秒）
+    MIN_ACTIONS = 3  # 会話を生成する最低アクション数
+    MAX_UTTERANCES = 4  # 1回の会話の最大発話数（2往復）
+
+    def __init__(self, speech, comment_reader=None, on_overlay=None):
+        """
+        Args:
+            speech: SpeechPipeline インスタンス
+            comment_reader: CommentReader インスタンス（コメント割り込み判定用）
+            on_overlay: オーバーレイ送信コールバック
+        """
+        self._speech = speech
+        self._comment_reader = comment_reader
+        self._on_overlay = on_overlay
+        self._parser = TranscriptParser()
+        self._running = False
+        self._task = None
+        self._last_conversation: list[str] = []  # 前回会話内容（繰り返し防止）
+        self._transcript_path: str | None = None
+        self._start_time: float | None = None
+
+    async def start(self):
+        """監視ループを開始する"""
+        if self._running:
+            return
+        self._running = True
+        # ACTIVE_FLAG作成（long-execution-timerを抑制）
+        try:
+            with open(self.ACTIVE_FLAG, "w") as f:
+                f.write(str(os.getpid()))
+        except OSError:
+            pass
+        self._task = asyncio.create_task(self._monitor_loop())
+        logger.info("[watcher] ClaudeWatcher開始")
+
+    async def stop(self):
+        """監視を停止する"""
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._task = None
+        # ACTIVE_FLAG削除（long-execution-timerのフォールバック復帰）
+        try:
+            os.remove(self.ACTIVE_FLAG)
+        except FileNotFoundError:
+            pass
+        self._parser.reset()
+        self._transcript_path = None
+        self._start_time = None
+        logger.info("[watcher] ClaudeWatcher停止")
+
+    async def _monitor_loop(self):
+        """マーカーファイルをポーリングし、INTERVAL間隔で解析・会話する"""
+        last_converse_time = 0.0
+
+        try:
+            while self._running:
+                if os.path.exists(self.MARKER_FILE):
+                    try:
+                        with open(self.MARKER_FILE) as f:
+                            marker = json.loads(f.read())
+                        new_path = marker.get("transcript_path", "")
+                        new_start = marker.get("start_time", 0)
+
+                        # セッションが変わったらパーサーリセット
+                        if new_path and new_path != self._transcript_path:
+                            self._parser.reset()
+                            self._last_conversation = []
+                            last_converse_time = 0.0
+                            logger.info("[watcher] 新セッション検出: %s", os.path.basename(new_path))
+
+                        self._transcript_path = new_path
+                        self._start_time = new_start
+                    except (json.JSONDecodeError, OSError) as e:
+                        logger.debug("[watcher] マーカーファイル読み込み失敗: %s", e)
+
+                    # INTERVAL経過したら会話生成を試行
+                    now = time.time()
+                    if self._transcript_path and (now - last_converse_time) >= self.INTERVAL:
+                        await self._check_and_converse()
+                        last_converse_time = time.time()
+                else:
+                    # マーカーファイルなし → セッションリセット
+                    if self._transcript_path:
+                        logger.info("[watcher] セッション終了")
+                        self._parser.reset()
+                        self._transcript_path = None
+                        self._start_time = None
+                        self._last_conversation = []
+
+                await asyncio.sleep(self.POLL_INTERVAL)
+        except asyncio.CancelledError:
+            pass
+
+    async def _check_and_converse(self):
+        """transcript差分を解析し、十分な変化があれば会話を生成・再生する"""
+        summary = self._parser.parse(self._transcript_path)
+
+        if summary is None:
+            logger.debug("[watcher] 変化なし → スキップ")
+            return
+
+        if len(summary.actions) < self.MIN_ACTIONS:
+            logger.info(
+                "[watcher] アクション数不足 (%d < %d) → スキップ",
+                len(summary.actions),
+                self.MIN_ACTIONS,
+            )
+            return
+
+        # 経過時間
+        elapsed_min = int((time.time() - self._start_time) / 60) if self._start_time else 0
+
+        # 会話を生成（Step 3 で実装予定）
+        dialogues = await self._generate_conversation(summary, elapsed_min)
+        if not dialogues:
+            return
+
+        logger.info("[watcher] 会話生成OK: %d発話", len(dialogues))
+        await self._play_conversation(dialogues)
+
+        # 今回の会話を記憶（繰り返し防止）
+        self._last_conversation = [d.get("speech", "") for d in dialogues]
+
+    async def _generate_conversation(self, summary, elapsed_min):
+        """作業サマリから二人の会話を生成する。
+
+        Returns:
+            list[dict] | None: [{"speaker", "speech", "tts_text", "emotion"}, ...] or None
+        """
+        # Step 3 で generate_claude_work_conversation() を実装する
+        logger.info(
+            "[watcher] 会話生成は未実装（Step 3待ち）: actions=%d, elapsed=%dm, prompt=%s",
+            len(summary.actions),
+            elapsed_min,
+            summary.user_prompt[:60],
+        )
+        return None
+
+    async def _play_conversation(self, dialogues):
+        """会話を順次再生する（コメント割り込み対応）。
+
+        各発話の前にコメントキューを確認し、コメントがあれば残り発話をスキップする。
+        """
+        from src.ai_responder import get_chat_characters
+
+        try:
+            characters = get_chat_characters()
+        except Exception:
+            characters = {}
+
+        for i, dlg in enumerate(dialogues):
+            # コメント割り込みチェック
+            if self._comment_reader and self._comment_reader.queue_size > 0:
+                logger.info(
+                    "[watcher] コメント到着 → 残り%d発話をスキップ",
+                    len(dialogues) - i,
+                )
+                break
+
+            speaker = dlg.get("speaker", "teacher")
+            cfg = characters.get(speaker, characters.get("teacher", {}))
+
+            # キャラ間の間
+            if i > 0:
+                await asyncio.sleep(0.3)
+
+            try:
+                self._speech.apply_emotion(
+                    dlg.get("emotion", "neutral"),
+                    avatar_id=speaker,
+                    character_config=cfg,
+                )
+                await self._speech.speak(
+                    dlg["speech"],
+                    subtitle={
+                        "author": cfg.get("name", speaker),
+                        "trigger_text": "[Claude Code実況]",
+                        "result": dlg,
+                    },
+                    tts_text=dlg.get("tts_text"),
+                    voice=cfg.get("tts_voice"),
+                    style=cfg.get("tts_style"),
+                    avatar_id=speaker,
+                )
+                self._speech.apply_emotion(
+                    "neutral", avatar_id=speaker, character_config=cfg,
+                )
+                await self._speech.notify_overlay_end()
+
+                # DB保存（trigger_type="claude_work"）
+                await self._save_avatar_comment(
+                    "claude_work",
+                    "[Claude Code実況]",
+                    dlg["speech"],
+                    dlg.get("emotion", "neutral"),
+                    speaker=speaker,
+                )
+            except Exception as e:
+                logger.error("[watcher] 発話失敗: %s", e, exc_info=True)
+                break
+
+    async def _save_avatar_comment(
+        self, trigger_type, trigger_text, text, emotion="neutral", speaker=None,
+    ):
+        """アバターコメントをDBに保存する"""
+        try:
+            from scripts import state
+
+            if state.current_episode:
+                await asyncio.to_thread(
+                    db.save_avatar_comment,
+                    state.current_episode["id"],
+                    trigger_type,
+                    trigger_text,
+                    text,
+                    emotion,
+                    speaker=speaker,
+                )
+        except Exception as e:
+            logger.warning("[watcher] DB保存失敗: %s", e)
+
+    @property
+    def is_active(self):
+        """Claude Codeセッションを監視中か"""
+        return self._running and self._transcript_path is not None
+
+    @property
+    def status(self):
+        """現在の監視ステータスを返す"""
+        elapsed = None
+        if self._start_time:
+            elapsed = int(time.time() - self._start_time)
+        return {
+            "running": self._running,
+            "active": self.is_active,
+            "transcript_path": self._transcript_path,
+            "start_time": self._start_time,
+            "elapsed_seconds": elapsed,
+            "last_conversation": self._last_conversation,
+        }

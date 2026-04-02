@@ -1,5 +1,22 @@
 # DONE
 
+## Claude Watcher Step 2: ClaudeWatcherサービス
+
+- [x] `src/claude_watcher.py` に `ClaudeWatcher` クラス追加
+  - `/tmp/claude_working` マーカーファイルのポーリング監視（10秒間隔）
+  - `/tmp/claude_watcher_active` フラグ管理（long-execution-timer抑制）
+  - セッション変更検出・パーサー自動リセット
+  - `_check_and_converse()`: transcript差分解析 → アクション数判定 → 会話生成（Step 3待ち）
+  - `_play_conversation()`: 順次再生 + コメント割り込み対応（queue_sizeチェック）
+  - DB保存（trigger_type="claude_work"）、statusプロパティ
+- [x] `tests/test_claude_watcher.py` に20テスト追加（合計39テスト）
+  - ライフサイクル: start/stop/フラグ作成・削除/二重start/状態リセット
+  - マーカー検出: ファイル検出・消失リセット・セッション変更
+  - check_and_converse: 変化なし/アクション不足/十分なアクション/会話再生
+  - play_conversation: 全発話再生/コメント割り込み/DB保存/エラー中断
+  - status: アイドル/アクティブ/is_active
+- [x] 全775テスト通過
+
 ## Claude Watcher Step 1: TranscriptParser
 
 - [x] `src/claude_watcher.py` 新規作成 — TranscriptParser + TranscriptSummary
