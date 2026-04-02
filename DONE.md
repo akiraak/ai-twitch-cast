@@ -1,5 +1,14 @@
 # DONE
 
+## TTS事前生成 Step 5: フロントエンド進捗表示・手動トリガー/キャンセルUI
+
+- [x] TTS一括生成ボタンをバージョンセレクターに追加
+- [x] 進捗バーUI（生成中スピナー・プログレスバー・完了/エラー表示・中止ボタン）
+- [x] 3秒間隔ポーリングで進捗自動更新（完了時5秒後フェードアウト+一覧リロード）
+- [x] import_sections / improve_content 完了後に自動ポーリング開始
+- [x] レッスン展開時に実行中タスクがあればポーリング自動再開
+- [x] triggerTtsPregen / cancelTtsPregen API呼び出し関数
+
 ## TTS事前生成 Step 3: import_sections / improve_content に統合
 
 - [x] `import_sections` のreturn前に `_start_tts_pregeneration()` 呼び出し追加

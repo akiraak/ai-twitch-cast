@@ -24,6 +24,9 @@ let _lessonCategories = null;
 // 選択中のカテゴリslug（null = 全て表示）
 let _selectedCategory = null;
 
+// TTS事前生成ポーリングタイマー（key → intervalId）
+let _ttsPregenTimers = {};
+
 
 function _getLessonLang(lessonId) {
   return _lessonLangTab[lessonId] || 'ja';
@@ -407,6 +410,14 @@ async function buildLessonItem(lessonId) {
   step3.innerHTML = '<div class="lesson-step-num">3</div>';
   step3.appendChild(step3Body);
   body.appendChild(step3);
+
+  // TTS事前生成の進行中タスクがあればポーリング再開
+  if (hasSections) {
+    const pregenRes = await api('GET', `/api/lessons/${lessonId}/tts-pregen-status?lang=${lang}&generator=${generator}&version=${currentVersion}`);
+    if (pregenRes && pregenRes.ok && pregenRes.state === 'running') {
+      startTtsPregenPolling(lessonId, lang, generator, currentVersion);
+    }
+  }
 
   // === STEP 4: 授業再生 ===
   const isRunning = runningThisLesson && lState === 'running';
@@ -1113,6 +1124,9 @@ async function importClaudeSections(lessonId, lang) {
     showToast(`インポート完了: ${res.count}セクション`, 'success');
     _openLessonIds.add(lessonId);
     await loadLessons();
+    if (res.tts_pregeneration_started && res.version_number) {
+      startTtsPregenPolling(lessonId, lang, 'claude', res.version_number);
+    }
   } else {
     showToast('インポート失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
   }
@@ -1189,6 +1203,9 @@ async function importClaudeSectionsInline(lessonId, lang, btnEl) {
     showToast(`インポート完了: ${res.count}セクション`, 'success');
     _openLessonIds.add(lessonId);
     await loadLessons();
+    if (res.tts_pregeneration_started && res.version_number) {
+      startTtsPregenPolling(lessonId, lang, 'claude', res.version_number);
+    }
   } else {
     if (statusEl) statusEl.textContent = '';
     showToast('インポート失敗: ' + (res && res.error ? res.error : '不明なエラー'), 'error');
@@ -1520,9 +1537,11 @@ function _buildVersionSelector(lessonId, lang, generator, versions, currentVersi
       <button onclick="verifyVersion(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#1565c0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">検証</button>
       <button onclick="showImprovePanel(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#e65100; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">改善</button>
       <button onclick="showVersionDiff(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">比較...</button>
+      <button onclick="triggerTtsPregen(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#4a148c; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">TTS一括生成</button>
       ${versions.length > 1 ? `<button onclick="_deleteVersion(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#c62828; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">削除</button>` : ''}
     </div>
     ${verifyHtml}
+    <div class="tts-pregen-bar-${lessonId}-${currentVersion}" style="margin-top:6px;"></div>
     <div class="verify-results-${lessonId}-${currentVersion}"></div>
     <div class="improve-panel-${lessonId}-${currentVersion}" style="display:none;"></div>
     <div class="diff-panel-${lessonId}" style="display:none;"></div>
@@ -1751,7 +1770,13 @@ async function executeImprove(lessonId, lang, generator, btn) {
     _lessonVersionTab[`${lessonId}_${lang}`] = res.version_number;
     showToast(`改善完了: v${res.version_number} 作成`, 'success');
     _openLessonIds.add(lessonId);
-    setTimeout(() => loadLessons(), 1500);
+    setTimeout(() => {
+      loadLessons().then(() => {
+        if (res.tts_pregeneration_started && res.version_number) {
+          startTtsPregenPolling(lessonId, lang, generator, res.version_number);
+        }
+      });
+    }, 1500);
   } else {
     let errHtml = `<div style="color:#c62828; font-size:0.75rem;">改善エラー: ${esc(res && res.error ? res.error : '不明')}</div>`;
     if (res && res.prompt) errHtml += _buildLlmCallDisplay('改善', res.prompt, res.raw_output);
@@ -2061,5 +2086,115 @@ async function createCategoryPrompt(slug) {
     await loadLearningsDashboard();
   } else {
     showToast('作成エラー: ' + (res && res.error ? res.error : '不明'), 'error');
+  }
+}
+
+// =============================================================
+// TTS事前生成 進捗ポーリング・UI
+// =============================================================
+
+function _ttsPregenTimerKey(lessonId, lang, generator, version) {
+  return `${lessonId}_${lang}_${generator}_${version}`;
+}
+
+function startTtsPregenPolling(lessonId, lang, generator, version) {
+  const key = _ttsPregenTimerKey(lessonId, lang, generator, version);
+  // 既にポーリング中なら重複起動しない
+  if (_ttsPregenTimers[key]) return;
+
+  // 即座に1回更新
+  _updateTtsPregenUI(lessonId, lang, generator, version);
+
+  _ttsPregenTimers[key] = setInterval(async () => {
+    const done = await _updateTtsPregenUI(lessonId, lang, generator, version);
+    if (done) stopTtsPregenPolling(lessonId, lang, generator, version);
+  }, 3000);
+}
+
+function stopTtsPregenPolling(lessonId, lang, generator, version) {
+  const key = _ttsPregenTimerKey(lessonId, lang, generator, version);
+  if (_ttsPregenTimers[key]) {
+    clearInterval(_ttsPregenTimers[key]);
+    delete _ttsPregenTimers[key];
+  }
+}
+
+async function _updateTtsPregenUI(lessonId, lang, generator, version) {
+  const res = await api('GET', `/api/lessons/${lessonId}/tts-pregen-status?lang=${lang}&generator=${generator}&version=${version}`);
+  if (!res || !res.ok) return true;
+
+  const el = document.querySelector(`.tts-pregen-bar-${lessonId}-${version}`);
+  if (!el) return true;
+
+  const state = res.state;
+  const total = res.total || 0;
+  const completed = res.completed || 0;
+  const generated = res.generated || 0;
+  const cached = res.cached || 0;
+  const failed = res.failed || 0;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  if (state === 'idle') {
+    el.innerHTML = '';
+    return true;
+  }
+
+  if (state === 'running') {
+    el.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:4px; margin-bottom:6px;">
+        <span class="lesson-spinner" style="font-size:0.7rem;">TTS生成中</span>
+        <div style="flex:1; background:#e1bee7; border-radius:3px; height:8px; overflow:hidden;">
+          <div style="width:${pct}%; height:100%; background:#7b1fa2; transition:width 0.3s;"></div>
+        </div>
+        <span style="font-size:0.7rem; color:#4a148c; font-weight:600; white-space:nowrap;">${completed}/${total}</span>
+        <span style="font-size:0.65rem; color:#6a1b9a;">(生成:${generated} キャッシュ:${cached}${failed ? ' 失敗:' + failed : ''})</span>
+        <button onclick="cancelTtsPregen(${lessonId}, '${lang}', '${generator}', ${version})" style="padding:2px 8px; background:#c62828; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.65rem;">中止</button>
+      </div>`;
+    return false;
+  }
+
+  if (state === 'completed') {
+    el.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:4px; margin-bottom:6px;">
+        <span style="font-size:0.7rem; color:#2e7d32; font-weight:600;">TTS生成完了</span>
+        <span style="font-size:0.65rem; color:#388e3c;">(生成:${generated} キャッシュ:${cached}${failed ? ' 失敗:' + failed : ''})</span>
+      </div>`;
+    // 5秒後にフェードアウト
+    setTimeout(() => { if (el) el.innerHTML = ''; }, 5000);
+    // TTSキャッシュ表示を更新するためloadLessonsを呼ぶ
+    _openLessonIds.add(lessonId);
+    setTimeout(() => loadLessons(), 1000);
+    return true;
+  }
+
+  if (state === 'error') {
+    el.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:#ffebee; border:1px solid #ef9a9a; border-radius:4px; margin-bottom:6px;">
+        <span style="font-size:0.7rem; color:#c62828; font-weight:600;">TTS生成エラー</span>
+        <span style="font-size:0.65rem; color:#d32f2f;">${esc(res.error || '不明')}</span>
+      </div>`;
+    return true;
+  }
+
+  return true;
+}
+
+async function triggerTtsPregen(lessonId, lang, generator, version) {
+  const res = await api('POST', `/api/lessons/${lessonId}/tts-pregen?lang=${lang}&generator=${generator}&version=${version}`);
+  if (res && res.ok) {
+    showToast('TTS一括生成を開始', 'success');
+    startTtsPregenPolling(lessonId, lang, generator, version);
+  } else {
+    showToast('TTS生成開始エラー: ' + (res && res.error ? res.error : '不明'), 'error');
+  }
+}
+
+async function cancelTtsPregen(lessonId, lang, generator, version) {
+  const res = await api('POST', `/api/lessons/${lessonId}/tts-pregen-cancel?lang=${lang}&generator=${generator}&version=${version}`);
+  if (res && res.ok) {
+    showToast('TTS生成を中止しました', 'info');
+    stopTtsPregenPolling(lessonId, lang, generator, version);
+    const el = document.querySelector(`.tts-pregen-bar-${lessonId}-${version}`);
+    if (el) el.innerHTML = '';
   }
 }
