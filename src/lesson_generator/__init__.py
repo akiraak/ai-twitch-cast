@@ -28,6 +28,7 @@ from .extractor import (
 
 # --- improver ---
 from .improver import (
+    _load_prompt,
     verify_lesson,
     evaluate_lesson_quality,
     evaluate_category_fit,

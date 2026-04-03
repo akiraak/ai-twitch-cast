@@ -5,7 +5,6 @@
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）
 
 ## 授業モード改善: AI自動判定で改善 → [plans/improve-without-annotations.md](plans/improve-without-annotations.md)
-- [ ] Step 4: `/improve` エンドポイント修正（target_sections空→3軸自動判定）
 - [ ] Step 5: 管理画面UI（「AI自動判定で改善」ボタン、3軸結果表示）
 - [ ] Step 6: レスポンスに3軸評価結果を追加
 - [ ] Step 7: テスト追加

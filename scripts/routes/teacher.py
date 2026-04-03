@@ -15,7 +15,11 @@ from src.lesson_generator import (
     extract_text_from_image,
     extract_text_from_url,
     get_lesson_characters,
+    _load_prompt,
     verify_lesson,
+    evaluate_lesson_quality,
+    evaluate_category_fit,
+    determine_targets,
     improve_sections,
     load_learnings,
     analyze_learnings,
@@ -1326,9 +1330,6 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
 
-    if not body.target_sections:
-        return {"ok": False, "error": "target_sections が空です"}
-
     # ソースバージョン確認
     src_ver = db.get_lesson_version(lesson_id, body.lang, body.generator, body.source_version)
     if not src_ver:
@@ -1340,12 +1341,6 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
     )
     if not src_sections:
         return {"ok": False, "error": "ソースバージョンにセクションがありません"}
-
-    # target_sections の検証
-    existing_indices = {s["order_index"] for s in src_sections}
-    invalid = [i for i in body.target_sections if i not in existing_indices]
-    if invalid:
-        return {"ok": False, "error": f"存在しない order_index: {invalid}"}
 
     # 元教材
     extracted_text = lesson.get("extracted_text", "")
@@ -1377,6 +1372,148 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
             verify_result = _json.loads(src_ver["verify_json"])
         except (_json.JSONDecodeError, TypeError):
             pass
+
+    # --- 自動判定フロー: target_sections が空の場合 ---
+    auto_detected = False
+    evaluation = None
+    if not body.target_sections:
+        import asyncio
+        logger.info("自動判定開始: lesson=%d, v=%d", lesson_id, body.source_version)
+
+        # ① 元教材整合性（DB保存分がなければ実行）
+        verify_for_eval = verify_result
+        verify_prompt_info = None
+        verify_raw = None
+        if verify_for_eval is None:
+            try:
+                vr = await verify_lesson(
+                    extracted_text=extracted_text,
+                    main_content=main_content,
+                    sections=src_sections,
+                    en=en,
+                )
+                verify_for_eval = vr["result"]
+                verify_prompt_info = vr["prompt"]
+                verify_raw = vr["raw_output"]
+                # DB保存
+                verify_json_str = _json.dumps(verify_for_eval, ensure_ascii=False)
+                db.save_version_verify(src_ver["id"], verify_json_str)
+            except Exception as e:
+                logger.warning("自動判定: verify失敗（続行）: %s", e)
+
+        # ② 授業品質 + ③ カテゴリ適合性（並列実行）
+        generation_prompt = _load_prompt("lesson_generate.md")
+
+        eval_tasks = [
+            evaluate_lesson_quality(
+                sections=src_sections,
+                generation_prompt=generation_prompt,
+                en=en,
+            )
+        ]
+
+        # カテゴリ専用プロンプトがある場合のみ③を実行
+        category_row = db.get_category_by_slug(category) if category else None
+        has_category_prompt = category_row and category_row.get("prompt_content")
+        if has_category_prompt:
+            eval_tasks.append(
+                evaluate_category_fit(
+                    sections=src_sections,
+                    category_prompt=category_row["prompt_content"],
+                    category_name=category_row["name"],
+                    category_description=category_row.get("description", ""),
+                    en=en,
+                )
+            )
+
+        try:
+            eval_results = await asyncio.gather(*eval_tasks)
+        except Exception as e:
+            logger.exception("自動判定: 評価エラー: lesson=%d", lesson_id)
+            return {"ok": False, "error": f"AI自動判定中にエラーが発生しました: {e}"}
+
+        quality_result_full = eval_results[0]
+        category_result_full = eval_results[1] if has_category_prompt else None
+
+        # 3軸統合
+        auto_targets, auto_instructions = determine_targets(
+            verify_for_eval,
+            quality_result_full["result"],
+            category_result_full["result"] if category_result_full else None,
+            src_sections,
+        )
+
+        if not auto_targets:
+            # 全軸で問題なし
+            evaluation = {
+                "verify_result": verify_for_eval,
+                "quality_result": quality_result_full["result"],
+                "category_result": category_result_full["result"] if category_result_full else None,
+                "detection_summary": "問題なし — 改善対象セクションが見つかりませんでした",
+            }
+            return {
+                "ok": True,
+                "no_issues": True,
+                "evaluation": evaluation,
+                "quality_prompt": quality_result_full["prompt"],
+                "quality_raw_output": quality_result_full["raw_output"],
+                "category_prompt": category_result_full["prompt"] if category_result_full else None,
+                "category_raw_output": category_result_full["raw_output"] if category_result_full else None,
+                "verify_prompt": verify_prompt_info,
+                "verify_raw_output": verify_raw,
+            }
+
+        # 自動判定の結果で target_sections と user_instructions を設定
+        body.target_sections = auto_targets
+        if auto_instructions:
+            if body.user_instructions:
+                body.user_instructions = f"{body.user_instructions}\n\n{auto_instructions}"
+            else:
+                body.user_instructions = auto_instructions
+        # verify_result も更新
+        verify_result = verify_for_eval
+        auto_detected = True
+
+        # 評価結果サマリ構築
+        verify_weak = len([c for c in (verify_for_eval or {}).get("coverage", []) if c.get("status") == "weak"])
+        verify_missing = len([c for c in (verify_for_eval or {}).get("coverage", []) if c.get("status") == "missing"])
+        verify_contradictions = len((verify_for_eval or {}).get("contradictions", []))
+        quality_major = len([q for q in quality_result_full["result"].get("quality_issues", []) if q.get("severity") == "major"])
+        quality_minor = len([q for q in quality_result_full["result"].get("quality_issues", []) if q.get("severity") == "minor"])
+        cat_major = 0
+        cat_minor = 0
+        if category_result_full:
+            cat_major = len([c for c in category_result_full["result"].get("category_issues", []) if c.get("severity") == "major"])
+            cat_minor = len([c for c in category_result_full["result"].get("category_issues", []) if c.get("severity") == "minor"])
+
+        summary_parts = [
+            f"教材整合性: weak {verify_weak} / missing {verify_missing} / 矛盾 {verify_contradictions}",
+            f"授業品質: major {quality_major} / minor {quality_minor}",
+        ]
+        if category_result_full:
+            summary_parts.append(f"カテゴリ: major {cat_major} / minor {cat_minor}")
+        summary_parts.append(f"→ 改善対象: セクション {auto_targets}")
+
+        evaluation = {
+            "verify_result": verify_for_eval,
+            "quality_result": quality_result_full["result"],
+            "category_result": category_result_full["result"] if category_result_full else None,
+            "detection_summary": " / ".join(summary_parts),
+            "quality_prompt": quality_result_full["prompt"],
+            "quality_raw_output": quality_result_full["raw_output"],
+            "category_prompt": category_result_full["prompt"] if category_result_full else None,
+            "category_raw_output": category_result_full["raw_output"] if category_result_full else None,
+            "verify_prompt": verify_prompt_info,
+            "verify_raw_output": verify_raw,
+        }
+
+        logger.info("自動判定完了: lesson=%d, targets=%s", lesson_id, auto_targets)
+
+    # target_sections の検証
+    existing_indices = {s["order_index"] for s in src_sections}
+    invalid = [i for i in body.target_sections if i not in existing_indices]
+    if invalid:
+        return {"ok": False, "error": f"存在しない order_index: {invalid}"}
 
     try:
         result = await improve_sections(
@@ -1486,7 +1623,7 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
     # TTS事前生成をバックグラウンドで開始
     _start_tts_pregeneration(lesson_id, body.lang, body.generator, new_version_number)
 
-    return {
+    resp = {
         "ok": True,
         "version_number": new_version_number,
         "improved_sections": improved_indices,
@@ -1495,3 +1632,7 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
         "raw_output": result["raw_output"],
         "tts_pregeneration_started": True,
     }
+    if auto_detected:
+        resp["auto_detected"] = True
+        resp["evaluation"] = evaluation
+    return resp

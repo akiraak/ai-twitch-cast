@@ -1,5 +1,14 @@
 # DONE
 
+## AI自動判定で授業スクリプト改善 Step 4: /improve エンドポイント自動判定
+
+- [x] `scripts/routes/teacher.py` — `target_sections`空の場合に3軸自動判定フローを実行（①verify ②quality ③category並列）
+- [x] `determine_targets()`で統合→改善対象セクション+instructionsを自動決定
+- [x] 問題なし時は`no_issues: true`で早期返却、改善時は`auto_detected: true`+`evaluation`をレスポンスに追加
+- [x] `src/lesson_generator/__init__.py` — `_load_prompt`をエクスポートに追加
+- [x] `plans/improve-without-annotations.md` — ステータスをStep 4完了に更新
+- [x] 全800テスト通過
+
 ## AI自動判定で授業スクリプト改善 Step 3: 評価関数追加
 
 - [x] `src/lesson_generator/improver.py` — `evaluate_lesson_quality()` 授業品質チェック（lesson_generate.md基準）
