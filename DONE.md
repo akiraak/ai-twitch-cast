@@ -1,5 +1,16 @@
 # DONE
 
+## AI自動判定で授業スクリプト改善 Step 5: 管理画面UI
+
+- [x] `static/js/admin/teacher.js` — 「AI自動判定で改善」ボタン追加（青色、改善パネル内）
+- [x] `executeImprove()` に `autoMode` パラメータ追加（空target_sectionsで3軸自動判定起動）
+- [x] `no_issues` レスポンス対応（「問題なし — 改善不要」表示）
+- [x] `auto_detected` + `evaluation` レスポンス対応（改善結果の前に評価結果表示）
+- [x] `_buildEvaluationDisplay()` — 3軸評価サマリ＋各軸詳細の折りたたみ表示
+- [x] `_buildEvalAxisDetail()` — 各軸（教材整合性/授業品質/カテゴリ適合性）の詳細レンダリング＋LLMプロンプト・出力表示
+- [x] `plans/improve-without-annotations.md` — ステータスをStep 5完了に更新
+- [x] 全800テスト通過
+
 ## AI自動判定で授業スクリプト改善 Step 4: /improve エンドポイント自動判定
 
 - [x] `scripts/routes/teacher.py` — `target_sections`空の場合に3軸自動判定フローを実行（①verify ②quality ③category並列）

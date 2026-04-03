@@ -1,6 +1,6 @@
 # 注釈なしでもAI自動判定で授業スクリプトを改善
 
-## ステータス: Step 4 完了
+## ステータス: Step 5 完了
 
 ## 背景
 
@@ -355,25 +355,9 @@ AI自動判定結果:
   → 改善対象: セクション 1, 2, 3
 ```
 
-### Step 6: レスポンスに3軸の評価結果を追加
+### Step 6: レスポンスに3軸の評価結果を追加 — **Step 4で実装済み**
 
-```json
-{
-    "ok": true,
-    "version_number": 3,
-    "improved_sections": [1, 2, 3],
-    "auto_detected": true,
-    "evaluation": {
-        "verify_result": {"coverage": [...], "contradictions": [...]},
-        "quality_result": {"quality_issues": [...], "overall_score": 7},
-        "category_result": {"category_issues": [...]},
-        "detection_summary": "教材整合性: weak 1 / 授業品質: major 2 / カテゴリ: major 1"
-    },
-    "sections": [...],
-    "prompt": {...},
-    "raw_output": "..."
-}
-```
+Step 4の`/improve`エンドポイント修正に含めて実装。`auto_detected: true` + `evaluation`（3軸結果・サマリ・プロンプト・raw_output）をレスポンスに追加済み。問題なし時は`no_issues: true`で早期返却。
 
 ### Step 7: テスト (`tests/test_api_teacher.py`)
 

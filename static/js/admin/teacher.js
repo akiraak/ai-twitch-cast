@@ -1826,8 +1826,9 @@ async function showImprovePanel(lessonId, lang, generator, currentVersion) {
       ${sectionChecks}
     </div>
     <textarea class="improve-instructions" rows="2" placeholder="追加の改善指示（任意）..." style="width:100%; padding:4px 6px; border:1px solid #ffcc80; border-radius:3px; font-size:0.72rem; margin-bottom:6px; box-sizing:border-box;"></textarea>
-    <div style="display:flex; gap:6px;">
-      <button onclick="executeImprove(${lessonId}, '${lang}', '${generator}', this)" style="padding:4px 12px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">改善を実行</button>
+    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+      <button onclick="executeImprove(${lessonId}, '${lang}', '${generator}', this, false)" style="padding:4px 12px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">改善を実行</button>
+      <button onclick="executeImprove(${lessonId}, '${lang}', '${generator}', this, true)" style="padding:4px 12px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">AI自動判定で改善</button>
       <button onclick="this.closest('.improve-panel-${lessonId}-${currentVersion}').style.display='none'" style="padding:4px 12px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">キャンセル</button>
     </div>
     <div class="improve-status" style="margin-top:6px;"></div>
@@ -1835,21 +1836,28 @@ async function showImprovePanel(lessonId, lang, generator, currentVersion) {
   el.style.display = '';
 }
 
-async function executeImprove(lessonId, lang, generator, btn) {
+async function executeImprove(lessonId, lang, generator, btn, autoMode = false) {
   const panel = btn.closest('div[class*="improve-panel"]');
   const statusEl = panel.querySelector('.improve-status');
   const sourceVersion = parseInt(panel.querySelector('.improve-source-version').value);
-  const checks = panel.querySelectorAll('.improve-sec-check:checked');
-  const targetSections = Array.from(checks).map(c => parseInt(c.value));
   const instructions = panel.querySelector('.improve-instructions').value.trim();
 
-  if (targetSections.length === 0) {
-    showToast('改善対象セクションを選択してください', 'error');
-    return;
+  let targetSections = [];
+  if (!autoMode) {
+    const checks = panel.querySelectorAll('.improve-sec-check:checked');
+    targetSections = Array.from(checks).map(c => parseInt(c.value));
+    if (targetSections.length === 0) {
+      showToast('改善対象セクションを選択してください', 'error');
+      return;
+    }
   }
 
-  statusEl.innerHTML = '<span class="lesson-spinner">改善中（数分かかります）...</span>';
-  btn.disabled = true;
+  statusEl.innerHTML = autoMode
+    ? '<span class="lesson-spinner">AI自動判定中（3軸評価+改善で数分かかります）...</span>'
+    : '<span class="lesson-spinner">改善中（数分かかります）...</span>';
+  // パネル内のボタンをすべて無効化
+  const buttons = panel.querySelectorAll('button');
+  buttons.forEach(b => b.disabled = true);
 
   const res = await api('POST', `/api/lessons/${lessonId}/improve`, {
     source_version: sourceVersion,
@@ -1858,11 +1866,21 @@ async function executeImprove(lessonId, lang, generator, btn) {
     user_instructions: instructions,
   });
 
-  btn.disabled = false;
+  buttons.forEach(b => b.disabled = false);
 
-  if (res && res.ok) {
-    // プロンプト・出力表示
-    let resultHtml = `<div style="color:#2e7d32; font-weight:600; font-size:0.75rem; margin-bottom:4px;">改善完了 → v${res.version_number}</div>`;
+  if (res && res.ok && res.no_issues) {
+    // 全軸で問題なし
+    let resultHtml = `<div style="color:#1565c0; font-weight:600; font-size:0.75rem; margin-bottom:4px;">AI自動判定: 問題なし — 改善不要</div>`;
+    resultHtml += _buildEvaluationDisplay(res.evaluation, res);
+    statusEl.innerHTML = resultHtml;
+    showToast('AI自動判定: 改善不要', 'info');
+  } else if (res && res.ok) {
+    // 改善成功
+    let resultHtml = '';
+    if (res.auto_detected && res.evaluation) {
+      resultHtml += _buildEvaluationDisplay(res.evaluation, null);
+    }
+    resultHtml += `<div style="color:#2e7d32; font-weight:600; font-size:0.75rem; margin:4px 0;">改善完了 → v${res.version_number}</div>`;
     resultHtml += _buildLlmCallDisplay('改善', res.prompt, res.raw_output);
     statusEl.innerHTML = resultHtml;
 
@@ -1966,6 +1984,102 @@ async function showVersionDiff(lessonId, lang, generator, versionA) {
   html += '</div>';
   panel.innerHTML = html;
   panel.style.display = '';
+}
+
+// =============================================================
+// AI自動判定 評価結果表示
+// =============================================================
+
+function _buildEvaluationDisplay(evaluation, noIssuesRes) {
+  if (!evaluation) return '';
+  let html = `<div style="margin:4px 0; padding:6px 8px; background:#e3f2fd; border:1px solid #90caf9; border-radius:4px; font-size:0.72rem;">`;
+  html += `<div style="font-weight:600; color:#1565c0; margin-bottom:4px;">AI自動判定結果</div>`;
+
+  // サマリ表示
+  if (evaluation.detection_summary) {
+    const lines = evaluation.detection_summary.split(' / ');
+    html += `<div style="margin-bottom:4px;">`;
+    for (const line of lines) {
+      html += `<div style="padding:1px 0;">${esc(line)}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // 各軸の詳細（折りたたみ）
+  html += _buildEvalAxisDetail('① 教材整合性', evaluation.verify_result, 'verify',
+    evaluation.verify_prompt || (noIssuesRes && noIssuesRes.verify_prompt),
+    evaluation.verify_raw_output || (noIssuesRes && noIssuesRes.verify_raw_output));
+  html += _buildEvalAxisDetail('② 授業品質', evaluation.quality_result, 'quality',
+    evaluation.quality_prompt || (noIssuesRes && noIssuesRes.quality_prompt),
+    evaluation.quality_raw_output || (noIssuesRes && noIssuesRes.quality_raw_output));
+  if (evaluation.category_result) {
+    html += _buildEvalAxisDetail('③ カテゴリ適合性', evaluation.category_result, 'category',
+      evaluation.category_prompt || (noIssuesRes && noIssuesRes.category_prompt),
+      evaluation.category_raw_output || (noIssuesRes && noIssuesRes.category_raw_output));
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function _buildEvalAxisDetail(label, result, type, prompt, rawOutput) {
+  if (!result) return '';
+  let html = `<details style="margin-top:3px;">
+    <summary style="cursor:pointer; font-size:0.68rem; color:#1565c0;">${esc(label)}</summary>
+    <div style="padding:4px 8px; background:#f5f5f5; border-radius:3px; margin-top:2px; font-size:0.65rem;">`;
+
+  if (type === 'verify') {
+    // 教材整合性: coverage + contradictions
+    const coverage = result.coverage || [];
+    const contradictions = result.contradictions || [];
+    if (coverage.length > 0) {
+      html += `<div style="margin-bottom:3px;"><strong>カバレッジ:</strong></div>`;
+      for (const c of coverage) {
+        const color = c.status === 'covered' ? '#2e7d32' : c.status === 'weak' ? '#e65100' : '#c62828';
+        html += `<div style="color:${color}; padding:1px 0;">[${esc(c.status)}] ${esc(c.source_item || '')}${c.section_index != null ? ` (セクション${c.section_index})` : ''}${c.detail ? ': ' + esc(c.detail) : ''}</div>`;
+      }
+    }
+    if (contradictions.length > 0) {
+      html += `<div style="margin-top:3px;"><strong>矛盾:</strong></div>`;
+      for (const c of contradictions) {
+        html += `<div style="color:#c62828; padding:1px 0;">セクション${c.section_index}: ${esc(c.issue || '')}</div>`;
+      }
+    }
+    if (coverage.length === 0 && contradictions.length === 0) {
+      html += `<div style="color:#888;">問題なし</div>`;
+    }
+  } else if (type === 'quality') {
+    // 授業品質: quality_issues + overall_score
+    const issues = result.quality_issues || [];
+    if (result.overall_score != null) {
+      html += `<div style="margin-bottom:3px;"><strong>総合スコア:</strong> ${result.overall_score}/10</div>`;
+    }
+    if (issues.length > 0) {
+      for (const q of issues) {
+        const color = q.severity === 'major' ? '#c62828' : '#e65100';
+        html += `<div style="color:${color}; padding:1px 0;">[${esc(q.severity)}] セクション${q.section_index}: ${esc(q.issue || '')}${q.aspect ? ` (${esc(q.aspect)})` : ''}</div>`;
+      }
+    } else {
+      html += `<div style="color:#888;">問題なし</div>`;
+    }
+  } else if (type === 'category') {
+    // カテゴリ適合性: category_issues
+    const issues = result.category_issues || [];
+    if (issues.length > 0) {
+      for (const c of issues) {
+        const color = c.severity === 'major' ? '#c62828' : '#e65100';
+        html += `<div style="color:${color}; padding:1px 0;">[${esc(c.severity)}] セクション${c.section_index}: ${esc(c.issue || '')}</div>`;
+      }
+    } else {
+      html += `<div style="color:#888;">問題なし</div>`;
+    }
+  }
+
+  // プロンプト・出力
+  html += _buildLlmCallDisplay(label, prompt, rawOutput);
+
+  html += `</div></details>`;
+  return html;
 }
 
 // =============================================================
