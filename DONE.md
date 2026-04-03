@@ -1,5 +1,16 @@
 # DONE
 
+## AI自動判定で授業スクリプト改善 Step 7: テスト追加（プラン完了）
+
+- [x] `tests/test_api_teacher.py` — `TestImproveAutoDetect` クラス追加（4テスト）
+  - `test_auto_detect_triggers_evaluation`: target_sections空 → 3軸評価→改善の確認
+  - `test_auto_detect_no_category_prompt`: カテゴリプロンプトなし → ①②のみで動作の確認
+  - `test_auto_detect_no_issues`: 全軸問題なし → `no_issues: true` の確認
+  - `test_auto_detect_with_category_prompt`: カテゴリプロンプトあり → ③も実行の確認
+- [x] 既存テスト `test_improve_empty_targets` → `test_improve_empty_targets_no_version` にリネーム
+- [x] `plans/improve-without-annotations.md` — ステータスを完了に更新
+- [x] 全804テスト通過
+
 ## AI自動判定で授業スクリプト改善 Step 5: 管理画面UI
 
 - [x] `static/js/admin/teacher.js` — 「AI自動判定で改善」ボタン追加（青色、改善パネル内）

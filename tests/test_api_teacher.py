@@ -1416,8 +1416,8 @@ class TestImproveAPI:
         })
         assert resp.json()["ok"] is False
 
-    def test_improve_empty_targets(self, api_client, test_db):
-        """target_sectionsが空"""
+    def test_improve_empty_targets_no_version(self, api_client, test_db):
+        """target_sectionsが空 + バージョンなし → ソースバージョンエラー"""
         r = api_client.post("/api/lessons", json={"name": "EmptyTarget"})
         lid = r.json()["lesson"]["id"]
         resp = api_client.post(f"/api/lessons/{lid}/improve", json={
@@ -1495,6 +1495,214 @@ class TestImproveAPI:
         plan = test_db.get_lesson_plan(lid, "ja", generator="claude", version_number=new_vn)
         assert plan is not None
         assert plan["knowledge"] == "テスト知識"
+
+
+class TestImproveAutoDetect:
+    """POST /api/lessons/{id}/improve 自動判定フロー（target_sections空）のテスト"""
+
+    def _setup_lesson_with_sections(self, api_client, test_db):
+        """テスト用のlesson + セクション + バージョンを作成"""
+        r = api_client.post("/api/lessons", json={"name": "AutoDetectTest"})
+        lid = r.json()["lesson"]["id"]
+        test_db.update_lesson(lid, extracted_text="変数は値を格納する箱。for文でループ。")
+        sections = [
+            {
+                "section_type": "introduction", "title": "導入",
+                "content": "プログラミングを学ぼう", "tts_text": "プログラミングを学ぼう",
+                "display_text": "入門", "emotion": "excited", "dialogues": [],
+            },
+            {
+                "section_type": "explanation", "title": "変数",
+                "content": "変数は箱です", "tts_text": "変数は箱です",
+                "display_text": "変数", "emotion": "neutral", "dialogues": [],
+            },
+            {
+                "section_type": "summary", "title": "まとめ",
+                "content": "今日の復習", "tts_text": "今日の復習",
+                "display_text": "まとめ", "emotion": "joy", "dialogues": [],
+            },
+        ]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": sections},
+        )
+        vn = resp.json()["version_number"]
+        return lid, vn
+
+    def test_auto_detect_triggers_evaluation(self, api_client, test_db, mock_gemini, monkeypatch):
+        """target_sections空 → 3軸評価が走り、自動判定で改善される"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        # verify_lesson, evaluate_lesson_quality, evaluate_category_fit, improve_sectionsをモック
+        mock_verify = AsyncMock(return_value={
+            "result": {
+                "coverage": [
+                    {"source_item": "変数", "status": "covered", "section_index": 1},
+                    {"source_item": "for文", "status": "weak", "section_index": 1, "detail": "説明不足"},
+                ],
+                "contradictions": [],
+            },
+            "prompt": "verify prompt", "raw_output": "verify output",
+        })
+        mock_quality = AsyncMock(return_value={
+            "result": {
+                "quality_issues": [
+                    {"section_index": 0, "aspect": "dialogue_quality", "severity": "major", "issue": "対話が単調"},
+                ],
+                "overall_score": 6,
+            },
+            "prompt": "quality prompt", "raw_output": "quality output",
+        })
+        mock_improve = AsyncMock(return_value={
+            "sections": [
+                {
+                    "order_index": 0, "section_type": "introduction", "title": "改善導入",
+                    "content": "改善", "tts_text": "改善", "display_text": "改善",
+                    "emotion": "excited", "dialogues": [], "dialogue_directions": [],
+                },
+                {
+                    "order_index": 1, "section_type": "explanation", "title": "改善変数",
+                    "content": "改善", "tts_text": "改善", "display_text": "改善",
+                    "emotion": "neutral", "dialogues": [], "dialogue_directions": [],
+                },
+            ],
+            "prompt": "improve prompt", "raw_output": "improve output",
+        })
+
+        monkeypatch.setattr("scripts.routes.teacher.verify_lesson", mock_verify)
+        monkeypatch.setattr("scripts.routes.teacher.evaluate_lesson_quality", mock_quality)
+        monkeypatch.setattr("scripts.routes.teacher.improve_sections", mock_improve)
+
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [],
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["auto_detected"] is True
+        assert data["version_number"] is not None
+        assert data["evaluation"] is not None
+        assert "教材整合性" in data["evaluation"]["detection_summary"]
+        assert "授業品質" in data["evaluation"]["detection_summary"]
+        # verify + quality が呼ばれた
+        mock_verify.assert_called_once()
+        mock_quality.assert_called_once()
+
+    def test_auto_detect_no_category_prompt(self, api_client, test_db, mock_gemini, monkeypatch):
+        """カテゴリプロンプトなし → ①②のみで動作"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        mock_verify = AsyncMock(return_value={
+            "result": {"coverage": [{"source_item": "変数", "status": "weak", "section_index": 1, "detail": "不足"}], "contradictions": []},
+            "prompt": "vp", "raw_output": "vo",
+        })
+        mock_quality = AsyncMock(return_value={
+            "result": {"quality_issues": [], "overall_score": 8},
+            "prompt": "qp", "raw_output": "qo",
+        })
+        mock_cat = AsyncMock()
+        mock_improve = AsyncMock(return_value={
+            "sections": [{"order_index": 1, "section_type": "explanation", "title": "改善",
+                          "content": "改善", "tts_text": "改善", "display_text": "改善",
+                          "emotion": "neutral", "dialogues": [], "dialogue_directions": []}],
+            "prompt": "ip", "raw_output": "io",
+        })
+
+        monkeypatch.setattr("scripts.routes.teacher.verify_lesson", mock_verify)
+        monkeypatch.setattr("scripts.routes.teacher.evaluate_lesson_quality", mock_quality)
+        monkeypatch.setattr("scripts.routes.teacher.evaluate_category_fit", mock_cat)
+        monkeypatch.setattr("scripts.routes.teacher.improve_sections", mock_improve)
+
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [],
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["auto_detected"] is True
+        # カテゴリ評価は呼ばれない（カテゴリなし）
+        mock_cat.assert_not_called()
+        assert data["evaluation"]["category_result"] is None
+
+    def test_auto_detect_no_issues(self, api_client, test_db, mock_gemini, monkeypatch):
+        """全軸で問題なし → no_issues: true"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        mock_verify = AsyncMock(return_value={
+            "result": {
+                "coverage": [{"source_item": "変数", "status": "covered", "section_index": 1}],
+                "contradictions": [],
+            },
+            "prompt": "vp", "raw_output": "vo",
+        })
+        mock_quality = AsyncMock(return_value={
+            "result": {"quality_issues": [], "overall_score": 9},
+            "prompt": "qp", "raw_output": "qo",
+        })
+        mock_improve = AsyncMock()
+
+        monkeypatch.setattr("scripts.routes.teacher.verify_lesson", mock_verify)
+        monkeypatch.setattr("scripts.routes.teacher.evaluate_lesson_quality", mock_quality)
+        monkeypatch.setattr("scripts.routes.teacher.improve_sections", mock_improve)
+
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [],
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["no_issues"] is True
+        assert "問題なし" in data["evaluation"]["detection_summary"]
+        # improve_sections は呼ばれない
+        mock_improve.assert_not_called()
+
+    def test_auto_detect_with_category_prompt(self, api_client, test_db, mock_gemini, monkeypatch):
+        """カテゴリプロンプトあり → ③も実行される"""
+        lid, vn = self._setup_lesson_with_sections(api_client, test_db)
+
+        # カテゴリを作成してlessonに紐づけ
+        cat = test_db.create_category("python", "Python", "Python入門", prompt_content="Pythonではf-stringを使うこと")
+        test_db.update_lesson(lid, category="python")
+
+        mock_verify = AsyncMock(return_value={
+            "result": {"coverage": [], "contradictions": []},
+            "prompt": "vp", "raw_output": "vo",
+        })
+        mock_quality = AsyncMock(return_value={
+            "result": {"quality_issues": [], "overall_score": 8},
+            "prompt": "qp", "raw_output": "qo",
+        })
+        mock_cat = AsyncMock(return_value={
+            "result": {
+                "category_issues": [
+                    {"section_index": 1, "severity": "major", "issue": "format()使用、f-stringにすべき"},
+                ],
+            },
+            "prompt": "cp", "raw_output": "co",
+        })
+        mock_improve = AsyncMock(return_value={
+            "sections": [{"order_index": 1, "section_type": "explanation", "title": "改善",
+                          "content": "改善", "tts_text": "改善", "display_text": "改善",
+                          "emotion": "neutral", "dialogues": [], "dialogue_directions": []}],
+            "prompt": "ip", "raw_output": "io",
+        })
+
+        monkeypatch.setattr("scripts.routes.teacher.verify_lesson", mock_verify)
+        monkeypatch.setattr("scripts.routes.teacher.evaluate_lesson_quality", mock_quality)
+        monkeypatch.setattr("scripts.routes.teacher.evaluate_category_fit", mock_cat)
+        monkeypatch.setattr("scripts.routes.teacher.improve_sections", mock_improve)
+
+        resp = api_client.post(f"/api/lessons/{lid}/improve", json={
+            "source_version": vn, "lang": "ja", "generator": "claude",
+            "target_sections": [],
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["auto_detected"] is True
+        # カテゴリ評価が呼ばれた
+        mock_cat.assert_called_once()
+        assert data["evaluation"]["category_result"] is not None
+        assert "カテゴリ" in data["evaluation"]["detection_summary"]
 
 
 class TestLoadLearnings:
