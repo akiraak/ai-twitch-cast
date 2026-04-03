@@ -500,6 +500,13 @@ def _create_tables(conn):
     """)
     conn.commit()
 
+    # Migration: lesson_categories に prompt_content カラム追加（prompt_file → prompt_content 移行）
+    try:
+        conn.execute("ALTER TABLE lesson_categories ADD COLUMN prompt_content TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # Migration: lessons に category カラム追加
     try:
         conn.execute("ALTER TABLE lessons ADD COLUMN category TEXT NOT NULL DEFAULT ''")

@@ -1788,17 +1788,16 @@ class TestImprovePromptAPI:
         (learnings_dir / "python.md").write_text("## Python\n- コード例を入れる", encoding="utf-8")
         monkeypatch.setattr(improver, "LEARNINGS_DIR", learnings_dir)
 
-        # カテゴリ作成（prompt_fileあり）
+        # カテゴリ作成（prompt_contentあり）
         prompts_dir = tmp_path / "prompts"
         prompts_dir.mkdir()
-        (prompts_dir / "lesson_generate_python.md").write_text("# Pythonプロンプト", encoding="utf-8")
         # improve_promptが読むシステムプロンプトもコピー
         (prompts_dir / "lesson_improve_prompt.md").write_text("# テスト用改善プロンプト", encoding="utf-8")
         monkeypatch.setattr(improver, "PROMPTS_DIR", prompts_dir)
 
         api_client.post("/api/lesson-categories", json={
             "slug": "python", "name": "Python",
-            "description": "Python教材", "prompt_file": "lesson_generate_python.md",
+            "description": "Python教材", "prompt_content": "# Pythonプロンプト\nPython専用ルール",
         })
 
         mock_gemini.models.generate_content.return_value.text = json.dumps({
@@ -1812,7 +1811,7 @@ class TestImprovePromptAPI:
         resp = api_client.post("/api/lessons/improve-prompt", json={"category": "python"})
         data = resp.json()
         assert data["ok"] is True
-        assert data["prompt_file"] == "lesson_generate_python.md"
+        assert "python" in data["prompt_file"]
 
     def test_improve_prompt_saves_to_db(self, api_client, test_db, mock_gemini, tmp_path, monkeypatch):
         """改善提案がDBに保存される"""
@@ -1935,13 +1934,13 @@ class TestCreateCategoryPromptAPI:
         })
         data = resp.json()
         assert data["ok"] is True
-        assert data["prompt_file"] == "lesson_generate_english.md"
         assert "英語" in data["content"]
-        # ファイル存在確認
-        assert (prompts_dir / "lesson_generate_english.md").exists()
+        # DB保存確認
+        cat = test_db.get_category_by_slug("english")
+        assert cat["prompt_content"] != ""
 
     def test_create_updates_category(self, api_client, test_db, mock_gemini, tmp_path, monkeypatch):
-        """作成後にカテゴリのprompt_fileが更新される"""
+        """作成後にカテゴリのprompt_contentが更新される"""
         from src.lesson_generator import improver
         prompts_dir = tmp_path / "prompts"
         prompts_dir.mkdir()
@@ -1957,7 +1956,7 @@ class TestCreateCategoryPromptAPI:
         api_client.post("/api/lesson-categories/math/create-prompt", json={})
 
         cat = test_db.get_category_by_slug("math")
-        assert cat["prompt_file"] == "lesson_generate_math.md"
+        assert cat["prompt_content"] == "# 数学プロンプト"
 
     def test_create_category_not_found(self, api_client):
         """存在しないカテゴリ"""

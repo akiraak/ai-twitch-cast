@@ -1,5 +1,14 @@
 # DONE
 
+## AI自動判定で授業スクリプト改善 Step 2: カテゴリプロンプトDB保存化
+
+- [x] `src/db/core.py` — `lesson_categories`に`prompt_content TEXT`カラム追加マイグレーション
+- [x] `src/db/lessons.py` — `create_category()`に`prompt_content`対応、`update_category()`新規追加
+- [x] `src/lesson_generator/improver.py` — `create_category_prompt()`ファイル書き出し廃止→DB保存、`improve_prompt()`が`prompt_content`を直接使用
+- [x] `scripts/routes/teacher.py` — カテゴリAPI `prompt_file`→`prompt_content`、専用プロンプト作成でDB保存に変更
+- [x] `static/js/admin/teacher.js` — UI表示を`prompt_content`対応に更新
+- [x] テスト更新、全800テスト通過
+
 ## AI自動判定で授業スクリプト改善 Step 1: 評価プロンプト作成
 
 - [x] `prompts/lesson_evaluate_quality.md` — 授業品質チェックプロンプト（教育効果・エンタメ性・対話品質・技術的正確性の4観点）

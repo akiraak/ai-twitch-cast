@@ -208,7 +208,7 @@ class CategoryCreate(BaseModel):
     slug: str
     name: str
     description: str = ""
-    prompt_file: str = ""
+    prompt_content: str = ""
 
 
 @router.get("/api/lesson-categories")
@@ -225,7 +225,7 @@ async def create_category(body: CategoryCreate):
     if existing:
         return {"ok": False, "error": f"slug '{body.slug}' は既に存在します"}
     cat = db.create_category(body.slug, body.name,
-                             description=body.description, prompt_file=body.prompt_file)
+                             description=body.description, prompt_content=body.prompt_content)
     logger.info("カテゴリ作成: %s (%s)", body.name, body.slug)
     return {"ok": True, "category": cat}
 
@@ -462,20 +462,20 @@ async def api_improve_prompt(body: ImprovePromptRequest):
     # カテゴリ情報
     cat_name = ""
     cat_desc = ""
-    prompt_file = ""
+    prompt_content = ""
     if category:
         cat = db.get_category_by_slug(category)
         if cat:
             cat_name = cat.get("name", "")
             cat_desc = cat.get("description", "")
-            prompt_file = cat.get("prompt_file", "")
+            prompt_content = cat.get("prompt_content", "")
 
     try:
         result = await improve_prompt(
             category=category,
             category_name=cat_name,
             category_description=cat_desc,
-            prompt_file=prompt_file,
+            prompt_content=prompt_content,
         )
     except Exception as e:
         logger.exception("プロンプト改善エラー")
@@ -539,15 +539,11 @@ async def api_create_category_prompt(slug: str, body: CreateCategoryPromptReques
     if result.get("error"):
         return {"ok": False, "error": result["error"]}
 
-    # カテゴリの prompt_file を更新
-    from src.db.core import get_connection
-    conn = get_connection()
-    conn.execute("UPDATE lesson_categories SET prompt_file = ? WHERE slug = ?",
-                 (result["prompt_file"], slug))
-    conn.commit()
+    # カテゴリの prompt_content をDBに保存
+    db.update_category(cat["id"], prompt_content=result["content"])
 
-    logger.info("カテゴリ専用プロンプト作成: %s → %s", slug, result["prompt_file"])
-    return {"ok": True, "prompt_file": result["prompt_file"], "content": result["content"]}
+    logger.info("カテゴリ専用プロンプト作成: %s (DB保存)", slug)
+    return {"ok": True, "content": result["content"]}
 
 
 @router.get("/api/lessons/{lesson_id}")

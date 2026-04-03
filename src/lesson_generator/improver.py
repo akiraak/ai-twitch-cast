@@ -492,6 +492,7 @@ async def improve_prompt(
     category_name: str = "",
     category_description: str = "",
     prompt_file: str = "",
+    prompt_content: str = "",
 ) -> dict:
     """学習結果をもとに生成プロンプトの改善案をdiff形式で生成する。
 
@@ -499,23 +500,30 @@ async def improve_prompt(
         category: カテゴリslug（空なら共通プロンプト lesson_generate.md）
         category_name: カテゴリ表示名
         category_description: カテゴリ説明
-        prompt_file: カテゴリ専用プロンプトファイル名（空ならベース）
+        prompt_file: カテゴリ専用プロンプトファイル名（空ならベース、後方互換）
+        prompt_content: カテゴリ専用プロンプト内容（DB保存、優先）
 
     Returns:
         {"summary", "diff_instructions", "learnings_to_graduate", "prompt", "raw_output"}
     """
     system_prompt = _load_prompt("lesson_improve_prompt.md")
 
-    # 改善対象プロンプトを読み込む
-    if prompt_file:
+    # 改善対象プロンプトを読み込む（prompt_content優先）
+    if prompt_content:
+        current_prompt = prompt_content
+        target_name = f"[DB] {category} カテゴリプロンプト"
+    elif prompt_file:
         target_path = PROMPTS_DIR / prompt_file
+        if not target_path.exists():
+            return {"error": f"プロンプトファイルが見つかりません: {target_path.name}"}
+        current_prompt = target_path.read_text(encoding="utf-8")
+        target_name = target_path.name
     else:
         target_path = PROMPTS_DIR / "lesson_generate.md"
-
-    if not target_path.exists():
-        return {"error": f"プロンプトファイルが見つかりません: {target_path.name}"}
-
-    current_prompt = target_path.read_text(encoding="utf-8")
+        if not target_path.exists():
+            return {"error": f"プロンプトファイルが見つかりません: {target_path.name}"}
+        current_prompt = target_path.read_text(encoding="utf-8")
+        target_name = target_path.name
 
     # 学習結果を読み込む
     learnings = load_learnings(category)
@@ -525,7 +533,7 @@ async def improve_prompt(
     # ユーザープロンプト構築
     user_parts = []
     user_parts.append("## 現在の生成プロンプト\n")
-    user_parts.append(f"ファイル: {target_path.name}\n")
+    user_parts.append(f"ファイル: {target_name}\n")
     user_parts.append(current_prompt)
     user_parts.append("\n\n## 学習結果\n")
     user_parts.append(learnings)
@@ -561,7 +569,7 @@ async def improve_prompt(
         "summary": result.get("summary", ""),
         "diff_instructions": result.get("diff_instructions", []),
         "learnings_to_graduate": result.get("learnings_to_graduate", []),
-        "prompt_file": target_path.name,
+        "prompt_file": target_name,
         "prompt": {
             "system": system_prompt,
             "user": user_prompt,
@@ -623,8 +631,10 @@ async def create_category_prompt(
 ) -> dict:
     """ベースプロンプト + カテゴリ説明からカテゴリ専用プロンプトを生成する。
 
+    生成したプロンプトはDB（lesson_categories.prompt_content）に保存される。
+
     Returns:
-        {"prompt_file": str, "content": str}
+        {"content": str}
     """
     base_path = PROMPTS_DIR / base_prompt_file
     if not base_path.exists():
@@ -660,13 +670,9 @@ async def create_category_prompt(
 
     generated = response.text.strip()
 
-    # ファイル名を生成
-    prompt_filename = f"lesson_generate_{category_slug}.md"
-    output_path = PROMPTS_DIR / prompt_filename
-    output_path.write_text(generated, encoding="utf-8")
-    logger.info("カテゴリ専用プロンプト作成: %s", output_path)
+    # DBに保存（呼び出し元で update_category を使う）
+    logger.info("カテゴリ専用プロンプト生成: %s (DB保存)", category_slug)
 
     return {
-        "prompt_file": prompt_filename,
         "content": generated,
     }

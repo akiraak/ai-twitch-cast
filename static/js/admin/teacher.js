@@ -2051,7 +2051,7 @@ async function loadLearningsDashboard() {
     const lastAnalysis = st.latest_learning ? st.latest_learning.created_at : 'なし';
 
     const catName = st.category_name || st.category || '未分類';
-    const promptFile = cat.prompt_file || '';
+    const hasPromptContent = !!(cat.prompt_content);
 
     html += `<div class="learning-card">
       <div class="learning-card-head">
@@ -2067,8 +2067,8 @@ async function loadLearningsDashboard() {
       <div class="learning-card-actions">
         <button onclick="executeLearningAnalysis('${esc(st.category)}')" class="learning-btn learning-btn--analyze">分析を実行</button>
         <button onclick="executePromptImprove('${esc(st.category)}')" class="learning-btn learning-btn--improve">プロンプトを改善</button>
-        ${st.category && !promptFile ? `<button onclick="createCategoryPrompt('${esc(st.category)}')" class="learning-btn learning-btn--create">専用プロンプト作成</button>` : ''}
-        ${promptFile ? `<span class="learning-prompt-badge">${esc(promptFile)}</span>` : ''}
+        ${st.category && !hasPromptContent ? `<button onclick="createCategoryPrompt('${esc(st.category)}')" class="learning-btn learning-btn--create">専用プロンプト作成</button>` : ''}
+        ${hasPromptContent ? `<span class="learning-prompt-badge">専用プロンプトあり</span>` : ''}
       </div>`;
 
     // 学習結果表示
@@ -2122,9 +2122,9 @@ async function executePromptImprove(category) {
 
   // diff表示 + 適用/却下ボタン
   const diffInstructions = res.diff_instructions || [];
-  const promptFile = res.prompt_file || '';
+  const promptTarget = res.prompt_file || '';
   let html = `<div style="padding:8px; background:#fff; border:1px solid #ce93d8; border-radius:4px; margin-top:4px;">
-    <div style="font-weight:600; font-size:0.75rem; color:#6a1b9a; margin-bottom:4px;">プロンプト改善提案 (${esc(promptFile)})</div>`;
+    <div style="font-weight:600; font-size:0.75rem; color:#6a1b9a; margin-bottom:4px;">プロンプト改善提案 (${esc(promptTarget)})</div>`;
 
   if (res.summary) {
     html += `<div style="font-size:0.72rem; color:#333; margin-bottom:6px;">${esc(res.summary)}</div>`;
@@ -2143,7 +2143,7 @@ async function executePromptImprove(category) {
   html += _buildLlmCallDisplay('プロンプト改善', res.prompt, res.raw_output);
 
   html += `<div style="display:flex; gap:6px; margin-top:6px;">
-    <button onclick="applyPromptDiff('${esc(promptFile)}', this)" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">適用</button>
+    <button onclick="applyPromptDiff('${esc(promptTarget)}', this)" style="padding:4px 12px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">適用</button>
     <button onclick="this.closest('.learning-status-${category || ''}').innerHTML=''" style="padding:4px 12px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">却下</button>
   </div>`;
   html += '</div>';
@@ -2181,7 +2181,7 @@ async function createCategoryPrompt(slug) {
   const res = await api('POST', `/api/lesson-categories/${slug}/create-prompt`);
   if (res && res.ok) {
     _lessonCategories = null;
-    showToast('専用プロンプト作成完了: ' + (res.prompt_file || ''), 'success');
+    showToast('専用プロンプト作成完了（DB保存）', 'success');
     await loadLearningsDashboard();
   } else {
     showToast('作成エラー: ' + (res && res.error ? res.error : '不明'), 'error');

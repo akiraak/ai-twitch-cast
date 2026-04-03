@@ -267,16 +267,29 @@ def get_categories():
     return [dict(r) for r in rows]
 
 
-def create_category(slug, name, description="", prompt_file=""):
+def create_category(slug, name, description="", prompt_file="", prompt_content=""):
     """カテゴリを作成する"""
     conn = get_connection()
     cur = conn.execute(
-        "INSERT INTO lesson_categories (slug, name, description, prompt_file, created_at) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (slug, name, description, prompt_file, _now()),
+        "INSERT INTO lesson_categories (slug, name, description, prompt_file, prompt_content, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (slug, name, description, prompt_file, prompt_content, _now()),
     )
     conn.commit()
     return dict(conn.execute("SELECT * FROM lesson_categories WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def update_category(category_id, **fields):
+    """カテゴリを更新する"""
+    conn = get_connection()
+    allowed = {"name", "description", "prompt_file", "prompt_content"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    params = list(updates.values()) + [category_id]
+    conn.execute(f"UPDATE lesson_categories SET {set_clause} WHERE id = ?", params)
+    conn.commit()
 
 
 def get_category_by_slug(slug):

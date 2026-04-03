@@ -83,6 +83,7 @@ from .lessons import (
     # カテゴリ
     get_categories,
     create_category,
+    update_category,
     get_category_by_slug,
     delete_category,
     # バージョン
