@@ -1125,6 +1125,31 @@ class TestSectionVersionNumber:
         assert remaining[0]["version_number"] == 2
 
 
+class TestDisplayProperties:
+    def test_default_empty(self, test_db):
+        """display_properties デフォルトは空JSON"""
+        lesson = test_db.create_lesson("DPDefault")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "テスト")
+        assert s["display_properties"] == "{}"
+
+    def test_save_and_retrieve(self, test_db):
+        """display_properties を指定して保存・取得"""
+        lesson = test_db.create_lesson("DPSave")
+        dp = json.dumps({"maxHeight": 40, "fontSize": 1.2})
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "テスト",
+                                       display_properties=dp)
+        assert json.loads(s["display_properties"]) == {"maxHeight": 40, "fontSize": 1.2}
+
+    def test_update(self, test_db):
+        """display_properties の更新"""
+        lesson = test_db.create_lesson("DPUpdate")
+        s = test_db.add_lesson_section(lesson["id"], 0, "explanation", "テスト")
+        new_dp = json.dumps({"maxHeight": 60, "width": 70})
+        test_db.update_lesson_section(s["id"], display_properties=new_dp)
+        sections = test_db.get_lesson_sections(lesson["id"])
+        assert json.loads(sections[0]["display_properties"]) == {"maxHeight": 60, "width": 70}
+
+
 class TestLessonLearnings:
     def test_save_and_get(self, test_db):
         lr = test_db.save_learning("english_natgeo", learnings_md="## 学習結果", section_count=5)

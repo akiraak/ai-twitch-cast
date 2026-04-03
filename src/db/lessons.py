@@ -93,18 +93,20 @@ def delete_lesson_source(source_id):
 def add_lesson_section(lesson_id, order_index, section_type, content, tts_text="",
                        display_text="", emotion="neutral", question="", answer="",
                        wait_seconds=8, title="", lang="ja", dialogues="",
-                       dialogue_directions="", generator="gemini", version_number=1):
+                       dialogue_directions="", generator="gemini", version_number=1,
+                       display_properties=""):
     """授業セクションを追加する"""
     conn = get_connection()
     cur = conn.execute(
         "INSERT INTO lesson_sections "
         "(lesson_id, order_index, section_type, title, content, tts_text, display_text, "
         "emotion, question, answer, wait_seconds, lang, dialogues, dialogue_directions, "
-        "generator, version_number, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "generator, version_number, display_properties, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (lesson_id, order_index, section_type, title, content, tts_text,
          display_text, emotion, question, answer, wait_seconds, lang, dialogues,
-         dialogue_directions, generator, version_number, _now()),
+         dialogue_directions, generator, version_number,
+         display_properties or "{}", _now()),
     )
     conn.commit()
     return dict(conn.execute("SELECT * FROM lesson_sections WHERE id = ?", (cur.lastrowid,)).fetchone())
@@ -136,7 +138,7 @@ def update_lesson_section(section_id, **fields):
     conn = get_connection()
     allowed = {"order_index", "section_type", "title", "content", "tts_text",
                "display_text", "emotion", "question", "answer", "wait_seconds",
-               "dialogues", "dialogue_directions"}
+               "dialogues", "dialogue_directions", "display_properties"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
@@ -391,13 +393,24 @@ def save_version_verify(version_id, verify_json):
 
 # --- section annotations ---
 
-def update_section_annotation(section_id, rating="", comment=""):
-    """セクションの注釈（◎/△/✕ + コメント）を更新する"""
+def update_section_annotation(section_id, rating=None, comment=None):
+    """セクションの注釈（◎/△/✕ + コメント）を更新する。Noneのフィールドは既存値を維持。"""
     conn = get_connection()
-    conn.execute(
-        "UPDATE lesson_sections SET annotation_rating = ?, annotation_comment = ? WHERE id = ?",
-        (rating, comment, section_id),
-    )
+    if rating is not None and comment is not None:
+        conn.execute(
+            "UPDATE lesson_sections SET annotation_rating = ?, annotation_comment = ? WHERE id = ?",
+            (rating, comment, section_id),
+        )
+    elif rating is not None:
+        conn.execute(
+            "UPDATE lesson_sections SET annotation_rating = ? WHERE id = ?",
+            (rating, section_id),
+        )
+    elif comment is not None:
+        conn.execute(
+            "UPDATE lesson_sections SET annotation_comment = ? WHERE id = ?",
+            (comment, section_id),
+        )
     conn.commit()
 
 

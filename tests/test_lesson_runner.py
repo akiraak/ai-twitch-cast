@@ -573,3 +573,68 @@ class TestDialoguePlayback:
 
         # 単話者モード: speakはcontent分割分だけ
         assert mock_speech.speak.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_play_section_sends_display_properties(self, mock_speech, test_db):
+        """display_propertiesがあればWebSocketイベントに含まれる"""
+        on_overlay = AsyncMock()
+        runner = LessonRunner(speech=mock_speech, on_overlay=on_overlay)
+        runner._teacher_cfg = {"name": "先生"}
+        runner._student_cfg = None
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._lang = "ja"
+        runner._sections = [{}]
+        runner._current_index = 0
+
+        mock_speech.generate_tts = AsyncMock(return_value=None)
+
+        section = {
+            "section_type": "explanation",
+            "content": "テスト",
+            "tts_text": "テスト",
+            "display_text": "表示テキスト",
+            "emotion": "neutral",
+            "dialogues": "",
+            "order_index": 0,
+            "display_properties": json.dumps({"maxHeight": 40, "fontSize": 1.2}),
+        }
+        await runner._play_section(section)
+
+        # lesson_text_showイベントにdisplay_propertiesが含まれる
+        overlay_calls = [c.args[0] for c in on_overlay.call_args_list
+                         if c.args[0].get("type") == "lesson_text_show"]
+        assert len(overlay_calls) >= 1
+        assert overlay_calls[0]["display_properties"] == {"maxHeight": 40, "fontSize": 1.2}
+
+    @pytest.mark.asyncio
+    async def test_play_section_no_display_properties(self, mock_speech, test_db):
+        """display_propertiesが空ならイベントに含まれない"""
+        on_overlay = AsyncMock()
+        runner = LessonRunner(speech=mock_speech, on_overlay=on_overlay)
+        runner._teacher_cfg = {"name": "先生"}
+        runner._student_cfg = None
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._lang = "ja"
+        runner._sections = [{}]
+        runner._current_index = 0
+
+        mock_speech.generate_tts = AsyncMock(return_value=None)
+
+        section = {
+            "section_type": "explanation",
+            "content": "テスト",
+            "tts_text": "テスト",
+            "display_text": "表示テキスト",
+            "emotion": "neutral",
+            "dialogues": "",
+            "order_index": 0,
+            "display_properties": "{}",
+        }
+        await runner._play_section(section)
+
+        overlay_calls = [c.args[0] for c in on_overlay.call_args_list
+                         if c.args[0].get("type") == "lesson_text_show"]
+        assert len(overlay_calls) >= 1
+        assert "display_properties" not in overlay_calls[0]

@@ -451,9 +451,20 @@ class LessonRunner:
         logger.info("[lesson] セクション %d/%d [%s]",
                      self._current_index + 1, len(self._sections), section_type)
 
+        # display_properties をパース
+        display_props_raw = section.get("display_properties", "{}")
+        display_props = {}
+        if display_props_raw:
+            try:
+                display_props = _json.loads(display_props_raw) if isinstance(display_props_raw, str) else display_props_raw
+                if not isinstance(display_props, dict):
+                    display_props = {}
+            except (_json.JSONDecodeError, TypeError):
+                display_props = {}
+
         # 画面テキスト: あれば更新、なければ非表示
         if display_text:
-            await self._show_lesson_text(display_text)
+            await self._show_lesson_text(display_text, display_props)
         else:
             await self._hide_lesson_text()
 
@@ -682,13 +693,16 @@ class LessonRunner:
             await self._speech.notify_overlay_end()
             self._speech.apply_emotion("neutral")
 
-    async def _show_lesson_text(self, text: str):
+    async def _show_lesson_text(self, text: str, display_properties: dict | None = None):
         """配信画面にテキストを表示する"""
         if self._on_overlay:
-            await self._on_overlay({
+            event = {
                 "type": "lesson_text_show",
                 "text": text,
-            })
+            }
+            if display_properties:
+                event["display_properties"] = display_properties
+            await self._on_overlay(event)
 
     async def _hide_lesson_text(self):
         """配信画面のテキストを非表示にする"""

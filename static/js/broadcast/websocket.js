@@ -170,7 +170,7 @@ function connectWS() {
 
       // 授業テキスト
       case 'lesson_text_show':
-        showLessonText(data.text);
+        showLessonText(data.text, data.display_properties);
         break;
       case 'lesson_text_hide':
         hideLessonText();

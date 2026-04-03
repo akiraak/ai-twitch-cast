@@ -196,11 +196,11 @@ async function buildLessonItem(lessonId) {
 
   // summary
   const summary = document.createElement('summary');
-  summary.style.cssText = 'cursor:pointer; font-weight:600; font-size:0.9rem; color:#2a1f40; list-style:none; display:flex; align-items:center; gap:8px;';
-  summary.innerHTML = `<span class="lesson-arrow" style="color:#7b1fa2; font-size:0.75rem;">&#9660;</span>`
-    + `<span style="font-size:0.65rem; color:#aaa; min-width:28px;">#${lessonId}</span>`
-    + `<span>${esc(lesson.name)}</span>`
-    + `<span style="font-size:0.7rem; color:#8a7a9a;">${esc(badgeText)}</span>`;
+  summary.style.cssText = 'cursor:pointer; list-style:none; display:flex; align-items:center; gap:10px;';
+  summary.innerHTML = `<span class="lesson-arrow" style="color:#7b1fa2; font-size:1rem;">&#9660;</span>`
+    + `<span style="font-size:0.8rem; color:#9a8aaa; font-weight:500;">#${lessonId}</span>`
+    + `<span style="font-size:1.15rem; font-weight:700; color:#2a1f40;">${esc(lesson.name)}</span>`
+    + `<span style="font-size:0.75rem; color:#8a7a9a; font-weight:400;">${esc(badgeText)}</span>`;
   details.appendChild(summary);
 
   // body
@@ -391,7 +391,7 @@ async function buildLessonItem(lessonId) {
   // バージョンセレクタ
   if (langVersions.length > 0) {
     const verDiv = document.createElement('div');
-    verDiv.innerHTML = _buildVersionSelector(lessonId, lang, generator, langVersions, currentVersion, sections);
+    verDiv.innerHTML = _buildVersionSelector(lessonId, lang, generator, langVersions, currentVersion, sections, lesson.name);
     step3Body.appendChild(verDiv);
   }
 
@@ -893,6 +893,26 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
     html += sectionField('TTS', 'tts_text', lessonId, s.id, s.tts_text);
     html += sectionField('画面', 'display_text', lessonId, s.id, s.display_text);
 
+    // display_properties（パネルサイズ制御）
+    const dp = parseDisplayProperties(s.display_properties);
+    html += `<details style="margin-top:4px; font-size:0.7rem;">
+      <summary style="cursor:pointer; color:#6a5590;">パネルサイズ${dp.maxHeight || dp.width || dp.fontSize ? ' (' + [dp.maxHeight ? 'H:'+dp.maxHeight+'%' : '', dp.width ? 'W:'+dp.width+'%' : '', dp.fontSize ? 'F:'+dp.fontSize+'vw' : ''].filter(Boolean).join(' ') + ')' : ''}</summary>
+      <div style="display:flex; gap:10px; margin-top:4px; flex-wrap:wrap;">
+        <label style="color:#6a5590;">高さ:
+          <input type="number" value="${dp.maxHeight || ''}" min="10" max="90" step="5" placeholder="auto" style="width:55px; padding:2px 4px; background:#fff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; font-size:0.7rem;"
+            data-dp-field="maxHeight" onchange="updateDisplayProperty(${lessonId}, ${s.id}, this)">%
+        </label>
+        <label style="color:#6a5590;">幅:
+          <input type="number" value="${dp.width || ''}" min="10" max="95" step="5" placeholder="auto" style="width:55px; padding:2px 4px; background:#fff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; font-size:0.7rem;"
+            data-dp-field="width" onchange="updateDisplayProperty(${lessonId}, ${s.id}, this)">%
+        </label>
+        <label style="color:#6a5590;">文字:
+          <input type="number" value="${dp.fontSize || ''}" min="0.5" max="3.0" step="0.1" placeholder="auto" style="width:55px; padding:2px 4px; background:#fff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; font-size:0.7rem;"
+            data-dp-field="fontSize" onchange="updateDisplayProperty(${lessonId}, ${s.id}, this)">vw
+        </label>
+      </div>
+    </details>`;
+
     if (s.section_type === 'question') {
       html += sectionField('Q', 'question', lessonId, s.id, s.question);
       html += sectionField('A', 'answer', lessonId, s.id, s.answer);
@@ -932,6 +952,24 @@ async function updateSectionField(lessonId, sectionId, field, value) {
   const body = {};
   body[field] = value;
   await api('PUT', '/api/lessons/' + lessonId + '/sections/' + sectionId, body);
+}
+
+function parseDisplayProperties(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try { return JSON.parse(raw); } catch { return {}; }
+}
+
+async function updateDisplayProperty(lessonId, sectionId, inputEl) {
+  const field = inputEl.dataset.dpField;
+  const val = inputEl.value ? Number(inputEl.value) : null;
+  // 同じセクションの他のdp入力を集める
+  const details = inputEl.closest('details');
+  const props = {};
+  details.querySelectorAll('[data-dp-field]').forEach(inp => {
+    if (inp.value) props[inp.dataset.dpField] = Number(inp.value);
+  });
+  await api('PUT', `/api/lessons/${lessonId}/sections/${sectionId}`, { display_properties: props });
 }
 
 async function deleteSection(lessonId, sectionId) {
@@ -1173,6 +1211,11 @@ function _copyToClipboard(text, btn) {
     btn.textContent = '\u2713 Copied!';
     setTimeout(() => { btn.textContent = orig; }, 1500);
   });
+}
+
+function _copyVersionUpCmd(lessonId, lessonName, btn) {
+  const cmd = `授業生成「#${lessonId} ${lessonName}」をバージョンアップ`;
+  _copyToClipboard(cmd, btn);
 }
 
 async function importClaudeSectionsInline(lessonId, lang, btnEl) {
@@ -1509,7 +1552,7 @@ async function saveLessonCategory(lessonId, category) {
 // バージョンセレクタ
 // =============================================================
 
-function _buildVersionSelector(lessonId, lang, generator, versions, currentVersion, sections) {
+function _buildVersionSelector(lessonId, lang, generator, versions, currentVersion, sections, lessonName) {
   if (!versions || versions.length === 0) return '';
 
   const currentVer = versions.find(v => v.version_number === currentVersion);
@@ -1550,6 +1593,7 @@ function _buildVersionSelector(lessonId, lang, generator, versions, currentVersi
       ${metaHtml}
     </div>
     <div style="display:flex; gap:4px; margin-top:6px; flex-wrap:wrap;">
+      <button onclick="_copyVersionUpCmd(${lessonId}, '${esc((lessonName || '').replace(/'/g, "\\'"))}', this)" style="padding:2px 8px; background:#2e7d32; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">Claude Code にバージョンアップを指示するテキストをコピー</button>
       <button onclick="_editVersionNote(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">メモ編集</button>
       <button onclick="_copyVersion(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">コピー</button>
       <button onclick="verifyVersion(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#1565c0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">検証</button>
@@ -1605,33 +1649,70 @@ function _buildAnnotationUI(lessonId, section) {
   const rating = section.annotation_rating || '';
   const comment = section.annotation_comment || '';
   const sid = section.id;
+  // キャッシュ同期
+  _sectionRatings[`${lessonId}_${sid}`] = rating;
 
-  const btnStyle = (r, color, label) => {
-    const sel = rating === r;
-    const bg = sel ? color : '#faf7ff';
-    const fg = sel ? '#fff' : color;
-    const bw = sel ? '2px' : '1px';
-    return `<button onclick="setAnnotationRating(${lessonId}, ${sid}, '${r}')" style="padding:2px 8px; background:${bg}; color:${fg}; border:${bw} solid ${color}; border-radius:3px; cursor:pointer; font-size:0.7rem; font-weight:${sel ? '700' : '400'};">${label}</button>`;
-  };
+  const goodSel = rating === 'good';
+  const badSel = rating === 'needs_improvement';
+  const redoSel = rating === 'redo';
 
-  return `<div style="display:flex; align-items:center; gap:4px; margin:4px 0; flex-wrap:wrap;">
-    ${btnStyle('good', '#2e7d32', '\u25CE良い')}
-    ${btnStyle('needs_improvement', '#e65100', '\u25B3要改善')}
-    ${btnStyle('redo', '#c62828', '\u2715作り直し')}
-    <input type="text" value="${esc(comment)}" placeholder="コメント..."
-      onblur="saveAnnotationComment(${lessonId}, ${sid}, this.value)"
-      style="flex:1; min-width:100px; padding:2px 6px; border:1px solid #d0c0e8; border-radius:3px; font-size:0.7rem; background:#fff; color:#2a1f40;">
+  const goodBtn = `<button onclick="setAnnotationRating(${lessonId}, ${sid}, 'good')"
+    style="padding:4px 14px; background:${goodSel ? '#2e7d32' : '#f0fff0'}; color:${goodSel ? '#fff' : '#2e7d32'};
+    border:2px solid #2e7d32; border-radius:4px; cursor:pointer; font-size:0.78rem; font-weight:700;">◎ 良い</button>`;
+
+  const badBtn = `<button onclick="setAnnotationRating(${lessonId}, ${sid}, 'needs_improvement')"
+    style="padding:4px 14px; background:${badSel ? '#c62828' : '#fff0f0'}; color:${badSel ? '#fff' : '#c62828'};
+    border:2px solid #c62828; border-radius:4px; cursor:pointer; font-size:0.78rem; font-weight:700;">✕ 悪い</button>`;
+
+  const redoBtn = `<button onclick="setAnnotationRating(${lessonId}, ${sid}, 'redo')"
+    style="padding:2px 10px; background:${redoSel ? '#e65100' : '#fff8f0'}; color:${redoSel ? '#fff' : '#e65100'};
+    border:1px solid #e65100; border-radius:3px; cursor:pointer; font-size:0.68rem;">↻ 作り直し</button>`;
+
+  // コメントがあれば表示
+  let commentLabel = '';
+  if (comment && (goodSel || badSel)) {
+    const clr = goodSel ? '#1b5e20' : '#b71c1c';
+    commentLabel = `<span style="font-size:0.7rem; color:${clr}; margin-left:2px;">— ${esc(comment)}</span>`;
+  }
+
+  return `<div style="margin:4px 0;">
+    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+      ${goodBtn} ${badBtn} ${commentLabel}
+    </div>
+    <div style="margin-top:3px;">${redoBtn}</div>
   </div>`;
 }
 
+// 現在のratingを保持（トグル用）
+const _sectionRatings = {};
 async function setAnnotationRating(lessonId, sectionId, rating) {
-  await api('PUT', `/api/lessons/${lessonId}/sections/${sectionId}/annotation`, { rating });
+  const key = `${lessonId}_${sectionId}`;
+  const current = _sectionRatings[key] || '';
+  // 同じボタン → 解除
+  if (current === rating) {
+    _sectionRatings[key] = '';
+    await api('PUT', `/api/lessons/${lessonId}/sections/${sectionId}/annotation`, { rating: '', comment: '' });
+    _openLessonIds.add(lessonId);
+    await loadLessons();
+    return;
+  }
+  // 良い/悪いはダイアログで理由を入力
+  const label = rating === 'good' ? '何が良いか' : rating === 'needs_improvement' ? '何が悪いか' : '';
+  let comment = null;
+  if (label) {
+    comment = await showModal(label + '（空欄でもOK）', {
+      title: rating === 'good' ? '◎ 良い' : '✕ 悪い',
+      input: label + '...',
+      okLabel: '保存',
+    });
+    if (comment === null) return; // キャンセル
+  }
+  _sectionRatings[key] = rating;
+  const body = { rating };
+  if (comment !== null) body.comment = comment;
+  await api('PUT', `/api/lessons/${lessonId}/sections/${sectionId}/annotation`, body);
   _openLessonIds.add(lessonId);
   await loadLessons();
-}
-
-async function saveAnnotationComment(lessonId, sectionId, comment) {
-  await api('PUT', `/api/lessons/${lessonId}/sections/${sectionId}/annotation`, { comment });
 }
 
 // =============================================================
@@ -1726,7 +1807,7 @@ async function showImprovePanel(lessonId, lang, generator, currentVersion) {
 
   let sectionChecks = sections.map((s, i) => {
     const autoCheck = s.annotation_rating === 'needs_improvement' || s.annotation_rating === 'redo';
-    const ratingLabel = s.annotation_rating ? ` [${s.annotation_rating === 'good' ? '\u25CE' : s.annotation_rating === 'needs_improvement' ? '\u25B3' : '\u2715'}]` : '';
+    const ratingLabel = s.annotation_rating ? ` [${s.annotation_rating === 'good' ? '\u25CE' : s.annotation_rating === 'needs_improvement' ? '\u2715' : '\u21BB'}]` : '';
     return `<label style="display:flex; align-items:center; gap:4px; font-size:0.72rem; padding:2px 0;">
       <input type="checkbox" class="improve-sec-check" value="${s.order_index}"${autoCheck ? ' checked' : ''}>
       ${i + 1}. ${esc(s.section_type)}${ratingLabel}

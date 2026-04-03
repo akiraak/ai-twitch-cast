@@ -54,7 +54,8 @@
         "direction": "この発話の意図・演出指示（2〜3文）",
         "key_content": "元教材から引用すべき具体的な内容"
       }
-    ]
+    ],
+    "display_properties": {"maxHeight": 40, "fontSize": 1.2}
   }
 ]
 ```
@@ -71,3 +72,5 @@
 - 整合性チェックで `contradiction` だった箇所は、元教材に合わせて修正する
 - ユーザーの注釈コメントに従って改善する（「短くして」「例を追加」等）
 - 学習結果のパターンを参考にして品質を上げる
+- `display_properties` で `display_text` のコンテンツ量に応じたパネルサイズを指定する（短い: maxHeight 20-30、中程度: 35-50、長い: 55-70）
+- 注釈にパネルサイズへの言及がある場合（「パネルが大きすぎる」等）、`display_properties` の `maxHeight` を調整する

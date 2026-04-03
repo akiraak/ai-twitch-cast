@@ -277,6 +277,22 @@ class TestLessonSections:
         assert updated["content"] == "更新後"
         assert updated["emotion"] == "excited"
 
+    def test_update_section_display_properties(self, api_client, test_db):
+        lid, secs = self._create_lesson_with_sections(api_client, test_db)
+        sid = secs[0]["id"]
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sid}",
+            json={"display_properties": {"maxHeight": 50, "fontSize": 1.2}},
+        )
+        assert resp.json()["ok"] is True
+
+        r = api_client.get(f"/api/lessons/{lid}")
+        updated = [s for s in r.json()["sections"] if s["id"] == sid][0]
+        import json
+        dp = json.loads(updated["display_properties"])
+        assert dp["maxHeight"] == 50
+        assert dp["fontSize"] == 1.2
+
     def test_delete_section(self, api_client, test_db):
         lid, secs = self._create_lesson_with_sections(api_client, test_db)
         sid = secs[1]["id"]
@@ -369,6 +385,25 @@ class TestImportSections:
         dlgs = json.loads(data["sections"][0]["dialogues"])
         assert len(dlgs) == 2
         assert dlgs[0]["speaker"] == "teacher"
+
+    def test_import_sections_with_display_properties(self, api_client, test_db):
+        """display_properties付きセクションのインポート"""
+        r = api_client.post("/api/lessons", json={"name": "DPImport"})
+        lid = r.json()["lesson"]["id"]
+        sections = self._make_sections()
+        sections[0]["display_properties"] = {"maxHeight": 30, "fontSize": 1.6}
+        sections[1]["display_properties"] = {"maxHeight": 60}
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": sections},
+        )
+        data = resp.json()
+        assert data["ok"] is True
+        dp0 = json.loads(data["sections"][0]["display_properties"])
+        assert dp0["maxHeight"] == 30
+        assert dp0["fontSize"] == 1.6
+        dp1 = json.loads(data["sections"][1]["display_properties"])
+        assert dp1["maxHeight"] == 60
 
     def test_import_sections_not_found(self, api_client):
         """存在しないレッスンへのインポート"""

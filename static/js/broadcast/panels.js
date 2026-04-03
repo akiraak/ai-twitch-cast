@@ -112,10 +112,32 @@ async function loadTodo() {
 
 // --- 授業テキストパネル ---
 
-function showLessonText(text) {
+function showLessonText(text, displayProperties) {
   const panel = document.getElementById('lesson-text-panel');
   const content = document.getElementById('lesson-text-content');
   if (!panel || !content) return;
+
+  // セクション別オーバーライド適用（値をクランプして安全に）
+  if (displayProperties) {
+    if (displayProperties.maxHeight != null) {
+      const v = Math.max(10, Math.min(90, Number(displayProperties.maxHeight)));
+      panel.style.maxHeight = v + '%';
+    }
+    if (displayProperties.width != null) {
+      const v = Math.max(10, Math.min(95, Number(displayProperties.width)));
+      panel.style.width = v + '%';
+    }
+    if (displayProperties.fontSize != null) {
+      const v = Math.max(0.5, Math.min(3.0, Number(displayProperties.fontSize)));
+      content.style.fontSize = v + 'vw';
+    }
+  } else {
+    // displayProperties がなければグローバル設定にリセット
+    panel.style.maxHeight = '';
+    panel.style.width = '';
+    content.style.fontSize = '';
+  }
+
   content.textContent = stripLangTags(text);
   panel.style.display = 'block';
   // デザイン設定はinit時・WebSocket経由で既に適用済み（再適用不要）
@@ -130,10 +152,14 @@ function hideLessonText() {
   const panel = document.getElementById('lesson-text-panel');
   if (!panel) return;
   panel.classList.remove('visible');
-  // フェードアウト完了後に非表示
+  // フェードアウト完了後に非表示 + セクション別オーバーライドをリセット
   setTimeout(() => {
     if (!panel.classList.contains('visible')) {
       panel.style.display = 'none';
+      panel.style.maxHeight = '';
+      panel.style.width = '';
+      const content = document.getElementById('lesson-text-content');
+      if (content) content.style.fontSize = '';
     }
   }, 600);
 }

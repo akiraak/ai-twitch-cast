@@ -539,6 +539,13 @@ def _create_tables(conn):
         except sqlite3.OperationalError:
             pass
 
+    # Migration: lesson_sections に display_properties カラム追加（セクション別パネルサイズ制御）
+    try:
+        conn.execute("ALTER TABLE lesson_sections ADD COLUMN display_properties TEXT NOT NULL DEFAULT '{}'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # Migration: lesson_plans に version_number 追加 + UNIQUE制約変更
     # 既存は UNIQUE(lesson_id, lang, generator) → UNIQUE(lesson_id, lang, generator, version_number)
     try:

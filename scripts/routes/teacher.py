@@ -170,6 +170,7 @@ class SectionUpdate(BaseModel):
     question: str | None = None
     answer: str | None = None
     wait_seconds: int | None = None
+    display_properties: dict | None = None
 
 
 class SectionReorder(BaseModel):
@@ -900,6 +901,11 @@ async def import_sections(
         if isinstance(dialogue_directions, (list, dict)):
             dialogue_directions = _json.dumps(dialogue_directions, ensure_ascii=False)
 
+        # display_properties: dictならJSON文字列に変換
+        display_properties = s.get("display_properties", "")
+        if isinstance(display_properties, dict):
+            display_properties = _json.dumps(display_properties, ensure_ascii=False)
+
         sec = db.add_lesson_section(
             lesson_id, order_index=i,
             section_type=s["section_type"],
@@ -916,6 +922,7 @@ async def import_sections(
             dialogue_directions=dialogue_directions,
             generator=generator,
             version_number=version_number,
+            display_properties=display_properties,
         )
         saved.append(sec)
 
@@ -955,6 +962,10 @@ async def update_section(lesson_id: int, section_id: int, body: SectionUpdate):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         return {"ok": True}
+
+    # display_properties は dict → JSON文字列に変換
+    if "display_properties" in updates:
+        updates["display_properties"] = _json.dumps(updates["display_properties"], ensure_ascii=False)
 
     # tts_text または content が変更された場合、該当セクションのTTSキャッシュを削除
     if "tts_text" in updates or "content" in updates:
@@ -1116,8 +1127,8 @@ class VersionUpdate(BaseModel):
 
 
 class AnnotationUpdate(BaseModel):
-    rating: str = ""   # "good" | "needs_improvement" | "redo" | ""
-    comment: str = ""
+    rating: str | None = None   # "good" | "needs_improvement" | "redo" | ""
+    comment: str | None = None
 
 
 VALID_RATINGS = {"good", "needs_improvement", "redo", ""}
@@ -1217,8 +1228,8 @@ async def delete_version(lesson_id: int, version_number: int,
 
 @router.put("/api/lessons/{lesson_id}/sections/{section_id}/annotation")
 async def update_annotation(lesson_id: int, section_id: int, body: AnnotationUpdate):
-    """セクションの注釈（◎/△/✕ + コメント）を更新する"""
-    if body.rating and body.rating not in VALID_RATINGS:
+    """セクションの注釈（◎/△/✕ + コメント）を更新する。指定フィールドのみ更新。"""
+    if body.rating is not None and body.rating not in VALID_RATINGS:
         return {"ok": False, "error": f"不正な rating: {body.rating}（good/needs_improvement/redo のいずれか）"}
     db.update_section_annotation(section_id, rating=body.rating, comment=body.comment)
     return {"ok": True}
@@ -1416,6 +1427,9 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
             dialogue_directions = s.get("dialogue_directions", "")
             if isinstance(dialogue_directions, (list, dict)):
                 dialogue_directions = _json.dumps(dialogue_directions, ensure_ascii=False)
+            display_properties = s.get("display_properties", "")
+            if isinstance(display_properties, dict):
+                display_properties = _json.dumps(display_properties, ensure_ascii=False)
             sec = db.add_lesson_section(
                 lesson_id, order_index=idx,
                 section_type=s.get("section_type", src_sec["section_type"]),
@@ -1432,6 +1446,7 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
                 dialogue_directions=dialogue_directions,
                 generator=body.generator,
                 version_number=new_version_number,
+                display_properties=display_properties,
             )
         else:
             # ソースからコピー
@@ -1451,6 +1466,7 @@ async def improve_content(lesson_id: int, body: ImproveRequest):
                 dialogue_directions=src_sec.get("dialogue_directions", ""),
                 generator=body.generator,
                 version_number=new_version_number,
+                display_properties=src_sec.get("display_properties", ""),
             )
         saved.append(sec)
 

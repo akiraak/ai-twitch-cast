@@ -1,5 +1,16 @@
 # DONE
 
+## 授業パネルサイズのセクション別制御
+
+- [x] セクションごとに `display_properties`（maxHeight/width/fontSize）を指定可能に → [plans/lesson-panel-size-control.md](plans/lesson-panel-size-control.md)
+  - DB: `lesson_sections` に `display_properties` カラム追加
+  - API: セクション更新・インポート・改善で対応
+  - 授業再生: WebSocketイベントに `display_properties` を含めてフロント側で一時適用
+  - 管理画面: セクション別パネルサイズ設定UI、注釈UIリデザイン（モーダル入力）
+  - AIプロンプト: コンテンツ量別サイズガイドライン追加
+  - テスト: DB・API・LessonRunner 計125行追加
+- [x] 全800テスト通過
+
 ## Claude Watcher 完了（全7ステップ）
 
 - [x] Claude Code作業実況の二人会話機能 → [plans/claude-watcher-conversation.md](plans/claude-watcher-conversation.md)
