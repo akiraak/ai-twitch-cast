@@ -1,5 +1,16 @@
 # DONE
 
+## Claude Code フック復旧可能化
+
+- [x] `claude-hooks/global/notify-stop.py` — Stopフック（作業完了報告 + タイマー停止）
+- [x] `claude-hooks/global/notify-prompt.py` — UserPromptSubmitフック（指示受信報告 + タイマー起動）
+- [x] `claude-hooks/global/long-execution-timer.py` — 長時間実行タイマー（3分以上で定期報告）
+- [x] `claude-hooks/local/fix-permissions.sh` — PostToolUseフック（ファイル所有者修正）
+- [x] `claude-hooks/settings-global.json` / `settings-local.json` — 設定テンプレート
+- [x] `scripts/setup-hooks.sh` — ワンコマンド復旧スクリプト（冪等、既存設定保持マージ）
+- [x] `~/.claude/hooks/` と `~/.claude/settings.json` に展開・復旧済み
+- [x] `.claude/hooks/fix-permissions.sh` と `.claude/settings.local.json` に展開済み
+
 ## AI自動判定で授業スクリプト改善 Step 7: テスト追加（プラン完了）
 
 - [x] `tests/test_api_teacher.py` — `TestImproveAutoDetect` クラス追加（4テスト）

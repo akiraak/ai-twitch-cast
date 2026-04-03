@@ -105,6 +105,15 @@ ai-twitch-cast/
 ├── CLAUDE.md                 # このファイル
 ├── DONE.md                   # 完了タスク
 ├── TODO.md                   # タスク一覧
+├── claude-hooks/             # Claude Codeフックの正本（setup-hooks.shで展開）
+│   ├── global/               # ~/.claude/hooks/ にコピーされる
+│   │   ├── notify-stop.py
+│   │   ├── notify-prompt.py
+│   │   └── long-execution-timer.py
+│   ├── local/                # .claude/hooks/ にコピーされる
+│   │   └── fix-permissions.sh
+│   ├── settings-global.json  # ~/.claude/settings.json のフック部分テンプレート
+│   └── settings-local.json   # .claude/settings.local.json のフック部分テンプレート
 ├── plans/                    # 作業プラン（詳細な実装計画）
 │   ├── websocket-optimization.md # サーバ↔配信アプリ WebSocket統合プラン
 │   └── stream-buffering-fix.md   # 配信バッファリング（くるくる）問題の分析と改善
@@ -157,11 +166,19 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 - サーバー未起動時は静かに失敗（エラー出力なし）
 - **無効化**: `~/.claude/settings.json` の該当フックを削除するだけ
 
+### 正本とセットアップ
+- **正本**: `claude-hooks/` ディレクトリにフックスクリプトと設定テンプレートを保存
+- **セットアップ**: `bash scripts/setup-hooks.sh` でワンコマンド復旧（冪等）
+- PC環境が変わったら `setup-hooks.sh` を実行するだけでフックが復旧する
+
 ### 関連ファイル
-- `~/.claude/hooks/notify-stop.py` — Stopフック（作業完了報告 + タイマー停止、グローバル）
-- `~/.claude/hooks/notify-prompt.py` — UserPromptSubmitフック（指示受信報告 + タイマー起動、グローバル）
-- `~/.claude/hooks/long-execution-timer.py` — 長時間実行タイマー（バックグラウンド、transcript解析）
-- `~/.claude/settings.json` — グローバルフック設定
+- `claude-hooks/global/notify-stop.py` — Stopフック正本（作業完了報告 + タイマー停止）
+- `claude-hooks/global/notify-prompt.py` — UserPromptSubmitフック正本（指示受信報告 + タイマー起動）
+- `claude-hooks/global/long-execution-timer.py` — 長時間実行タイマー正本（バックグラウンド、transcript解析）
+- `claude-hooks/local/fix-permissions.sh` — PostToolUseフック正本（ファイル所有者修正）
+- `claude-hooks/settings-global.json` — `~/.claude/settings.json` のフック設定テンプレート
+- `claude-hooks/settings-local.json` — `.claude/settings.local.json` のフック設定テンプレート
+- `scripts/setup-hooks.sh` — セットアップスクリプト（上記をコピー＋設定マージ）
 
 ## WSL2環境について
 
