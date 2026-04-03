@@ -1597,7 +1597,7 @@ function _buildVersionSelector(lessonId, lang, generator, versions, currentVersi
       <button onclick="_editVersionNote(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">メモ編集</button>
       <button onclick="_copyVersion(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">コピー</button>
       <button onclick="verifyVersion(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#1565c0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">検証</button>
-      <button onclick="showImprovePanel(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#e65100; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">改善</button>
+      <button onclick="showImprovePanel(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:4px 14px; background:#d50000; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.78rem; font-weight:700; letter-spacing:0.5px;">強制バージョンアップ</button>
       <button onclick="showVersionDiff(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#f5f0ff; color:#6a5590; border:1px solid #d0c0e8; border-radius:3px; cursor:pointer; font-size:0.68rem;">比較...</button>
       <button onclick="triggerTtsPregen(${lessonId}, '${lang}', '${generator}', ${currentVersion})" style="padding:2px 8px; background:#4a148c; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">TTS一括生成</button>
       ${versions.length > 1 ? `<button onclick="_deleteVersion(${lessonId}, ${currentVersion}, '${lang}', '${generator}')" style="padding:2px 8px; background:#c62828; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.68rem;">削除</button>` : ''}
@@ -1815,22 +1815,25 @@ async function showImprovePanel(lessonId, lang, generator, currentVersion) {
     </label>`;
   }).join('');
 
-  el.innerHTML = `<div style="margin-top:8px; padding:8px; background:#fff3e0; border:1px solid #ffcc80; border-radius:4px;">
-    <div style="font-weight:600; font-size:0.78rem; color:#e65100; margin-bottom:6px;">部分改善</div>
-    <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
-      <span style="font-size:0.72rem;">改善元:</span>
-      <select class="improve-source-version" style="padding:2px 6px; border:1px solid #ffcc80; border-radius:3px; font-size:0.72rem;">${versionOptions}</select>
+  el.innerHTML = `<div style="margin-top:8px; padding:10px; background:#fce4ec; border:2px solid #d50000; border-radius:6px;">
+    <div style="font-weight:700; font-size:0.85rem; color:#d50000; margin-bottom:8px;">強制バージョンアップ</div>
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+      <span style="font-size:0.72rem; font-weight:500;">元バージョン:</span>
+      <select class="improve-source-version" style="padding:2px 6px; border:1px solid #ef9a9a; border-radius:3px; font-size:0.72rem;">${versionOptions}</select>
     </div>
-    <div style="margin-bottom:6px;">
-      <div style="font-size:0.72rem; font-weight:500; margin-bottom:3px;">対象セクション:</div>
-      ${sectionChecks}
+    <div style="margin-bottom:8px;">
+      <button onclick="executeImprove(${lessonId}, '${lang}', '${generator}', this, true)" style="padding:8px 20px; background:#d50000; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:0.85rem; font-weight:700; width:100%;">AIが自動で判定してバージョンアップ</button>
     </div>
-    <textarea class="improve-instructions" rows="2" placeholder="追加の改善指示（任意）..." style="width:100%; padding:4px 6px; border:1px solid #ffcc80; border-radius:3px; font-size:0.72rem; margin-bottom:6px; box-sizing:border-box;"></textarea>
-    <div style="display:flex; gap:6px; flex-wrap:wrap;">
-      <button onclick="executeImprove(${lessonId}, '${lang}', '${generator}', this, false)" style="padding:4px 12px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">改善を実行</button>
-      <button onclick="executeImprove(${lessonId}, '${lang}', '${generator}', this, true)" style="padding:4px 12px; background:#1565c0; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">AI自動判定で改善</button>
-      <button onclick="this.closest('.improve-panel-${lessonId}-${currentVersion}').style.display='none'" style="padding:4px 12px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">キャンセル</button>
-    </div>
+    <details style="margin-bottom:8px;">
+      <summary style="cursor:pointer; font-size:0.7rem; color:#888;">セクションを手動で選んでバージョンアップ</summary>
+      <div style="padding:6px 0;">
+        <div style="font-size:0.72rem; font-weight:500; margin-bottom:3px;">対象セクション:</div>
+        ${sectionChecks}
+        <textarea class="improve-instructions" rows="2" placeholder="追加の指示（任意）..." style="width:100%; padding:4px 6px; border:1px solid #ef9a9a; border-radius:3px; font-size:0.72rem; margin-top:6px; box-sizing:border-box;"></textarea>
+        <button onclick="executeImprove(${lessonId}, '${lang}', '${generator}', this, false)" style="padding:6px 16px; background:#e65100; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:600; margin-top:6px;">選択セクションをバージョンアップ</button>
+      </div>
+    </details>
+    <button onclick="this.closest('.improve-panel-${lessonId}-${currentVersion}').style.display='none'" style="padding:4px 12px; background:#888; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.72rem;">閉じる</button>
     <div class="improve-status" style="margin-top:6px;"></div>
   </div>`;
   el.style.display = '';
@@ -1840,7 +1843,8 @@ async function executeImprove(lessonId, lang, generator, btn, autoMode = false) 
   const panel = btn.closest('div[class*="improve-panel"]');
   const statusEl = panel.querySelector('.improve-status');
   const sourceVersion = parseInt(panel.querySelector('.improve-source-version').value);
-  const instructions = panel.querySelector('.improve-instructions').value.trim();
+  const instructionsEl = panel.querySelector('.improve-instructions');
+  const instructions = instructionsEl ? instructionsEl.value.trim() : '';
 
   let targetSections = [];
   if (!autoMode) {
