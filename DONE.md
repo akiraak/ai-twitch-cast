@@ -1,5 +1,12 @@
 # DONE
 
+## AI自動判定で授業スクリプト改善 Step 3: 評価関数追加
+
+- [x] `src/lesson_generator/improver.py` — `evaluate_lesson_quality()` 授業品質チェック（lesson_generate.md基準）
+- [x] `src/lesson_generator/improver.py` — `evaluate_category_fit()` カテゴリ適合性チェック（DB prompt_content基準）
+- [x] `src/lesson_generator/improver.py` — `determine_targets()` 3軸統合判定（major→対象、minor→参考情報）
+- [x] `src/lesson_generator/__init__.py` — 新関数3つをエクスポートに追加
+
 ## AI自動判定で授業スクリプト改善 Step 2: カテゴリプロンプトDB保存化
 
 - [x] `src/db/core.py` — `lesson_categories`に`prompt_content TEXT`カラム追加マイグレーション

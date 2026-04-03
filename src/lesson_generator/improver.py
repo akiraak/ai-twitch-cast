@@ -151,6 +151,162 @@ async def verify_lesson(
     }
 
 
+async def evaluate_lesson_quality(
+    sections: list[dict],
+    generation_prompt: str,
+    en: bool = False,
+) -> dict:
+    """授業品質チェック。生成プロンプトの品質基準に照らして評価する。
+
+    Returns:
+        {"result": {"quality_issues": [...], "overall_score": int},
+         "prompt": {"system": str, "user": str}, "raw_output": str}
+    """
+    system_template = _load_prompt("lesson_evaluate_quality.md")
+    system_prompt = system_template.replace("{generation_prompt}", generation_prompt)
+
+    user_prompt = "## 授業セクション\n\n" + _format_sections_for_prompt(sections)
+
+    client = get_client()
+    response = client.models.generate_content(
+        model=_get_model(),
+        contents=[
+            types.Content(role="user", parts=[
+                types.Part(text=f"{system_prompt}\n\n---\n\n{user_prompt}"),
+            ]),
+        ],
+        config=types.GenerateContentConfig(
+            temperature=0.1,
+            max_output_tokens=8192,
+        ),
+    )
+
+    result = _parse_json_response(response.text)
+    if not isinstance(result, dict):
+        result = {"quality_issues": [], "overall_score": 0}
+    if "quality_issues" not in result:
+        result["quality_issues"] = []
+
+    return {
+        "result": result,
+        "prompt": {"system": system_prompt, "user": user_prompt},
+        "raw_output": response.text,
+    }
+
+
+async def evaluate_category_fit(
+    sections: list[dict],
+    category_prompt: str,
+    category_name: str,
+    category_description: str,
+    en: bool = False,
+) -> dict:
+    """カテゴリ適合性チェック。DB保存のカテゴリ専用プロンプトに照らして評価する。
+
+    Returns:
+        {"result": {"category_issues": [...]},
+         "prompt": {"system": str, "user": str}, "raw_output": str}
+    """
+    system_template = _load_prompt("lesson_evaluate_category.md")
+    system_prompt = (
+        system_template
+        .replace("{category_name}", category_name)
+        .replace("{category_description}", category_description)
+        .replace("{category_prompt_content}", category_prompt)
+    )
+
+    user_prompt = "## 授業セクション\n\n" + _format_sections_for_prompt(sections)
+
+    client = get_client()
+    response = client.models.generate_content(
+        model=_get_model(),
+        contents=[
+            types.Content(role="user", parts=[
+                types.Part(text=f"{system_prompt}\n\n---\n\n{user_prompt}"),
+            ]),
+        ],
+        config=types.GenerateContentConfig(
+            temperature=0.1,
+            max_output_tokens=8192,
+        ),
+    )
+
+    result = _parse_json_response(response.text)
+    if not isinstance(result, dict):
+        result = {"category_issues": []}
+    if "category_issues" not in result:
+        result["category_issues"] = []
+
+    return {
+        "result": result,
+        "prompt": {"system": system_prompt, "user": user_prompt},
+        "raw_output": response.text,
+    }
+
+
+def determine_targets(
+    verify_result: dict | None,
+    quality_result: dict | None,
+    category_result: dict | None,
+    all_sections: list[dict],
+) -> tuple[list[int], str]:
+    """3軸の評価結果を統合して改善対象セクションを決定する。
+
+    Args:
+        verify_result: verify_lesson() の result（coverage/contradictions）
+        quality_result: evaluate_lesson_quality() の result（quality_issues）
+        category_result: evaluate_category_fit() の result（category_issues）
+        all_sections: 全セクション（order_index取得用）
+
+    Returns:
+        (sorted target indices, combined user_instructions text)
+    """
+    target_set: set[int] = set()
+    instructions: list[str] = []
+
+    # ① 元教材整合性
+    if verify_result:
+        for item in verify_result.get("coverage", []):
+            if item.get("status") == "weak":
+                idx = item.get("section_index")
+                if idx is not None:
+                    target_set.add(idx)
+                    instructions.append(f"[教材整合性] セクション{idx}: {item.get('detail', '説明不足')}")
+        for item in verify_result.get("contradictions", []):
+            idx = item.get("section_index")
+            if idx is not None:
+                target_set.add(idx)
+                instructions.append(f"[教材整合性] セクション{idx}の矛盾: {item.get('issue', '')}")
+        missing = [i for i in verify_result.get("coverage", []) if i.get("status") == "missing"]
+        if missing:
+            for item in missing:
+                instructions.append(f"[教材整合性] 不足内容を追加: {item.get('source_item', '')}")
+            if not target_set:
+                target_set.update(s.get("order_index", 0) for s in all_sections)
+
+    # ② 授業品質
+    if quality_result:
+        for item in quality_result.get("quality_issues", []):
+            idx = item.get("section_index")
+            severity = item.get("severity", "minor")
+            if severity == "major" and idx is not None:
+                target_set.add(idx)
+            if idx is not None:
+                instructions.append(f"[授業品質/{severity}] セクション{idx}: {item.get('issue', '')}")
+
+    # ③ カテゴリ適合性
+    if category_result:
+        for item in category_result.get("category_issues", []):
+            idx = item.get("section_index")
+            severity = item.get("severity", "minor")
+            if severity == "major" and idx is not None:
+                target_set.add(idx)
+            if idx is not None:
+                instructions.append(f"[カテゴリ/{severity}] セクション{idx}: {item.get('issue', '')}")
+
+    return sorted(target_set), "\n".join(instructions)
+
+
 async def improve_sections(
     extracted_text: str,
     main_content: list[dict],

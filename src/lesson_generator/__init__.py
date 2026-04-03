@@ -29,6 +29,9 @@ from .extractor import (
 # --- improver ---
 from .improver import (
     verify_lesson,
+    evaluate_lesson_quality,
+    evaluate_category_fit,
+    determine_targets,
     improve_sections,
     load_learnings,
     analyze_learnings,
