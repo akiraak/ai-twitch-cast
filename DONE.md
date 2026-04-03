@@ -1,5 +1,10 @@
 # DONE
 
+## AI自動判定で授業スクリプト改善 Step 1: 評価プロンプト作成
+
+- [x] `prompts/lesson_evaluate_quality.md` — 授業品質チェックプロンプト（教育効果・エンタメ性・対話品質・技術的正確性の4観点）
+- [x] `prompts/lesson_evaluate_category.md` — カテゴリ適合性チェックプロンプト（DB保存のカテゴリ要件で評価）
+
 ## 授業パネルサイズのセクション別制御
 
 - [x] セクションごとに `display_properties`（maxHeight/width/fontSize）を指定可能に → [plans/lesson-panel-size-control.md](plans/lesson-panel-size-control.md)
