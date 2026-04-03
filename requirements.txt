@@ -9,6 +9,7 @@ httpx>=0.27.0
 json-repair>=0.58.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0
+aiofiles>=23.0.0
 
 # テスト
 pytest>=7.0.0
