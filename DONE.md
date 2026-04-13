@@ -1,5 +1,13 @@
 # DONE
 
+## 管理画面Docsタブにprompts表示を追加
+
+- [x] `scripts/routes/docs_viewer.py` — `ALLOWED_DIRS` に `"prompts"` 追加
+- [x] `static/index.html` — `prompts` ボタン追加
+- [x] `static/js/admin/docs.js` — `switchDocsDir()` を3ボタン対応に
+- [x] `static/js/admin/init.js` — ハッシュ復元時の `prompts` ボタントグル追加
+- [x] プラン: [plans/prompts-in-docs-tab.md](plans/prompts-in-docs-tab.md)
+
 ## Claude Code フック復旧可能化
 
 - [x] `claude-hooks/global/notify-stop.py` — Stopフック（作業完了報告 + タイマー停止）

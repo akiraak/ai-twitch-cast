@@ -18,6 +18,7 @@ if (_initTab === 'docs' && _initParam) {
   }
   document.getElementById('docs-dir-plans').classList.toggle('active', _docsCurrentDir === 'plans');
   document.getElementById('docs-dir-docs').classList.toggle('active', _docsCurrentDir === 'docs');
+  document.getElementById('docs-dir-prompts').classList.toggle('active', _docsCurrentDir === 'prompts');
 }
 { if (TAB_NAMES.includes(_initTab)) switchTab(_initTab);
 }

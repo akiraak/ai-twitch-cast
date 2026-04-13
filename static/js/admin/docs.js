@@ -9,6 +9,7 @@ function switchDocsDir(dir) {
   location.hash = `docs:${dir}`;
   document.getElementById('docs-dir-plans').classList.toggle('active', dir === 'plans');
   document.getElementById('docs-dir-docs').classList.toggle('active', dir === 'docs');
+  document.getElementById('docs-dir-prompts').classList.toggle('active', dir === 'prompts');
   loadDocFiles();
   resetDocsContent();
 }

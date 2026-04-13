@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-ALLOWED_DIRS = {"plans", "docs"}
+ALLOWED_DIRS = {"plans", "docs", "prompts"}
 
 
 @router.get("/api/docs/files")
