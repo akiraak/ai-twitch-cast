@@ -1,5 +1,10 @@
 # DONE
 
+## 授業モード: バージョン別セクション表示の修正
+
+- [x] `static/js/admin/teacher.js` — セクションフィルタに `version_number` 条件を追加（初回表示時も最新バージョンのみ表示）
+- [x] プラン: [plans/lesson-version-filter.md](plans/lesson-version-filter.md)
+
 ## 管理画面Docsタブにprompts表示を追加
 
 - [x] `scripts/routes/docs_viewer.py` — `ALLOWED_DIRS` に `"prompts"` 追加

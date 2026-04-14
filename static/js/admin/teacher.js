@@ -152,10 +152,10 @@ async function buildLessonItem(lessonId) {
 
   // 現在の lang+generator に対応するバージョン一覧
   const langVersions = allVersions.filter(v => v.lang === lang && v.generator === generator);
-  const sections = allSections.filter(s => (s.lang || 'ja') === lang && (s.generator || 'claude') === generator);
-
   // バージョン番号確定（未選択なら最新）
   const currentVersion = selectedVersion || (langVersions.length ? langVersions[langVersions.length - 1].version_number : 1);
+  // 現在のバージョンのセクションのみ表示
+  const sections = allSections.filter(s => (s.lang || 'ja') === lang && (s.generator || 'claude') === generator && s.version_number === currentVersion);
 
   const hasSources = sources.length > 0;
   const hasSections = sections.length > 0;
