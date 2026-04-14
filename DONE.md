@@ -1,5 +1,10 @@
 # DONE
 
+## display_text読み上げルール追加
+
+- [x] `prompts/lesson_generate.md` に「各セクションの最初のdialogueでdisplay_textを全文読み上げる」ルールを追加
+- [x] プラン: [plans/display-text-readout-rule.md](plans/display-text-readout-rule.md)
+
 ## 授業モード: TTS対話モード(dlg)フォールバックバグ修正
 
 - [x] `src/tts_pregenerate.py` — `_parse_dialogues()` から `student_cfg` ガードを削除。dialoguesがあれば常に対話モードで事前生成

@@ -2,7 +2,6 @@
 
 ## 授業モード改善: 自動検査・改善ループ → [plans/auto-verify-improve-loop.md](plans/auto-verify-improve-loop.md)
 - [ ] 自動検査・改善ループ実装（verify→improve×3回、上記の3軸判定を活用）
-- [ ] `lesson_generate.md` に「各セクションの最初のdialogueで、display_textの内容を先生が読み上げる（または紹介する）こと」ルールを追加 → [plans/display-text-readout-rule.md](plans/display-text-readout-rule.md)
 
 ## 管理画面
 - [ ] カテゴリごとに付けている良い/悪いの情報を管理画面で見れるようにする。そのセクションの会話など内容も保存し何が悪いのか分かりやすく確認できるようにする
