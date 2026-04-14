@@ -7,6 +7,12 @@
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）
 
+## 授業スクリプト品質
+- [ ] `lesson_generate.md` に「各セクションの最初のdialogueで、display_textの内容を先生が読み上げる（または紹介する）こと」ルールを追加
+
+## 管理画面
+- [ ] カテゴリごとに付けている良い/悪いの情報を管理画面で見れるようにする。そのセクションの会話など内容も保存し何が悪いのか分かりやすく確認できるようにする
+
 ## 検討
 - [ ] 遅延が大きく発生した場合にスキップしてでも最新の配信内容に追いつく機能の検証 → [plans/latency-skip-catchup.md](plans/latency-skip-catchup.md)
 - [ ] キャプチャウィンドウの音を配信に自然に乗せれるかを検証 → [plans/capture-window-audio.md](plans/capture-window-audio.md)
