@@ -1,5 +1,13 @@
 # DONE
 
+## カテゴリ別評価ビューア
+
+- [x] `scripts/routes/teacher.py` — `GET /api/lessons/annotated-sections` エンドポイント追加（カテゴリ・rating フィルタ、dialoguesパース済み完全データ）
+- [x] `static/js/admin/teacher.js` — 学習ダッシュボードに「注釈一覧」ボタン・フィルタタブ・セクション詳細表示（dialogues/display_text/tts_text折りたたみ）、ダッシュボード自動読み込み
+- [x] `static/css/index.css` — 注釈一覧用CSSスタイル追加
+- [x] `tests/test_api_teacher.py` — `TestAnnotatedSectionsAPI` テストクラス追加（7テスト）
+- [x] プラン: [plans/category-evaluation-viewer.md](plans/category-evaluation-viewer.md)
+
 ## display_text読み上げルール追加
 
 - [x] `prompts/lesson_generate.md` に「各セクションの最初のdialogueでdisplay_textを全文読み上げる」ルールを追加

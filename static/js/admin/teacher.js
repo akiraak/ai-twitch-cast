@@ -2121,10 +2121,10 @@ function _renderLearningSection(container) {
   section.innerHTML = `
     <div class="learning-header">
       <h3>学習ダッシュボード</h3>
-      <button onclick="loadLearningsDashboard()">読み込み</button>
     </div>
     <div id="learnings-dashboard"></div>`;
   container.appendChild(section);
+  loadLearningsDashboard();
 }
 
 async function loadLearningsDashboard() {
@@ -2187,7 +2187,11 @@ async function loadLearningsDashboard() {
         <button onclick="executePromptImprove('${esc(st.category)}')" class="learning-btn learning-btn--improve">プロンプトを改善</button>
         ${st.category && !hasPromptContent ? `<button onclick="createCategoryPrompt('${esc(st.category)}')" class="learning-btn learning-btn--create">専用プロンプト作成</button>` : ''}
         ${hasPromptContent ? `<span class="learning-prompt-badge">専用プロンプトあり</span>` : ''}
+        <button onclick="toggleAnnotatedSections('${esc(st.category)}')" class="learning-btn learning-btn--annot" id="annot-btn-${esc(st.category)}">注釈一覧 ▼</button>
       </div>`;
+
+    // 注釈セクション一覧（展開用コンテナ）
+    html += `<div id="annot-panel-${esc(st.category)}" class="annot-panel" style="display:none;"></div>`;
 
     // 学習結果表示
     if (st.learnings_md) {
@@ -2204,6 +2208,128 @@ async function loadLearningsDashboard() {
   }
 
   container.innerHTML = html;
+}
+
+// =============================================================
+// 注釈セクション一覧
+// =============================================================
+
+async function toggleAnnotatedSections(category) {
+  const panel = document.getElementById(`annot-panel-${category}`);
+  const btn = document.getElementById(`annot-btn-${category}`);
+  if (!panel) return;
+
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    if (btn) btn.textContent = '注釈一覧 ▼';
+    return;
+  }
+
+  panel.style.display = 'block';
+  if (btn) btn.textContent = '注釈一覧 ▲';
+  loadAnnotatedSections(category, '');
+}
+
+async function loadAnnotatedSections(category, rating) {
+  const panel = document.getElementById(`annot-panel-${category}`);
+  if (!panel) return;
+  panel.innerHTML = '<span class="lesson-spinner">読み込み中...</span>';
+
+  const params = new URLSearchParams({ category });
+  if (rating) params.set('rating', rating);
+
+  const res = await api('GET', `/api/lessons/annotated-sections?${params}`);
+  if (!res || !res.ok) {
+    panel.innerHTML = '<div style="color:#888; font-size:0.8rem;">読み込みに失敗しました</div>';
+    return;
+  }
+
+  const counts = res.counts || {};
+  const sections = res.sections || [];
+  const totalCount = (counts.good || 0) + (counts.needs_improvement || 0) + (counts.redo || 0);
+
+  // フィルタタブ
+  const activeTab = rating || '';
+  const tabBtn = (label, value, count) => {
+    const cls = activeTab === value ? 'annot-tab annot-tab--active' : 'annot-tab';
+    return `<button class="${cls}" onclick="loadAnnotatedSections('${esc(category)}','${value}')">${label}(${count})</button>`;
+  };
+
+  let html = `<div class="annot-tabs">
+    ${tabBtn('全て', '', totalCount)}
+    ${tabBtn('◎良い', 'good', counts.good || 0)}
+    ${tabBtn('✕悪い', 'needs_improvement', counts.needs_improvement || 0)}
+    ${tabBtn('↻作直', 'redo', counts.redo || 0)}
+  </div>`;
+
+  if (sections.length === 0) {
+    html += '<div style="color:#8a7a9a; font-size:0.8rem; padding:8px 0;">該当するセクションがありません</div>';
+  }
+
+  for (const sec of sections) {
+    html += _renderAnnotatedSection(sec);
+  }
+
+  panel.innerHTML = html;
+}
+
+function _renderAnnotatedSection(sec) {
+  const ratingLabels = {
+    good: { badge: '◎ 良い', cls: 'annot-badge--good' },
+    needs_improvement: { badge: '✕ 悪い', cls: 'annot-badge--ni' },
+    redo: { badge: '↻ 作り直し', cls: 'annot-badge--redo' },
+  };
+  const rl = ratingLabels[sec.annotation_rating] || { badge: sec.annotation_rating, cls: '' };
+
+  let html = `<div class="annot-section-card">
+    <div class="annot-section-header">
+      <span class="annot-section-title">#${sec.lesson_id} ${esc(sec.lesson_name)} &gt; S${sec.order_index} ${esc(sec.section_type)}</span>
+      <span class="annot-section-meta">v${sec.version_number} / ${esc(sec.emotion)}</span>
+    </div>
+    <div class="annot-section-rating">
+      <span class="annot-badge ${rl.cls}">${rl.badge}</span>
+      ${sec.annotation_comment ? `<span class="annot-comment"> — ${esc(sec.annotation_comment)}</span>` : ''}
+    </div>`;
+
+  // 会話内容（dialogues）
+  if (sec.dialogues && sec.dialogues.length > 0) {
+    let dlgHtml = '';
+    for (const d of sec.dialogues) {
+      const speaker = d.speaker === 'student' ? '🙋生徒' : '🎓先生';
+      const spClass = d.speaker === 'student' ? 'annot-dlg--student' : 'annot-dlg--teacher';
+      dlgHtml += `<div class="annot-dlg ${spClass}">
+        <span class="annot-dlg-speaker">${speaker}</span>`;
+      if (d.emotion) dlgHtml += ` <span class="annot-dlg-emotion">[${esc(d.emotion)}]</span>`;
+      dlgHtml += `<div class="annot-dlg-text">${esc(d.tts_text || d.text || '')}</div>`;
+      if (d.display_text) dlgHtml += `<div class="annot-dlg-display">${esc(d.display_text)}</div>`;
+      if (d.review) dlgHtml += `<div class="annot-dlg-review">レビュー: ${esc(d.review)}</div>`;
+      dlgHtml += '</div>';
+    }
+    html += `<details class="annot-detail"><summary>会話内容 (${sec.dialogues.length}発話)</summary><div class="annot-detail-body">${dlgHtml}</div></details>`;
+  }
+
+  // title
+  if (sec.title) {
+    html += `<details class="annot-detail"><summary>タイトル</summary><div class="annot-detail-body"><pre class="annot-pre">${esc(sec.title)}</pre></div></details>`;
+  }
+
+  // display_text
+  if (sec.display_text) {
+    html += `<details class="annot-detail"><summary>表示テキスト (display_text)</summary><div class="annot-detail-body"><pre class="annot-pre">${esc(sec.display_text)}</pre></div></details>`;
+  }
+
+  // tts_text
+  if (sec.tts_text) {
+    html += `<details class="annot-detail"><summary>発話テキスト (tts_text)</summary><div class="annot-detail-body"><pre class="annot-pre">${esc(sec.tts_text)}</pre></div></details>`;
+  }
+
+  // content（dialoguesと重複しない場合のみ）
+  if (sec.content && !sec.dialogues?.length) {
+    html += `<details class="annot-detail"><summary>コンテンツ (content)</summary><div class="annot-detail-body"><pre class="annot-pre">${esc(sec.content)}</pre></div></details>`;
+  }
+
+  html += '</div>';
+  return html;
 }
 
 async function executeLearningAnalysis(category) {

@@ -458,6 +458,77 @@ async def api_get_learnings(category: str | None = None):
     return {"ok": True, "stats": stats}
 
 
+@router.get("/api/lessons/annotated-sections")
+async def api_get_annotated_sections(category: str = "", rating: str = ""):
+    """カテゴリ別に注釈付きセクションを返す（会話内容含む完全データ）
+
+    Query params:
+        category: カテゴリslug（空文字=未分類）
+        rating: "good" | "needs_improvement" | "redo" | "" (空=全部)
+    """
+    valid_ratings = {"good", "needs_improvement", "redo", ""}
+    if rating not in valid_ratings:
+        return {"ok": False, "error": f"不正な rating: {rating}"}
+
+    all_lessons = db.get_all_lessons()
+    # カテゴリフィルタ
+    cat_lessons = [l for l in all_lessons if l.get("category", "") == category]
+
+    sections = []
+    counts = {"good": 0, "needs_improvement": 0, "redo": 0}
+
+    for lesson in cat_lessons:
+        lid = lesson["id"]
+        lesson_name = lesson["name"]
+        versions = db.get_lesson_versions(lid)
+
+        for ver in versions:
+            vn = ver["version_number"]
+            lang = ver["lang"]
+            gen = ver["generator"]
+            secs = db.get_lesson_sections(lid, lang=lang, generator=gen, version_number=vn)
+
+            for s in secs:
+                r = s.get("annotation_rating", "")
+                if not r:
+                    continue
+                # カウント（フィルタ前に全件カウント）
+                if r in counts:
+                    counts[r] += 1
+
+                if rating and r != rating:
+                    continue
+
+                # dialogues をパース
+                dialogues_raw = s.get("dialogues", "")
+                try:
+                    dialogues = _json.loads(dialogues_raw) if dialogues_raw else []
+                except (_json.JSONDecodeError, TypeError):
+                    dialogues = []
+
+                sections.append({
+                    "lesson_id": lid,
+                    "lesson_name": lesson_name,
+                    "version_number": vn,
+                    "section_id": s["id"],
+                    "order_index": s.get("order_index", 0),
+                    "section_type": s.get("section_type", ""),
+                    "title": s.get("title", ""),
+                    "emotion": s.get("emotion", "neutral"),
+                    "content": s.get("content", ""),
+                    "tts_text": s.get("tts_text", ""),
+                    "display_text": s.get("display_text", ""),
+                    "dialogues": dialogues,
+                    "annotation_rating": r,
+                    "annotation_comment": s.get("annotation_comment", ""),
+                })
+
+    # 新しい順（section_id DESC）でソート
+    sections.sort(key=lambda x: x["section_id"], reverse=True)
+
+    return {"ok": True, "sections": sections, "counts": counts}
+
+
 @router.post("/api/lessons/improve-prompt")
 async def api_improve_prompt(body: ImprovePromptRequest):
     """学習結果をもとに生成プロンプトの改善案をdiff生成"""

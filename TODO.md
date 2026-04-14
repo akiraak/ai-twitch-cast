@@ -4,9 +4,6 @@
 - [ ] カテゴリ別学習の調査と修正
 - [ ] 自動検査・改善ループ実装（verify→improve×3回、上記の3軸判定を活用）→ [plans/auto-verify-improve-loop.md](plans/auto-verify-improve-loop.md)
 
-## 管理画面
-- [ ] カテゴリ別評価ビューア: 注釈付きセクションの一覧・会話内容の閲覧 → [plans/category-evaluation-viewer.md](plans/category-evaluation-viewer.md)
-
 ## バグ
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）

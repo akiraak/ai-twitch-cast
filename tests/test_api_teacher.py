@@ -1109,6 +1109,128 @@ class TestAnnotationAPI:
         assert resp.json()["ok"] is False
 
 
+class TestAnnotatedSectionsAPI:
+    """GET /api/lessons/annotated-sections のテスト"""
+
+    def _setup_lesson_with_annotations(self, api_client, test_db, category="test-cat"):
+        """テスト用の授業+セクション+注釈をセットアップする"""
+        import json
+
+        # カテゴリ作成
+        api_client.post("/api/lesson-categories", json={
+            "slug": category, "name": "テストカテゴリ",
+        })
+
+        # 授業作成
+        r = api_client.post("/api/lessons", json={"name": "AnnotSec授業", "category": category})
+        lid = r.json()["lesson"]["id"]
+
+        # バージョン作成
+        test_db.create_lesson_version(lid, lang="ja", generator="gemini", version_number=1)
+
+        # セクション追加（注釈付き）
+        dialogues = json.dumps([
+            {"speaker": "teacher", "tts_text": "こんにちは", "emotion": "happy"},
+            {"speaker": "student", "tts_text": "よろしくお願いします", "emotion": "neutral"},
+        ])
+        s1 = test_db.add_lesson_section(lid, 0, "introduction", "導入コンテンツ",
+                                        tts_text="導入の発話テキスト",
+                                        display_text="導入の表示テキスト",
+                                        title="導入", dialogues=dialogues)
+        test_db.update_section_annotation(s1["id"], rating="good", comment="わかりやすい導入")
+
+        s2 = test_db.add_lesson_section(lid, 1, "explanation", "説明コンテンツ",
+                                        tts_text="説明の発話テキスト",
+                                        title="変数とは")
+        test_db.update_section_annotation(s2["id"], rating="needs_improvement", comment="説明が抽象的")
+
+        s3 = test_db.add_lesson_section(lid, 2, "example", "例題コンテンツ",
+                                        title="例題")
+        test_db.update_section_annotation(s3["id"], rating="redo", comment="作り直し必要")
+
+        # 注釈なしセクション
+        test_db.add_lesson_section(lid, 3, "summary", "まとめ", title="まとめ")
+
+        return lid
+
+    def test_get_all_annotated_sections(self, api_client, test_db):
+        """全注釈セクションを取得できる"""
+        lid = self._setup_lesson_with_annotations(api_client, test_db)
+
+        resp = api_client.get("/api/lessons/annotated-sections?category=test-cat")
+        data = resp.json()
+        assert data["ok"] is True
+        assert len(data["sections"]) == 3
+        assert data["counts"] == {"good": 1, "needs_improvement": 1, "redo": 1}
+
+    def test_filter_by_rating(self, api_client, test_db):
+        """ratingでフィルタできる"""
+        self._setup_lesson_with_annotations(api_client, test_db)
+
+        resp = api_client.get("/api/lessons/annotated-sections?category=test-cat&rating=good")
+        data = resp.json()
+        assert data["ok"] is True
+        assert len(data["sections"]) == 1
+        assert data["sections"][0]["annotation_rating"] == "good"
+        assert data["sections"][0]["annotation_comment"] == "わかりやすい導入"
+        # countsはフィルタ前の全件
+        assert data["counts"]["good"] == 1
+        assert data["counts"]["needs_improvement"] == 1
+
+    def test_dialogues_parsed(self, api_client, test_db):
+        """dialoguesがパース済みJSONで返る"""
+        self._setup_lesson_with_annotations(api_client, test_db)
+
+        resp = api_client.get("/api/lessons/annotated-sections?category=test-cat&rating=good")
+        data = resp.json()
+        sec = data["sections"][0]
+        assert isinstance(sec["dialogues"], list)
+        assert len(sec["dialogues"]) == 2
+        assert sec["dialogues"][0]["speaker"] == "teacher"
+        assert sec["dialogues"][0]["tts_text"] == "こんにちは"
+
+    def test_full_data_not_truncated(self, api_client, test_db):
+        """content/tts_text/display_textが切り詰めなしで返る"""
+        self._setup_lesson_with_annotations(api_client, test_db)
+
+        resp = api_client.get("/api/lessons/annotated-sections?category=test-cat&rating=good")
+        sec = resp.json()["sections"][0]
+        assert sec["tts_text"] == "導入の発話テキスト"
+        assert sec["display_text"] == "導入の表示テキスト"
+        assert sec["content"] == "導入コンテンツ"
+        assert sec["title"] == "導入"
+
+    def test_empty_category(self, api_client, test_db):
+        """存在しないカテゴリでは空結果"""
+        resp = api_client.get("/api/lessons/annotated-sections?category=nonexistent")
+        data = resp.json()
+        assert data["ok"] is True
+        assert len(data["sections"]) == 0
+        assert data["counts"] == {"good": 0, "needs_improvement": 0, "redo": 0}
+
+    def test_invalid_rating_param(self, api_client, test_db):
+        """不正なratingパラメータでエラー"""
+        resp = api_client.get("/api/lessons/annotated-sections?category=test-cat&rating=invalid")
+        data = resp.json()
+        assert data["ok"] is False
+
+    def test_section_fields(self, api_client, test_db):
+        """必要なフィールドがすべて含まれている"""
+        self._setup_lesson_with_annotations(api_client, test_db)
+
+        resp = api_client.get("/api/lessons/annotated-sections?category=test-cat&rating=needs_improvement")
+        sec = resp.json()["sections"][0]
+        expected_keys = {
+            "lesson_id", "lesson_name", "version_number", "section_id",
+            "order_index", "section_type", "title", "emotion", "content",
+            "tts_text", "display_text", "dialogues", "annotation_rating",
+            "annotation_comment",
+        }
+        assert expected_keys.issubset(set(sec.keys()))
+        assert sec["section_type"] == "explanation"
+        assert sec["title"] == "変数とは"
+
+
 class TestVerifyAPI:
     """POST /api/lessons/{id}/verify のテスト"""
 
