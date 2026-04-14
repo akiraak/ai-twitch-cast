@@ -42,10 +42,10 @@ async def _generate_one(text: str, cache: Path, voice=None, style=None) -> bool:
             pass
 
 
-def _parse_dialogues(section: dict, student_cfg: dict | None) -> list[dict] | None:
+def _parse_dialogues(section: dict) -> list[dict] | None:
     """セクションからdialogueリストをパースする（lesson_runner._play_sectionと同じロジック）"""
     dialogues_raw = section.get("dialogues", "")
-    if not dialogues_raw or not student_cfg:
+    if not dialogues_raw:
         return None
     try:
         parsed = json.loads(dialogues_raw) if isinstance(dialogues_raw, str) else dialogues_raw
@@ -77,7 +77,7 @@ async def pregenerate_section_tts(
     """
     result = {"generated": 0, "cached": 0, "failed": 0}
 
-    dialogues = _parse_dialogues(section, student_cfg)
+    dialogues = _parse_dialogues(section)
 
     if dialogues:
         # 対話モード

@@ -73,7 +73,7 @@ class TestParseDialogues:
             {"speaker": "teacher", "content": "こんにちは"},
             {"speaker": "student", "content": "はい"},
         ]})}
-        result = _parse_dialogues(section, {"tts_voice": "v"})
+        result = _parse_dialogues(section)
         assert len(result) == 2
         assert result[0]["speaker"] == "teacher"
 
@@ -84,29 +84,28 @@ class TestParseDialogues:
         section = {"dialogues": json.dumps([
             {"speaker": "teacher", "content": "テスト"},
         ])}
-        result = _parse_dialogues(section, {"tts_voice": "v"})
+        result = _parse_dialogues(section)
         assert len(result) == 1
 
     def test_empty_dialogues(self):
         """空のdialogues → None"""
         from src.tts_pregenerate import _parse_dialogues
 
-        assert _parse_dialogues({"dialogues": ""}, {"v": 1}) is None
-        assert _parse_dialogues({"dialogues": "[]"}, {"v": 1}) is None
-        assert _parse_dialogues({}, {"v": 1}) is None
+        assert _parse_dialogues({"dialogues": ""}) is None
+        assert _parse_dialogues({"dialogues": "[]"}) is None
+        assert _parse_dialogues({}) is None
 
-    def test_no_student_cfg(self):
-        """student_cfgがNone → None"""
+    def test_no_dialogues_key(self):
+        """dialoguesキーなし → None"""
         from src.tts_pregenerate import _parse_dialogues
 
-        section = {"dialogues": json.dumps([{"speaker": "teacher"}])}
-        assert _parse_dialogues(section, None) is None
+        assert _parse_dialogues({}) is None
 
     def test_invalid_json(self):
         """不正JSON → None"""
         from src.tts_pregenerate import _parse_dialogues
 
-        assert _parse_dialogues({"dialogues": "NOT JSON"}, {"v": 1}) is None
+        assert _parse_dialogues({"dialogues": "NOT JSON"}) is None
 
 
 class TestPregenerateSectionTts:

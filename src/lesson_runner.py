@@ -344,8 +344,9 @@ class LessonRunner:
             self._teacher_cfg = None
             self._student_cfg = None
 
-        logger.info("授業開始: lesson=%d (%s), sections=%d, dialogue=%s",
+        logger.info("授業開始: lesson=%d (%s), sections=%d, teacher=%s, student=%s",
                      lesson_id, lesson["name"], len(sections),
+                     "有" if self._teacher_cfg else "無",
                      "有" if self._student_cfg else "無")
 
         # ステータス通知
@@ -471,7 +472,7 @@ class LessonRunner:
         # dialoguesがあれば対話再生、なければ従来の単話者再生
         dialogues_raw = section.get("dialogues", "")
         dialogues = None
-        if dialogues_raw and self._student_cfg:
+        if dialogues_raw:
             try:
                 parsed = _json.loads(dialogues_raw) if isinstance(dialogues_raw, str) else dialogues_raw
                 # v4: {dialogues: [...], review: {...}} 形式に対応

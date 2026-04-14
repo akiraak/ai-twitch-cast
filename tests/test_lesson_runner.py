@@ -544,7 +544,7 @@ class TestDialoguePlayback:
 
     @pytest.mark.asyncio
     async def test_play_section_no_student_config(self, mock_speech, test_db):
-        """student_cfgがNoneならdialoguesがあっても単話者再生"""
+        """student_cfgがNoneでもdialoguesがあれば対話モードで再生"""
         dialogues = json.dumps([
             {"speaker": "teacher", "content": "Hello", "emotion": "neutral"},
             {"speaker": "student", "content": "Hi", "emotion": "joy"},
@@ -571,8 +571,8 @@ class TestDialoguePlayback:
         }
         await runner._play_section(section)
 
-        # 単話者モード: speakはcontent分割分だけ
-        assert mock_speech.speak.call_count == 1
+        # 対話モード: dialogueの各エントリ分speakが呼ばれる
+        assert mock_speech.speak.call_count == 2
 
     @pytest.mark.asyncio
     async def test_play_section_sends_display_properties(self, mock_speech, test_db):

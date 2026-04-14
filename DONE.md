@@ -1,5 +1,13 @@
 # DONE
 
+## 授業モード: TTS対話モード(dlg)フォールバックバグ修正
+
+- [x] `src/tts_pregenerate.py` — `_parse_dialogues()` から `student_cfg` ガードを削除。dialoguesがあれば常に対話モードで事前生成
+- [x] `src/lesson_runner.py` — `_play_section()` のdialogue判定から `self._student_cfg` ガードを削除
+- [x] `src/lesson_runner.py` — 起動ログにteacher/student両方の設定有無を表示
+- [x] テスト更新: 仕様変更に合わせてテストの期待値を修正
+- [x] プラン: [plans/tts-dialogue-fallback-fix.md](plans/tts-dialogue-fallback-fix.md)
+
 ## 授業モード: バージョン別セクション表示の修正
 
 - [x] `static/js/admin/teacher.js` — セクションフィルタに `version_number` 条件を追加（初回表示時も最新バージョンのみ表示）
