@@ -327,6 +327,95 @@ class TestSendTtsToNativeApp:
 
 
 # =====================================================
+# _wait_tts_complete
+# =====================================================
+
+
+class TestWaitTtsComplete:
+    @pytest.mark.asyncio
+    async def test_polls_until_inactive(self):
+        """active=True→True→Falseでポーリング終了すること"""
+        responses = [
+            {"ok": True, "active": True},
+            {"ok": True, "active": True},
+            {"ok": True, "active": False},
+        ]
+        call_count = 0
+
+        async def mock_ws_request(action, timeout=2.0):
+            nonlocal call_count
+            resp = responses[min(call_count, len(responses) - 1)]
+            call_count += 1
+            return resp
+
+        sp = SpeechPipeline()
+        with patch("scripts.services.capture_client.ws_request", side_effect=mock_ws_request):
+            await sp._wait_tts_complete(max_extra=5.0)
+
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_immediately_inactive(self):
+        """最初からactive=Falseならポーリング1回で終了すること"""
+        call_count = 0
+
+        async def mock_ws_request(action, timeout=2.0):
+            nonlocal call_count
+            call_count += 1
+            return {"ok": True, "active": False}
+
+        sp = SpeechPipeline()
+        with patch("scripts.services.capture_client.ws_request", side_effect=mock_ws_request):
+            await sp._wait_tts_complete(max_extra=5.0)
+
+        assert call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_timeout_stops_polling(self):
+        """max_extraに達したらポーリングを打ち切ること"""
+        call_count = 0
+
+        async def mock_ws_request(action, timeout=2.0):
+            nonlocal call_count
+            call_count += 1
+            return {"ok": True, "active": True}
+
+        sp = SpeechPipeline()
+        with patch("scripts.services.capture_client.ws_request", side_effect=mock_ws_request), \
+             patch("asyncio.sleep", new_callable=AsyncMock):
+            await sp._wait_tts_complete(max_extra=0.5)
+
+        # 0.5秒 / 0.2秒間隔 = 最大2〜3回のポーリング
+        assert 2 <= call_count <= 3
+
+    @pytest.mark.asyncio
+    async def test_ws_failure_silently_skips(self):
+        """ws_request失敗時に例外を出さずスキップすること"""
+        async def mock_ws_request(action, timeout=2.0):
+            raise Exception("connection refused")
+
+        sp = SpeechPipeline()
+        with patch("scripts.services.capture_client.ws_request", side_effect=mock_ws_request):
+            await sp._wait_tts_complete(max_extra=5.0)  # Should not raise
+
+    @pytest.mark.asyncio
+    async def test_none_result_treated_as_inactive(self):
+        """ws_requestがNoneを返した場合もinactiveとして扱うこと"""
+        call_count = 0
+
+        async def mock_ws_request(action, timeout=2.0):
+            nonlocal call_count
+            call_count += 1
+            return None
+
+        sp = SpeechPipeline()
+        with patch("scripts.services.capture_client.ws_request", side_effect=mock_ws_request):
+            await sp._wait_tts_complete(max_extra=5.0)
+
+        assert call_count == 1
+
+
+# =====================================================
 # モジュール分離
 # =====================================================
 

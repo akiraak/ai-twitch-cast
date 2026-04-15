@@ -1,5 +1,13 @@
 # DONE
 
+## 対話モード長文TTS切り詰め修正
+
+- [x] `win-native-app/WinNativeApp/Server/HttpServer.cs` — `tts_status` WebSocketアクション追加、`OnGetTtsStatus` プロパティ追加
+- [x] `win-native-app/WinNativeApp/MainForm.cs` — `OnGetTtsStatus` コールバック設定（配信中: FFmpeg `IsTtsActive`、非配信: NAudio `PlaybackState`）
+- [x] `src/speech_pipeline.py` — `_wait_tts_complete()` メソッド追加、`_speak_impl` の `asyncio.sleep(duration+0.1)` 後にC#再生完了ポーリング
+- [x] `tests/test_speech_pipeline.py` — `TestWaitTtsComplete` テストクラス追加（5テスト: ポーリング・即時完了・タイムアウト・例外スキップ・None応答）
+- [x] プラン: [plans/dialogue-tts-split.md](plans/dialogue-tts-split.md)
+
 ## 授業生成でv5を作るとv4の音声が消えるバグ修正
 
 - [x] `extract_lesson_text` からセクション全削除を除去（既存バージョンの音声を保護）

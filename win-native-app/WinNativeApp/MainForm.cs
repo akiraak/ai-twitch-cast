@@ -819,6 +819,15 @@ public class MainForm : Form
             BeginInvoke(() => PlaySe(url, volume));
         };
 
+        // TTS再生状態コールバック
+        _httpServer.OnGetTtsStatus = () => new
+        {
+            ok = true,
+            active = (_ffmpeg is { IsRunning: true })
+                ? _ffmpeg.IsTtsActive
+                : (_ttsWaveOut?.PlaybackState == PlaybackState.Playing)
+        };
+
         try
         {
             _httpServer.Start();

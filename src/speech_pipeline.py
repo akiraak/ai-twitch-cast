@@ -206,6 +206,9 @@ class SpeechPipeline:
                 # 音声の長さ分だけ待機（余白は最小限にして自然なテンポを保つ）
                 await asyncio.sleep(duration + 0.1)
 
+                # C# 側の再生完了を確認（まだ再生中なら追加で待つ）
+                await self._wait_tts_complete(max_extra=duration * 0.5)
+
                 # リップシンク停止
                 if lipsync_frames:
                     await self._on_overlay({"type": "lipsync_stop", "avatar_id": avatar_id})
@@ -225,6 +228,27 @@ class SpeechPipeline:
                 wav_path.parent.rmdir()
             except OSError:
                 pass
+
+    async def _wait_tts_complete(self, max_extra: float = 5.0):
+        """C# 側の TTS 再生が完了するまでポーリングで待機する
+
+        Args:
+            max_extra: 追加で待つ最大秒数（無限待ち防止）
+        """
+        try:
+            from scripts.services.capture_client import ws_request
+            elapsed = 0.0
+            interval = 0.2
+            while elapsed < max_extra:
+                result = await ws_request("tts_status", timeout=2.0)
+                if not (result and result.get("active")):
+                    break
+                await asyncio.sleep(interval)
+                elapsed += interval
+            if elapsed > 0.1:
+                logger.info("[tts] TTS完了待ち: %.1f秒追加", elapsed)
+        except Exception:
+            pass  # C# 未接続時は静かにスキップ
 
     async def send_tts_to_native_app(self, wav_path):
         """TTS WAVをC#アプリに送信する。C#側で配信中→FFmpegパイプ、非配信→ローカル再生。"""

@@ -48,6 +48,9 @@ public class HttpServer : IDisposable
     // SE（効果音）制御コールバック（MainFormが設定）
     public Action<string, float>? OnSePlay { get; set; }      // (url, volume)
 
+    // TTS再生状態コールバック（MainFormが設定）
+    public Func<object>? OnGetTtsStatus { get; set; }
+
     public int Port => _port;
 
     public HttpServer(int port = 9090)
@@ -459,6 +462,7 @@ public class HttpServer : IDisposable
                 "bgm_stop" => HandleWsBgmStop(),
                 "bgm_volume" => HandleWsBgmVolume(msg),
                 "se_play" => HandleWsSePlay(msg),
+                "tts_status" => HandleWsTtsStatus(),
                 _ => new { ok = false, error = $"unknown action: {action}" }
             };
 
@@ -644,6 +648,11 @@ public class HttpServer : IDisposable
 
         OnBgmVolume?.Invoke(source, volume);
         return new { ok = true };
+    }
+
+    private object HandleWsTtsStatus()
+    {
+        return OnGetTtsStatus?.Invoke() ?? new { ok = true, active = false };
     }
 
     private object HandleWsQuit()
