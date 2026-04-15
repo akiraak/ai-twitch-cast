@@ -1,5 +1,13 @@
 # DONE
 
+## Phase 2: broadcast.html 授業表示ハンドラ
+
+- [x] `static/js/broadcast/lesson.js` (新規) — `window.lesson` オブジェクト（`startDialogue`/`endDialogue`/`showText`/`hideText`/`pause`/`resume`）
+- [x] `static/broadcast.html` — lesson.js の script 読み込み追加（panels.js の後）
+- [x] 感情→BlendShapeのデフォルトマッピング内蔵（キャラ設定のfallback）
+- [x] C# LessonPlayer の `InjectJs("window.lesson.*")` 呼び出しに対応
+- [x] プラン: [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
+
 ## 対話モード長文TTS切り詰め修正
 
 - [x] `win-native-app/WinNativeApp/Server/HttpServer.cs` — `tts_status` WebSocketアクション追加、`OnGetTtsStatus` プロパティ追加
