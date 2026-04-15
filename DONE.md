@@ -1,5 +1,13 @@
 # DONE
 
+## 授業生成でv5を作るとv4の音声が消えるバグ修正
+
+- [x] `extract_lesson_text` からセクション全削除を除去（既存バージョンの音声を保護）
+- [x] `delete_version` APIに `clear_tts_cache` 追加（音声ファイルも同時削除）
+- [x] `import_sections` のバージョン置換時に `clear_tts_cache` 追加
+- [x] テスト3件追加（セクション保護・バージョン削除時TTS削除・インポート置換時TTS削除）
+- [x] プラン: [plans/lesson-audio-deletion-bug.md](plans/lesson-audio-deletion-bug.md)
+
 ## 字幕チャンク分割表示（案C2）
 
 - [x] `src/speech_pipeline.py` — `notify_overlay()` に `duration` 引数追加、`_speak_impl()` から音声秒数を渡す

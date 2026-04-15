@@ -809,8 +809,8 @@ async def extract_lesson_text(lesson_id: int):
 
     main_content_json = _json.dumps(main_content, ensure_ascii=False) if main_content else ""
     db.update_lesson(lesson_id, extracted_text=extracted, main_content=main_content_json)
-    # テキスト変更でセクションを無効化
-    db.delete_lesson_sections(lesson_id)
+    # セクションは削除しない（既存バージョンの音声を保護する）
+    # 必要に応じてユーザーが手動でバージョン削除する
 
     logger.info("テキスト抽出完了: lesson=%d, %d件, %d文字, main_content=%d件",
                 lesson_id, len(texts), len(extracted), len(main_content))
@@ -955,6 +955,8 @@ async def import_sections(
         version_number = version
         db.delete_lesson_sections(lesson_id, lang=lang, generator=generator,
                                   version_number=version_number)
+        clear_tts_cache(lesson_id, lang=lang, generator=generator,
+                        version_number=version_number)
     else:
         # 新バージョンを自動作成
         ver = db.create_lesson_version(lesson_id, lang=lang, generator=generator,
@@ -1288,6 +1290,8 @@ async def delete_version(lesson_id: int, version_number: int,
     ver = db.get_lesson_version(lesson_id, lang, generator, version_number)
     if not ver:
         return {"ok": False, "error": "バージョンが見つかりません"}
+    clear_tts_cache(lesson_id, lang=lang, generator=generator,
+                    version_number=version_number)
     db.delete_lesson_version(lesson_id, lang, generator, version_number)
     logger.info("バージョン削除: lesson=%d, lang=%s, gen=%s, v=%d",
                 lesson_id, lang, generator, version_number)

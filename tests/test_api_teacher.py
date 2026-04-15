@@ -206,6 +206,37 @@ class TestLessonSources:
         assert saved[0]["content_type"] == "passage"
         assert saved[0]["role"] == "main"
 
+    def test_extract_text_preserves_sections(self, api_client, test_db, mock_gemini, tmp_path):
+        """extract-text がセクションを削除しない（バージョン保護）"""
+        r1 = api_client.post("/api/lessons", json={"name": "PreserveSec"})
+        lid = r1.json()["lesson"]["id"]
+
+        # セクション追加
+        test_db.add_lesson_section(lid, 0, "introduction", "既存セクション",
+                                   lang="ja", generator="claude", version_number=1)
+
+        # 画像ソース追加
+        img = tmp_path / "test.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+        api_client.post(
+            f"/api/lessons/{lid}/upload-image",
+            files={"file": ("test.png", img.read_bytes(), "image/png")},
+        )
+
+        mc_json = json.dumps([{"content_type": "passage", "content": "text", "label": "L", "role": "main"}])
+        mock_gemini.models.generate_content.side_effect = [
+            MagicMock(text="New text"),
+            MagicMock(text=mc_json),
+        ]
+
+        resp = api_client.post(f"/api/lessons/{lid}/extract-text")
+        assert resp.json()["ok"] is True
+
+        # セクションが保護されている
+        sections = test_db.get_lesson_sections(lid)
+        assert len(sections) == 1
+        assert sections[0]["content"] == "既存セクション"
+
     def test_add_url_saves_main_content(self, api_client, test_db, mock_gemini):
         """add-url が main_content も保存する"""
         r1 = api_client.post("/api/lessons", json={"name": "UrlMC"})
@@ -457,6 +488,27 @@ class TestImportSections:
         r2 = api_client.get(f"/api/lessons/{lid}?version={v}")
         claude_sections = r2.json()["sections_by_generator"].get("claude", [])
         assert len(claude_sections) == 1
+
+    def test_import_replace_clears_tts_cache(self, api_client, test_db):
+        """バージョン置換インポート時にTTSキャッシュが削除される"""
+        r = api_client.post("/api/lessons", json={"name": "ReplTTS"})
+        lid = r.json()["lesson"]["id"]
+
+        sections = self._make_sections()
+        resp1 = api_client.post(
+            f"/api/lessons/{lid}/import-sections?generator=claude",
+            json={"sections": sections},
+        )
+        v = resp1.json()["version_number"]
+
+        with patch("scripts.routes.teacher.clear_tts_cache") as mock_clear:
+            api_client.post(
+                f"/api/lessons/{lid}/import-sections?generator=claude&version={v}",
+                json={"sections": [sections[0]]},
+            )
+            mock_clear.assert_called_once_with(
+                lid, lang="ja", generator="claude", version_number=v,
+            )
 
     def test_import_does_not_affect_gemini(self, api_client, test_db):
         """claudeインポートがgeminiセクションに影響しない"""
@@ -816,6 +868,27 @@ class TestVersionAPI:
         sections = test_db.get_lesson_sections(lid, lang="ja", generator="claude",
                                                 version_number=vn)
         assert len(sections) == 0
+
+    def test_delete_version_clears_tts_cache(self, api_client, test_db):
+        """バージョン削除時にTTSキャッシュも削除される"""
+        r = api_client.post("/api/lessons", json={"name": "VerDelTTS"})
+        lid = r.json()["lesson"]["id"]
+
+        r1 = api_client.post(f"/api/lessons/{lid}/versions", json={
+            "lang": "ja", "generator": "claude",
+        })
+        vn = r1.json()["version"]["version_number"]
+        test_db.add_lesson_section(lid, 0, "introduction", "テスト",
+                                   lang="ja", generator="claude", version_number=vn)
+
+        with patch("scripts.routes.teacher.clear_tts_cache") as mock_clear:
+            resp = api_client.delete(
+                f"/api/lessons/{lid}/versions/{vn}?lang=ja&generator=claude",
+            )
+            assert resp.json()["ok"] is True
+            mock_clear.assert_called_once_with(
+                lid, lang="ja", generator="claude", version_number=vn,
+            )
 
     def test_delete_version_not_found(self, api_client):
         """存在しないバージョンの削除はエラー"""
