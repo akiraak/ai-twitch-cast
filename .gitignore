@@ -26,3 +26,5 @@ test-animation/resources/
 test-animation/animations/
 test-animation/debug.log
 
+# debug screenshots
+debug-ss/
