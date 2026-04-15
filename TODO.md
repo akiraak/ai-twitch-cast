@@ -5,9 +5,9 @@
 - [ ] 自動検査・改善ループ実装（verify→improve×3回、上記の3軸判定を活用）→ [plans/auto-verify-improve-loop.md](plans/auto-verify-improve-loop.md)
 - [ ] セクション開始の長い読み上げなど、キャラのセリフ欄が大きすぎてdisplayコンテンツに被ってしまうのの対策 → [plans/subtitle-overflow-fix.md](plans/subtitle-overflow-fix.md)
   - [ ] 案A: 字幕パネルにCSS max-height制限を追加
-  - [ ] 案C2: 長文字幕をJS側でチャンク分割し、タイマーで順次切り替え表示（TTSは分割しない）
 
 ## バグ
+- [ ] 対話モード長文TTS切り詰め: `_play_dialogues` で長文を分割せず1回のTTSに投げるため末尾が無音になる → [plans/dialogue-tts-split.md](plans/dialogue-tts-split.md)
 - [ ] 配信中の音声ドロップ調査（音声キューdepth=100飽和、10秒ごとに+13〜30ドロップ）→ [plans/stream-buffering-fix.md](plans/stream-buffering-fix.md)
 - [ ] 授業モード: 手動テストで字幕サイズ・セリフ長を再確認（rulesが効いているか）
 

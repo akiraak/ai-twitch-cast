@@ -1,5 +1,12 @@
 # DONE
 
+## 字幕チャンク分割表示（案C2）
+
+- [x] `src/speech_pipeline.py` — `notify_overlay()` に `duration` 引数追加、`_speak_impl()` から音声秒数を渡す
+- [x] `static/js/broadcast/panels.js` — `splitSubtitleChunks()` 追加、`showSubtitle()` チャンク対応（80文字超で分割→タイマー順次切替）、`fadeSubtitle()` でチャンクタイマークリア
+- [x] `tests/test_speech_pipeline.py` — duration有無のテスト2件追加
+- [x] プラン: [plans/subtitle-chunk-display.md](plans/subtitle-chunk-display.md)
+
 ## カテゴリ別評価ビューア
 
 - [x] `scripts/routes/teacher.py` — `GET /api/lessons/annotated-sections` エンドポイント追加（カテゴリ・rating フィルタ、dialoguesパース済み完全データ）

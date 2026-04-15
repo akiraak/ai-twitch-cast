@@ -125,6 +125,28 @@ class TestNotifyOverlay:
         event = callback.call_args[0][0]
         assert event["translation"] == ""
 
+    @pytest.mark.asyncio
+    async def test_duration_included_when_provided(self):
+        """duration指定時にペイロードに含まれること"""
+        callback = AsyncMock()
+        sp = SpeechPipeline(on_overlay=callback)
+        result = {"speech": "テスト", "emotion": "neutral"}
+        await sp.notify_overlay("bob", "msg", result, duration=10.5)
+
+        event = callback.call_args[0][0]
+        assert event["duration"] == 10.5
+
+    @pytest.mark.asyncio
+    async def test_duration_omitted_when_none(self):
+        """duration未指定時にペイロードに含まれないこと"""
+        callback = AsyncMock()
+        sp = SpeechPipeline(on_overlay=callback)
+        result = {"speech": "テスト", "emotion": "neutral"}
+        await sp.notify_overlay("bob", "msg", result)
+
+        event = callback.call_args[0][0]
+        assert "duration" not in event
+
 
 # =====================================================
 # notify_overlay_end

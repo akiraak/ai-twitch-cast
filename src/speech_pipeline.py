@@ -54,7 +54,7 @@ class SpeechPipeline:
 
         return segments if segments else [text]
 
-    async def notify_overlay(self, author, trigger_text, result, avatar_id="teacher"):
+    async def notify_overlay(self, author, trigger_text, result, avatar_id="teacher", duration=None):
         """オーバーレイにコメント情報を送信する"""
         if not self._on_overlay:
             return
@@ -65,7 +65,7 @@ class SpeechPipeline:
         # SSMLタグの残存チェック
         if '<lang' in stripped_speech or '</lang>' in stripped_speech:
             logger.warning("[overlay] ⚠ strip後もSSMLタグが残存: %s", repr(stripped_speech[:200]))
-        await self._on_overlay({
+        payload = {
             "type": "comment",
             "author": author,
             "trigger_text": trigger_text,
@@ -73,7 +73,10 @@ class SpeechPipeline:
             "translation": result.get("translation", ""),
             "emotion": result["emotion"],
             "avatar_id": avatar_id,
-        })
+        }
+        if duration is not None:
+            payload["duration"] = duration
+        await self._on_overlay(payload)
 
     async def notify_overlay_end(self):
         """オーバーレイに発話終了を通知する"""
@@ -180,6 +183,7 @@ class SpeechPipeline:
                     await self.notify_overlay(
                         subtitle["author"], subtitle["trigger_text"], subtitle["result"],
                         avatar_id=avatar_id,
+                        duration=duration,
                     )
                 if lipsync_frames:
                     await self._on_overlay({

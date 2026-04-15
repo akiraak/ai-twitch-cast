@@ -14,11 +14,53 @@ function _getSubtitleEl(avatarId) {
 // z-indexカウンタ: 最後に表示された字幕を上に
 let _subtitleZCounter = 20;
 
+// チャンクタイマー管理（アバターIDごと）
+const _chunkTimers = { teacher: [], student: [] };
+const SUBTITLE_CHUNK_MAX_LEN = 80;
+
+function clearChunkTimers(avatarId) {
+  const key = avatarId === 'student' ? 'student' : 'teacher';
+  _chunkTimers[key].forEach(t => clearTimeout(t));
+  _chunkTimers[key] = [];
+}
+
+function splitSubtitleChunks(text, maxLen) {
+  if (text.length <= maxLen) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let cut = -1;
+    // 優先1: 句読点
+    for (let i = maxLen - 1; i >= maxLen * 0.4; i--) {
+      if ('。！？.!?'.includes(remaining[i])) { cut = i + 1; break; }
+    }
+    // 優先2: 読点・カンマ
+    if (cut < 0) {
+      for (let i = maxLen - 1; i >= maxLen * 0.4; i--) {
+        if ('、,，'.includes(remaining[i])) { cut = i + 1; break; }
+      }
+    }
+    // 優先3: スペース
+    if (cut < 0) {
+      for (let i = maxLen - 1; i >= maxLen * 0.4; i--) {
+        if (remaining[i] === ' ') { cut = i + 1; break; }
+      }
+    }
+    // 強制分割
+    if (cut < 0) cut = maxLen;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
 function showSubtitle(data) {
   const el = _getSubtitleEl(data.avatar_id);
   const isStudent = data.avatar_id === 'student';
   const timer = isStudent ? fadeTimerStudent : fadeTimerTeacher;
   clearTimeout(timer);
+  clearChunkTimers(data.avatar_id);
 
   // もう一方の字幕を速めにフェードアウト（重なり軽減）
   const otherEl = isStudent ? subtitleEl : subtitle2El;
@@ -38,9 +80,32 @@ function showSubtitle(data) {
   el.classList.remove('fading-fast');
   el.querySelector('.author').textContent = '';
   el.querySelector('.trigger-text').textContent = stripLangTags(data.trigger_text);
-  el.querySelector('.speech').textContent = stripLangTags(data.speech);
   el.querySelector('.translation').textContent = stripLangTags(data.translation || '');
   el.classList.add('visible');
+
+  // チャンク分割表示
+  const speechText = stripLangTags(data.speech);
+  const speechEl = el.querySelector('.speech');
+  const chunks = splitSubtitleChunks(speechText, SUBTITLE_CHUNK_MAX_LEN);
+
+  if (chunks.length <= 1) {
+    // 短文: 従来通り一括表示
+    speechEl.textContent = speechText;
+    return;
+  }
+
+  // 長文: タイマーで順次切り替え
+  const totalMs = (data.duration || 5) * 1000;
+  const intervalMs = totalMs / chunks.length;
+  const timerKey = isStudent ? 'student' : 'teacher';
+
+  speechEl.textContent = chunks[0];
+  for (let i = 1; i < chunks.length; i++) {
+    const tid = setTimeout(() => {
+      speechEl.textContent = chunks[i];
+    }, intervalMs * i);
+    _chunkTimers[timerKey].push(tid);
+  }
 }
 
 function fadeSubtitle(avatarId) {
@@ -50,6 +115,7 @@ function fadeSubtitle(avatarId) {
     fadeSubtitle('student');
     return;
   }
+  clearChunkTimers(avatarId);
   const el = _getSubtitleEl(avatarId);
   const duration = parseFloat(el.dataset.fadeDuration || 3) * 1000;
   const timerId = setTimeout(() => {
