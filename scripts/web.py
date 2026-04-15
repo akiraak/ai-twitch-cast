@@ -239,6 +239,15 @@ async def _restore_session():
     except Exception as e:
         logger.info("配信状態確認スキップ（C#アプリ未起動）: %s", type(e).__name__)
 
+    # 授業再生の復旧（lesson.playbackがDBに保存されている場合）
+    try:
+        runner = state.reader.lesson_runner
+        restored = await runner.restore()
+        if restored:
+            logger.info("授業復旧OK")
+    except Exception as e:
+        logger.warning("授業復旧失敗: %s", e)
+
     logger.info("自動復旧完了")
 
     # 保留コミットの読み上げ（TTSクライアント接続を待ってから）

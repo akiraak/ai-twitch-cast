@@ -11,6 +11,7 @@ import pytest
 
 from src.lesson_runner import (
     LESSON_AUDIO_DIR,
+    PLAYBACK_SETTING_KEY,
     LessonRunner,
     LessonState,
     _cache_path,
@@ -813,10 +814,14 @@ class TestPrepareAndSendSection:
 
         # 完了イベント: setしない → タイムアウト
         mock_evt = asyncio.Event()
-        mock_ws_request = AsyncMock(return_value={"ok": True})
+        # ws_request: load/play は成功、lesson_status はplaying返却（idle検知させない）
+        async def _mock_ws(action, **kwargs):
+            if action == "lesson_status":
+                return {"state": "playing", "dialogue_index": 0, "total_dialogues": 1}
+            return {"ok": True}
 
-        # タイムアウトを短く: duration(0.1) + 30 + wait_seconds(2) = 32.1秒は長すぎるので
-        # _get_pace_scale をモックして合計タイムアウトを小さくする
+        mock_ws_request = AsyncMock(side_effect=_mock_ws)
+
         with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
              patch("scripts.services.capture_client.ws_request", mock_ws_request), \
              patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
@@ -830,6 +835,53 @@ class TestPrepareAndSendSection:
                 await runner._prepare_and_send_section(section)
 
         # タイムアウトしてもエラーにならずに完了する
+        assert runner._state == LessonState.RUNNING
+
+    @pytest.mark.asyncio
+    async def test_idle_detection_fallback(self, mock_speech, tmp_path, monkeypatch):
+        """C#がidleを返した場合、イベントなしでもセクション完了扱いにする"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+
+        wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_part_00.wav"
+        _create_test_wav(wav_path, duration=0.1)
+
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {"name": "先生"}
+        runner._sections = [{}]
+        runner._current_index = 0
+
+        section = {
+            "section_type": "explanation",
+            "content": "テスト",
+            "dialogues": "",
+            "order_index": 0,
+        }
+
+        # 完了イベント: setしない
+        mock_evt = asyncio.Event()
+        # ws_request: lesson_status が idle を返す → fallbackで即完了
+        async def _mock_ws(action, **kwargs):
+            if action == "lesson_status":
+                return {"state": "idle", "dialogue_index": -1, "total_dialogues": 0}
+            return {"ok": True}
+
+        mock_ws_request = AsyncMock(side_effect=_mock_ws)
+
+        import time
+        t0 = time.monotonic()
+        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
+             patch("scripts.services.capture_client.ws_request", mock_ws_request), \
+             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
+            await runner._prepare_and_send_section(section)
+        elapsed = time.monotonic() - t0
+
+        # idle検知で即完了 → 30秒タイムアウトまで待たない（10秒以内に完了すべき）
+        assert elapsed < 10.0
         assert runner._state == LessonState.RUNNING
 
     @pytest.mark.asyncio
@@ -930,3 +982,298 @@ class TestPauseResumeStopForwarding:
             await runner.stop()
 
         assert runner.state == LessonState.IDLE
+
+
+class TestPlaybackPersistence:
+    """DB永続化のテスト"""
+
+    def test_save_and_get_playback_state(self, runner, test_db):
+        """再生状態をDBに保存・読み取りできる"""
+        runner._lesson_id = 42
+        runner._current_index = 3
+        runner._state = LessonState.RUNNING
+        runner._lang = "en"
+        runner._generator = "claude"
+        runner._version_number = 2
+        runner._episode_id = 100
+
+        runner._save_playback_state()
+
+        state = LessonRunner.get_playback_state()
+        assert state is not None
+        assert state["lesson_id"] == 42
+        assert state["section_index"] == 3
+        assert state["state"] == "running"
+        assert state["lang"] == "en"
+        assert state["generator"] == "claude"
+        assert state["version_number"] == 2
+        assert state["episode_id"] == 100
+
+    def test_clear_playback_state(self, runner, test_db):
+        """再生状態をDBから削除できる"""
+        runner._lesson_id = 1
+        runner._current_index = 0
+        runner._state = LessonState.RUNNING
+        runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._episode_id = None
+
+        runner._save_playback_state()
+        assert LessonRunner.get_playback_state() is not None
+
+        LessonRunner._clear_playback_state()
+        assert LessonRunner.get_playback_state() is None
+
+    def test_get_playback_state_empty(self, test_db):
+        """永続化データがない場合Noneを返す"""
+        assert LessonRunner.get_playback_state() is None
+
+    @pytest.mark.asyncio
+    async def test_stop_clears_playback_state(self, runner, test_db):
+        """stopで永続化データがクリアされる"""
+        runner._lesson_id = 1
+        runner._current_index = 0
+        runner._state = LessonState.RUNNING
+        runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._sections = [{"section_type": "explanation", "content": "A"}]
+
+        runner._save_playback_state()
+
+        mock_ws = AsyncMock(return_value={"ok": True})
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            await runner.stop()
+
+        assert LessonRunner.get_playback_state() is None
+
+    @pytest.mark.asyncio
+    async def test_prepare_and_send_saves_state(self, mock_speech, tmp_path, monkeypatch, test_db):
+        """_prepare_and_send_section実行後にDBに状態が保存される"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+
+        wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_dlg_00.wav"
+        _create_test_wav(wav_path, duration=0.5)
+
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {"name": "先生"}
+        runner._student_cfg = None
+        runner._sections = [{}]
+        runner._current_index = 0
+        runner._episode_id = 50
+
+        section = {
+            "section_type": "introduction",
+            "content": "Hello",
+            "display_text": "",
+            "dialogues": json.dumps([{"speaker": "teacher", "content": "Hello", "emotion": "neutral"}]),
+            "order_index": 0,
+            "wait_seconds": 2,
+        }
+
+        mock_evt = asyncio.Event()
+        mock_ws = AsyncMock(return_value={"ok": True})
+
+        async def _set_evt(*args, **kwargs):
+            if args and args[0] == "lesson_section_play":
+                mock_evt.set()
+            return {"ok": True}
+
+        mock_ws.side_effect = _set_evt
+
+        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
+             patch("scripts.services.capture_client.ws_request", mock_ws), \
+             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
+            await runner._prepare_and_send_section(section)
+
+        state = LessonRunner.get_playback_state()
+        assert state is not None
+        assert state["lesson_id"] == 1
+        assert state["section_index"] == 0
+        assert state["episode_id"] == 50
+
+
+class TestRestore:
+    """サーバー再起動復旧のテスト"""
+
+    @pytest.mark.asyncio
+    async def test_restore_no_playback(self, runner, test_db):
+        """永続化データがない場合はFalseを返す"""
+        result = await runner.restore()
+        assert result is False
+        assert runner.state == LessonState.IDLE
+
+    @pytest.mark.asyncio
+    async def test_restore_lesson_not_found(self, runner, test_db):
+        """lesson_idのレッスンが存在しない場合はFalseを返し、永続化データをクリア"""
+        from src import db as _db
+        _db.set_setting(PLAYBACK_SETTING_KEY, json.dumps({
+            "lesson_id": 9999,
+            "section_index": 0,
+            "state": "running",
+            "lang": "ja",
+            "generator": "gemini",
+            "version_number": 1,
+        }))
+
+        result = await runner.restore()
+        assert result is False
+        assert LessonRunner.get_playback_state() is None
+
+    @pytest.mark.asyncio
+    async def test_restore_no_sections(self, runner, test_db):
+        """セクションがない場合はFalseを返す"""
+        from src import db as _db
+        lesson = _db.create_lesson("NoSections")
+        _db.set_setting(PLAYBACK_SETTING_KEY, json.dumps({
+            "lesson_id": lesson["id"],
+            "section_index": 0,
+            "state": "running",
+            "lang": "ja",
+            "generator": "gemini",
+            "version_number": 1,
+        }))
+
+        result = await runner.restore()
+        assert result is False
+        assert LessonRunner.get_playback_state() is None
+
+    @pytest.mark.asyncio
+    async def test_restore_csharp_idle(self, runner, test_db):
+        """C#がidle → 次のセクションから再開"""
+        from src import db as _db
+        lesson = _db.create_lesson("RestoreTest")
+        _db.add_lesson_section(lesson["id"], 0, "intro", "A")
+        _db.add_lesson_section(lesson["id"], 1, "explain", "B")
+        _db.add_lesson_section(lesson["id"], 2, "summary", "C")
+
+        _db.set_setting(PLAYBACK_SETTING_KEY, json.dumps({
+            "lesson_id": lesson["id"],
+            "section_index": 1,
+            "state": "running",
+            "lang": "ja",
+            "generator": "gemini",
+            "version_number": 1,
+        }))
+
+        mock_ws = AsyncMock(return_value={"status": "idle"})
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            result = await runner.restore()
+
+        assert result is True
+        assert runner.state == LessonState.RUNNING
+        assert runner.lesson_id == lesson["id"]
+        # idle → saved_index + 1 = 2 から再開
+        assert runner.current_index == 2
+
+        await runner.stop()
+
+    @pytest.mark.asyncio
+    async def test_restore_csharp_no_lesson(self, runner, test_db):
+        """C#がno_lesson → 保存されたインデックスから再開"""
+        from src import db as _db
+        lesson = _db.create_lesson("RestoreNoLesson")
+        _db.add_lesson_section(lesson["id"], 0, "intro", "A")
+        _db.add_lesson_section(lesson["id"], 1, "explain", "B")
+
+        _db.set_setting(PLAYBACK_SETTING_KEY, json.dumps({
+            "lesson_id": lesson["id"],
+            "section_index": 0,
+            "state": "running",
+            "lang": "ja",
+            "generator": "gemini",
+            "version_number": 1,
+        }))
+
+        mock_ws = AsyncMock(return_value={"status": "no_lesson"})
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            result = await runner.restore()
+
+        assert result is True
+        assert runner.state == LessonState.RUNNING
+        assert runner.current_index == 0  # 保存されたインデックスから
+
+        await runner.stop()
+
+    @pytest.mark.asyncio
+    async def test_restore_csharp_disconnected(self, runner, test_db):
+        """C#未接続 → 保存されたインデックスから再開"""
+        from src import db as _db
+        lesson = _db.create_lesson("RestoreDisconnected")
+        _db.add_lesson_section(lesson["id"], 0, "intro", "A")
+
+        _db.set_setting(PLAYBACK_SETTING_KEY, json.dumps({
+            "lesson_id": lesson["id"],
+            "section_index": 0,
+            "state": "running",
+            "lang": "ja",
+            "generator": "gemini",
+            "version_number": 1,
+        }))
+
+        mock_ws = AsyncMock(side_effect=ConnectionError("未接続"))
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            result = await runner.restore()
+
+        assert result is True
+        assert runner.state == LessonState.RUNNING
+        assert runner.current_index == 0
+
+        await runner.stop()
+
+    @pytest.mark.asyncio
+    async def test_restore_all_sections_completed(self, runner, test_db):
+        """全セクション完了済み → Falseを返し、永続化データをクリア"""
+        from src import db as _db
+        lesson = _db.create_lesson("RestoreCompleted")
+        _db.add_lesson_section(lesson["id"], 0, "intro", "A")
+
+        # section_index=0, C# idle → resume_index=1 → len(sections)=1 → 完了
+        _db.set_setting(PLAYBACK_SETTING_KEY, json.dumps({
+            "lesson_id": lesson["id"],
+            "section_index": 0,
+            "state": "running",
+            "lang": "ja",
+            "generator": "gemini",
+            "version_number": 1,
+        }))
+
+        mock_ws = AsyncMock(return_value={"status": "idle"})
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            result = await runner.restore()
+
+        assert result is False
+        assert LessonRunner.get_playback_state() is None
+
+    @pytest.mark.asyncio
+    async def test_restore_preserves_episode_id(self, runner, test_db):
+        """復旧時にepisode_idが復元される"""
+        from src import db as _db
+        lesson = _db.create_lesson("RestoreEpisode")
+        _db.add_lesson_section(lesson["id"], 0, "intro", "A")
+        _db.add_lesson_section(lesson["id"], 1, "explain", "B")
+
+        _db.set_setting(PLAYBACK_SETTING_KEY, json.dumps({
+            "lesson_id": lesson["id"],
+            "section_index": 0,
+            "state": "running",
+            "lang": "ja",
+            "generator": "gemini",
+            "version_number": 1,
+            "episode_id": 77,
+        }))
+
+        mock_ws = AsyncMock(return_value={"status": "no_lesson"})
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            result = await runner.restore()
+
+        assert result is True
+        assert runner._episode_id == 77
+
+        await runner.stop()

@@ -396,6 +396,16 @@ class TestSettings:
         test_db.set_setting("num", 42)
         assert test_db.get_setting("num") == "42"
 
+    def test_delete_setting(self, test_db):
+        test_db.set_setting("to_delete", "value")
+        assert test_db.get_setting("to_delete") == "value"
+        test_db.delete_setting("to_delete")
+        assert test_db.get_setting("to_delete") is None
+
+    def test_delete_setting_nonexistent(self, test_db):
+        # 存在しないキーの削除はエラーにならない
+        test_db.delete_setting("nonexistent_key")
+
 
 class TestSeTracks:
     def test_upsert_and_get_all(self, test_db):

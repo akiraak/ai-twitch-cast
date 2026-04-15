@@ -1,5 +1,31 @@
 # DONE
 
+## Phase 5: バグ修正 — 授業セクション完了イベントロスト対策
+
+- [x] `src/lesson_runner.py` — `_wait_section_complete()` 新設: 完了イベント待ちをC# lesson_statusポーリング付きに変更。音声再生時間経過後にC#がidle（再生完了）なら即座に次セクションへ（イベントロスト時のfallback）
+- [x] `src/lesson_runner.py` — `_prepare_and_send_section()` — ws_requestの結果ログ追加（section_load/section_play成功/失敗を記録）
+- [x] `win-native-app/.../LessonPlayer.cs` — `PlaySectionAsync()` — try/finally化: エラー・キャンセル時も `lesson_section_complete` を必ずBroadcast
+- [x] `win-native-app/.../LessonPlayer.cs` — `PlayDialoguesAsync()` — InjectJs/PlayAudioの例外を個別catchし、1 dialogueの失敗で全セクション再生が止まらないよう修正。ログレベルをDebug→Informationに引き上げ
+- [x] `tests/test_lesson_runner.py` — `test_idle_detection_fallback` 追加: C#がidleを返した場合イベントなしでもセクション完了扱いになるテスト
+- [x] `tests/test_lesson_runner.py` — `test_timeout_on_no_completion` をポーリング対応に更新
+
+## Phase 4: DB永続化・サーバー再起動復旧
+
+- [x] `src/db/core.py` — `delete_setting()` 関数追加
+- [x] `src/db/__init__.py` — `delete_setting` を re-export
+- [x] `src/lesson_runner.py` — `PLAYBACK_SETTING_KEY` 定数追加（`"lesson.playback"`）
+- [x] `src/lesson_runner.py` — `_save_playback_state()` — 再生状態をDBに永続化
+- [x] `src/lesson_runner.py` — `_clear_playback_state()` — 永続化データをDBから削除
+- [x] `src/lesson_runner.py` — `get_playback_state()` — DBから再生状態を読み取り
+- [x] `src/lesson_runner.py` — `restore()` — サーバー再起動後の授業復旧（C# lesson_status問い合わせ→idle/playing/no_lesson/disconnected対応）
+- [x] `src/lesson_runner.py` — `_prepare_and_send_section()` にDB保存を追加（再生開始後に永続化）
+- [x] `src/lesson_runner.py` — `stop()` / `_run_loop()` 完了時にDB永続化をクリア
+- [x] `scripts/web.py` — `_restore_session()` に授業復旧を統合
+- [x] `tests/test_db.py` — `delete_setting` テスト追加（2テスト）
+- [x] `tests/test_lesson_runner.py` — `TestPlaybackPersistence` クラス追加（5テスト: 保存/読み取り、クリア、stop時クリア、send時保存、空状態）
+- [x] `tests/test_lesson_runner.py` — `TestRestore` クラス追加（7テスト: データなし、lesson不在、セクション不在、C# idle、C# no_lesson、C#未接続、全完了、episode_id復元）
+- [x] プラン: [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
+
 ## Phase 3: Python LessonRunner 書き換え（クライアント主導型）
 
 - [x] `src/lesson_runner.py` — `_play_section`→`_prepare_and_send_section`（バンドル生成・C#送信・完了イベント待ち）

@@ -18,6 +18,8 @@ from src.lesson_generator import get_lesson_characters
 from src.lipsync import analyze_amplitude
 from src.speech_pipeline import SpeechPipeline
 
+PLAYBACK_SETTING_KEY = "lesson.playback"
+
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 LESSON_AUDIO_DIR = PROJECT_DIR / "resources" / "audio" / "lessons"
 
@@ -313,6 +315,113 @@ class LessonRunner:
     def set_episode(self, episode_id: int | None):
         self._episode_id = episode_id
 
+    async def restore(self) -> bool:
+        """DBから授業再生状態を読み取り、サーバー再起動後に授業を復旧する
+
+        Returns:
+            True: 復旧に成功（授業を再開）
+            False: 復旧対象なし or 復旧失敗
+        """
+        playback = self.get_playback_state()
+        if not playback:
+            return False
+
+        lesson_id = playback.get("lesson_id")
+        if not lesson_id:
+            self._clear_playback_state()
+            return False
+
+        lesson = db.get_lesson(lesson_id)
+        if not lesson:
+            logger.warning("[lesson restore] lesson_id=%d が存在しません、永続化データをクリア", lesson_id)
+            self._clear_playback_state()
+            return False
+
+        lang = playback.get("lang", "ja")
+        generator = playback.get("generator", "gemini")
+        version_number = playback.get("version_number", 1)
+        saved_index = playback.get("section_index", 0)
+        episode_id = playback.get("episode_id")
+
+        sections = db.get_lesson_sections(lesson_id, lang=lang, generator=generator,
+                                          version_number=version_number)
+        if not sections:
+            logger.warning("[lesson restore] セクションが見つかりません、永続化データをクリア")
+            self._clear_playback_state()
+            return False
+
+        # C#の授業再生状態を問い合わせる
+        csharp_state = None
+        try:
+            from scripts.services.capture_client import ws_request
+            csharp_state = await asyncio.wait_for(
+                ws_request("lesson_status", timeout=3.0), timeout=5.0
+            )
+        except Exception as e:
+            logger.info("[lesson restore] C#状態取得失敗（未接続）: %s", type(e).__name__)
+
+        # 復旧開始インデックスを決定
+        resume_index = saved_index
+        if csharp_state:
+            cs_status = csharp_state.get("status", "no_lesson")
+            if cs_status == "idle":
+                # C#はセクション再生完了 → 次のセクションから
+                resume_index = saved_index + 1
+                logger.info("[lesson restore] C# idle → section %d から再開", resume_index)
+            elif cs_status == "playing":
+                # C#が再生中 → 完了を待ってから次のセクション
+                logger.info("[lesson restore] C# playing → 完了イベント待ち")
+                try:
+                    from scripts.services.capture_client import get_lesson_section_complete_event
+                    evt = get_lesson_section_complete_event()
+                    evt.clear()
+                    await asyncio.wait_for(evt.wait(), timeout=300)
+                except asyncio.TimeoutError:
+                    logger.warning("[lesson restore] C#再生完了タイムアウト（300秒）")
+                resume_index = saved_index + 1
+            else:
+                # no_lesson → 保存されたインデックスからやり直し
+                logger.info("[lesson restore] C# %s → section %d からやり直し", cs_status, saved_index)
+        else:
+            # C#未接続 → 保存されたインデックスからやり直し
+            logger.info("[lesson restore] C#未接続 → section %d からやり直し", saved_index)
+
+        # 全セクション完了済みチェック
+        if resume_index >= len(sections):
+            logger.info("[lesson restore] 全セクション完了済み、永続化データをクリア")
+            self._clear_playback_state()
+            return False
+
+        # 状態をセットアップして再開
+        self._lesson_id = lesson_id
+        self._lesson_name = lesson["name"]
+        self._lang = lang
+        self._generator = generator
+        self._version_number = version_number
+        self._sections = sections
+        self._current_index = resume_index
+        self._state = LessonState.RUNNING
+        self._pause_event.set()
+        if episode_id:
+            self._episode_id = episode_id
+
+        # キャラクター設定を取得
+        try:
+            characters = await asyncio.to_thread(get_lesson_characters)
+            self._teacher_cfg = characters.get("teacher")
+            self._student_cfg = characters.get("student")
+        except Exception as e:
+            logger.warning("キャラクター設定取得失敗: %s", e)
+            self._teacher_cfg = None
+            self._student_cfg = None
+
+        logger.info("授業復旧: lesson=%d (%s), section=%d/%d から再開",
+                     lesson_id, lesson["name"], resume_index + 1, len(sections))
+
+        await self._notify_status()
+        self._task = asyncio.create_task(self._run_loop())
+        return True
+
     async def start(self, lesson_id: int, lang: str = "ja", generator: str = "gemini",
                     version_number: int | None = None):
         """授業を開始する
@@ -398,6 +507,9 @@ class LessonRunner:
         self._state = LessonState.IDLE
         self._pause_event.set()  # pause中のawaitを解除
 
+        # DB永続化をクリア
+        self._clear_playback_state()
+
         # C#に停止指示
         try:
             from scripts.services.capture_client import ws_request
@@ -449,6 +561,7 @@ class LessonRunner:
             if self._state != LessonState.IDLE:
                 logger.info("授業完了: lesson=%d", self._lesson_id)
                 self._state = LessonState.IDLE
+                self._clear_playback_state()
                 await self._notify_status()
                 self._lesson_id = None
                 self._sections = []
@@ -509,27 +622,30 @@ class LessonRunner:
             "pace_scale": self._get_pace_scale(),
         }
 
-        await ws_request("lesson_section_load", timeout=30.0, section_data=section_data)
+        load_result = await ws_request("lesson_section_load", timeout=30.0, section_data=section_data)
+        logger.info("[lesson]   section_load: %s", "ok" if load_result.get("ok") else load_result)
 
         # 完了イベントをクリア（再生開始前にクリアしないとrace condition）
         evt = get_lesson_section_complete_event()
         evt.clear()
 
         # 再生開始
-        await ws_request("lesson_section_play", timeout=5.0)
+        play_result = await ws_request("lesson_section_play", timeout=5.0)
+        logger.info("[lesson]   section_play: %s", "ok" if play_result.get("ok") else play_result)
 
-        # C#からの完了通知を待つ
-        timeout = sum(d["duration"] for d in bundle) + 30
+        # 進捗をDBに永続化（再生開始後に保存）
+        self._save_playback_state()
+
+        # C#からの完了通知を待つ（ポーリング付き）
+        total_duration = sum(d["duration"] for d in bundle)
+        timeout = total_duration + 30
         wait_secs = section.get("wait_seconds", 2) * self._get_pace_scale()
         timeout += wait_secs
         if question_data:
             timeout += question_data.get("wait_seconds", 8) * self._get_pace_scale()
             timeout += sum(d.get("duration", 0) for d in question_data.get("answer_dialogues", []))
 
-        try:
-            await asyncio.wait_for(evt.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning("[lesson] セクション完了タイムアウト (%.0f秒)", timeout)
+        await self._wait_section_complete(evt, timeout, total_duration)
 
         # アバター発話をDB保存
         content = section["content"]
@@ -742,6 +858,54 @@ class LessonRunner:
             "answer_dialogues": answer_dialogues,
         }
 
+    async def _wait_section_complete(self, evt: asyncio.Event, timeout: float, total_duration: float):
+        """完了イベントを待つ。ポーリングでC#状態を確認し、idle検知時は即座に完了扱いにする。
+
+        C#が lesson_section_complete を送れない場合（WebSocket断絶・C#エラー等）でも、
+        C# lesson_status がidle（再生完了）なら即座に次のセクションに進める。
+        """
+        from scripts.services.capture_client import ws_request as _ws_request
+
+        poll_interval = 5.0  # ポーリング間隔（秒）
+        # 音声再生が終わるまでの推定時間はポーリングしない（C#が再生中なのは確実）
+        initial_wait = min(total_duration + 5, timeout)
+        elapsed = 0.0
+
+        # フェーズ1: 音声再生中は完了イベントだけを待つ
+        try:
+            await asyncio.wait_for(evt.wait(), timeout=initial_wait)
+            return  # 正常完了
+        except asyncio.TimeoutError:
+            elapsed = initial_wait
+
+        # フェーズ2: 音声再生時間を過ぎたらC# statusをポーリング
+        remaining = timeout - elapsed
+        while remaining > 0 and self._state != LessonState.IDLE:
+            # C#のlesson_statusを確認
+            try:
+                status = await _ws_request("lesson_status", timeout=3.0)
+                cs_state = status.get("state", "unknown") if status else "unknown"
+                cs_dlg = status.get("dialogue_index", -1) if status else -1
+                cs_total = status.get("total_dialogues", 0) if status else 0
+                logger.info("[lesson]   C# status: state=%s, dialogue=%d/%d", cs_state, cs_dlg + 1, cs_total)
+
+                if cs_state == "idle":
+                    # C#は再生完了しているがイベントが届かなかった
+                    logger.info("[lesson]   C# idle検知 → セクション完了扱い（イベントロスト）")
+                    return
+            except Exception as e:
+                logger.warning("[lesson]   C# status取得失敗: %s", type(e).__name__)
+
+            # 次のポーリングまでイベント待ち
+            wait_time = min(poll_interval, remaining)
+            try:
+                await asyncio.wait_for(evt.wait(), timeout=wait_time)
+                return  # 正常完了
+            except asyncio.TimeoutError:
+                remaining -= wait_time
+
+        logger.warning("[lesson] セクション完了タイムアウト (%.0f秒)", timeout)
+
     def _get_pace_scale(self) -> float:
         """settings DBから間のスケールを取得する（デフォルト1.0）"""
         try:
@@ -791,6 +955,35 @@ class LessonRunner:
                     for s in self._sections
                 ]
             await self._on_overlay(event)
+
+    def _save_playback_state(self):
+        """授業再生状態をDBに永続化する"""
+        data = {
+            "lesson_id": self._lesson_id,
+            "section_index": self._current_index,
+            "state": self._state.value,
+            "lang": self._lang,
+            "generator": self._generator,
+            "version_number": self._version_number,
+            "episode_id": self._episode_id,
+        }
+        db.set_setting(PLAYBACK_SETTING_KEY, _json.dumps(data))
+
+    @staticmethod
+    def _clear_playback_state():
+        """授業再生状態をDBから削除する"""
+        db.delete_setting(PLAYBACK_SETTING_KEY)
+
+    @staticmethod
+    def get_playback_state() -> dict | None:
+        """DBから授業再生状態を読み取る"""
+        raw = db.get_setting(PLAYBACK_SETTING_KEY)
+        if not raw:
+            return None
+        try:
+            return _json.loads(raw)
+        except (_json.JSONDecodeError, TypeError):
+            return None
 
     def get_status(self) -> dict:
         """現在のステータスを取得する"""

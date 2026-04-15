@@ -1,14 +1,18 @@
 # TODO
 
-## 授業再生のクライアント主導型への移行 → [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
+## 授業データ一括送信方式 → [plans/lesson-full-bundle.md](plans/lesson-full-bundle.md)
 
-サーバー再起動で授業が途切れる問題を根本解決。C#が再生を主導し、Pythonはコンテンツ生成に専念する。
+全セクションを最初にC#に渡し、サーバーはその後一切関与しない方式に変更。セクション単位の往復通信（load→play→complete待ち）を廃止し、C#が全セクションを自律再生する。
 
-- [>] Phase 1: C# 再生エンジン + WebSocket API（LessonPlayer新設、lesson_*アクション追加）— ビルド・動作確認待ち
-- [>] Phase 2: broadcast.html 授業表示ハンドラ（lesson.js新設、C# JS interop経由で字幕・口パク・感情）— Phase 1と合わせて動作確認待ち
-- [>] Phase 3: Python LessonRunner 書き換え（バンドル生成・送信・完了イベント待ち、旧speak/sleep/polling削除）— Phase 1-2と合わせて動作確認待ち
-- [ ] Phase 4: DB永続化・サーバー再起動復旧（進捗永続化、lesson_status問い合わせ、startup復旧）
-- [ ] Phase 5: 旧コード整理（旧メソッド削除、ドキュメント更新）
+- [ ] Phase A: C# LessonPlayer 全セクション対応（StartLesson/AddSection/PlayAsync全セクション版、lesson_complete通知）
+- [ ] Phase B: Python LessonRunner 書き換え（全セクション一括バンドル生成→送信→lesson_play→lesson_complete待ち）
+- [ ] Phase C: 旧コード整理（lesson_section_load/play/complete廃止）
+
+## 授業再生のクライアント主導型への移行（旧プラン） → [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
+
+- [>] Phase 1-4: 実装済み（ビルド・動作確認待ち）
+- [>] Phase 5: バグ修正
+    - [ ] 最初のセリフしか読まれない問題が未解決 → 上記の一括送信方式で根本対策 lesson-full-bundle.md
 
 ## TTS完了待ちの過剰遅延改善（コメント応答用） → [plans/tts-wait-excess-delay.md](plans/tts-wait-excess-delay.md)
 

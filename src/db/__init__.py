@@ -40,6 +40,7 @@ from .core import (
     get_user_comment_count,
     get_setting,
     set_setting,
+    delete_setting,
     get_settings_by_prefix,
     get_character_memory,
     update_character_persona,

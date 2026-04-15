@@ -1318,6 +1318,13 @@ def set_setting(key, value):
     conn.commit()
 
 
+def delete_setting(key):
+    """設定値を削除する"""
+    conn = get_connection()
+    conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+    conn.commit()
+
+
 def get_settings_by_prefix(prefix):
     """プレフィックスに一致する設定をdict{key: value}で返す"""
     conn = get_connection()
