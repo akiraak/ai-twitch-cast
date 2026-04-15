@@ -67,6 +67,12 @@ public class MainForm : Form
     private MeteringWaveProvider? _seMeter;
     private static readonly string SeCacheDir = Path.Combine(Path.GetTempPath(), "ai-twitch-cast-se");
 
+    // 授業再生 state（コメントTTSとは独立した音声チャンネル）
+    private LessonPlayer? _lessonPlayer;
+    private WaveOutEvent? _lessonWaveOut;
+    private WaveChannel32? _lessonChannel;
+    private MeteringWaveProvider? _lessonMeter;
+
     // 音量トラッキング（0.0〜2.0 for master, 0.0〜1.0 for others）
     private float _volumeMaster = 0.8f;
     private float _volumeTts = 0.8f;
@@ -533,6 +539,10 @@ public class MainForm : Form
         var ch = _ttsChannel;
         if (ch != null)
             ch.Volume = Math.Clamp(effectiveVol, 0f, 1f);
+        // 授業音声にも同じTTS音量を適用
+        var lch = _lessonChannel;
+        if (lch != null)
+            lch.Volume = Math.Clamp(effectiveVol, 0f, 1f);
         _ffmpeg?.SetTtsVolume(effectiveVol);
     }
 
@@ -828,6 +838,23 @@ public class MainForm : Form
                 : (_ttsWaveOut?.PlaybackState == PlaybackState.Playing)
         };
 
+        // 授業再生エンジン初期化
+        _lessonPlayer = new LessonPlayer();
+        _lessonPlayer.PlayAudio = (wavData, _) => PlayLessonAudioAsync(wavData, EffectiveTtsVolume());
+        _lessonPlayer.StopAudio = () => { try { _lessonWaveOut?.Stop(); } catch { } };
+        _lessonPlayer.PauseAudio = () => { try { _lessonWaveOut?.Pause(); } catch { } };
+        _lessonPlayer.ResumeAudio = () => { try { _lessonWaveOut?.Play(); } catch { } };
+        _lessonPlayer.InjectJs = (js) =>
+        {
+            BeginInvoke(() =>
+            {
+                if (_webView.CoreWebView2 != null)
+                    _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+            });
+        };
+        _lessonPlayer.BroadcastEvent = (data) => _httpServer?.BroadcastWsEvent(data) ?? Task.CompletedTask;
+        _httpServer.LessonPlayer = _lessonPlayer;
+
         try
         {
             _httpServer.Start();
@@ -861,11 +888,16 @@ public class MainForm : Form
         {
             // 非配信: MeteringWaveProviderの実測値を合成
             bgmActive = _bgmMeter != null && _bgmWaveOut?.PlaybackState == PlaybackState.Playing;
-            ttsActive = _ttsMeter != null;
+            ttsActive = _ttsMeter != null || _lessonMeter != null;
             var bgmDb = bgmActive ? _bgmMeter!.RmsDb : -100f;
-            var ttsDb = ttsActive ? _ttsMeter!.RmsDb : -100f;
+            var ttsDb = _ttsMeter != null ? _ttsMeter.RmsDb : -100f;
+            // 授業音声メーターも合算
+            if (_lessonMeter != null)
+                ttsDb = Math.Max(ttsDb, _lessonMeter.RmsDb);
             var bgmPeak = bgmActive ? _bgmMeter!.PeakDb : -100f;
-            var ttsPeak = ttsActive ? _ttsMeter!.PeakDb : -100f;
+            var ttsPeak = _ttsMeter != null ? _ttsMeter.PeakDb : -100f;
+            if (_lessonMeter != null)
+                ttsPeak = Math.Max(ttsPeak, _lessonMeter.PeakDb);
             // 2ソースのdBを線形加算（パワー合算）
             double bgmPow = Math.Pow(10, bgmDb / 10.0);
             double ttsPow = Math.Pow(10, ttsDb / 10.0);
@@ -1322,6 +1354,89 @@ public class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// 授業用WAVをローカルスピーカーで再生する。PlaybackStopped時にTaskが完了する。
+    /// コメントTTSとは独立した音声チャンネルを使用。
+    /// </summary>
+    private Task PlayLessonAudioAsync(byte[] wavData, float volume)
+    {
+        var tcs = new TaskCompletionSource();
+
+        // 前回の授業音声を停止
+        var oldWaveOut = _lessonWaveOut;
+        if (oldWaveOut != null)
+        {
+            _lessonWaveOut = null;
+            _lessonChannel = null;
+            _lessonMeter = null;
+            try { oldWaveOut.Stop(); } catch { }
+            try { oldWaveOut.Dispose(); } catch { }
+        }
+
+        try
+        {
+            var ms = new MemoryStream(wavData);
+            var reader = new WaveFileReader(ms);
+            var channel = new WaveChannel32(reader) { Volume = Math.Clamp(volume, 0f, 1f) };
+            var meter = new MeteringWaveProvider(channel);
+            var waveOut = new WaveOutEvent();
+            waveOut.Init(meter);
+            waveOut.Volume = 1.0f;
+
+            _lessonWaveOut = waveOut;
+            _lessonChannel = channel;
+            _lessonMeter = meter;
+
+            var disposed = false;
+            waveOut.PlaybackStopped += (_, _) =>
+            {
+                if (disposed) return;
+                disposed = true;
+                if (_lessonWaveOut == waveOut)
+                {
+                    _lessonWaveOut = null;
+                    _lessonChannel = null;
+                    _lessonMeter = null;
+                }
+                try { waveOut.Dispose(); } catch { }
+                try { reader.Dispose(); } catch { }
+                try { ms.Dispose(); } catch { }
+                tcs.TrySetResult();
+            };
+
+            waveOut.Play();
+            Log.Debug("[Lesson] Audio playback started ({Size} bytes, vol={Vol:F2})", wavData.Length, volume);
+
+            // 配信中: PCMリサンプル → FFmpegミキサー（TTS同様に処理）
+            if (_ffmpeg is { IsRunning: true })
+            {
+                var pcm = TtsDecoder.DecodeWav(wavData, 1.0f);
+                _ffmpeg.WriteTtsData(pcm);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[Lesson] Audio playback failed");
+            _lessonWaveOut = null;
+            _lessonChannel = null;
+            _lessonMeter = null;
+            tcs.TrySetResult();
+        }
+
+        return tcs.Task;
+    }
+
+    /// <summary>授業音声の再生を停止し、リソースを解放する。</summary>
+    private void StopLessonAudio()
+    {
+        var waveOut = _lessonWaveOut;
+        _lessonWaveOut = null;
+        _lessonChannel = null;
+        _lessonMeter = null;
+        try { waveOut?.Stop(); } catch { }
+        try { waveOut?.Dispose(); } catch { }
+    }
+
     /// <summary>BGMをローカル再生する。ダウンロード→再生開始。</summary>
     // BGMキャッシュディレクトリ（初回ダウンロード後はローカルから即再生）
     private static readonly string BgmCacheDir = Path.Combine(Path.GetTempPath(), "ai-twitch-cast-bgm");
@@ -1676,6 +1791,9 @@ public class MainForm : Form
             try { _ffmpeg.Dispose(); } catch { }
             _ffmpeg = null;
         }
+        Log.Information("[Cleanup] lesson...");
+        _lessonPlayer?.Stop();
+        StopLessonAudio();
         Log.Information("[Cleanup] bgm...");
         StopBgmPlayback();
         Log.Information("[Cleanup] capture...");

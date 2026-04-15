@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Serilog;
 using WinNativeApp.Capture;
+using WinNativeApp.Streaming;
 
 namespace WinNativeApp.Server;
 
@@ -50,6 +51,9 @@ public class HttpServer : IDisposable
 
     // TTS再生状態コールバック（MainFormが設定）
     public Func<object>? OnGetTtsStatus { get; set; }
+
+    // 授業再生エンジン（MainFormが設定）
+    public LessonPlayer? LessonPlayer { get; set; }
 
     public int Port => _port;
 
@@ -463,6 +467,12 @@ public class HttpServer : IDisposable
                 "bgm_volume" => HandleWsBgmVolume(msg),
                 "se_play" => HandleWsSePlay(msg),
                 "tts_status" => HandleWsTtsStatus(),
+                "lesson_section_load" => HandleWsLessonLoad(msg),
+                "lesson_section_play" => HandleWsLessonPlay(),
+                "lesson_pause" => HandleWsLessonPause(),
+                "lesson_resume" => HandleWsLessonResume(),
+                "lesson_stop" => HandleWsLessonStop(),
+                "lesson_status" => HandleWsLessonStatus(),
                 _ => new { ok = false, error = $"unknown action: {action}" }
             };
 
@@ -653,6 +663,79 @@ public class HttpServer : IDisposable
     private object HandleWsTtsStatus()
     {
         return OnGetTtsStatus?.Invoke() ?? new { ok = true, active = false };
+    }
+
+    // =====================================================
+    // 授業再生 (lesson_*) ハンドラー
+    // =====================================================
+
+    private object HandleWsLessonLoad(JsonElement msg)
+    {
+        if (LessonPlayer == null)
+            return new { ok = false, error = "LessonPlayer not available" };
+
+        if (!msg.TryGetProperty("section_data", out var sectionData))
+            return new { ok = false, error = "section_data is required" };
+
+        try
+        {
+            LessonPlayer.LoadSection(sectionData);
+            return new { ok = true };
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[WebSocket] lesson_section_load failed");
+            return new { ok = false, error = ex.Message };
+        }
+    }
+
+    private object HandleWsLessonPlay()
+    {
+        if (LessonPlayer == null)
+            return new { ok = false, error = "LessonPlayer not available" };
+
+        if (!LessonPlayer.CanPlay)
+            return new { ok = false, error = LessonPlayer.IsPlaying ? "Already playing" : "No section loaded" };
+
+        // バックグラウンドで再生開始（完了はlesson_section_completeイベントで通知）
+        _ = Task.Run(async () =>
+        {
+            try { await LessonPlayer.PlayAsync(); }
+            catch (Exception ex) { Log.Error(ex, "[Lesson] PlayAsync failed"); }
+        });
+
+        return new { ok = true };
+    }
+
+    private object HandleWsLessonPause()
+    {
+        if (LessonPlayer == null)
+            return new { ok = false, error = "LessonPlayer not available" };
+        LessonPlayer.Pause();
+        return new { ok = true };
+    }
+
+    private object HandleWsLessonResume()
+    {
+        if (LessonPlayer == null)
+            return new { ok = false, error = "LessonPlayer not available" };
+        LessonPlayer.Resume();
+        return new { ok = true };
+    }
+
+    private object HandleWsLessonStop()
+    {
+        if (LessonPlayer == null)
+            return new { ok = false, error = "LessonPlayer not available" };
+        LessonPlayer.Stop();
+        return new { ok = true };
+    }
+
+    private object HandleWsLessonStatus()
+    {
+        if (LessonPlayer == null)
+            return new { ok = true, state = "no_lesson" };
+        return LessonPlayer.GetStatus();
     }
 
     private object HandleWsQuit()
