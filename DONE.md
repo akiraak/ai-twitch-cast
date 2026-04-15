@@ -1,5 +1,18 @@
 # DONE
 
+## Phase 3: Python LessonRunner 書き換え（クライアント主導型）
+
+- [x] `src/lesson_runner.py` — `_play_section`→`_prepare_and_send_section`（バンドル生成・C#送信・完了イベント待ち）
+- [x] `src/lesson_runner.py` — 単話者/対話モード統一（`_get_unified_dialogues`で両方をdialogues配列に変換）
+- [x] `src/lesson_runner.py` — `_build_dialogue_bundle`/`_wav_to_bundle_entry`（TTS+lipsync+wav_b64のバンドル生成）
+- [x] `src/lesson_runner.py` — `_build_question_data`（questionセクションのanswer TTS含むデータ生成）
+- [x] `src/lesson_runner.py` — pause/resume/stopをC#にWebSocket転送（`lesson_pause`/`lesson_resume`/`lesson_stop`）
+- [x] `src/lesson_runner.py` — 旧`_play_single_speaker`/`_play_dialogues`/`_handle_question`/`_pause_aware_sleep`を削除
+- [x] `scripts/services/capture_client.py` — `lesson_section_complete` Push通知受信・`get_lesson_section_complete_event()`追加
+- [x] `tests/test_lesson_runner.py` — Phase 3テスト追加（パース・統一変換・バンドル生成・C#送信・タイムアウト・pause/resume/stop転送）
+- [x] `tests/conftest.py` — `generate_tts` AsyncMock追加（API統合テスト対応）
+- [x] プラン: [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
+
 ## Phase 2: broadcast.html 授業表示ハンドラ
 
 - [x] `static/js/broadcast/lesson.js` (新規) — `window.lesson` オブジェクト（`startDialogue`/`endDialogue`/`showText`/`hideText`/`pause`/`resume`）

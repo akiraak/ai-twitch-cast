@@ -6,7 +6,7 @@
 
 - [>] Phase 1: C# 再生エンジン + WebSocket API（LessonPlayer新設、lesson_*アクション追加）— ビルド・動作確認待ち
 - [>] Phase 2: broadcast.html 授業表示ハンドラ（lesson.js新設、C# JS interop経由で字幕・口パク・感情）— Phase 1と合わせて動作確認待ち
-- [ ] Phase 3: Python LessonRunner 書き換え（バンドル生成・送信・完了イベント待ち、旧speak/sleep/polling削除）
+- [>] Phase 3: Python LessonRunner 書き換え（バンドル生成・送信・完了イベント待ち、旧speak/sleep/polling削除）— Phase 1-2と合わせて動作確認待ち
 - [ ] Phase 4: DB永続化・サーバー再起動復旧（進捗永続化、lesson_status問い合わせ、startup復旧）
 - [ ] Phase 5: 旧コード整理（旧メソッド削除、ドキュメント更新）
 

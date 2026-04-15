@@ -95,6 +95,7 @@ def api_client(test_db, mock_env, mock_gemini, monkeypatch):
     mock_speech.speak = AsyncMock()
     mock_speech.notify_overlay_end = AsyncMock()
     mock_speech.apply_emotion = MagicMock()
+    mock_speech.generate_tts = AsyncMock(return_value=None)
     mock_speech.split_sentences = SpeechPipeline.split_sentences
     mock_lesson_runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
 

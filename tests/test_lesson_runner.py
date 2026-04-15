@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import struct
+import wave
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,12 +20,24 @@ from src.lesson_runner import (
 )
 
 
+def _create_test_wav(path: Path, duration: float = 1.0, sample_rate: int = 24000):
+    """テスト用のWAVファイルを生成する"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    n_frames = int(sample_rate * duration)
+    with wave.open(str(path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack(f"<{n_frames}h", *([1000] * n_frames)))
+
+
 @pytest.fixture
 def mock_speech():
     speech = MagicMock()
     speech.speak = AsyncMock()
     speech.notify_overlay_end = AsyncMock()
     speech.apply_emotion = MagicMock()
+    speech.generate_tts = AsyncMock(return_value=None)
     speech.split_sentences = MagicMock(side_effect=lambda t: [t])
     return speech
 
@@ -82,16 +96,24 @@ class TestLessonLifecycle:
         test_db.add_lesson_section(lesson["id"], 0, "introduction", "A")
         test_db.add_lesson_section(lesson["id"], 1, "explanation", "B")
 
-        await runner.start(lesson["id"])
-        assert runner.state == LessonState.RUNNING
+        # _prepare_and_send_sectionをモック（pause中に永遠にブロック）
+        block = asyncio.Event()
 
-        await runner.pause()
-        assert runner.state == LessonState.PAUSED
+        async def slow_section(section):
+            await block.wait()
 
-        await runner.resume()
-        assert runner.state == LessonState.RUNNING
+        with patch.object(runner, "_prepare_and_send_section", side_effect=slow_section):
+            await runner.start(lesson["id"])
+            await asyncio.sleep(0.05)  # タスク起動待ち
+            assert runner.state == LessonState.RUNNING
 
-        await runner.stop()
+            await runner.pause()
+            assert runner.state == LessonState.PAUSED
+
+            await runner.resume()
+            assert runner.state == LessonState.RUNNING
+
+            await runner.stop()
 
     @pytest.mark.asyncio
     async def test_stop_when_idle(self, runner):
@@ -460,181 +482,451 @@ class TestVersionedTtsCache:
         assert status["version_number"] == 1
 
 
-class TestDialoguePlayback:
-    """対話再生のテスト"""
+class TestParseDialogues:
+    """_parse_dialogues / _parse_display_properties のテスト"""
+
+    def test_parse_dialogues_json_string(self):
+        """JSON文字列からdialoguesをパースする"""
+        section = {"dialogues": json.dumps([
+            {"speaker": "teacher", "content": "Hello"},
+        ])}
+        result = LessonRunner._parse_dialogues(section)
+        assert len(result) == 1
+        assert result[0]["speaker"] == "teacher"
+
+    def test_parse_dialogues_v4_format(self):
+        """v4 {dialogues: [...], review: {...}} 形式に対応"""
+        section = {"dialogues": json.dumps({
+            "dialogues": [{"speaker": "teacher", "content": "A"}],
+            "review": {"rating": 5},
+        })}
+        result = LessonRunner._parse_dialogues(section)
+        assert len(result) == 1
+
+    def test_parse_dialogues_empty(self):
+        """空のdialoguesはNoneを返す"""
+        assert LessonRunner._parse_dialogues({"dialogues": ""}) is None
+        assert LessonRunner._parse_dialogues({"dialogues": "[]"}) is None
+        assert LessonRunner._parse_dialogues({}) is None
+
+    def test_parse_display_properties(self):
+        """display_propertiesのパース"""
+        section = {"display_properties": json.dumps({"maxHeight": 40})}
+        result = LessonRunner._parse_display_properties(section)
+        assert result == {"maxHeight": 40}
+
+    def test_parse_display_properties_empty(self):
+        """空のdisplay_properties"""
+        assert LessonRunner._parse_display_properties({"display_properties": "{}"}) == {}
+        assert LessonRunner._parse_display_properties({"display_properties": ""}) == {}
+        assert LessonRunner._parse_display_properties({}) == {}
+
+
+class TestUnifiedDialogues:
+    """_get_unified_dialogues のテスト"""
+
+    def test_dialogue_mode(self, mock_speech):
+        """dialoguesがある場合、is_single_speaker=Falseで返す"""
+        runner = LessonRunner(speech=mock_speech)
+        section = {"dialogues": json.dumps([
+            {"speaker": "teacher", "content": "A"},
+            {"speaker": "student", "content": "B"},
+        ])}
+        dialogues, is_single = runner._get_unified_dialogues(section)
+        assert not is_single
+        assert len(dialogues) == 2
+        assert dialogues[0]["speaker"] == "teacher"
+        assert dialogues[1]["speaker"] == "student"
+
+    def test_single_speaker_conversion(self, mock_speech):
+        """単話者モードでdialogues配列に変換される"""
+        runner = LessonRunner(speech=mock_speech)
+        section = {
+            "content": "テスト",
+            "tts_text": "テスト読み",
+            "emotion": "joy",
+            "dialogues": "",
+        }
+        dialogues, is_single = runner._get_unified_dialogues(section)
+        assert is_single
+        assert len(dialogues) == 1
+        assert dialogues[0]["speaker"] == "teacher"
+        assert dialogues[0]["content"] == "テスト"
+        assert dialogues[0]["tts_text"] == "テスト読み"
+        assert dialogues[0]["emotion"] == "joy"
+
+    def test_single_speaker_sentence_split(self, mock_speech):
+        """30文字超のテキストは文分割される"""
+        runner = LessonRunner(speech=mock_speech)
+        long_text = "これは最初の文です。" * 5  # 50文字
+        section = {"content": long_text, "dialogues": "", "emotion": "neutral"}
+        dialogues, is_single = runner._get_unified_dialogues(section)
+        assert is_single
+        # split_sentencesで分割されるので複数エントリ
+        assert len(dialogues) >= 2
+
+
+class TestBundleAssembly:
+    """バンドル組み立てのテスト"""
 
     @pytest.mark.asyncio
-    async def test_play_dialogues_calls_speak_per_dialogue(self, mock_speech, test_db):
-        """dialoguesがあると話者別に個別speak呼び出しされる"""
-        dialogues = json.dumps([
-            {"speaker": "teacher", "content": "こんにちは！", "tts_text": "こんにちは！", "emotion": "excited"},
-            {"speaker": "student", "content": "よろしく！", "tts_text": "よろしく！", "emotion": "joy"},
-            {"speaker": "teacher", "content": "始めよう！", "tts_text": "始めよう！", "emotion": "neutral"},
-        ])
-        teacher_cfg = {"name": "先生", "tts_voice": "Despina", "tts_style": "にこにこ"}
-        student_cfg = {"name": "生徒", "tts_voice": "Kore", "tts_style": "元気"}
+    async def test_build_dialogue_bundle(self, mock_speech, tmp_path, monkeypatch):
+        """対話モードのバンドル生成 — TTS+lipsync+wav_b64が含まれる"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
 
-        on_overlay = AsyncMock()
-        runner = LessonRunner(speech=mock_speech, on_overlay=on_overlay)
-        runner._teacher_cfg = teacher_cfg
-        runner._student_cfg = student_cfg
+        runner = LessonRunner(speech=mock_speech)
         runner._state = LessonState.RUNNING
         runner._lesson_id = 1
         runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {"name": "先生", "tts_voice": "Despina"}
+        runner._student_cfg = {"name": "生徒", "tts_voice": "Kore"}
+
+        # キャッシュ済みWAVを配置
+        for i in range(2):
+            wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / f"section_00_dlg_{i:02d}.wav"
+            _create_test_wav(wav_path, duration=0.5)
+
+        dialogues = [
+            {"speaker": "teacher", "content": "Hello", "emotion": "joy"},
+            {"speaker": "student", "content": "Hi", "emotion": "neutral"},
+        ]
+
+        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1, 0.5, 0.3]):
+            bundle = await runner._build_dialogue_bundle(dialogues, order_index=0)
+
+        assert len(bundle) == 2
+        # エントリの構造確認
+        entry = bundle[0]
+        assert entry["index"] == 0
+        assert entry["speaker"] == "teacher"
+        assert entry["avatar_id"] == "teacher"
+        assert entry["content"] == "Hello"
+        assert entry["emotion"] == "joy"
+        assert entry["gesture"] == "nod"  # joy → nod
+        assert entry["lipsync_frames"] == [0.1, 0.5, 0.3]
+        assert entry["duration"] == pytest.approx(0.5, abs=0.01)
+        assert len(entry["wav_b64"]) > 0
+
+        entry2 = bundle[1]
+        assert entry2["speaker"] == "student"
+        assert entry2["emotion"] == "neutral"
+        assert entry2["gesture"] is None  # neutralにはgestureなし
+
+    @pytest.mark.asyncio
+    async def test_build_bundle_single_speaker(self, mock_speech, tmp_path, monkeypatch):
+        """単話者モードのバンドル生成 — _cache_path形式を使う"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+
+        runner = LessonRunner(speech=mock_speech)
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {"name": "先生"}
+
+        # part形式のキャッシュ
+        wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_part_00.wav"
+        _create_test_wav(wav_path, duration=1.0)
+
+        dialogues = [{"speaker": "teacher", "content": "テスト", "tts_text": "テスト", "emotion": "neutral"}]
+
+        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.2, 0.4]):
+            bundle = await runner._build_dialogue_bundle(dialogues, order_index=0, is_single_speaker=True)
+
+        assert len(bundle) == 1
+        assert bundle[0]["duration"] == pytest.approx(1.0, abs=0.01)
+
+    @pytest.mark.asyncio
+    async def test_build_bundle_tts_failure(self, mock_speech, tmp_path, monkeypatch):
+        """TTS生成失敗時はバンドルが空になる"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+
+        runner = LessonRunner(speech=mock_speech)
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {}
+
+        # generate_tts がNoneを返す
+        mock_speech.generate_tts = AsyncMock(return_value=None)
+
+        dialogues = [{"speaker": "teacher", "content": "失敗テスト", "emotion": "neutral"}]
+        bundle = await runner._build_dialogue_bundle(dialogues, order_index=0)
+        assert len(bundle) == 0
+
+    @pytest.mark.asyncio
+    async def test_build_bundle_stops_on_idle(self, mock_speech, tmp_path, monkeypatch):
+        """状態がIDLEになったらバンドル生成を中断する"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+
+        runner = LessonRunner(speech=mock_speech)
+        runner._state = LessonState.IDLE  # IDLEに設定
+        runner._lesson_id = 1
+        runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {}
+
+        dialogues = [
+            {"speaker": "teacher", "content": "A", "emotion": "neutral"},
+            {"speaker": "teacher", "content": "B", "emotion": "neutral"},
+        ]
+        bundle = await runner._build_dialogue_bundle(dialogues, order_index=0)
+        assert len(bundle) == 0
+
+
+class TestQuestionData:
+    """questionセクションデータ生成のテスト"""
+
+    @pytest.mark.asyncio
+    async def test_build_question_data(self, mock_speech, tmp_path):
+        """questionデータにwait_secondsとanswer_dialoguesが含まれる"""
+        # generate_ttsが返すWAVを作成
+        wav = tmp_path / "answer.wav"
+        _create_test_wav(wav, duration=2.0)
+        mock_speech.generate_tts = AsyncMock(return_value=wav)
+
+        runner = LessonRunner(speech=mock_speech)
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+
+        section = {
+            "section_type": "question",
+            "question": True,
+            "wait_seconds": 10,
+            "answer": "答えはAです",
+            "emotion": "joy",
+        }
+
+        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]):
+            result = await runner._build_question_data(section, order_index=0)
+
+        assert result["wait_seconds"] == 10
+        assert len(result["answer_dialogues"]) == 1
+        assert result["answer_dialogues"][0]["content"] == "答えはAです"
+        assert result["answer_dialogues"][0]["emotion"] == "joy"
+
+    @pytest.mark.asyncio
+    async def test_build_question_data_no_answer(self, mock_speech):
+        """answerがない場合、answer_dialoguesは空"""
+        runner = LessonRunner(speech=mock_speech)
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+
+        section = {"wait_seconds": 5, "answer": "", "emotion": "neutral"}
+        result = await runner._build_question_data(section, order_index=0)
+        assert result["wait_seconds"] == 5
+        assert result["answer_dialogues"] == []
+
+
+class TestPrepareAndSendSection:
+    """_prepare_and_send_section の統合テスト"""
+
+    @pytest.mark.asyncio
+    async def test_sends_bundle_to_csharp(self, mock_speech, tmp_path, monkeypatch):
+        """セクションバンドルがC#にWebSocket送信される"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+
+        # キャッシュWAV作成
+        wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_dlg_00.wav"
+        _create_test_wav(wav_path, duration=1.0)
+
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {"name": "先生"}
+        runner._student_cfg = None
         runner._sections = [{}]
         runner._current_index = 0
-
-        # generate_tts はNone返す（キャッシュなし、WAVなし）
-        mock_speech.generate_tts = AsyncMock(return_value=None)
 
         section = {
             "section_type": "introduction",
-            "content": "こんにちは！よろしく！始めよう！",
-            "dialogues": dialogues,
+            "content": "Hello",
+            "display_text": "表示",
+            "dialogues": json.dumps([{"speaker": "teacher", "content": "Hello", "emotion": "neutral"}]),
             "order_index": 0,
+            "wait_seconds": 2,
         }
-        await runner._play_dialogues(section, json.loads(dialogues))
 
-        # speak が 3回呼ばれる（dialogue 3つ）
-        assert mock_speech.speak.call_count == 3
+        # 完了イベント: 即座にsetする
+        mock_evt = asyncio.Event()
 
-        # 1回目: teacher
-        call1 = mock_speech.speak.call_args_list[0]
-        assert call1.kwargs["avatar_id"] == "teacher"
-        assert call1.kwargs["voice"] == "Despina"
+        mock_ws_request = AsyncMock(return_value={"ok": True})
 
-        # 2回目: student
-        call2 = mock_speech.speak.call_args_list[1]
-        assert call2.kwargs["avatar_id"] == "student"
-        assert call2.kwargs["voice"] == "Kore"
+        async def _set_evt_after_play(*args, **kwargs):
+            if args and args[0] == "lesson_section_play":
+                mock_evt.set()
+            return {"ok": True}
 
-        # 3回目: teacher
-        call3 = mock_speech.speak.call_args_list[2]
-        assert call3.kwargs["avatar_id"] == "teacher"
+        mock_ws_request.side_effect = _set_evt_after_play
+
+        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1, 0.5]), \
+             patch("scripts.services.capture_client.ws_request", mock_ws_request), \
+             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
+            await runner._prepare_and_send_section(section)
+
+        # ws_requestが lesson_section_load と lesson_section_play で呼ばれたか
+        call_actions = [c.args[0] for c in mock_ws_request.call_args_list]
+        assert "lesson_section_load" in call_actions
+        assert "lesson_section_play" in call_actions
+
+        # lesson_section_loadのsection_dataを検証
+        load_call = [c for c in mock_ws_request.call_args_list if c.args[0] == "lesson_section_load"][0]
+        section_data = load_call.kwargs["section_data"]
+        assert section_data["lesson_id"] == 1
+        assert section_data["display_text"] == "表示"
+        assert len(section_data["dialogues"]) == 1
+        assert section_data["dialogues"][0]["content"] == "Hello"
 
     @pytest.mark.asyncio
-    async def test_play_section_falls_back_to_single_speaker(self, mock_speech, test_db):
-        """dialoguesが空なら従来の単話者再生にフォールバック"""
-        on_overlay = AsyncMock()
-        runner = LessonRunner(speech=mock_speech, on_overlay=on_overlay)
-        runner._teacher_cfg = {"name": "先生"}
-        runner._student_cfg = {"name": "生徒"}
+    async def test_timeout_on_no_completion(self, mock_speech, tmp_path, monkeypatch):
+        """完了イベントが来ない場合タイムアウトする"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+
+        wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_part_00.wav"
+        _create_test_wav(wav_path, duration=0.1)
+
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
         runner._state = LessonState.RUNNING
         runner._lesson_id = 1
         runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {"name": "先生"}
         runner._sections = [{}]
         runner._current_index = 0
-
-        mock_speech.generate_tts = AsyncMock(return_value=None)
 
         section = {
             "section_type": "explanation",
             "content": "テスト",
-            "tts_text": "テスト",
-            "emotion": "neutral",
-            "dialogues": "",  # 空
-            "order_index": 0,
-        }
-        await runner._play_section(section)
-
-        # 単話者モード: speakが1回
-        assert mock_speech.speak.call_count == 1
-        call = mock_speech.speak.call_args_list[0]
-        assert call.kwargs.get("avatar_id", "teacher") == "teacher"
-
-    @pytest.mark.asyncio
-    async def test_play_section_no_student_config(self, mock_speech, test_db):
-        """student_cfgがNoneでもdialoguesがあれば対話モードで再生"""
-        dialogues = json.dumps([
-            {"speaker": "teacher", "content": "Hello", "emotion": "neutral"},
-            {"speaker": "student", "content": "Hi", "emotion": "joy"},
-        ])
-        on_overlay = AsyncMock()
-        runner = LessonRunner(speech=mock_speech, on_overlay=on_overlay)
-        runner._teacher_cfg = {"name": "先生"}
-        runner._student_cfg = None  # 生徒なし
-        runner._state = LessonState.RUNNING
-        runner._lesson_id = 1
-        runner._lang = "ja"
-        runner._sections = [{}]
-        runner._current_index = 0
-
-        mock_speech.generate_tts = AsyncMock(return_value=None)
-
-        section = {
-            "section_type": "introduction",
-            "content": "HelloHi",
-            "tts_text": "HelloHi",
-            "emotion": "neutral",
-            "dialogues": dialogues,
-            "order_index": 0,
-        }
-        await runner._play_section(section)
-
-        # 対話モード: dialogueの各エントリ分speakが呼ばれる
-        assert mock_speech.speak.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_play_section_sends_display_properties(self, mock_speech, test_db):
-        """display_propertiesがあればWebSocketイベントに含まれる"""
-        on_overlay = AsyncMock()
-        runner = LessonRunner(speech=mock_speech, on_overlay=on_overlay)
-        runner._teacher_cfg = {"name": "先生"}
-        runner._student_cfg = None
-        runner._state = LessonState.RUNNING
-        runner._lesson_id = 1
-        runner._lang = "ja"
-        runner._sections = [{}]
-        runner._current_index = 0
-
-        mock_speech.generate_tts = AsyncMock(return_value=None)
-
-        section = {
-            "section_type": "explanation",
-            "content": "テスト",
-            "tts_text": "テスト",
-            "display_text": "表示テキスト",
-            "emotion": "neutral",
             "dialogues": "",
             "order_index": 0,
-            "display_properties": json.dumps({"maxHeight": 40, "fontSize": 1.2}),
         }
-        await runner._play_section(section)
 
-        # lesson_text_showイベントにdisplay_propertiesが含まれる
-        overlay_calls = [c.args[0] for c in on_overlay.call_args_list
-                         if c.args[0].get("type") == "lesson_text_show"]
-        assert len(overlay_calls) >= 1
-        assert overlay_calls[0]["display_properties"] == {"maxHeight": 40, "fontSize": 1.2}
+        # 完了イベント: setしない → タイムアウト
+        mock_evt = asyncio.Event()
+        mock_ws_request = AsyncMock(return_value={"ok": True})
+
+        # タイムアウトを短く: duration(0.1) + 30 + wait_seconds(2) = 32.1秒は長すぎるので
+        # _get_pace_scale をモックして合計タイムアウトを小さくする
+        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
+             patch("scripts.services.capture_client.ws_request", mock_ws_request), \
+             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
+            # タイムアウトをモンキーパッチ: wait_forを短いタイムアウトに差し替え
+            original_wait_for = asyncio.wait_for
+
+            async def short_wait_for(coro, timeout):
+                return await original_wait_for(coro, timeout=0.1)
+
+            with patch("asyncio.wait_for", short_wait_for):
+                await runner._prepare_and_send_section(section)
+
+        # タイムアウトしてもエラーにならずに完了する
+        assert runner._state == LessonState.RUNNING
 
     @pytest.mark.asyncio
-    async def test_play_section_no_display_properties(self, mock_speech, test_db):
-        """display_propertiesが空ならイベントに含まれない"""
-        on_overlay = AsyncMock()
-        runner = LessonRunner(speech=mock_speech, on_overlay=on_overlay)
-        runner._teacher_cfg = {"name": "先生"}
-        runner._student_cfg = None
+    async def test_empty_bundle_skips_send(self, mock_speech, tmp_path, monkeypatch):
+        """バンドルが空の場合はC#への送信をスキップ"""
+        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
+
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
         runner._state = LessonState.RUNNING
         runner._lesson_id = 1
         runner._lang = "ja"
+        runner._generator = "gemini"
+        runner._version_number = 1
+        runner._teacher_cfg = {}
         runner._sections = [{}]
         runner._current_index = 0
 
+        # generate_ttsがNoneを返す → バンドル空
         mock_speech.generate_tts = AsyncMock(return_value=None)
 
         section = {
             "section_type": "explanation",
             "content": "テスト",
-            "tts_text": "テスト",
-            "display_text": "表示テキスト",
-            "emotion": "neutral",
             "dialogues": "",
             "order_index": 0,
-            "display_properties": "{}",
         }
-        await runner._play_section(section)
 
-        overlay_calls = [c.args[0] for c in on_overlay.call_args_list
-                         if c.args[0].get("type") == "lesson_text_show"]
-        assert len(overlay_calls) >= 1
-        assert "display_properties" not in overlay_calls[0]
+        mock_ws_request = AsyncMock()
+        with patch("scripts.services.capture_client.ws_request", mock_ws_request):
+            await runner._prepare_and_send_section(section)
+
+        # ws_requestは呼ばれない（バンドル空のため）
+        mock_ws_request.assert_not_called()
+
+
+class TestPauseResumeStopForwarding:
+    """pause/resume/stopのC#転送テスト"""
+
+    @pytest.mark.asyncio
+    async def test_pause_forwards_to_csharp(self, mock_speech):
+        """pauseがC#にlesson_pauseを送信する"""
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._sections = [{"section_type": "explanation", "content": "A"}]
+
+        mock_ws = AsyncMock(return_value={"ok": True})
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            await runner.pause()
+
+        assert runner.state == LessonState.PAUSED
+        mock_ws.assert_called_once_with("lesson_pause")
+
+    @pytest.mark.asyncio
+    async def test_resume_forwards_to_csharp(self, mock_speech):
+        """resumeがC#にlesson_resumeを送信する"""
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
+        runner._state = LessonState.PAUSED
+        runner._lesson_id = 1
+        runner._sections = [{"section_type": "explanation", "content": "A"}]
+        runner._pause_event.clear()
+
+        mock_ws = AsyncMock(return_value={"ok": True})
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            await runner.resume()
+
+        assert runner.state == LessonState.RUNNING
+        mock_ws.assert_called_once_with("lesson_resume")
+
+    @pytest.mark.asyncio
+    async def test_stop_forwards_to_csharp(self, mock_speech):
+        """stopがC#にlesson_stopを送信し、完了イベントをsetする"""
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._sections = [{"section_type": "explanation", "content": "A"}]
+
+        mock_ws = AsyncMock(return_value={"ok": True})
+        mock_evt = asyncio.Event()
+        with patch("scripts.services.capture_client.ws_request", mock_ws), \
+             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
+            await runner.stop()
+
+        assert runner.state == LessonState.IDLE
+        mock_ws.assert_called_once_with("lesson_stop")
+        assert mock_evt.is_set()  # 待機中タスクを解除するためsetされる
+
+    @pytest.mark.asyncio
+    async def test_stop_handles_csharp_disconnect(self, mock_speech):
+        """C#未接続でもstopはエラーにならない"""
+        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
+        runner._state = LessonState.RUNNING
+        runner._lesson_id = 1
+        runner._sections = [{"section_type": "explanation", "content": "A"}]
+
+        mock_ws = AsyncMock(side_effect=ConnectionError("C#アプリ未接続"))
+        with patch("scripts.services.capture_client.ws_request", mock_ws):
+            await runner.stop()
+
+        assert runner.state == LessonState.IDLE
