@@ -1,6 +1,6 @@
 # 授業データ一括送信方式
 
-## ステータス: Phase A・B 完了 / Phase C・D 未着手
+## ステータス: Phase A・B・C 完了 / Phase D 未着手
 
 ## 背景
 

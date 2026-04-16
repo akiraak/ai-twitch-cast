@@ -853,6 +853,7 @@ public class MainForm : Form
             });
         };
         _lessonPlayer.BroadcastEvent = (data) => _httpServer?.BroadcastWsEvent(data) ?? Task.CompletedTask;
+        _lessonPlayer.NotifyPanel = (data) => BeginInvoke(() => SendPanelMessage(data));
         _httpServer.LessonPlayer = _lessonPlayer;
 
         try

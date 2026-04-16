@@ -1,5 +1,17 @@
 # DONE
 
+## 授業データ一括送信方式 Phase C: コントロールパネル授業進捗表示
+
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `NotifyPanel` コールバック（`Action<object>?`）追加
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `SendPanelUpdate()` ヘルパー新設: 授業未ロード時は空データ、ロード後は state/lesson_id/section_index/total_sections/section_type/display_text/dialogue_index/total_dialogues/dialogues[] (80文字切り詰め) /current_content/current_speaker を送信
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `_currentDialogues` フィールド追加（main/answer どちらを再生中か追跡）
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `LoadLesson` / `PlayAllSectionsAsync`（各セクション開始時・finally） / `PlayDialoguesAsync`（各ダイアログ開始時） / `Pause` / `Resume` / `Stop` で `SendPanelUpdate()` を発火
+- [x] `win-native-app/.../MainForm.cs` — `_lessonPlayer.NotifyPanel = (data) => BeginInvoke(() => SendPanelMessage(data))` で接続
+- [x] `win-native-app/.../control-panel.html` — Chat と Design の間に `Lesson` タブ追加（状態バッジ、セクション進捗バー、教材テキスト、現在の発話、ダイアログ一覧）
+- [x] `win-native-app/.../control-panel.html` — `updateLesson(m)` 関数実装: バッジ更新、セクションバー描画、教材テキスト/発話の表示切替、ダイアログ一覧のDOM生成＋現在ダイアログへのスクロール追従
+- [x] `win-native-app/.../control-panel.html` — `wv.addEventListener('message')` の switch に `case 'lesson'` 追加
+- [x] プラン: [plans/lesson-full-bundle.md](plans/lesson-full-bundle.md) Phase C 完了
+
 ## 授業データ一括送信方式 Phase B: Python LessonRunner 書き換え
 
 - [x] `scripts/services/capture_client.py` — `get_lesson_complete_event()` / `get_lesson_complete_payload()` 追加、`_read_capture_ws()` で `lesson_complete` Push通知をイベントとして受信

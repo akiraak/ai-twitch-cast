@@ -333,6 +333,120 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
 #chatSendBtn:hover { background: var(--accent-hover); }
 #chatSendBtn:disabled { opacity: 0.35; cursor: default; }
 
+/* Lesson tab */
+.lesson-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--bg-input);
+  color: var(--text-dim);
+}
+.lesson-badge.loaded { background: #2b4f7a; color: #bfe0ff; }
+.lesson-badge.playing { background: var(--green); color: #fff; }
+.lesson-badge.paused { background: #7a6a2b; color: #ffeab0; }
+.lesson-badge.idle { background: #4a4a4a; color: var(--text-dim); }
+
+.lesson-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.lesson-id { font-size: 11px; color: var(--text-dim); }
+
+.section-bar {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 6px;
+  height: 8px;
+}
+.section-cell {
+  flex: 1;
+  background: var(--bg-input);
+  border-radius: 2px;
+  min-width: 4px;
+}
+.section-cell.done { background: #2d6a4f; }
+.section-cell.current { background: var(--accent); box-shadow: 0 0 4px var(--accent); }
+
+.lesson-display-text {
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 6px;
+  max-height: 60px;
+  overflow-y: auto;
+  user-select: text;
+  cursor: text;
+}
+
+.lesson-current-speech {
+  background: #1a2b3a;
+  border-left: 2px solid var(--accent);
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 6px;
+  user-select: text;
+  cursor: text;
+  max-height: 80px;
+  overflow-y: auto;
+}
+.lesson-current-speech .speaker {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
+}
+
+.lesson-dialogue-list {
+  flex: 1;
+  background: #1a1a1a;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-y: auto;
+  min-height: 0;
+  font-size: 11px;
+  padding: 4px 0;
+  user-select: text;
+}
+.lesson-dialogue {
+  padding: 3px 8px;
+  border-left: 2px solid transparent;
+  color: var(--text-dim);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.lesson-dialogue.done { opacity: 0.45; }
+.lesson-dialogue.current {
+  background: rgba(14, 99, 156, 0.15);
+  border-left-color: var(--accent);
+  color: var(--text);
+}
+.lesson-dialogue .dlg-speaker {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 4px;
+  text-transform: uppercase;
+}
+.lesson-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 /* Design tab */
 .design-panel { border-bottom: 1px solid var(--border); }
 .design-panel summary {
@@ -362,6 +476,7 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   <button class="tab active" data-tab="stream">Stream</button>
   <button class="tab" data-tab="sound">Sound</button>
   <button class="tab" data-tab="chat">Chat</button>
+  <button class="tab" data-tab="lesson">Lesson</button>
   <button class="tab" data-tab="design">Design</button>
 </div>
 
@@ -470,6 +585,28 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   </div>
 </div>
 
+<div class="tab-content" id="tab-lesson">
+  <div class="section">
+    <div class="lesson-header">
+      <div class="section-title" style="margin-bottom:0;">Lesson <span class="lesson-id" id="lessonId"></span></div>
+      <span class="lesson-badge idle" id="lessonBadge">idle</span>
+    </div>
+    <div class="section-bar" id="lessonSectionBar"></div>
+    <div class="stats" id="lessonProgress" style="margin-bottom:4px;"></div>
+    <div class="lesson-display-text" id="lessonDisplayText" style="display:none;"></div>
+    <div class="lesson-current-speech" id="lessonCurrentSpeech" style="display:none;">
+      <div class="speaker" id="lessonCurrentSpeaker"></div>
+      <div id="lessonCurrentContent"></div>
+    </div>
+  </div>
+  <div class="section flex">
+    <div class="section-title">Dialogues</div>
+    <div class="lesson-dialogue-list" id="lessonDialogueList">
+      <div class="lesson-empty">授業が読み込まれていません</div>
+    </div>
+  </div>
+</div>
+
 <div class="tab-content" id="tab-design">
   <div class="section" style="flex:1; overflow-y:auto;">
     <div class="section-title">授業パネル</div>
@@ -513,6 +650,7 @@ wv?.addEventListener('message', e => {
       appendChatAi(m.speech);
       if (m.translation) appendChatTranslation(m.translation);
       break;
+    case 'lesson': updateLesson(m); break;
   }
 });
 
@@ -652,6 +790,93 @@ function updateBgmStatus(m) {
 function setTrackVolume(pct) {
   $('volTrack').value = pct;
   $('volTrackVal').textContent = pct + '%';
+}
+
+// === Lesson tab ===
+let _lastLessonSectionIdx = -1;
+function updateLesson(m) {
+  const badge = $('lessonBadge');
+  badge.textContent = m.state || 'idle';
+  badge.className = 'lesson-badge ' + (m.state || 'idle');
+
+  $('lessonId').textContent = m.lesson_id ? '#' + m.lesson_id : '';
+
+  // セクション進捗バー
+  const bar = $('lessonSectionBar');
+  const total = m.total_sections || 0;
+  const cur = (typeof m.section_index === 'number') ? m.section_index : -1;
+  if (total > 0) {
+    let cells = '';
+    for (let i = 0; i < total; i++) {
+      let cls = '';
+      if (i < cur) cls = 'done';
+      else if (i === cur) cls = 'current';
+      cells += `<div class="section-cell ${cls}"></div>`;
+    }
+    bar.innerHTML = cells;
+  } else {
+    bar.innerHTML = '';
+  }
+
+  // 進捗テキスト
+  const prog = $('lessonProgress');
+  if (total > 0) {
+    const dlgTotal = m.total_dialogues || 0;
+    const dlgCur = (typeof m.dialogue_index === 'number' && m.dialogue_index >= 0) ? m.dialogue_index + 1 : 0;
+    const secType = m.section_type ? ` [${m.section_type}]` : '';
+    prog.textContent = `Section ${cur + 1}/${total}${secType}  Dialogue ${dlgCur}/${dlgTotal}`;
+  } else {
+    prog.textContent = '';
+  }
+
+  // 教材テキスト
+  const dt = $('lessonDisplayText');
+  if (m.display_text) {
+    dt.textContent = m.display_text;
+    dt.style.display = '';
+  } else {
+    dt.style.display = 'none';
+  }
+
+  // 現在の発話
+  const speech = $('lessonCurrentSpeech');
+  if (m.current_content) {
+    $('lessonCurrentSpeaker').textContent = m.current_speaker || '';
+    $('lessonCurrentContent').textContent = m.current_content;
+    speech.style.display = '';
+  } else {
+    speech.style.display = 'none';
+  }
+
+  // ダイアログ一覧
+  const list = $('lessonDialogueList');
+  const dialogues = m.dialogues || [];
+  if (!total) {
+    list.innerHTML = '<div class="lesson-empty">授業が読み込まれていません</div>';
+  } else if (!dialogues.length) {
+    list.innerHTML = '<div class="lesson-empty">（このセクションにダイアログなし）</div>';
+  } else {
+    const dlgIdx = (typeof m.dialogue_index === 'number') ? m.dialogue_index : -1;
+    let html = '';
+    dialogues.forEach((d, i) => {
+      let cls = '';
+      if (dlgIdx >= 0 && i < dlgIdx) cls = 'done';
+      else if (i === dlgIdx) cls = 'current';
+      html += `<div class="lesson-dialogue ${cls}" data-idx="${i}">
+        <span class="dlg-speaker">${esc(d.speaker || '')}</span>${esc(d.content || '')}
+      </div>`;
+    });
+    list.innerHTML = html;
+
+    // 現在ダイアログにスクロール（セクションが変わったときや現在位置が変わったとき）
+    const currentEl = list.querySelector('.lesson-dialogue.current');
+    if (currentEl) {
+      currentEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else if (cur !== _lastLessonSectionIdx) {
+      list.scrollTop = 0;
+    }
+  }
+  _lastLessonSectionIdx = cur;
 }
 
 function setVolumes(v) {

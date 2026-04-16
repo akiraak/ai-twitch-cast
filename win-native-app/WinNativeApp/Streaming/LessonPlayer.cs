@@ -64,6 +64,8 @@ public class LessonPlayer
     public Action<string>? InjectJs { get; set; }
     /// <summary>全WebSocketクライアントにPush通知を送信する</summary>
     public Func<object, Task>? BroadcastEvent { get; set; }
+    /// <summary>コントロールパネルに授業進捗を通知する</summary>
+    public Action<object>? NotifyPanel { get; set; }
 
     // 状態（旧: 単一セクション）
     private SectionData? _section;
@@ -82,6 +84,7 @@ public class LessonPlayer
     private int _currentDialogueIndex = -1;
     private int _totalDialogues;
     private string _state = "idle"; // idle, loaded, playing, paused
+    private List<DialogueData>? _currentDialogues; // 現在再生中のダイアログ配列（main または answer）
 
     /// <summary>再生可能か（セクションがロード済みかつ再生中でない）</summary>
     public bool CanPlay => (_section != null || _sections != null) && !_playing;
@@ -140,6 +143,8 @@ public class LessonPlayer
         var totalDialogues = _sections.Sum(s => s.Dialogues.Count);
         Log.Information("[Lesson] Lesson loaded: id={LessonId} sections={Count} totalDialogues={Dialogues} paceScale={Pace}",
             _lessonId, _sections.Count, totalDialogues, _paceScale);
+
+        SendPanelUpdate();
     }
 
     /// <summary>ロード済みセクションの再生を開始する。完了またはキャンセルまでawaitする。</summary>
@@ -204,10 +209,12 @@ public class LessonPlayer
                 _cts.Token.ThrowIfCancellationRequested();
                 await WaitIfPausedAsync(_cts.Token);
                 _currentSectionIndex = i;
+                _currentDialogueIndex = -1;
 
                 Log.Information("[Lesson] Playing section {Index}/{Total}",
                     i + 1, _sections.Count);
 
+                SendPanelUpdate();
                 await PlaySectionInternalAsync(_sections[i], _cts.Token);
             }
         }
@@ -248,6 +255,9 @@ public class LessonPlayer
             _sections = null;
             _currentSectionIndex = -1;
             _currentDialogueIndex = -1;
+            _currentDialogues = null;
+
+            SendPanelUpdate();
         }
     }
 
@@ -261,6 +271,7 @@ public class LessonPlayer
         InjectJs?.Invoke("if(window.lesson)window.lesson.pause()");
         Log.Information("[Lesson] Paused at dialogue {Index}/{Total}",
             _currentDialogueIndex + 1, _totalDialogues);
+        SendPanelUpdate();
     }
 
     /// <summary>一時停止を解除する。</summary>
@@ -273,6 +284,7 @@ public class LessonPlayer
         InjectJs?.Invoke("if(window.lesson)window.lesson.resume()");
         _resumeTcs?.TrySetResult();
         Log.Information("[Lesson] Resumed");
+        SendPanelUpdate();
     }
 
     /// <summary>再生を停止する。</summary>
@@ -283,6 +295,8 @@ public class LessonPlayer
             _state = "idle";
             _section = null;
             _sections = null;
+            _currentDialogues = null;
+            SendPanelUpdate();
             return;
         }
 
@@ -355,6 +369,60 @@ public class LessonPlayer
         }
 
         return Math.Round(remaining, 1);
+    }
+
+    /// <summary>コントロールパネルに現在の授業進捗を送信する。</summary>
+    private void SendPanelUpdate()
+    {
+        if (NotifyPanel == null) return;
+
+        // 授業未ロード
+        if (_sections == null || _sections.Count == 0)
+        {
+            NotifyPanel(new
+            {
+                type = "lesson",
+                state = _state,
+                lesson_id = 0,
+                section_index = -1,
+                total_sections = 0,
+                section_type = (string?)null,
+                display_text = (string?)null,
+                dialogue_index = -1,
+                total_dialogues = 0,
+                dialogues = Array.Empty<object>(),
+                current_content = "",
+                current_speaker = "",
+            });
+            return;
+        }
+
+        var sectionIdx = Math.Max(0, Math.Min(_currentSectionIndex, _sections.Count - 1));
+        var section = _sections[sectionIdx];
+        var dialogues = _currentDialogues ?? section.Dialogues;
+        var currentDlg = (_currentDialogueIndex >= 0 && _currentDialogueIndex < dialogues.Count)
+            ? dialogues[_currentDialogueIndex] : null;
+
+        NotifyPanel(new
+        {
+            type = "lesson",
+            state = _state,
+            lesson_id = _lessonId,
+            section_index = _currentSectionIndex,
+            total_sections = _sections.Count,
+            section_type = section.SectionType,
+            display_text = section.DisplayText,
+            dialogue_index = _currentDialogueIndex,
+            total_dialogues = dialogues.Count,
+            dialogues = dialogues.Select(d => new
+            {
+                index = d.Index,
+                speaker = d.Speaker,
+                content = d.Content.Length > 80 ? d.Content[..80] + "…" : d.Content,
+            }).ToArray(),
+            current_content = currentDlg?.Content ?? "",
+            current_speaker = currentDlg?.Speaker ?? "",
+        });
     }
 
     // =====================================================
@@ -466,6 +534,7 @@ public class LessonPlayer
     private async Task PlayDialoguesAsync(List<DialogueData> dialogues, CancellationToken ct)
     {
         _totalDialogues = dialogues.Count;
+        _currentDialogues = dialogues;
 
         for (int i = 0; i < dialogues.Count; i++)
         {
@@ -478,6 +547,8 @@ public class LessonPlayer
             Log.Debug("[Lesson] Dialogue {I}/{Total}: speaker={Speaker} content=\"{Content}\"",
                 i + 1, dialogues.Count, dlg.Speaker,
                 dlg.Content.Length > 40 ? dlg.Content[..40] + "..." : dlg.Content);
+
+            SendPanelUpdate();
 
             // broadcast.htmlに表示指示
             var dlgJson = JsonSerializer.Serialize(new

@@ -4,7 +4,6 @@
 
 全セクションを最初にC#に渡し、サーバーはその後一切関与しない方式に変更。セクション単位の往復通信（load→play→complete待ち）を廃止し、C#が全セクションを自律再生する。
 
-- [ ] Phase C: コントロールパネル授業進捗表示（LessonPlayer NotifyPanel、control-panel.html Lessonタブ）
 - [ ] Phase D: 旧コード整理（lesson_section_load/play/complete廃止）
 
 ## 授業再生のクライアント主導型への移行（旧プラン） → [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
