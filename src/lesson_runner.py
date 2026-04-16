@@ -363,21 +363,43 @@ class LessonRunner:
         # 復旧開始インデックスを決定
         resume_index = saved_index
         if csharp_state:
-            cs_status = csharp_state.get("status", "no_lesson")
+            cs_status = csharp_state.get("status") or csharp_state.get("state", "no_lesson")
             if cs_status == "idle":
                 # C#はセクション再生完了 → 次のセクションから
                 resume_index = saved_index + 1
                 logger.info("[lesson restore] C# idle → section %d から再開", resume_index)
             elif cs_status == "playing":
-                # C#が再生中 → 完了を待ってから次のセクション
-                logger.info("[lesson restore] C# playing → 完了イベント待ち")
+                # C#が再生中 → 全セクション完了を待つ（新方式ではC#が単独で完走する）
+                logger.info("[lesson restore] C# playing → lesson_complete 待ち")
+                saved_total = playback.get("total_duration", 300)
                 try:
-                    from scripts.services.capture_client import get_lesson_section_complete_event
-                    evt = get_lesson_section_complete_event()
-                    evt.clear()
-                    await asyncio.wait_for(evt.wait(), timeout=300)
-                except asyncio.TimeoutError:
-                    logger.warning("[lesson restore] C#再生完了タイムアウト（300秒）")
+                    from scripts.services.capture_client import (
+                        get_lesson_complete_event,
+                        get_lesson_section_complete_event,
+                    )
+                    lesson_evt = get_lesson_complete_event()
+                    lesson_evt.clear()
+                    sec_evt = get_lesson_section_complete_event()
+                    sec_evt.clear()
+                    # どちらのイベントが来ても進む
+                    done, _pending = await asyncio.wait(
+                        [
+                            asyncio.create_task(lesson_evt.wait()),
+                            asyncio.create_task(sec_evt.wait()),
+                        ],
+                        timeout=saved_total * 1.5 + 60,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for t in _pending:
+                        t.cancel()
+                    if not done:
+                        logger.warning("[lesson restore] 完了イベントタイムアウト")
+                except Exception as e:
+                    logger.warning("[lesson restore] 完了待ち失敗: %s", e)
+                # 新方式: C#が単独で全完走する → 以降のセクションは不要
+                if lesson_evt.is_set():
+                    self._clear_playback_state()
+                    return False
                 resume_index = saved_index + 1
             else:
                 # no_lesson → 保存されたインデックスからやり直し
@@ -517,10 +539,14 @@ class LessonRunner:
         except Exception as e:
             logger.warning("[lesson] stop送信失敗: %s", e)
 
-        # 完了イベントをsetして待機中のタスクを解除
+        # 完了イベントをsetして待機中のタスクを解除（旧: section、新: lesson）
         try:
-            from scripts.services.capture_client import get_lesson_section_complete_event
+            from scripts.services.capture_client import (
+                get_lesson_complete_event,
+                get_lesson_section_complete_event,
+            )
             get_lesson_section_complete_event().set()
+            get_lesson_complete_event().set()
         except Exception:
             pass
 
@@ -543,21 +569,11 @@ class LessonRunner:
         await self._notify_status()
 
     async def _run_loop(self):
-        """セクションを順次再生する（C#がタイミング制御、Pythonはバンドル送信）"""
+        """全セクション一括バンドル生成→C#送信→lesson_complete 待機"""
         try:
-            while self._current_index < len(self._sections) and self._state != LessonState.IDLE:
-                # 一時停止中は待機（セクション間のpause対応）
-                await self._pause_event.wait()
-                if self._state == LessonState.IDLE:
-                    break
+            await self._send_all_and_play()
 
-                section = self._sections[self._current_index]
-                await self._prepare_and_send_section(section)
-                self._current_index += 1
-                await self._notify_status()
-                # セクション間の待ちはC#側で処理（wait_seconds × pace_scaleをバンドルに含めている）
-
-            # 全セクション完了
+            # 全セクション完了（stopでIDLEになっていない場合）
             if self._state != LessonState.IDLE:
                 logger.info("授業完了: lesson=%d", self._lesson_id)
                 self._state = LessonState.IDLE
@@ -578,6 +594,201 @@ class LessonRunner:
             self._state = LessonState.IDLE
             await self._hide_lesson_text()
             await self._notify_status()
+
+    async def _send_all_and_play(self):
+        """全セクションのバンドルを事前生成→一括送信→再生→完了待機"""
+        from scripts.services.capture_client import (
+            get_lesson_complete_event,
+            ws_request,
+        )
+
+        # 1. 全セクションのバンドルを事前生成（self._current_index から）
+        all_sections: list[dict] = []
+        total_duration = 0.0
+        pace_scale = self._get_pace_scale()
+        start_index = self._current_index
+
+        for i in range(start_index, len(self._sections)):
+            if self._state == LessonState.IDLE:
+                return  # stopが呼ばれた
+
+            # 一時停止中はここでも待機（セクション生成単位の中断点）
+            await self._pause_event.wait()
+            if self._state == LessonState.IDLE:
+                return
+
+            section = self._sections[i]
+            self._current_index = i
+            await self._notify_tts_progress(i, len(self._sections))
+
+            bundle = await self._build_section_bundle(section, i)
+            if bundle is None:
+                logger.warning("[lesson] セクション %d: バンドル生成失敗、スキップ", i)
+                continue
+            all_sections.append(bundle)
+            total_duration += self._calc_section_duration(bundle, pace_scale)
+            logger.info("[lesson] セクション %d/%d TTS生成完了 (duration=%.1fs)",
+                         i + 1, len(self._sections), total_duration)
+
+        if self._state == LessonState.IDLE:
+            return
+        if not all_sections:
+            logger.warning("[lesson] 送信可能なセクションがありません")
+            return
+
+        # 2. 一括送信
+        logger.info("[lesson] 全セクションをC#に送信: sections=%d, total_duration=%.1fs",
+                     len(all_sections), total_duration)
+        try:
+            load_result = await ws_request(
+                "lesson_load", timeout=30.0,
+                lesson_id=self._lesson_id,
+                total_sections=len(all_sections),
+                pace_scale=pace_scale,
+                sections=all_sections,
+            )
+            logger.info("[lesson]   lesson_load: %s", "ok" if load_result.get("ok") else load_result)
+        except Exception as e:
+            logger.error("[lesson] lesson_load 送信失敗: %s", e)
+            return
+
+        # 3. 再生開始（完了イベントはクリアしてから play を送る）
+        evt = get_lesson_complete_event()
+        evt.clear()
+
+        try:
+            play_result = await ws_request("lesson_play", timeout=5.0)
+            logger.info("[lesson]   lesson_play: %s", "ok" if play_result.get("ok") else play_result)
+        except Exception as e:
+            logger.error("[lesson] lesson_play 送信失敗: %s", e)
+            return
+
+        # DB永続化（total_duration も保存）
+        self._save_playback_state(total_duration=total_duration)
+
+        # 4. 授業全体の完了を待つ
+        await self._wait_lesson_complete(evt, total_duration)
+
+        # 5. DB保存: 授業全体のアバター発話
+        if self._episode_id:
+            for section in self._sections:
+                content = section.get("content", "")
+                emotion = section.get("emotion", "neutral")
+                section_type = section.get("section_type", "")
+                try:
+                    await asyncio.to_thread(
+                        db.save_avatar_comment, self._episode_id,
+                        "lesson", f"[授業:{section_type}]", content, emotion,
+                    )
+                except Exception as e:
+                    logger.warning("授業コメントDB保存失敗: %s", e)
+
+    async def _build_section_bundle(self, section: dict, section_index: int) -> dict | None:
+        """単一セクションのバンドル（lesson_load.sections[]に入れる辞書）を組み立てる"""
+        section_type = section["section_type"]
+        display_text = section.get("display_text", "")
+        order_index = section.get("order_index", section_index)
+
+        # display_properties をパース
+        display_props = self._parse_display_properties(section)
+
+        # dialogues を統一フォーマットで取得
+        dialogues, is_single_speaker = self._get_unified_dialogues(section)
+
+        # バンドル生成（TTS + lipsync + wav_b64）
+        dlg_bundle = await self._build_dialogue_bundle(dialogues, order_index, is_single_speaker)
+
+        if not dlg_bundle:
+            logger.warning("[lesson] セクション %d: dialogueバンドルが空", section_index)
+            return None
+
+        # questionセクション
+        question_data = None
+        if section_type == "question" and section.get("question"):
+            question_data = await self._build_question_data(section, order_index)
+
+        return {
+            "lesson_id": self._lesson_id,
+            "section_index": section_index,
+            "total_sections": len(self._sections),
+            "section_type": section_type,
+            "display_text": display_text,
+            "display_properties": display_props,
+            "dialogues": dlg_bundle,
+            "question": question_data,
+            "wait_seconds": section.get("wait_seconds", 2),
+        }
+
+    @staticmethod
+    def _calc_section_duration(section_bundle: dict, pace_scale: float) -> float:
+        """セクションバンドルの合計再生時間（秒）を算出する"""
+        total = sum(d.get("duration", 0) for d in section_bundle.get("dialogues", []))
+        q = section_bundle.get("question")
+        if q:
+            total += q.get("wait_seconds", 0) * pace_scale
+            total += sum(d.get("duration", 0) for d in q.get("answer_dialogues", []))
+        total += section_bundle.get("wait_seconds", 0) * pace_scale
+        return total
+
+    async def _wait_lesson_complete(self, evt: asyncio.Event, total_duration: float):
+        """lesson_complete を待つ。イベントロスト時はポーリングでC#状態を確認する。
+
+        - Phase 1: 音声再生時間+30秒をイベント待ち
+        - Phase 2: idle検知で完了扱い、最大 total_duration*1.5+60 秒まで
+        """
+        from scripts.services.capture_client import ws_request as _ws_request
+
+        phase1_timeout = total_duration + 30
+        max_timeout = total_duration * 1.5 + 60
+        poll_interval = 5.0
+
+        # Phase 1: 音声再生中は完了イベントだけを待つ
+        try:
+            await asyncio.wait_for(evt.wait(), timeout=phase1_timeout)
+            logger.info("[lesson] 授業完了イベント受信")
+            return
+        except asyncio.TimeoutError:
+            pass
+
+        # Phase 2: C# statusをポーリング
+        elapsed = phase1_timeout
+        while elapsed < max_timeout and self._state != LessonState.IDLE:
+            try:
+                status = await _ws_request("lesson_status", timeout=3.0)
+                cs_state = status.get("state", "unknown") if status else "unknown"
+                cs_sec = status.get("section_index", -1) if status else -1
+                cs_total = status.get("total_sections", 0) if status else 0
+                logger.info("[lesson]   C# status: state=%s, section=%d/%d",
+                             cs_state, cs_sec + 1, cs_total)
+
+                if cs_state == "idle":
+                    logger.info("[lesson]   C# idle検知 → 授業完了扱い（イベントロスト）")
+                    return
+            except Exception as e:
+                logger.warning("[lesson]   C# status取得失敗: %s", type(e).__name__)
+
+            wait_time = min(poll_interval, max_timeout - elapsed)
+            try:
+                await asyncio.wait_for(evt.wait(), timeout=wait_time)
+                return
+            except asyncio.TimeoutError:
+                elapsed += wait_time
+
+        logger.warning("[lesson] 授業完了タイムアウト (%.0f秒)", max_timeout)
+
+    async def _notify_tts_progress(self, current: int, total: int):
+        """TTS生成中の進捗を配信画面に通知する"""
+        if self._on_overlay:
+            await self._on_overlay({
+                "type": "lesson_status",
+                "state": self._state.value,
+                "lesson_id": self._lesson_id,
+                "lesson_name": self._lesson_name,
+                "current_index": current,
+                "total_sections": total,
+                "phase": "tts_generating",
+                "tts_progress": {"current": current + 1, "total": total},
+            })
 
     async def _prepare_and_send_section(self, section: dict):
         """セクションバンドルを生成してC#に送信し、完了イベントを待つ"""
@@ -956,8 +1167,11 @@ class LessonRunner:
                 ]
             await self._on_overlay(event)
 
-    def _save_playback_state(self):
-        """授業再生状態をDBに永続化する"""
+    def _save_playback_state(self, total_duration: float | None = None):
+        """授業再生状態をDBに永続化する
+
+        total_duration: 復旧時の lesson_complete 待機タイムアウト算出に使う
+        """
         data = {
             "lesson_id": self._lesson_id,
             "section_index": self._current_index,
@@ -967,6 +1181,8 @@ class LessonRunner:
             "version_number": self._version_number,
             "episode_id": self._episode_id,
         }
+        if total_duration is not None:
+            data["total_duration"] = total_duration
         db.set_setting(PLAYBACK_SETTING_KEY, _json.dumps(data))
 
     @staticmethod

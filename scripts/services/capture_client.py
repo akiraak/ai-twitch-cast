@@ -52,6 +52,8 @@ _pending_requests: dict[str, asyncio.Future] = {}
 _ws_reader_task = None
 _ws_connect_cooldown_until: float = 0  # 接続失敗後のクールダウン期限（monotonic）
 _lesson_section_complete_event: asyncio.Event | None = None
+_lesson_complete_event: asyncio.Event | None = None
+_lesson_complete_payload: dict | None = None
 
 
 def get_lesson_section_complete_event() -> asyncio.Event:
@@ -60,6 +62,19 @@ def get_lesson_section_complete_event() -> asyncio.Event:
     if _lesson_section_complete_event is None:
         _lesson_section_complete_event = asyncio.Event()
     return _lesson_section_complete_event
+
+
+def get_lesson_complete_event() -> asyncio.Event:
+    """授業全体完了イベントを取得する（LessonRunnerで使用）"""
+    global _lesson_complete_event
+    if _lesson_complete_event is None:
+        _lesson_complete_event = asyncio.Event()
+    return _lesson_complete_event
+
+
+def get_lesson_complete_payload() -> dict | None:
+    """直近の lesson_complete Push通知ペイロードを返す（reason/sections_played 等）"""
+    return _lesson_complete_payload
 
 
 async def ensure_capture_ws():
@@ -193,6 +208,11 @@ async def _read_capture_ws():
                 continue
             if data.get("type") == "lesson_section_complete":
                 get_lesson_section_complete_event().set()
+                continue
+            if data.get("type") == "lesson_complete":
+                global _lesson_complete_payload
+                _lesson_complete_payload = data
+                get_lesson_complete_event().set()
                 continue
             rid = data.get("requestId")
             if rid and rid in _pending_requests:

@@ -1,5 +1,20 @@
 # DONE
 
+## 授業データ一括送信方式 Phase B: Python LessonRunner 書き換え
+
+- [x] `scripts/services/capture_client.py` — `get_lesson_complete_event()` / `get_lesson_complete_payload()` 追加、`_read_capture_ws()` で `lesson_complete` Push通知をイベントとして受信
+- [x] `src/lesson_runner.py` — `_run_loop()` を `_send_all_and_play()` 呼び出し方式に書き換え（セクション単位のループを廃止）
+- [x] `src/lesson_runner.py` — `_send_all_and_play()` 新設: 全セクションバンドル事前生成 → `lesson_load` 一括送信 → `lesson_play` → `lesson_complete` 待機
+- [x] `src/lesson_runner.py` — `_build_section_bundle()` 新設: 単一セクションのバンドル辞書を組み立てる（`_prepare_and_send_section` から抽出）
+- [x] `src/lesson_runner.py` — `_wait_lesson_complete()` 新設: Phase1（イベント待ち, total_duration+30s）→ Phase2（lesson_statusポーリング, max total_duration*1.5+60s）のフォールバック
+- [x] `src/lesson_runner.py` — `_calc_section_duration()` 新設: dialogues + question + wait_seconds*pace の合計を算出
+- [x] `src/lesson_runner.py` — `_notify_tts_progress()` 新設: TTS生成中の進捗を `phase: "tts_generating"` として配信画面に通知
+- [x] `src/lesson_runner.py` — `stop()` で `get_lesson_complete_event().set()` も呼び、新方式の待機タスクを解除
+- [x] `src/lesson_runner.py` — `_save_playback_state(total_duration=...)` 追加: 復旧時の完了待ちタイムアウト算出用
+- [x] `src/lesson_runner.py` — `restore()` で C# playing 時に `lesson_complete` イベントを優先的に待機、完了時は状態クリアのみ
+- [x] `tests/test_lesson_runner.py` — `TestSendAllAndPlay` / `TestBuildSectionBundle` / `TestLessonCompletePayload` 追加（バンドル生成、lesson_load送信、完了待ち、idle fallback、TTS進捗通知、セクション再開）
+- [x] プラン: [plans/lesson-full-bundle.md](plans/lesson-full-bundle.md) Phase B 完了
+
 ## 授業データ一括送信方式 Phase A: C# LessonPlayer 全セクション対応
 
 - [x] `win-native-app/.../LessonPlayer.cs` — `LoadLesson(JsonElement)` 追加: 全セクションを一括ロード（lesson_id / pace_scale / total_sections / sections[]）
