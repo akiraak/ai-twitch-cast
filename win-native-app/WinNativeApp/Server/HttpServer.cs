@@ -467,8 +467,10 @@ public class HttpServer : IDisposable
                 "bgm_volume" => HandleWsBgmVolume(msg),
                 "se_play" => HandleWsSePlay(msg),
                 "tts_status" => HandleWsTtsStatus(),
-                "lesson_section_load" => HandleWsLessonLoad(msg),
-                "lesson_section_play" => HandleWsLessonPlay(),
+                "lesson_section_load" => HandleWsLessonSectionLoad(msg),
+                "lesson_section_play" => HandleWsLessonSectionPlay(),
+                "lesson_load" => HandleWsLessonLoad(msg),
+                "lesson_play" => HandleWsLessonPlay(),
                 "lesson_pause" => HandleWsLessonPause(),
                 "lesson_resume" => HandleWsLessonResume(),
                 "lesson_stop" => HandleWsLessonStop(),
@@ -669,7 +671,8 @@ public class HttpServer : IDisposable
     // 授業再生 (lesson_*) ハンドラー
     // =====================================================
 
-    private object HandleWsLessonLoad(JsonElement msg)
+    /// <summary>旧: 単一セクションロード（Phase D で削除予定）</summary>
+    private object HandleWsLessonSectionLoad(JsonElement msg)
     {
         if (LessonPlayer == null)
             return new { ok = false, error = "LessonPlayer not available" };
@@ -689,7 +692,8 @@ public class HttpServer : IDisposable
         }
     }
 
-    private object HandleWsLessonPlay()
+    /// <summary>旧: 単一セクション再生（Phase D で削除予定。完了はlesson_section_completeで通知）</summary>
+    private object HandleWsLessonSectionPlay()
     {
         if (LessonPlayer == null)
             return new { ok = false, error = "LessonPlayer not available" };
@@ -697,7 +701,45 @@ public class HttpServer : IDisposable
         if (!LessonPlayer.CanPlay)
             return new { ok = false, error = LessonPlayer.IsPlaying ? "Already playing" : "No section loaded" };
 
-        // バックグラウンドで再生開始（完了はlesson_section_completeイベントで通知）
+        _ = Task.Run(async () =>
+        {
+            try { await LessonPlayer.PlayAsync(); }
+            catch (Exception ex) { Log.Error(ex, "[Lesson] PlayAsync failed"); }
+        });
+
+        return new { ok = true };
+    }
+
+    /// <summary>新: 全セクション一括ロード</summary>
+    private object HandleWsLessonLoad(JsonElement msg)
+    {
+        if (LessonPlayer == null)
+            return new { ok = false, error = "LessonPlayer not available" };
+
+        if (!msg.TryGetProperty("sections", out var sections) || sections.ValueKind != JsonValueKind.Array)
+            return new { ok = false, error = "sections array is required" };
+
+        try
+        {
+            LessonPlayer.LoadLesson(msg);
+            return new { ok = true };
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[WebSocket] lesson_load failed");
+            return new { ok = false, error = ex.Message };
+        }
+    }
+
+    /// <summary>新: 全セクション順次再生（完了はlesson_completeで通知）</summary>
+    private object HandleWsLessonPlay()
+    {
+        if (LessonPlayer == null)
+            return new { ok = false, error = "LessonPlayer not available" };
+
+        if (!LessonPlayer.CanPlay)
+            return new { ok = false, error = LessonPlayer.IsPlaying ? "Already playing" : "No lesson loaded" };
+
         _ = Task.Run(async () =>
         {
             try { await LessonPlayer.PlayAsync(); }

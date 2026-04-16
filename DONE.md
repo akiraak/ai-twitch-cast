@@ -1,5 +1,19 @@
 # DONE
 
+## 授業データ一括送信方式 Phase A: C# LessonPlayer 全セクション対応
+
+- [x] `win-native-app/.../LessonPlayer.cs` — `LoadLesson(JsonElement)` 追加: 全セクションを一括ロード（lesson_id / pace_scale / total_sections / sections[]）
+- [x] `win-native-app/.../LessonPlayer.cs` — `PlayAllSectionsAsync()` 追加: 全セクション順次再生＋ `lesson_complete` Push通知（reason: completed/stopped/error、sections_played付き）
+- [x] `win-native-app/.../LessonPlayer.cs` — `PlaySectionInternalAsync()` 追加: 一括モード用の内部再生メソッド（セクション完了通知を送らず、状態クリアしない）
+- [x] `win-native-app/.../LessonPlayer.cs` — `PlayAsync()` を分岐: `_sections != null` なら新経路、そうでなければ旧 `PlaySectionAsync` 経路
+- [x] `win-native-app/.../LessonPlayer.cs` — `GetStatus()` に `remaining_duration` と `section_index` / `total_sections` を追加（一括モード時）
+- [x] `win-native-app/.../LessonPlayer.cs` — `CalcRemainingDuration()` 追加: セクション/ダイアログ/question待機/wait_seconds を合算
+- [x] `win-native-app/.../LessonPlayer.cs` — `Stop()` で `_sections` もクリア、`CanPlay` が新旧両モード対応
+- [x] `win-native-app/.../HttpServer.cs` — `lesson_load` / `lesson_play` アクションをWebSocketディスパッチに追加
+- [x] `win-native-app/.../HttpServer.cs` — `HandleWsLessonLoad` / `HandleWsLessonPlay` 新設: `LoadLesson` / `PlayAsync`（全セクション版）に接続
+- [x] `win-native-app/.../HttpServer.cs` — 旧ハンドラを `HandleWsLessonSectionLoad` / `HandleWsLessonSectionPlay` にリネーム（Phase D 削除予定）
+- [x] プラン: [plans/lesson-full-bundle.md](plans/lesson-full-bundle.md)
+
 ## Phase 5: バグ修正 — 授業セクション完了イベントロスト対策
 
 - [x] `src/lesson_runner.py` — `_wait_section_complete()` 新設: 完了イベント待ちをC# lesson_statusポーリング付きに変更。音声再生時間経過後にC#がidle（再生完了）なら即座に次セクションへ（イベントロスト時のfallback）

@@ -65,20 +65,26 @@ public class LessonPlayer
     /// <summary>全WebSocketクライアントにPush通知を送信する</summary>
     public Func<object, Task>? BroadcastEvent { get; set; }
 
-    // 状態
+    // 状態（旧: 単一セクション）
     private SectionData? _section;
+    // 状態（新: 全セクション一括）
+    private List<SectionData>? _sections;
+    private int _lessonId;
+    private double _paceScale = 1.0;
+
     private volatile bool _playing;
     private volatile bool _paused;
     private CancellationTokenSource? _cts;
     private TaskCompletionSource? _resumeTcs;
 
     // ステータストラッキング
+    private int _currentSectionIndex = -1;
     private int _currentDialogueIndex = -1;
     private int _totalDialogues;
     private string _state = "idle"; // idle, loaded, playing, paused
 
     /// <summary>再生可能か（セクションがロード済みかつ再生中でない）</summary>
-    public bool CanPlay => _section != null && !_playing;
+    public bool CanPlay => (_section != null || _sections != null) && !_playing;
     /// <summary>再生中か</summary>
     public bool IsPlaying => _playing;
 
@@ -101,9 +107,52 @@ public class LessonPlayer
             _section.LessonId, _section.SectionIndex, _section.TotalSections, _section.Dialogues.Count);
     }
 
+    /// <summary>全セクションを一括ロードする。再生中の場合は停止してからロードする。</summary>
+    public void LoadLesson(JsonElement json)
+    {
+        if (_playing)
+            Stop();
+
+        _lessonId = json.TryGetProperty("lesson_id", out var lid) ? lid.GetInt32() : 0;
+        _paceScale = json.TryGetProperty("pace_scale", out var ps) ? ps.GetDouble() : 1.0;
+        var totalSections = json.TryGetProperty("total_sections", out var ts) ? ts.GetInt32() : 0;
+
+        _sections = new List<SectionData>();
+
+        if (json.TryGetProperty("sections", out var sectionsEl) && sectionsEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var s in sectionsEl.EnumerateArray())
+            {
+                var section = ParseSectionData(s);
+                // lesson_load のメタデータで上書き
+                section.LessonId = _lessonId;
+                section.PaceScale = _paceScale;
+                section.TotalSections = totalSections;
+                _sections.Add(section);
+            }
+        }
+
+        _section = null; // 旧方式のデータをクリア
+        _state = "loaded";
+        _currentSectionIndex = -1;
+        _currentDialogueIndex = -1;
+
+        var totalDialogues = _sections.Sum(s => s.Dialogues.Count);
+        Log.Information("[Lesson] Lesson loaded: id={LessonId} sections={Count} totalDialogues={Dialogues} paceScale={Pace}",
+            _lessonId, _sections.Count, totalDialogues, _paceScale);
+    }
+
     /// <summary>ロード済みセクションの再生を開始する。完了またはキャンセルまでawaitする。</summary>
     public async Task PlayAsync()
     {
+        // 全セクション一括モード
+        if (_sections != null)
+        {
+            await PlayAllSectionsAsync();
+            return;
+        }
+
+        // 旧: 単一セクションモード（Phase D で削除予定）
         if (_section == null) throw new InvalidOperationException("No section loaded");
         if (_playing) throw new InvalidOperationException("Already playing");
 
@@ -131,6 +180,74 @@ public class LessonPlayer
         {
             _playing = false;
             _cts = null;  // GCに任せる（Dispose競合回避）
+        }
+    }
+
+    /// <summary>全セクションを順次再生し、完了時にlesson_completeを送信する。</summary>
+    private async Task PlayAllSectionsAsync()
+    {
+        if (_sections == null || _sections.Count == 0)
+            throw new InvalidOperationException("No lesson loaded");
+        if (_playing) throw new InvalidOperationException("Already playing");
+
+        _playing = true;
+        _paused = false;
+        _state = "playing";
+        _cts = new CancellationTokenSource();
+        _currentSectionIndex = 0;
+        string reason = "completed";
+
+        try
+        {
+            for (int i = 0; i < _sections.Count; i++)
+            {
+                _cts.Token.ThrowIfCancellationRequested();
+                await WaitIfPausedAsync(_cts.Token);
+                _currentSectionIndex = i;
+
+                Log.Information("[Lesson] Playing section {Index}/{Total}",
+                    i + 1, _sections.Count);
+
+                await PlaySectionInternalAsync(_sections[i], _cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            reason = "stopped";
+            Log.Information("[Lesson] Lesson playback cancelled at section {Index}/{Total}",
+                _currentSectionIndex + 1, _sections.Count);
+        }
+        catch (Exception ex)
+        {
+            reason = "error";
+            Log.Error(ex, "[Lesson] Lesson playback error at section {Index}/{Total}",
+                _currentSectionIndex + 1, _sections.Count);
+        }
+        finally
+        {
+            _playing = false;
+            _state = "idle";
+            _cts = null;
+
+            // 授業全体の完了通知
+            if (BroadcastEvent != null)
+            {
+                await BroadcastEvent(new
+                {
+                    type = "lesson_complete",
+                    lesson_id = _lessonId,
+                    sections_played = _currentSectionIndex + (reason == "completed" ? 1 : 0),
+                    reason,
+                });
+            }
+
+            var sectionsPlayed = _currentSectionIndex + (reason == "completed" ? 1 : 0);
+            Log.Information("[Lesson] Lesson {Id} finished: reason={Reason} sections_played={Played}/{Total}",
+                _lessonId, reason, sectionsPlayed, _sections?.Count ?? 0);
+
+            _sections = null;
+            _currentSectionIndex = -1;
+            _currentDialogueIndex = -1;
         }
     }
 
@@ -165,6 +282,7 @@ public class LessonPlayer
         {
             _state = "idle";
             _section = null;
+            _sections = null;
             return;
         }
 
@@ -182,6 +300,23 @@ public class LessonPlayer
     /// <summary>現在の再生状態を返す。</summary>
     public object GetStatus()
     {
+        // 全セクション一括モード
+        if (_sections != null)
+        {
+            return new
+            {
+                ok = true,
+                state = _state,
+                lesson_id = _lessonId,
+                section_index = _currentSectionIndex,
+                total_sections = _sections.Count,
+                dialogue_index = _currentDialogueIndex,
+                total_dialogues = _totalDialogues,
+                remaining_duration = CalcRemainingDuration(),
+            };
+        }
+
+        // 旧: 単一セクションモード
         return new
         {
             ok = true,
@@ -193,10 +328,86 @@ public class LessonPlayer
         };
     }
 
+    /// <summary>残り再生時間（秒）を概算する。</summary>
+    private double CalcRemainingDuration()
+    {
+        if (_sections == null || _currentSectionIndex < 0) return 0;
+
+        double remaining = 0;
+        for (int i = _currentSectionIndex; i < _sections.Count; i++)
+        {
+            var sec = _sections[i];
+            var dialogues = (i == _currentSectionIndex && _currentDialogueIndex >= 0)
+                ? sec.Dialogues.Skip(_currentDialogueIndex)
+                : sec.Dialogues;
+
+            foreach (var dlg in dialogues)
+                remaining += dlg.Duration;
+
+            if (sec.Question != null)
+            {
+                remaining += sec.Question.WaitSeconds * sec.PaceScale;
+                foreach (var dlg in sec.Question.AnswerDialogues)
+                    remaining += dlg.Duration;
+            }
+
+            remaining += sec.WaitSeconds * sec.PaceScale;
+        }
+
+        return Math.Round(remaining, 1);
+    }
+
     // =====================================================
     // 再生ロジック
     // =====================================================
 
+    /// <summary>
+    /// 全セクション一括再生用の内部メソッド。
+    /// lesson_section_complete は送信せず、状態クリアも行わない（PlayAllSectionsAsync が管理）。
+    /// </summary>
+    private async Task PlaySectionInternalAsync(SectionData section, CancellationToken ct)
+    {
+        Log.Information("[Lesson] Playing section {Index}/{Total}: type={Type}, dialogues={Count}",
+            section.SectionIndex + 1, section.TotalSections, section.SectionType, section.Dialogues.Count);
+
+        // 教材テキスト表示
+        if (!string.IsNullOrEmpty(section.DisplayText))
+        {
+            var textEscaped = JsonSerializer.Serialize(section.DisplayText);
+            var propsJson = section.DisplayProperties.HasValue
+                ? JsonSerializer.Serialize(section.DisplayProperties.Value)
+                : "null";
+            InjectJs?.Invoke($"if(window.lesson)window.lesson.showText({textEscaped},{propsJson})");
+        }
+
+        // メインdialogue再生
+        await PlayDialoguesAsync(section.Dialogues, ct);
+
+        // questionセクション: 待機→回答再生
+        if (section.SectionType == "question" && section.Question != null)
+        {
+            var waitMs = (int)(section.Question.WaitSeconds * section.PaceScale * 1000);
+            Log.Information("[Lesson] Question wait: {Ms}ms", waitMs);
+            await PauseAwareDelayAsync(waitMs, ct);
+
+            await PlayDialoguesAsync(section.Question.AnswerDialogues, ct);
+        }
+
+        // 教材テキスト非表示
+        InjectJs?.Invoke("if(window.lesson)window.lesson.hideText()");
+
+        // セクション間の間
+        if (section.WaitSeconds > 0)
+        {
+            var gapMs = (int)(section.WaitSeconds * section.PaceScale * 1000);
+            await PauseAwareDelayAsync(gapMs, ct);
+        }
+
+        _currentDialogueIndex = -1;
+        Log.Information("[Lesson] Section {Index} complete", section.SectionIndex);
+    }
+
+    /// <summary>旧: 単一セクション再生（lesson_section_complete を送信）。Phase D で削除予定。</summary>
     private async Task PlaySectionAsync(SectionData section, CancellationToken ct)
     {
         Log.Information("[Lesson] Playing section {Index}: type={Type}, dialogues={Count}",
