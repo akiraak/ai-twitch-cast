@@ -1,5 +1,12 @@
 # DONE
 
+## 授業開始ボタン: TTSキャッシュ未完了時は開始不可
+
+- [x] `static/js/admin/teacher.js` — STEP 4 レンダリングで全セクションのTTSキャッシュ有無を判定、未生成があれば「授業開始」ボタンを灰色・disabled にして「TTS事前生成が必要 (N/M)」を表示、注意メッセージを赤字で表示
+- [x] 方針転換: 進捗表示よりもボタンゲートで防止する方がシンプルかつ状態が明確（実装途中だった phase/tts_progress ポーリングはrevert）
+- [x] 全テストpass
+- [x] プラン: [plans/lesson-start-prepare-progress.md](plans/lesson-start-prepare-progress.md) ステータスを「完了」に更新
+
 ## 授業再生ハング修正: PlaybackStopped未発火対応（多層防御） — 実機検証完了
 
 - [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `PlayAudio` シグネチャを `Func<byte[], float, double, CancellationToken, Task>?` に変更（duration と ct を追加）

@@ -424,21 +424,32 @@ async function buildLessonItem(lessonId) {
   const isRunning = runningThisLesson && lState === 'running';
   const isPaused = runningThisLesson && lState === 'paused';
   const isActive = isRunning || isPaused;
+  // TTSキャッシュ完備チェック（未生成セクションがあれば開始ボタンを無効化）
+  const cachedCount = hasSections
+    ? sections.filter(s => (ttsCacheMap[s.order_index] || []).length > 0).length
+    : 0;
+  const allCached = hasSections && cachedCount === sections.length;
   const step4 = document.createElement('div');
   step4.className = 'lesson-step' + (isActive ? ' step-done' : hasSections ? ' step-active' : ' step-disabled');
   const step4Body = document.createElement('div');
   step4Body.className = 'lesson-step-body';
   const progressInfo = isActive ? `${statusRes.status.current_index + 1} / ${statusRes.status.total_sections} セクション` : '';
+  const startDisabled = !allCached && !isActive;
+  const startBtnLabel = startDisabled
+    ? `TTS事前生成が必要 (${cachedCount} / ${sections.length})`
+    : `${lang === 'en' ? 'Start Lesson' : '授業開始'} (v${currentVersion})`;
+  const startBtnBg = startDisabled ? '#9e9e9e' : '#2e7d32';
+  const startBtnCursor = startDisabled ? 'not-allowed' : 'pointer';
   step4Body.innerHTML = `<div class="lesson-step-title">授業再生${isActive ? '（実行中）' : ''}</div>
     <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-      <button onclick="startLesson(${lessonId}, '${lang}', ${currentVersion})" class="btn-lesson-start" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? ' display:none;' : ''}">${lang === 'en' ? 'Start Lesson' : '授業開始'} (v${currentVersion})</button>
+      <button onclick="startLesson(${lessonId}, '${lang}', ${currentVersion})" class="btn-lesson-start" ${startDisabled ? 'disabled' : ''} style="padding:5px 14px; background:${startBtnBg}; color:#fff; border:none; border-radius:4px; cursor:${startBtnCursor}; font-size:0.8rem;${isActive ? ' display:none;' : ''}">${startBtnLabel}</button>
       <button onclick="pauseLesson()" class="btn-lesson-pause" style="padding:5px 14px; background:#f57f17; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isRunning ? '' : ' display:none;'}">一時停止</button>
       <button onclick="resumeLesson()" class="btn-lesson-resume" style="padding:5px 14px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isPaused ? '' : ' display:none;'}">再開</button>
       <button onclick="stopLesson()" class="btn-lesson-stop" style="padding:5px 14px; background:#c62828; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;${isActive ? '' : ' display:none;'}">終了</button>
       <span class="lesson-state" style="font-size:0.8rem; color:#8a7a9a;">${isRunning ? '再生中' : isPaused ? '一時停止中' : ''}</span>
       <button onclick="window.open('/broadcast', '_blank', 'width=1920,height=1080')" style="padding:5px 14px; background:#6a1b9a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">配信プレビュー</button>
     </div>
-    <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:#8a7a9a;">${progressInfo}</div>`;
+    <div class="lesson-progress" style="margin-top:4px; font-size:0.75rem; color:${startDisabled ? '#c62828' : '#8a7a9a'};">${startDisabled ? 'TTS事前生成が未完了です。先に「TTS事前生成」ボタンで音声を生成してください。' : progressInfo}</div>`;
 
   step4.innerHTML = '<div class="lesson-step-num">4</div>';
   step4.appendChild(step4Body);
