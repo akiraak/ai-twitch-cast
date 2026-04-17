@@ -840,7 +840,7 @@ public class MainForm : Form
 
         // 授業再生エンジン初期化
         _lessonPlayer = new LessonPlayer();
-        _lessonPlayer.PlayAudio = (wavData, _) => PlayLessonAudioAsync(wavData, EffectiveTtsVolume());
+        _lessonPlayer.PlayAudio = (wavData, _, duration, ct) => PlayLessonAudioAsync(wavData, EffectiveTtsVolume(), duration, ct);
         _lessonPlayer.StopAudio = () => { try { _lessonWaveOut?.Stop(); } catch { } };
         _lessonPlayer.PauseAudio = () => { try { _lessonWaveOut?.Pause(); } catch { } };
         _lessonPlayer.ResumeAudio = () => { try { _lessonWaveOut?.Play(); } catch { } };
@@ -1356,10 +1356,11 @@ public class MainForm : Form
     }
 
     /// <summary>
-    /// 授業用WAVをローカルスピーカーで再生する。PlaybackStopped時にTaskが完了する。
+    /// 授業用WAVをローカルスピーカーで再生する。PlaybackStopped または duration ベースの
+    /// フォールバックタイムアウトで Task が完了する（多層防御 — 詳細は plans/lesson-playback-stopped-hang.md）。
     /// コメントTTSとは独立した音声チャンネルを使用。
     /// </summary>
-    private Task PlayLessonAudioAsync(byte[] wavData, float volume)
+    private Task PlayLessonAudioAsync(byte[] wavData, float volume, double duration, CancellationToken ct)
     {
         var tcs = new TaskCompletionSource();
 
@@ -1388,31 +1389,59 @@ public class MainForm : Form
             _lessonChannel = channel;
             _lessonMeter = meter;
 
-            var disposed = false;
+            int completed = 0;  // 0=未完了, 1=完了処理開始済み（CompareExchangeで原子化）
+            var playStart = DateTime.UtcNow;
+
             waveOut.PlaybackStopped += (_, _) =>
             {
-                if (disposed) return;
-                disposed = true;
-                if (_lessonWaveOut == waveOut)
+                if (Interlocked.CompareExchange(ref completed, 1, 0) != 0) return;
+                var elapsed = (DateTime.UtcNow - playStart).TotalSeconds;
+                Log.Debug("[Lesson] PlaybackStopped fired after {Elapsed:F2}s (duration={D:F2}s, state={S})",
+                    elapsed, duration, waveOut.PlaybackState);
+                tcs.TrySetResult();  // (1) await を先に解放
+                Task.Run(() =>        // (2) Dispose は別スレッド（再生スレッドからの自己デッドロック回避）
                 {
-                    _lessonWaveOut = null;
-                    _lessonChannel = null;
-                    _lessonMeter = null;
-                }
-                try { waveOut.Dispose(); } catch { }
-                try { reader.Dispose(); } catch { }
-                try { ms.Dispose(); } catch { }
-                tcs.TrySetResult();
+                    if (_lessonWaveOut == waveOut)
+                    {
+                        _lessonWaveOut = null;
+                        _lessonChannel = null;
+                        _lessonMeter = null;
+                    }
+                    try { waveOut.Dispose(); } catch { }
+                    try { reader.Dispose(); } catch { }
+                    try { ms.Dispose(); } catch { }
+                });
             };
 
             waveOut.Play();
-            Log.Debug("[Lesson] Audio playback started ({Size} bytes, vol={Vol:F2})", wavData.Length, volume);
+            Log.Debug("[Lesson] Audio playback started ({Size} bytes, vol={Vol:F2}, duration={D:F2}s)",
+                wavData.Length, volume, duration);
 
             // 配信中: PCMリサンプル → FFmpegミキサー（TTS同様に処理）
             if (_ffmpeg is { IsRunning: true })
             {
                 var pcm = TtsDecoder.DecodeWav(wavData, 1.0f);
                 _ffmpeg.WriteTtsData(pcm);
+            }
+
+            // フォールバック: duration + 1.5秒 経過しても PlaybackStopped が来なければ強制完了
+            // 仮説2（PlaybackStopped未発火）への保険。Stop時は ct でキャンセルされる
+            if (duration > 0)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(duration + 1.5), ct);
+                    }
+                    catch (OperationCanceledException) { return; }
+                    if (Interlocked.CompareExchange(ref completed, 1, 0) != 0) return;
+                    var elapsed = (DateTime.UtcNow - playStart).TotalSeconds;
+                    Log.Warning("[Lesson] PlaybackStopped未発火のためタイムアウトで次へ (elapsed={E:F2}s, duration={D:F2}s, state={S})",
+                        elapsed, duration, waveOut.PlaybackState);
+                    tcs.TrySetResult();
+                    // ここでは Dispose しない — 次の PlayLessonAudioAsync 冒頭の oldWaveOut.Stop/Dispose に任せる
+                });
             }
         }
         catch (Exception ex)

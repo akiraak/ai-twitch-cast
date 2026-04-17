@@ -3,8 +3,7 @@
 ## 授業再生のクライアント主導型への移行（旧プラン） → [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
 
 - [>] Phase 1-4: 実装済み（ビルド・動作確認待ち）
-- [>] Phase 5: バグ修正
-    - [ ] 最初のセリフしか読まれない問題 → PlaybackStopped未発火が原因と判明 [plans/lesson-playback-stopped-hang.md](plans/lesson-playback-stopped-hang.md)
+- [>] Phase 5: バグ修正（PlaybackStopped未発火問題は実装済み・動作確認待ち）
 
 ## TTS完了待ちの過剰遅延改善（コメント応答用） → [plans/tts-wait-excess-delay.md](plans/tts-wait-excess-delay.md)
 

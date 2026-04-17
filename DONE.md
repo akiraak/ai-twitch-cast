@@ -1,5 +1,18 @@
 # DONE
 
+## 授業再生ハング修正: PlaybackStopped未発火対応（多層防御）
+
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `PlayAudio` シグネチャを `Func<byte[], float, double, CancellationToken, Task>?` に変更（duration と ct を追加）
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `PlayDialoguesAsync` 内の呼び出しを `await PlayAudio(dlg.WavData, 1.0f, dlg.Duration, ct)` に更新
+- [x] `win-native-app/.../MainForm.cs` — `PlayLessonAudioAsync` に `double duration, CancellationToken ct` 引数追加
+- [x] `win-native-app/.../MainForm.cs` — `PlaybackStopped` ハンドラで `Interlocked.CompareExchange` による原子的完了判定 + `tcs.TrySetResult()` を `Dispose` より先に実行
+- [x] `win-native-app/.../MainForm.cs` — `Dispose` 一式は `Task.Run` で別スレッドに逃がし（再生スレッドからの自己デッドロック回避）
+- [x] `win-native-app/.../MainForm.cs` — フォールバック `Task.Run(async () => Task.Delay(duration + 1.5s, ct))` を追加（PlaybackStopped未発火時の保険）
+- [x] `win-native-app/.../MainForm.cs` — PlaybackStopped発火時とフォールバック発火時の経過時間・PlaybackStateをログ出力（仮説1/2の切り分け用）
+- [x] `win-native-app/.../MainForm.cs` — `_lessonPlayer.PlayAudio` ラムダを `(wavData, _, duration, ct) => PlayLessonAudioAsync(...)` に更新
+- [x] テスト: 全861テストpass
+- [x] プラン: [plans/lesson-playback-stopped-hang.md](plans/lesson-playback-stopped-hang.md) ステータスを「実装完了 — Windows実機での動作確認待ち」に更新
+
 ## 授業データ一括送信方式 Phase D: 旧コード整理
 
 - [x] `win-native-app/.../HttpServer.cs` — `lesson_section_load` / `lesson_section_play` ディスパッチと `HandleWsLessonSectionLoad` / `HandleWsLessonSectionPlay` を削除

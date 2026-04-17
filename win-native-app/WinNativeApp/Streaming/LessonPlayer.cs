@@ -52,8 +52,9 @@ public class SectionData
 public class LessonPlayer
 {
     // コールバック（MainFormが設定）
-    /// <summary>WAV音声を再生し、PlaybackStopped時にTaskが完了する</summary>
-    public Func<byte[], float, Task>? PlayAudio { get; set; }
+    /// <summary>WAV音声を再生し、PlaybackStopped または duration ベースのフォールバックで Task が完了する。
+    /// duration: 音声長さ（秒、フォールバックタイマーに使用）。ct: 停止時にフォールバックも止める</summary>
+    public Func<byte[], float, double, CancellationToken, Task>? PlayAudio { get; set; }
     /// <summary>現在の音声再生を停止する</summary>
     public Action? StopAudio { get; set; }
     /// <summary>現在の音声再生を一時停止する</summary>
@@ -442,10 +443,10 @@ public class LessonPlayer
             });
             InjectJs?.Invoke($"if(window.lesson)window.lesson.startDialogue({dlgJson})");
 
-            // 音声再生 → PlaybackStopped待ち
+            // 音声再生 → PlaybackStopped待ち（または duration ベースのフォールバック）
             if (PlayAudio != null && dlg.WavData is { Length: > 0 })
             {
-                await PlayAudio(dlg.WavData, 1.0f);
+                await PlayAudio(dlg.WavData, 1.0f, dlg.Duration, ct);
             }
             else if (dlg.Duration > 0)
             {
