@@ -84,6 +84,7 @@ public class LessonPlayer
     private int _totalDialogues;
     private string _state = "idle"; // idle, loaded, playing, paused
     private List<DialogueData>? _currentDialogues; // 現在再生中のダイアログ配列（main または answer）
+    private string _currentKind = "main"; // 現在再生中の種別（"main" | "answer"）
 
     /// <summary>再生可能か（授業がロード済みかつ再生中でない）</summary>
     public bool CanPlay => _sections != null && !_playing;
@@ -122,11 +123,13 @@ public class LessonPlayer
         _state = "loaded";
         _currentSectionIndex = -1;
         _currentDialogueIndex = -1;
+        _currentKind = "main";
 
         var totalDialogues = _sections.Sum(s => s.Dialogues.Count);
         Log.Information("[Lesson] Lesson loaded: id={LessonId} sections={Count} totalDialogues={Dialogues} paceScale={Pace}",
             _lessonId, _sections.Count, totalDialogues, _paceScale);
 
+        SendOutlineToPanel();
         SendPanelUpdate();
         BroadcastOutline();
     }
@@ -174,6 +177,44 @@ public class LessonPlayer
 
         var json = JsonSerializer.Serialize(outline);
         InjectJs($"if(window.lesson&&window.lesson.setOutline)window.lesson.setOutline({json})");
+    }
+
+    /// <summary>コントロールパネルに全セクションの軽量outlineを送信する（WAV/lipsync除く）。LoadLesson時に1回発火。</summary>
+    private void SendOutlineToPanel()
+    {
+        if (_sections == null || NotifyPanel == null) return;
+
+        NotifyPanel(new
+        {
+            type = "lesson_outline",
+            lesson_id = _lessonId,
+            total_sections = _sections.Count,
+            sections = _sections.Select(s => new
+            {
+                section_index = s.SectionIndex,
+                section_type = s.SectionType,
+                display_text = s.DisplayText,
+                dialogues = s.Dialogues.Select(d => new
+                {
+                    index = d.Index,
+                    kind = "main",
+                    speaker = d.Speaker,
+                    content = d.Content,
+                    emotion = d.Emotion,
+                }).ToArray(),
+                question = s.Question == null ? null : (object)new
+                {
+                    answer_dialogues = s.Question.AnswerDialogues.Select(d => new
+                    {
+                        index = d.Index,
+                        kind = "answer",
+                        speaker = d.Speaker,
+                        content = d.Content,
+                        emotion = d.Emotion,
+                    }).ToArray(),
+                },
+            }).ToArray(),
+        });
     }
 
     /// <summary>ロード済み授業の再生を開始する。完了またはキャンセルまでawaitする。</summary>
@@ -247,6 +288,7 @@ public class LessonPlayer
             _currentSectionIndex = -1;
             _currentDialogueIndex = -1;
             _currentDialogues = null;
+            _currentKind = "main";
 
             SendPanelUpdate();
         }
@@ -375,12 +417,9 @@ public class LessonPlayer
                 section_index = -1,
                 total_sections = 0,
                 section_type = (string?)null,
-                display_text = (string?)null,
                 dialogue_index = -1,
                 total_dialogues = 0,
-                dialogues = Array.Empty<object>(),
-                current_content = "",
-                current_speaker = "",
+                kind = "main",
             });
             return;
         }
@@ -388,8 +427,6 @@ public class LessonPlayer
         var sectionIdx = Math.Max(0, Math.Min(_currentSectionIndex, _sections.Count - 1));
         var section = _sections[sectionIdx];
         var dialogues = _currentDialogues ?? section.Dialogues;
-        var currentDlg = (_currentDialogueIndex >= 0 && _currentDialogueIndex < dialogues.Count)
-            ? dialogues[_currentDialogueIndex] : null;
 
         NotifyPanel(new
         {
@@ -399,17 +436,9 @@ public class LessonPlayer
             section_index = _currentSectionIndex,
             total_sections = _sections.Count,
             section_type = section.SectionType,
-            display_text = section.DisplayText,
             dialogue_index = _currentDialogueIndex,
             total_dialogues = dialogues.Count,
-            dialogues = dialogues.Select(d => new
-            {
-                index = d.Index,
-                speaker = d.Speaker,
-                content = d.Content.Length > 80 ? d.Content[..80] + "…" : d.Content,
-            }).ToArray(),
-            current_content = currentDlg?.Content ?? "",
-            current_speaker = currentDlg?.Speaker ?? "",
+            kind = _currentKind,
         });
     }
 
@@ -464,6 +493,7 @@ public class LessonPlayer
     {
         _totalDialogues = dialogues.Count;
         _currentDialogues = dialogues;
+        _currentKind = kind;
 
         for (int i = 0; i < dialogues.Count; i++)
         {

@@ -358,89 +358,106 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
 }
 .lesson-id { font-size: 11px; color: var(--text-dim); }
 
-.section-bar {
+/* === 授業タイムライン（broadcast の lesson-dialogues-panel と同等、px 単位） === */
+#lessonDialoguesTabs {
   display: flex;
-  gap: 2px;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 4px;
   margin-bottom: 6px;
-  height: 8px;
+  border-bottom: 1px solid rgba(124, 77, 255, 0.25);
 }
-.section-cell {
-  flex: 1;
-  background: var(--bg-input);
-  border-radius: 2px;
-  min-width: 4px;
+#lessonDialoguesTabs::-webkit-scrollbar { display: none; }
+.ld-tab {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 3px 8px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(124, 77, 255, 0.25);
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
-.section-cell.done { background: #2d6a4f; }
-.section-cell.current { background: var(--accent); box-shadow: 0 0 4px var(--accent); }
-
-.lesson-display-text {
-  background: var(--bg-section);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 6px 8px;
-  font-size: 12px;
-  color: var(--text);
-  margin-bottom: 6px;
-  max-height: 60px;
-  overflow-y: auto;
-  user-select: text;
-  cursor: text;
-}
-
-.lesson-current-speech {
-  background: #1a2b3a;
-  border-left: 2px solid var(--accent);
-  padding: 6px 8px;
-  font-size: 12px;
-  color: var(--text);
-  margin-bottom: 6px;
-  user-select: text;
-  cursor: text;
-  max-height: 80px;
-  overflow-y: auto;
-}
-.lesson-current-speech .speaker {
-  font-size: 10px;
+.ld-tab:hover { color: rgba(255, 255, 255, 0.9); }
+.ld-tab.active {
+  color: #fff;
+  background: rgba(124, 77, 255, 0.28);
+  border-color: rgba(124, 77, 255, 0.65);
   font-weight: 600;
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin-bottom: 2px;
 }
+.ld-tab.done { color: rgba(255, 255, 255, 0.45); }
+.ld-tab.current::before { content: '▶ '; color: #7c4dff; }
+.ld-tab.done::before { content: '✓ '; color: rgba(124, 255, 180, 0.7); }
 
-.lesson-dialogue-list {
+.lesson-timeline-list {
   flex: 1;
   background: #1a1a1a;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow-y: auto;
   min-height: 0;
-  font-size: 11px;
-  padding: 4px 0;
+  padding: 4px 6px;
   user-select: text;
+  cursor: text;
 }
-.lesson-dialogue {
-  padding: 3px 8px;
-  border-left: 2px solid transparent;
-  color: var(--text-dim);
+.ld-group-header {
+  font-size: 10px;
+  color: rgba(200, 180, 255, 0.75);
+  margin: 6px 0 3px;
+  letter-spacing: 0.05em;
+}
+.ld-row {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+  font-size: 11px;
   line-height: 1.4;
+  padding: 3px 4px;
+  margin-bottom: 1px;
+  border-radius: 2px;
+  border-left: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.85);
   word-break: break-word;
 }
-.lesson-dialogue.done { opacity: 0.45; }
-.lesson-dialogue.current {
-  background: rgba(14, 99, 156, 0.15);
-  border-left-color: var(--accent);
-  color: var(--text);
-}
-.lesson-dialogue .dlg-speaker {
-  display: inline-block;
-  font-size: 10px;
-  color: var(--accent);
+.ld-row.past { opacity: 0.55; color: rgba(255, 255, 255, 0.5); }
+.ld-row.current {
+  background: rgba(124, 77, 255, 0.22);
+  border-left-color: #7c4dff;
+  color: #fff;
   font-weight: 600;
-  margin-right: 4px;
-  text-transform: uppercase;
 }
-.lesson-empty {
+.ld-row.future { color: rgba(255, 255, 255, 0.85); }
+.ld-marker {
+  flex: 0 0 14px;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+.ld-row.past .ld-marker::before { content: '✓'; color: rgba(124, 255, 180, 0.75); }
+.ld-row.current .ld-marker::before { content: '▶'; color: #7c4dff; }
+.ld-speaker { flex: 0 0 auto; font-size: 12px; }
+.ld-content { flex: 1 1 auto; }
+
+.ld-follow-hint {
+  align-self: flex-end;
+  font-size: 10px;
+  color: rgba(255, 200, 100, 0.8);
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 4px;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 200, 100, 0.35);
+  border-radius: 3px;
+  background: rgba(255, 200, 100, 0.08);
+}
+.ld-follow-hint:hover { background: rgba(255, 200, 100, 0.15); }
+
+.ld-empty {
   padding: 20px;
   text-align: center;
   color: var(--text-dim);
@@ -591,18 +608,13 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
       <div class="section-title" style="margin-bottom:0;">Lesson <span class="lesson-id" id="lessonId"></span></div>
       <span class="lesson-badge idle" id="lessonBadge">idle</span>
     </div>
-    <div class="section-bar" id="lessonSectionBar"></div>
-    <div class="stats" id="lessonProgress" style="margin-bottom:4px;"></div>
-    <div class="lesson-display-text" id="lessonDisplayText" style="display:none;"></div>
-    <div class="lesson-current-speech" id="lessonCurrentSpeech" style="display:none;">
-      <div class="speaker" id="lessonCurrentSpeaker"></div>
-      <div id="lessonCurrentContent"></div>
-    </div>
+    <div class="stats" id="lessonProgress"></div>
   </div>
   <div class="section flex">
-    <div class="section-title">Dialogues</div>
-    <div class="lesson-dialogue-list" id="lessonDialogueList">
-      <div class="lesson-empty">授業が読み込まれていません</div>
+    <div id="lessonDialoguesTabs"></div>
+    <div id="lessonFollowHintSlot"></div>
+    <div class="lesson-timeline-list" id="lessonDialoguesList">
+      <div class="ld-empty">授業が読み込まれていません</div>
     </div>
   </div>
 </div>
@@ -651,6 +663,7 @@ wv?.addEventListener('message', e => {
       if (m.translation) appendChatTranslation(m.translation);
       break;
     case 'lesson': updateLesson(m); break;
+    case 'lesson_outline': setLessonOutline(m); break;
   }
 });
 
@@ -792,8 +805,169 @@ function setTrackVolume(pct) {
   $('volTrackVal').textContent = pct + '%';
 }
 
-// === Lesson tab ===
-let _lastLessonSectionIdx = -1;
+// === Lesson tab（タイムライン版: broadcast の lesson-dialogues-panel と同期） ===
+const _timelineState = {
+  lessonId: 0,
+  sections: [],        // outline 由来の全セクション
+  currentSection: -1,  // 再生中セクション
+  currentDialogue: -1, // 再生中 dialogue index
+  currentKind: 'main', // 'main' | 'answer'
+  viewSection: -1,     // 表示中のタブ（手動選択で currentSection とずれることがある）
+  autoFollow: true,
+  followTimer: null,
+};
+const _FOLLOW_RESET_MS = 5000;
+
+function _speakerIcon(speaker) {
+  return speaker === 'student' ? '\u{1F9D1}' : '\u{1F469}';
+}
+
+function setLessonOutline(m) {
+  _timelineState.lessonId = m.lesson_id || 0;
+  _timelineState.sections = Array.isArray(m.sections) ? m.sections : [];
+  _timelineState.currentSection = -1;
+  _timelineState.currentDialogue = -1;
+  _timelineState.currentKind = 'main';
+  _timelineState.autoFollow = true;
+  _timelineState.viewSection = _timelineState.sections.length > 0 ? 0 : -1;
+  if (_timelineState.followTimer) {
+    clearTimeout(_timelineState.followTimer);
+    _timelineState.followTimer = null;
+  }
+  renderLessonTimeline();
+}
+
+function _setAutoFollow(enable) {
+  _timelineState.autoFollow = enable;
+  if (_timelineState.followTimer) {
+    clearTimeout(_timelineState.followTimer);
+    _timelineState.followTimer = null;
+  }
+  if (!enable) {
+    _timelineState.followTimer = setTimeout(() => {
+      _timelineState.autoFollow = true;
+      if (_timelineState.currentSection >= 0) {
+        _timelineState.viewSection = _timelineState.currentSection;
+      }
+      renderLessonTimeline();
+    }, _FOLLOW_RESET_MS);
+  }
+}
+
+function _selectSection(idx) {
+  _timelineState.viewSection = idx;
+  _setAutoFollow(false);
+  renderLessonTimeline();
+}
+
+function _renderDialogueGroup(listEl, dialogues, kind, isCurrentSection, currentKind, currentDialogue, curSection, viewSection) {
+  dialogues.forEach((dlg, i) => {
+    const row = document.createElement('div');
+    let state;
+    if (!isCurrentSection) {
+      if (curSection < 0) state = 'future';
+      else if (viewSection < curSection) state = 'past';
+      else state = 'future';
+    } else if (kind === currentKind && i === currentDialogue) {
+      state = 'current';
+    } else if ((kind === 'main' && currentKind === 'answer')
+      || (kind === currentKind && i < currentDialogue)) {
+      state = 'past';
+    } else {
+      state = 'future';
+    }
+    row.className = 'ld-row ' + state;
+
+    const marker = document.createElement('span');
+    marker.className = 'ld-marker';
+    row.appendChild(marker);
+
+    const speaker = document.createElement('span');
+    speaker.className = 'ld-speaker';
+    speaker.textContent = _speakerIcon(dlg.speaker);
+    row.appendChild(speaker);
+
+    const content = document.createElement('span');
+    content.className = 'ld-content';
+    content.textContent = dlg.content || '';
+    row.appendChild(content);
+
+    listEl.appendChild(row);
+  });
+}
+
+function renderLessonTimeline() {
+  const tabsEl = $('lessonDialoguesTabs');
+  const listEl = $('lessonDialoguesList');
+  const hintSlot = $('lessonFollowHintSlot');
+  if (!tabsEl || !listEl) return;
+
+  const st = _timelineState;
+  const sections = st.sections || [];
+  hintSlot.innerHTML = '';
+
+  if (sections.length === 0) {
+    tabsEl.innerHTML = '';
+    listEl.innerHTML = '<div class="ld-empty">授業が読み込まれていません</div>';
+    return;
+  }
+
+  const viewIdx = Math.max(0, Math.min(st.viewSection, sections.length - 1));
+  const curIdx = st.currentSection;
+
+  // タブ
+  tabsEl.innerHTML = '';
+  sections.forEach((sec, i) => {
+    const tab = document.createElement('div');
+    const classes = ['ld-tab'];
+    if (i === viewIdx) classes.push('active');
+    if (curIdx >= 0 && i < curIdx) classes.push('done');
+    else if (i === curIdx) classes.push('current');
+    tab.className = classes.join(' ');
+    tab.textContent = `\u00A7${i + 1}`;
+    tab.title = sec.section_type || '';
+    tab.addEventListener('click', () => _selectSection(i));
+    tabsEl.appendChild(tab);
+  });
+
+  // リスト
+  listEl.innerHTML = '';
+  const sec = sections[viewIdx];
+  const mainDlgs = Array.isArray(sec.dialogues) ? sec.dialogues : [];
+  const isCurrentSection = viewIdx === curIdx;
+
+  if (mainDlgs.length === 0 && !sec.question) {
+    listEl.innerHTML = '<div class="ld-empty">（このセクションにダイアログなし）</div>';
+  } else {
+    _renderDialogueGroup(listEl, mainDlgs, 'main', isCurrentSection, st.currentKind, st.currentDialogue, curIdx, viewIdx);
+
+    if (sec.question && Array.isArray(sec.question.answer_dialogues) && sec.question.answer_dialogues.length > 0) {
+      const header = document.createElement('div');
+      header.className = 'ld-group-header';
+      header.textContent = '— 回答 —';
+      listEl.appendChild(header);
+      _renderDialogueGroup(listEl, sec.question.answer_dialogues, 'answer', isCurrentSection, st.currentKind, st.currentDialogue, curIdx, viewIdx);
+    }
+  }
+
+  // 追従ヒント（手動選択中）
+  if (!st.autoFollow && curIdx >= 0 && viewIdx !== curIdx) {
+    const hint = document.createElement('div');
+    hint.className = 'ld-follow-hint';
+    hint.textContent = '\u2192 現在地へ';
+    hint.addEventListener('click', () => {
+      _timelineState.viewSection = _timelineState.currentSection;
+      _setAutoFollow(true);
+      renderLessonTimeline();
+    });
+    hintSlot.appendChild(hint);
+  }
+
+  // 現在行を可視領域に
+  const currentRow = listEl.querySelector('.ld-row.current');
+  if (currentRow) currentRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 function updateLesson(m) {
   const badge = $('lessonBadge');
   badge.textContent = m.state || 'idle';
@@ -801,24 +975,10 @@ function updateLesson(m) {
 
   $('lessonId').textContent = m.lesson_id ? '#' + m.lesson_id : '';
 
-  // セクション進捗バー
-  const bar = $('lessonSectionBar');
   const total = m.total_sections || 0;
   const cur = (typeof m.section_index === 'number') ? m.section_index : -1;
-  if (total > 0) {
-    let cells = '';
-    for (let i = 0; i < total; i++) {
-      let cls = '';
-      if (i < cur) cls = 'done';
-      else if (i === cur) cls = 'current';
-      cells += `<div class="section-cell ${cls}"></div>`;
-    }
-    bar.innerHTML = cells;
-  } else {
-    bar.innerHTML = '';
-  }
 
-  // 進捗テキスト
+  // 上部メタ行（Section x/y [type]  Dialogue a/b）
   const prog = $('lessonProgress');
   if (total > 0) {
     const dlgTotal = m.total_dialogues || 0;
@@ -829,54 +989,26 @@ function updateLesson(m) {
     prog.textContent = '';
   }
 
-  // 教材テキスト
-  const dt = $('lessonDisplayText');
-  if (m.display_text) {
-    dt.textContent = m.display_text;
-    dt.style.display = '';
-  } else {
-    dt.style.display = 'none';
-  }
+  // タイムライン状態更新
+  const prevSection = _timelineState.currentSection;
+  _timelineState.currentSection = cur;
+  _timelineState.currentDialogue = (typeof m.dialogue_index === 'number') ? m.dialogue_index : -1;
+  _timelineState.currentKind = m.kind || 'main';
 
-  // 現在の発話
-  const speech = $('lessonCurrentSpeech');
-  if (m.current_content) {
-    $('lessonCurrentSpeaker').textContent = m.current_speaker || '';
-    $('lessonCurrentContent').textContent = m.current_content;
-    speech.style.display = '';
-  } else {
-    speech.style.display = 'none';
-  }
-
-  // ダイアログ一覧
-  const list = $('lessonDialogueList');
-  const dialogues = m.dialogues || [];
-  if (!total) {
-    list.innerHTML = '<div class="lesson-empty">授業が読み込まれていません</div>';
-  } else if (!dialogues.length) {
-    list.innerHTML = '<div class="lesson-empty">（このセクションにダイアログなし）</div>';
-  } else {
-    const dlgIdx = (typeof m.dialogue_index === 'number') ? m.dialogue_index : -1;
-    let html = '';
-    dialogues.forEach((d, i) => {
-      let cls = '';
-      if (dlgIdx >= 0 && i < dlgIdx) cls = 'done';
-      else if (i === dlgIdx) cls = 'current';
-      html += `<div class="lesson-dialogue ${cls}" data-idx="${i}">
-        <span class="dlg-speaker">${esc(d.speaker || '')}</span>${esc(d.content || '')}
-      </div>`;
-    });
-    list.innerHTML = html;
-
-    // 現在ダイアログにスクロール（セクションが変わったときや現在位置が変わったとき）
-    const currentEl = list.querySelector('.lesson-dialogue.current');
-    if (currentEl) {
-      currentEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    } else if (cur !== _lastLessonSectionIdx) {
-      list.scrollTop = 0;
+  // 授業終了（state=idle かつ lesson_id=0）で outline もクリア
+  if (!m.lesson_id && !total) {
+    _timelineState.sections = [];
+    _timelineState.viewSection = -1;
+    _timelineState.autoFollow = true;
+    if (_timelineState.followTimer) {
+      clearTimeout(_timelineState.followTimer);
+      _timelineState.followTimer = null;
     }
+  } else if (_timelineState.autoFollow && cur >= 0) {
+    _timelineState.viewSection = cur;
   }
-  _lastLessonSectionIdx = cur;
+
+  renderLessonTimeline();
 }
 
 function setVolumes(v) {

@@ -1,5 +1,18 @@
 # DONE
 
+## C#コントロールパネル Lesson タブを授業タイムラインに差し替え
+
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `_currentKind` フィールドを追加し、`PlayDialoguesAsync` の先頭で `_currentKind = kind;` を保存。`LoadLesson` / `PlayAsync` finally で `main` にリセット
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `SendOutlineToPanel()` を新設（NotifyPanel 経由で `type = "lesson_outline"` を送信）。`LoadLesson` 末尾で `SendPanelUpdate()` の直前に呼び、コントロールパネルへ全セクションを1回配信
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `SendPanelUpdate` の匿名型を整理: `kind` を追加、`display_text` / `dialogues[]` / `current_content` / `current_speaker` を削除（outline 受信済のため冗長）
+- [x] `win-native-app/WinNativeApp/control-panel.html` — Lesson タブの HTML を刷新: 旧 `section-bar` / `lesson-display-text` / `lesson-current-speech` / `lesson-dialogue-list` を撤去、broadcast の `lesson-dialogues-panel` と同じ `#lessonDialoguesTabs` + `.lesson-timeline-list` + 追従ヒント構造に置き換え
+- [x] `win-native-app/WinNativeApp/control-panel.html` — CSS を刷新: broadcast.css の `.ld-tab` / `.ld-row`（past/current/future）/ `.ld-marker` / `.ld-speaker` / `.ld-content` / `.ld-group-header` / `.ld-follow-hint` を px 単位で移植
+- [x] `win-native-app/WinNativeApp/control-panel.html` — JS: `case 'lesson_outline':` を switch に追加。`_timelineState`（sections / currentSection / currentDialogue / currentKind / viewSection / autoFollow / followTimer）と `_FOLLOW_RESET_MS=5000` を追加
+- [x] `win-native-app/WinNativeApp/control-panel.html` — JS: `setLessonOutline` / `renderLessonTimeline` / `_renderDialogueGroup` / `_selectSection` / `_setAutoFollow`（broadcast の panels.js と同じ命名・ロジック）を実装
+- [x] `win-native-app/WinNativeApp/control-panel.html` — JS: `updateLesson` を書き直し、`state` / `lesson_id` / `section_index` / `dialogue_index` / `kind` / 上部メタ行 + `renderLessonTimeline` に絞る。`_timelineState.autoFollow` が true なら viewSection を currentSection に追従
+- [x] 全862テストpass確認（`python3 -m pytest tests/ -q`）
+- [x] プラン: [plans/control-panel-lesson-timeline.md](plans/control-panel-lesson-timeline.md) ステータスを「完了」に更新
+
 ## テスト実行時の本番TTSキャッシュ漏洩を修正
 
 - [x] 原因: `tests/test_api_teacher.py` の `test_delete_lesson` / `test_delete_tts_cache` / `test_delete_tts_cache_section` が `api_client` 経由で DELETE エンドポイントを叩く際、`LESSON_AUDIO_DIR` を monkeypatch していなかった。テスト用 in-memory DB は空から始まるため lesson_id=1 が最初に払い出され、サーバ側の `clear_tts_cache(1)` が本番 `resources/audio/lessons/1/` を `shutil.rmtree` していた。結果: **pytest を走らせるたびに English 1-1 の TTSキャッシュが全削除**される状態（「機能実装するたびにTTS再生成が必要」の根因）
