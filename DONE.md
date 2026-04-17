@@ -1,6 +1,6 @@
 # DONE
 
-## 授業再生ハング修正: PlaybackStopped未発火対応（多層防御）
+## 授業再生ハング修正: PlaybackStopped未発火対応（多層防御） — 実機検証完了
 
 - [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `PlayAudio` シグネチャを `Func<byte[], float, double, CancellationToken, Task>?` に変更（duration と ct を追加）
 - [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `PlayDialoguesAsync` 内の呼び出しを `await PlayAudio(dlg.WavData, 1.0f, dlg.Duration, ct)` に更新
@@ -11,7 +11,8 @@
 - [x] `win-native-app/.../MainForm.cs` — PlaybackStopped発火時とフォールバック発火時の経過時間・PlaybackStateをログ出力（仮説1/2の切り分け用）
 - [x] `win-native-app/.../MainForm.cs` — `_lessonPlayer.PlayAudio` ラムダを `(wavData, _, duration, ct) => PlayLessonAudioAsync(...)` に更新
 - [x] テスト: 全861テストpass
-- [x] プラン: [plans/lesson-playback-stopped-hang.md](plans/lesson-playback-stopped-hang.md) ステータスを「実装完了 — Windows実機での動作確認待ち」に更新
+- [x] 実機検証（English 1-1 v8、全37ダイアログTTS事前生成済み）で授業が最後まで再生されることを確認
+- [x] プラン: [plans/lesson-playback-stopped-hang.md](plans/lesson-playback-stopped-hang.md) ステータスを「完了」に更新
 
 ## 授業データ一括送信方式 Phase D: 旧コード整理
 

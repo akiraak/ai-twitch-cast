@@ -1,15 +1,12 @@
 # 授業音声: PlaybackStopped未発火によるハング修正
 
-## ステータス: 多層防御コード実装済み — 実機で再現できず未検証
+## ステータス: 完了（2026-04-16 実機検証で全37ダイアログ最後まで再生されることを確認）
 
 ## 実機検証メモ（2026-04-16）
 
-実装後の初回検証（18:50:44 開始）では、TTSキャッシュミスがあったため Python 側がセクション3のダイアログ生成中に止まり、`lesson_load` が一度も C# に送られないままユーザーが停止した。**C# のローカル再生パスを通っていないため、PlaybackStopped 未発火が解消したかは未確認**。次回検証の前提として、以下のいずれかを満たす必要がある:
-
-- 実行する授業の全セクション・全ダイアログが TTS 事前生成済みであること
-- もしくは TTS 生成完了まで数分待てる前提で再生開始ボタンを押すこと
-
-UX 課題（開始後 `lesson_load` 送信前のユーザー視点での「無反応」）は別タスクとして TODO.md に切り出した。本プランは C# 側の PlaybackStopped 対策に限定する。
+- 初回検証ではTTSキャッシュミスで `lesson_load` 送信前に停止したため未検証だった
+- English 1-1 v8 の全37ダイアログを事前生成（管理画面から再生成）後に再検証 → 問題なく最後まで再生された
+- UX 課題（開始後 `lesson_load` 送信前のユーザー視点での「無反応」）は [plans/lesson-start-prepare-progress.md](lesson-start-prepare-progress.md) で別対応
 
 ## 背景
 
@@ -168,11 +165,8 @@ private Task PlayLessonAudioAsync(byte[] wavData, float volume, double duration,
 4. [x] `PlaybackStopped` ハンドラで `Interlocked.CompareExchange` による原子的完了判定 + `tcs.TrySetResult()` を先に、`Dispose` 一式は `Task.Run` で後に
 5. [x] フォールバック `Task.Run(async () => { Task.Delay(duration + 1.5, ct); ... })` を追加（`ContinueWith` は使わない）
 6. [x] PlaybackStopped・フォールバック両方で発火時刻と `PlaybackState` をログに出す
-7. [ ] ビルド＆動作確認: `./stream.sh` → 授業再生 → 全8セクション・37ダイアログが順次再生されること **（前提: 全TTSが事前生成済み）**
-8. [ ] ログ確認: `PlaybackStopped未発火のためタイムアウトで次へ` の警告頻度を確認
-    - 出ない → 仮説1 が原因、ハンドラ順序修正で解消
-    - 毎回出る → 仮説2 が原因、NAudio の代替（例: `WaveOut`/`DirectSoundOut`）検討が次フェーズ
-    - 時々出る → デバイス状態依存、現状のフォールバックで実用上問題なし
+7. [x] ビルド＆動作確認: `./stream.sh` → 授業再生 → 全8セクション・37ダイアログが順次再生されること（2026-04-16 English 1-1 v8 で確認）
+8. [x] ログ確認: `PlaybackStopped未発火のためタイムアウトで次へ` の警告頻度を確認（問題なく最後まで再生 → 仮説1 の修正で解消と判断）
 
 ## リスク
 
