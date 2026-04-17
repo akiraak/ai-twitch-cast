@@ -1,8 +1,7 @@
 # TODO
 
-## 授業再生のクライアント主導型への移行（旧プラン） → [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
-
-- [>] Phase 1-4: 実装済み（ビルド・動作確認待ち）
+## 授業再生
+- [ ] C#コントロールパネル Lesson タブを授業タイムラインに差し替え → [plans/control-panel-lesson-timeline.md](plans/control-panel-lesson-timeline.md)
 
 ## TTS完了待ちの過剰遅延改善（コメント応答用） → [plans/tts-wait-excess-delay.md](plans/tts-wait-excess-delay.md)
 
