@@ -1,6 +1,15 @@
 # 授業音声: PlaybackStopped未発火によるハング修正
 
-## ステータス: 実装完了 — Windows実機での動作確認待ち
+## ステータス: 多層防御コード実装済み — 実機で再現できず未検証
+
+## 実機検証メモ（2026-04-16）
+
+実装後の初回検証（18:50:44 開始）では、TTSキャッシュミスがあったため Python 側がセクション3のダイアログ生成中に止まり、`lesson_load` が一度も C# に送られないままユーザーが停止した。**C# のローカル再生パスを通っていないため、PlaybackStopped 未発火が解消したかは未確認**。次回検証の前提として、以下のいずれかを満たす必要がある:
+
+- 実行する授業の全セクション・全ダイアログが TTS 事前生成済みであること
+- もしくは TTS 生成完了まで数分待てる前提で再生開始ボタンを押すこと
+
+UX 課題（開始後 `lesson_load` 送信前のユーザー視点での「無反応」）は別タスクとして TODO.md に切り出した。本プランは C# 側の PlaybackStopped 対策に限定する。
 
 ## 背景
 
@@ -153,14 +162,14 @@ private Task PlayLessonAudioAsync(byte[] wavData, float volume, double duration,
 
 ## 実装ステップ
 
-1. `LessonPlayer.cs` の `PlayAudio` シグネチャを `Func<byte[], float, double, CancellationToken, Task>?` に変更
-2. `PlayDialoguesAsync` の呼び出しを `await PlayAudio(dlg.WavData, 1.0f, dlg.Duration, ct)` に変更
-3. `MainForm.cs` の `PlayLessonAudioAsync` に `double duration, CancellationToken ct` 引数追加
-4. `PlaybackStopped` ハンドラで `Interlocked.CompareExchange` による原子的完了判定 + `tcs.TrySetResult()` を先に、`Dispose` 一式は `Task.Run` で後に
-5. フォールバック `Task.Run(async () => { Task.Delay(duration + 1.5, ct); ... })` を追加（`ContinueWith` は使わない）
-6. PlaybackStopped・フォールバック両方で発火時刻と `PlaybackState` をログに出す
-7. ビルド＆動作確認: `./stream.sh` → 授業再生 → 全8セクション・37ダイアログが順次再生されること
-8. ログ確認: `PlaybackStopped未発火のためタイムアウトで次へ` の警告頻度を確認
+1. [x] `LessonPlayer.cs` の `PlayAudio` シグネチャを `Func<byte[], float, double, CancellationToken, Task>?` に変更
+2. [x] `PlayDialoguesAsync` の呼び出しを `await PlayAudio(dlg.WavData, 1.0f, dlg.Duration, ct)` に変更
+3. [x] `MainForm.cs` の `PlayLessonAudioAsync` に `double duration, CancellationToken ct` 引数追加
+4. [x] `PlaybackStopped` ハンドラで `Interlocked.CompareExchange` による原子的完了判定 + `tcs.TrySetResult()` を先に、`Dispose` 一式は `Task.Run` で後に
+5. [x] フォールバック `Task.Run(async () => { Task.Delay(duration + 1.5, ct); ... })` を追加（`ContinueWith` は使わない）
+6. [x] PlaybackStopped・フォールバック両方で発火時刻と `PlaybackState` をログに出す
+7. [ ] ビルド＆動作確認: `./stream.sh` → 授業再生 → 全8セクション・37ダイアログが順次再生されること **（前提: 全TTSが事前生成済み）**
+8. [ ] ログ確認: `PlaybackStopped未発火のためタイムアウトで次へ` の警告頻度を確認
     - 出ない → 仮説1 が原因、ハンドラ順序修正で解消
     - 毎回出る → 仮説2 が原因、NAudio の代替（例: `WaveOut`/`DirectSoundOut`）検討が次フェーズ
     - 時々出る → デバイス状態依存、現状のフォールバックで実用上問題なし
