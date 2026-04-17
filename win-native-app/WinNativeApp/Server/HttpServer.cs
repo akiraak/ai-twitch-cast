@@ -467,8 +467,6 @@ public class HttpServer : IDisposable
                 "bgm_volume" => HandleWsBgmVolume(msg),
                 "se_play" => HandleWsSePlay(msg),
                 "tts_status" => HandleWsTtsStatus(),
-                "lesson_section_load" => HandleWsLessonSectionLoad(msg),
-                "lesson_section_play" => HandleWsLessonSectionPlay(),
                 "lesson_load" => HandleWsLessonLoad(msg),
                 "lesson_play" => HandleWsLessonPlay(),
                 "lesson_pause" => HandleWsLessonPause(),
@@ -671,46 +669,7 @@ public class HttpServer : IDisposable
     // 授業再生 (lesson_*) ハンドラー
     // =====================================================
 
-    /// <summary>旧: 単一セクションロード（Phase D で削除予定）</summary>
-    private object HandleWsLessonSectionLoad(JsonElement msg)
-    {
-        if (LessonPlayer == null)
-            return new { ok = false, error = "LessonPlayer not available" };
-
-        if (!msg.TryGetProperty("section_data", out var sectionData))
-            return new { ok = false, error = "section_data is required" };
-
-        try
-        {
-            LessonPlayer.LoadSection(sectionData);
-            return new { ok = true };
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[WebSocket] lesson_section_load failed");
-            return new { ok = false, error = ex.Message };
-        }
-    }
-
-    /// <summary>旧: 単一セクション再生（Phase D で削除予定。完了はlesson_section_completeで通知）</summary>
-    private object HandleWsLessonSectionPlay()
-    {
-        if (LessonPlayer == null)
-            return new { ok = false, error = "LessonPlayer not available" };
-
-        if (!LessonPlayer.CanPlay)
-            return new { ok = false, error = LessonPlayer.IsPlaying ? "Already playing" : "No section loaded" };
-
-        _ = Task.Run(async () =>
-        {
-            try { await LessonPlayer.PlayAsync(); }
-            catch (Exception ex) { Log.Error(ex, "[Lesson] PlayAsync failed"); }
-        });
-
-        return new { ok = true };
-    }
-
-    /// <summary>新: 全セクション一括ロード</summary>
+    /// <summary>全セクション一括ロード</summary>
     private object HandleWsLessonLoad(JsonElement msg)
     {
         if (LessonPlayer == null)
@@ -731,7 +690,7 @@ public class HttpServer : IDisposable
         }
     }
 
-    /// <summary>新: 全セクション順次再生（完了はlesson_completeで通知）</summary>
+    /// <summary>全セクション順次再生（完了はlesson_completeで通知）</summary>
     private object HandleWsLessonPlay()
     {
         if (LessonPlayer == null)

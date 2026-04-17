@@ -1,5 +1,14 @@
 # DONE
 
+## 授業データ一括送信方式 Phase D: 旧コード整理
+
+- [x] `win-native-app/.../HttpServer.cs` — `lesson_section_load` / `lesson_section_play` ディスパッチと `HandleWsLessonSectionLoad` / `HandleWsLessonSectionPlay` を削除
+- [x] `win-native-app/.../LessonPlayer.cs` — 旧 `LoadSection` / 単一セクション版 `PlayAsync` 分岐 / `PlaySectionAsync` を削除、`_section` フィールド削除。`CanPlay` / `Stop` / `GetStatus` を一括モード前提に整理、`PlayAllSectionsAsync` を `PlayAsync` に統合
+- [x] `src/lesson_runner.py` — `_prepare_and_send_section()` / `_wait_section_complete()` を削除、`restore()` の section_complete イベント待機分岐と `stop()` の `get_lesson_section_complete_event().set()` も削除
+- [x] `scripts/services/capture_client.py` — `_lesson_section_complete_event` / `get_lesson_section_complete_event()` / `lesson_section_complete` Push通知ハンドラを削除
+- [x] `tests/test_lesson_runner.py` — `TestPrepareAndSendSection` クラスを削除、`test_prepare_and_send_saves_state` を `test_send_all_and_play_saves_state` に置き換え、`test_stop_forwards_to_csharp` のパッチを `get_lesson_complete_event` へ差し替え
+- [x] プラン: [plans/lesson-full-bundle.md](plans/lesson-full-bundle.md) Phase D 完了
+
 ## 授業データ一括送信方式 Phase C: コントロールパネル授業進捗表示
 
 - [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `NotifyPanel` コールバック（`Action<object>?`）追加

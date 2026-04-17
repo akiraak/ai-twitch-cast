@@ -725,198 +725,6 @@ class TestQuestionData:
         assert result["answer_dialogues"] == []
 
 
-class TestPrepareAndSendSection:
-    """_prepare_and_send_section の統合テスト"""
-
-    @pytest.mark.asyncio
-    async def test_sends_bundle_to_csharp(self, mock_speech, tmp_path, monkeypatch):
-        """セクションバンドルがC#にWebSocket送信される"""
-        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
-
-        # キャッシュWAV作成
-        wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_dlg_00.wav"
-        _create_test_wav(wav_path, duration=1.0)
-
-        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
-        runner._state = LessonState.RUNNING
-        runner._lesson_id = 1
-        runner._lang = "ja"
-        runner._generator = "gemini"
-        runner._version_number = 1
-        runner._teacher_cfg = {"name": "先生"}
-        runner._student_cfg = None
-        runner._sections = [{}]
-        runner._current_index = 0
-
-        section = {
-            "section_type": "introduction",
-            "content": "Hello",
-            "display_text": "表示",
-            "dialogues": json.dumps([{"speaker": "teacher", "content": "Hello", "emotion": "neutral"}]),
-            "order_index": 0,
-            "wait_seconds": 2,
-        }
-
-        # 完了イベント: 即座にsetする
-        mock_evt = asyncio.Event()
-
-        mock_ws_request = AsyncMock(return_value={"ok": True})
-
-        async def _set_evt_after_play(*args, **kwargs):
-            if args and args[0] == "lesson_section_play":
-                mock_evt.set()
-            return {"ok": True}
-
-        mock_ws_request.side_effect = _set_evt_after_play
-
-        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1, 0.5]), \
-             patch("scripts.services.capture_client.ws_request", mock_ws_request), \
-             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
-            await runner._prepare_and_send_section(section)
-
-        # ws_requestが lesson_section_load と lesson_section_play で呼ばれたか
-        call_actions = [c.args[0] for c in mock_ws_request.call_args_list]
-        assert "lesson_section_load" in call_actions
-        assert "lesson_section_play" in call_actions
-
-        # lesson_section_loadのsection_dataを検証
-        load_call = [c for c in mock_ws_request.call_args_list if c.args[0] == "lesson_section_load"][0]
-        section_data = load_call.kwargs["section_data"]
-        assert section_data["lesson_id"] == 1
-        assert section_data["display_text"] == "表示"
-        assert len(section_data["dialogues"]) == 1
-        assert section_data["dialogues"][0]["content"] == "Hello"
-
-    @pytest.mark.asyncio
-    async def test_timeout_on_no_completion(self, mock_speech, tmp_path, monkeypatch):
-        """完了イベントが来ない場合タイムアウトする"""
-        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
-
-        wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_part_00.wav"
-        _create_test_wav(wav_path, duration=0.1)
-
-        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
-        runner._state = LessonState.RUNNING
-        runner._lesson_id = 1
-        runner._lang = "ja"
-        runner._generator = "gemini"
-        runner._version_number = 1
-        runner._teacher_cfg = {"name": "先生"}
-        runner._sections = [{}]
-        runner._current_index = 0
-
-        section = {
-            "section_type": "explanation",
-            "content": "テスト",
-            "dialogues": "",
-            "order_index": 0,
-        }
-
-        # 完了イベント: setしない → タイムアウト
-        mock_evt = asyncio.Event()
-        # ws_request: load/play は成功、lesson_status はplaying返却（idle検知させない）
-        async def _mock_ws(action, **kwargs):
-            if action == "lesson_status":
-                return {"state": "playing", "dialogue_index": 0, "total_dialogues": 1}
-            return {"ok": True}
-
-        mock_ws_request = AsyncMock(side_effect=_mock_ws)
-
-        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
-             patch("scripts.services.capture_client.ws_request", mock_ws_request), \
-             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
-            # タイムアウトをモンキーパッチ: wait_forを短いタイムアウトに差し替え
-            original_wait_for = asyncio.wait_for
-
-            async def short_wait_for(coro, timeout):
-                return await original_wait_for(coro, timeout=0.1)
-
-            with patch("asyncio.wait_for", short_wait_for):
-                await runner._prepare_and_send_section(section)
-
-        # タイムアウトしてもエラーにならずに完了する
-        assert runner._state == LessonState.RUNNING
-
-    @pytest.mark.asyncio
-    async def test_idle_detection_fallback(self, mock_speech, tmp_path, monkeypatch):
-        """C#がidleを返した場合、イベントなしでもセクション完了扱いにする"""
-        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
-
-        wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_part_00.wav"
-        _create_test_wav(wav_path, duration=0.1)
-
-        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
-        runner._state = LessonState.RUNNING
-        runner._lesson_id = 1
-        runner._lang = "ja"
-        runner._generator = "gemini"
-        runner._version_number = 1
-        runner._teacher_cfg = {"name": "先生"}
-        runner._sections = [{}]
-        runner._current_index = 0
-
-        section = {
-            "section_type": "explanation",
-            "content": "テスト",
-            "dialogues": "",
-            "order_index": 0,
-        }
-
-        # 完了イベント: setしない
-        mock_evt = asyncio.Event()
-        # ws_request: lesson_status が idle を返す → fallbackで即完了
-        async def _mock_ws(action, **kwargs):
-            if action == "lesson_status":
-                return {"state": "idle", "dialogue_index": -1, "total_dialogues": 0}
-            return {"ok": True}
-
-        mock_ws_request = AsyncMock(side_effect=_mock_ws)
-
-        import time
-        t0 = time.monotonic()
-        with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
-             patch("scripts.services.capture_client.ws_request", mock_ws_request), \
-             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
-            await runner._prepare_and_send_section(section)
-        elapsed = time.monotonic() - t0
-
-        # idle検知で即完了 → 30秒タイムアウトまで待たない（10秒以内に完了すべき）
-        assert elapsed < 10.0
-        assert runner._state == LessonState.RUNNING
-
-    @pytest.mark.asyncio
-    async def test_empty_bundle_skips_send(self, mock_speech, tmp_path, monkeypatch):
-        """バンドルが空の場合はC#への送信をスキップ"""
-        monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
-
-        runner = LessonRunner(speech=mock_speech, on_overlay=AsyncMock())
-        runner._state = LessonState.RUNNING
-        runner._lesson_id = 1
-        runner._lang = "ja"
-        runner._generator = "gemini"
-        runner._version_number = 1
-        runner._teacher_cfg = {}
-        runner._sections = [{}]
-        runner._current_index = 0
-
-        # generate_ttsがNoneを返す → バンドル空
-        mock_speech.generate_tts = AsyncMock(return_value=None)
-
-        section = {
-            "section_type": "explanation",
-            "content": "テスト",
-            "dialogues": "",
-            "order_index": 0,
-        }
-
-        mock_ws_request = AsyncMock()
-        with patch("scripts.services.capture_client.ws_request", mock_ws_request):
-            await runner._prepare_and_send_section(section)
-
-        # ws_requestは呼ばれない（バンドル空のため）
-        mock_ws_request.assert_not_called()
-
-
 class TestPauseResumeStopForwarding:
     """pause/resume/stopのC#転送テスト"""
 
@@ -962,7 +770,7 @@ class TestPauseResumeStopForwarding:
         mock_ws = AsyncMock(return_value={"ok": True})
         mock_evt = asyncio.Event()
         with patch("scripts.services.capture_client.ws_request", mock_ws), \
-             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
+             patch("scripts.services.capture_client.get_lesson_complete_event", return_value=mock_evt):
             await runner.stop()
 
         assert runner.state == LessonState.IDLE
@@ -1049,8 +857,8 @@ class TestPlaybackPersistence:
         assert LessonRunner.get_playback_state() is None
 
     @pytest.mark.asyncio
-    async def test_prepare_and_send_saves_state(self, mock_speech, tmp_path, monkeypatch, test_db):
-        """_prepare_and_send_section実行後にDBに状態が保存される"""
+    async def test_send_all_and_play_saves_state(self, mock_speech, tmp_path, monkeypatch, test_db):
+        """_send_all_and_play 実行後にDBに状態が保存される"""
         monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
 
         wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_dlg_00.wav"
@@ -1064,38 +872,32 @@ class TestPlaybackPersistence:
         runner._version_number = 1
         runner._teacher_cfg = {"name": "先生"}
         runner._student_cfg = None
-        runner._sections = [{}]
-        runner._current_index = 0
-        runner._episode_id = 50
-
-        section = {
+        runner._sections = [{
             "section_type": "introduction",
             "content": "Hello",
             "display_text": "",
             "dialogues": json.dumps([{"speaker": "teacher", "content": "Hello", "emotion": "neutral"}]),
             "order_index": 0,
             "wait_seconds": 2,
-        }
+        }]
+        runner._current_index = 0
+        runner._episode_id = 50
 
-        mock_evt = asyncio.Event()
-        mock_ws = AsyncMock(return_value={"ok": True})
+        lesson_evt = asyncio.Event()
 
-        async def _set_evt(*args, **kwargs):
-            if args and args[0] == "lesson_section_play":
-                mock_evt.set()
+        async def _ws(action, **kwargs):
+            if action == "lesson_play":
+                lesson_evt.set()
             return {"ok": True}
 
-        mock_ws.side_effect = _set_evt
-
         with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
-             patch("scripts.services.capture_client.ws_request", mock_ws), \
-             patch("scripts.services.capture_client.get_lesson_section_complete_event", return_value=mock_evt):
-            await runner._prepare_and_send_section(section)
+             patch("scripts.services.capture_client.ws_request", AsyncMock(side_effect=_ws)), \
+             patch("scripts.services.capture_client.get_lesson_complete_event", return_value=lesson_evt):
+            await runner._send_all_and_play()
 
         state = LessonRunner.get_playback_state()
         assert state is not None
         assert state["lesson_id"] == 1
-        assert state["section_index"] == 0
         assert state["episode_id"] == 50
 
 

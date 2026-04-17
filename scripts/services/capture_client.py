@@ -51,17 +51,8 @@ _capture_ws_lock = asyncio.Lock()
 _pending_requests: dict[str, asyncio.Future] = {}
 _ws_reader_task = None
 _ws_connect_cooldown_until: float = 0  # 接続失敗後のクールダウン期限（monotonic）
-_lesson_section_complete_event: asyncio.Event | None = None
 _lesson_complete_event: asyncio.Event | None = None
 _lesson_complete_payload: dict | None = None
-
-
-def get_lesson_section_complete_event() -> asyncio.Event:
-    """授業セクション完了イベントを取得する（LessonRunnerで使用）"""
-    global _lesson_section_complete_event
-    if _lesson_section_complete_event is None:
-        _lesson_section_complete_event = asyncio.Event()
-    return _lesson_section_complete_event
 
 
 def get_lesson_complete_event() -> asyncio.Event:
@@ -205,9 +196,6 @@ async def _read_capture_ws():
             # Push通知（requestIdなし）の処理
             if data.get("type") == "capture_changed":
                 asyncio.create_task(_handle_capture_changed(data))
-                continue
-            if data.get("type") == "lesson_section_complete":
-                get_lesson_section_complete_event().set()
                 continue
             if data.get("type") == "lesson_complete":
                 global _lesson_complete_payload

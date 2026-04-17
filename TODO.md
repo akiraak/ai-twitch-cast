@@ -1,11 +1,5 @@
 # TODO
 
-## 授業データ一括送信方式 → [plans/lesson-full-bundle.md](plans/lesson-full-bundle.md)
-
-全セクションを最初にC#に渡し、サーバーはその後一切関与しない方式に変更。セクション単位の往復通信（load→play→complete待ち）を廃止し、C#が全セクションを自律再生する。
-
-- [ ] Phase D: 旧コード整理（lesson_section_load/play/complete廃止）
-
 ## 授業再生のクライアント主導型への移行（旧プラン） → [plans/client-driven-lesson.md](plans/client-driven-lesson.md)
 
 - [>] Phase 1-4: 実装済み（ビルド・動作確認待ち）
