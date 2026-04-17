@@ -1,5 +1,21 @@
 # DONE
 
+## 配信画面の授業タイムラインパネルを削除（サイドバーに一本化）
+
+- [x] `static/broadcast.html` — `#lesson-dialogues-panel` ブロックを削除
+- [x] `static/css/broadcast.css` — `#lesson-dialogues-panel` 〜 `.ld-follow-hint` までのスタイルを削除
+- [x] `static/js/broadcast/lesson.js` — `_timelineState` / `_FOLLOW_RESET_MS` / `window.lesson.setOutline` / `window.lesson.onComplete` / `startDialogue` 内のタイムライン更新を削除
+- [x] `static/js/broadcast/panels.js` — `_speakerIcon` / `showLessonDialogues` / `hideLessonDialogues` / `_setAutoFollow` / `_selectSection` / `renderLessonDialogues` / `_renderDialogueGroup` を削除、`setLessonMode(false)` の `hideLessonDialogues()` 呼び出しも削除
+- [x] `static/js/broadcast/globals.js` — `ITEM_REGISTRY` から `lesson-dialogues-panel` を削除
+- [x] `static/js/broadcast/settings.js` — `applySettings` の `lesson_dialogues` 分岐を削除
+- [x] `static/js/broadcast/init.js` — 起動時の `_lessonOutlineRequest` postMessage 送信を削除
+- [x] `scripts/routes/overlay.py` — `_OVERLAY_DEFAULTS.lesson_dialogues` と `fixed_items` の `lesson_dialogues` を削除
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `BroadcastOutline()` メソッドと呼び出し、授業完了時の `window.lesson.onComplete(...)` InjectJs、startDialogue payload の `sectionIndex/dialogueIndex/kind` フィールドを削除。`PlayDialoguesAsync` から不要な `sectionIndex` 引数も削除
+- [x] `win-native-app/WinNativeApp/MainForm.cs` — WebMessage 受信ハンドラの `_lessonOutlineRequest` 受信ブロックを削除
+- [x] DB cleanup: `DELETE FROM broadcast_items WHERE type='lesson_dialogues'`（1 件削除）
+- [x] 全862テストpass確認（`python3 -m pytest tests/ -q`）
+- [x] プラン: [plans/remove-broadcast-lesson-dialogues-panel.md](plans/remove-broadcast-lesson-dialogues-panel.md) ステータスを「完了」に更新
+
 ## C#コントロールパネル Lesson タブを授業タイムラインに差し替え
 
 - [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `_currentKind` フィールドを追加し、`PlayDialoguesAsync` の先頭で `_currentKind = kind;` を保存。`LoadLesson` / `PlayAsync` finally で `main` にリセット

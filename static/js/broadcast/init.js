@@ -98,9 +98,6 @@ async function init() {
   // TODOはWebSocket pushで更新されるためポーリング不要
   connectWS();
 
-  // 授業outline復元要求（C#がLoadLesson済みなら再送）
-  try { window.chrome?.webview?.postMessage({_lessonOutlineRequest: true}); } catch(e){}
-
   initEditMode();
 }
 
