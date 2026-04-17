@@ -389,6 +389,13 @@ _OVERLAY_DEFAULTS = {
         "bgColor": "#0a0a1e", "borderColor": "#7c4dff", "borderOpacity": 0.3,
         "textColor": "#ffffff",
     }),
+    "lesson_dialogues": _make_item_defaults({
+        "positionX": 75, "positionY": 2, "width": 24, "maxHeight": 70,
+        "bgOpacity": 0.6, "backdropBlur": 10,
+        "titleFontSize": 1.05, "itemFontSize": 0.85,
+        "bgColor": "#0a0a1e", "borderColor": "#7c4dff", "borderOpacity": 0.3,
+        "textColor": "#ffffff",
+    }),
     "sync": {"lipsyncDelay": 100},
 }
 
@@ -589,7 +596,7 @@ async def save_overlay_settings(request: Request):
     """レイアウト設定をDBに保存し、オーバーレイに反映する"""
     body = await request.json()
     logger.info("[overlay] save_settings: %s", {k: v for k, v in body.items() if k != "type"})
-    fixed_items = {"avatar", "avatar1", "avatar2", "subtitle", "subtitle2", "todo", "lesson_title", "lesson_text", "lesson_progress"}
+    fixed_items = {"avatar", "avatar1", "avatar2", "subtitle", "subtitle2", "todo", "lesson_title", "lesson_text", "lesson_progress", "lesson_dialogues"}
     lighting_sections = {"lighting_teacher", "lighting_student"}
     for section, props in body.items():
         if not isinstance(props, dict):

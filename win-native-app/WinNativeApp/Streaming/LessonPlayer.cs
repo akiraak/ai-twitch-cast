@@ -128,6 +128,52 @@ public class LessonPlayer
             _lessonId, _sections.Count, totalDialogues, _paceScale);
 
         SendPanelUpdate();
+        BroadcastOutline();
+    }
+
+    /// <summary>broadcast.htmlに全セクションの軽量outlineをInjectJs経由で送信する（WAV/lipsync除く）。</summary>
+    public void BroadcastOutline()
+    {
+        if (_sections == null || InjectJs == null) return;
+
+        var outline = new
+        {
+            lesson_id = _lessonId,
+            total_sections = _sections.Count,
+            sections = _sections.Select(s => new
+            {
+                section_index = s.SectionIndex,
+                section_type = s.SectionType,
+                display_text = s.DisplayText,
+                dialogues = s.Dialogues.Select(d => new
+                {
+                    index = d.Index,
+                    kind = "main",
+                    speaker = d.Speaker,
+                    avatar_id = d.AvatarId,
+                    content = d.Content,
+                    emotion = d.Emotion,
+                    duration = d.Duration,
+                }).ToArray(),
+                question = s.Question == null ? null : (object)new
+                {
+                    wait_seconds = s.Question.WaitSeconds,
+                    answer_dialogues = s.Question.AnswerDialogues.Select(d => new
+                    {
+                        index = d.Index,
+                        kind = "answer",
+                        speaker = d.Speaker,
+                        avatar_id = d.AvatarId,
+                        content = d.Content,
+                        emotion = d.Emotion,
+                        duration = d.Duration,
+                    }).ToArray(),
+                },
+            }).ToArray(),
+        };
+
+        var json = JsonSerializer.Serialize(outline);
+        InjectJs($"if(window.lesson&&window.lesson.setOutline)window.lesson.setOutline({json})");
     }
 
     /// <summary>ロード済み授業の再生を開始する。完了またはキャンセルまでawaitする。</summary>
@@ -189,6 +235,9 @@ public class LessonPlayer
                     reason,
                 });
             }
+
+            // broadcast.html タイムラインを完了状態に遷移
+            InjectJs?.Invoke($"if(window.lesson&&window.lesson.onComplete)window.lesson.onComplete({JsonSerializer.Serialize(new { reason })})");
 
             var sectionsPlayed = _currentSectionIndex + (reason == "completed" ? 1 : 0);
             Log.Information("[Lesson] Lesson {Id} finished: reason={Reason} sections_played={Played}/{Total}",
@@ -385,7 +434,7 @@ public class LessonPlayer
         }
 
         // メインdialogue再生
-        await PlayDialoguesAsync(section.Dialogues, ct);
+        await PlayDialoguesAsync(section.Dialogues, section.SectionIndex, "main", ct);
 
         // questionセクション: 待機→回答再生
         if (section.SectionType == "question" && section.Question != null)
@@ -394,7 +443,7 @@ public class LessonPlayer
             Log.Information("[Lesson] Question wait: {Ms}ms", waitMs);
             await PauseAwareDelayAsync(waitMs, ct);
 
-            await PlayDialoguesAsync(section.Question.AnswerDialogues, ct);
+            await PlayDialoguesAsync(section.Question.AnswerDialogues, section.SectionIndex, "answer", ct);
         }
 
         // 教材テキスト非表示
@@ -411,7 +460,7 @@ public class LessonPlayer
         Log.Information("[Lesson] Section {Index} complete", section.SectionIndex);
     }
 
-    private async Task PlayDialoguesAsync(List<DialogueData> dialogues, CancellationToken ct)
+    private async Task PlayDialoguesAsync(List<DialogueData> dialogues, int sectionIndex, string kind, CancellationToken ct)
     {
         _totalDialogues = dialogues.Count;
         _currentDialogues = dialogues;
@@ -440,6 +489,9 @@ public class LessonPlayer
                 gesture = dlg.Gesture,
                 lipsyncFrames = dlg.LipsyncFrames,
                 duration = dlg.Duration,
+                sectionIndex,
+                dialogueIndex = i,
+                kind,
             });
             InjectJs?.Invoke($"if(window.lesson)window.lesson.startDialogue({dlgJson})");
 

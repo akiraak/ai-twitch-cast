@@ -216,6 +216,26 @@ function applySettings(s) {
       }
     }
   }
+  // === lesson_dialogues ===
+  if (s.lesson_dialogues) {
+    const ldp = document.getElementById('lesson-dialogues-panel');
+    if (ldp) {
+      applyCommonStyle(ldp, s.lesson_dialogues);
+      if (s.lesson_dialogues.width != null) ldp.style.width = s.lesson_dialogues.width + '%';
+      if (s.lesson_dialogues.height != null) ldp.style.height = s.lesson_dialogues.height + '%';
+      if (s.lesson_dialogues.maxHeight != null) ldp.style.maxHeight = s.lesson_dialogues.maxHeight + '%';
+      const ld = s.lesson_dialogues;
+      const fs = ld.fontSize;
+      const titleFs = ld.titleFontSize ?? (fs != null ? fs : null);
+      const itemFs = ld.itemFontSize ?? (fs != null ? fs : null);
+      const title = document.getElementById('lesson-dialogues-title');
+      if (title && titleFs != null) title.style.fontSize = titleFs + 'vw';
+      if (itemFs != null) {
+        ldp.querySelectorAll('.ld-row').forEach(el => el.style.fontSize = itemFs + 'vw');
+        ldp.dataset.itemFontSize = itemFs;
+      }
+    }
+  }
   // === sync ===
   if (s.sync) {
     if (s.sync.lipsyncDelay != null) {

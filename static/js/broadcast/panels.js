@@ -336,6 +336,162 @@ function hideLessonTitle() {
   }, 600);
 }
 
+// --- 授業Dialogueタイムラインパネル ---
+
+function _speakerIcon(speaker) {
+  return speaker === 'student' ? '\u{1F9D1}' : '\u{1F469}';
+}
+
+function showLessonDialogues() {
+  const panel = document.getElementById('lesson-dialogues-panel');
+  if (!panel) return;
+  renderLessonDialogues();
+  panel.style.display = 'flex';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { panel.classList.add('visible'); });
+  });
+}
+
+function hideLessonDialogues() {
+  const panel = document.getElementById('lesson-dialogues-panel');
+  if (!panel) return;
+  panel.classList.remove('visible');
+  setTimeout(() => {
+    if (!panel.classList.contains('visible')) panel.style.display = 'none';
+  }, 600);
+}
+
+function _setAutoFollow(enable) {
+  _timelineState.autoFollow = enable;
+  if (_timelineState.followTimer) {
+    clearTimeout(_timelineState.followTimer);
+    _timelineState.followTimer = null;
+  }
+  if (!enable) {
+    _timelineState.followTimer = setTimeout(() => {
+      _timelineState.autoFollow = true;
+      if (_timelineState.currentSection >= 0) {
+        _timelineState.viewSection = _timelineState.currentSection;
+      }
+      renderLessonDialogues();
+    }, _FOLLOW_RESET_MS);
+  }
+}
+
+function _selectSection(idx) {
+  _timelineState.viewSection = idx;
+  _setAutoFollow(false);
+  renderLessonDialogues();
+}
+
+function renderLessonDialogues() {
+  const panel = document.getElementById('lesson-dialogues-panel');
+  const tabsEl = document.getElementById('lesson-dialogues-tabs');
+  const listEl = document.getElementById('lesson-dialogues-list');
+  if (!panel || !tabsEl || !listEl) return;
+
+  const st = _timelineState;
+  const sections = st.sections || [];
+  if (sections.length === 0) {
+    tabsEl.innerHTML = '';
+    listEl.innerHTML = '';
+    return;
+  }
+
+  const viewIdx = Math.max(0, Math.min(st.viewSection, sections.length - 1));
+  const curIdx = st.currentSection;
+
+  // タブ
+  tabsEl.innerHTML = '';
+  sections.forEach((sec, i) => {
+    const tab = document.createElement('div');
+    const classes = ['ld-tab'];
+    if (i === viewIdx) classes.push('active');
+    if (curIdx >= 0 && i < curIdx) classes.push('done');
+    else if (i === curIdx) classes.push('current');
+    tab.className = classes.join(' ');
+    tab.textContent = `\u00A7${i + 1}`;
+    tab.title = sec.section_type || '';
+    tab.addEventListener('click', () => _selectSection(i));
+    tabsEl.appendChild(tab);
+  });
+
+  // リスト
+  listEl.innerHTML = '';
+  const sec = sections[viewIdx];
+  const mainDlgs = Array.isArray(sec.dialogues) ? sec.dialogues : [];
+  const isCurrentSection = viewIdx === curIdx;
+
+  _renderDialogueGroup(listEl, mainDlgs, 'main', isCurrentSection, st.currentKind, st.currentDialogue, curIdx, viewIdx);
+
+  if (sec.question && Array.isArray(sec.question.answer_dialogues) && sec.question.answer_dialogues.length > 0) {
+    const header = document.createElement('div');
+    header.className = 'ld-group-header';
+    header.textContent = '— 回答 —';
+    listEl.appendChild(header);
+    _renderDialogueGroup(listEl, sec.question.answer_dialogues, 'answer', isCurrentSection, st.currentKind, st.currentDialogue, curIdx, viewIdx);
+  }
+
+  // 追従ヒント（手動選択中）
+  let hint = panel.querySelector('.ld-follow-hint');
+  if (!st.autoFollow && curIdx >= 0 && viewIdx !== curIdx) {
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.className = 'ld-follow-hint';
+      hint.textContent = '\u2192 現在地へ';
+      hint.addEventListener('click', () => {
+        _timelineState.viewSection = _timelineState.currentSection;
+        _setAutoFollow(true);
+        renderLessonDialogues();
+      });
+      panel.appendChild(hint);
+    }
+  } else if (hint) {
+    hint.remove();
+  }
+
+  // 現在行を可視領域に
+  const currentRow = listEl.querySelector('.ld-row.current');
+  if (currentRow) currentRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function _renderDialogueGroup(listEl, dialogues, kind, isCurrentSection, currentKind, currentDialogue, curSection, viewSection) {
+  dialogues.forEach((dlg, i) => {
+    const row = document.createElement('div');
+    let state;
+    if (!isCurrentSection) {
+      // 他セクション: currentより前なら past、後なら future
+      if (curSection < 0) state = 'future';
+      else if (viewSection < curSection) state = 'past';
+      else state = 'future';
+    } else if (kind === currentKind && i === currentDialogue) {
+      state = 'current';
+    } else if ((kind === 'main' && currentKind === 'answer')
+      || (kind === currentKind && i < currentDialogue)) {
+      state = 'past';
+    } else {
+      state = 'future';
+    }
+    row.className = 'ld-row ' + state;
+
+    const marker = document.createElement('span');
+    marker.className = 'ld-marker';
+    row.appendChild(marker);
+
+    const speaker = document.createElement('span');
+    speaker.className = 'ld-speaker';
+    speaker.textContent = _speakerIcon(dlg.speaker);
+    row.appendChild(speaker);
+
+    const content = document.createElement('span');
+    content.className = 'ld-content';
+    content.textContent = dlg.content || '';
+    row.appendChild(content);
+
+    listEl.appendChild(row);
+  });
+}
+
 // --- 授業モード（パネル表示切替） ---
 
 let _lessonMode = false;
@@ -356,5 +512,6 @@ function setLessonMode(active) {
     hideLessonText();
     hideLessonProgress();
     hideLessonTitle();
+    hideLessonDialogues();
   }
 }

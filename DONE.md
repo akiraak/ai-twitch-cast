@@ -1,5 +1,21 @@
 # DONE
 
+## 授業Dialogueタイムライン表示
+
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `BroadcastOutline()` 新設: `LoadLesson` 完了時に全セクションの軽量outline（WAV/lipsync除外）をInjectJs経由で `window.lesson.setOutline(...)` に送信
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `PlayDialoguesAsync` を `(dialogues, sectionIndex, kind)` 署名に変更、`startDialogue` のJSON payloadに `sectionIndex` / `dialogueIndex` / `kind`（"main" or "answer"）を追加
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — 授業完了時に `window.lesson.onComplete({reason})` をInjectJs
+- [x] `win-native-app/.../MainForm.cs` — broadcast.htmlからの `_lessonOutlineRequest` postMessageを受けたら `_lessonPlayer.BroadcastOutline()` を呼んでoutline再送（リロード復元）
+- [x] `static/broadcast.html` — `#lesson-dialogues-panel`（タイトル・タブ・リスト）を追加、`data-editable="lesson_dialogues"` + `data-managed-visibility`
+- [x] `static/css/broadcast.css` — タイムラインパネル／タブ／行（past/current/future）／追従ヒントのスタイルを追加
+- [x] `static/js/broadcast/globals.js` — `ITEM_REGISTRY` に `lesson-dialogues-panel` を登録
+- [x] `static/js/broadcast/lesson.js` — `_timelineState`（sections / currentSection / currentDialogue / viewSection / autoFollow / followTimer）を管理、`window.lesson.setOutline` / `window.lesson.onComplete` を追加、`startDialogue` でタイムライン状態を更新
+- [x] `static/js/broadcast/panels.js` — `showLessonDialogues` / `hideLessonDialogues` / `renderLessonDialogues` / `_renderDialogueGroup` / `_selectSection` / `_setAutoFollow`（5秒無操作で復帰）を追加、`setLessonMode(false)` で非表示
+- [x] `static/js/broadcast/settings.js` — `applySettings` に `lesson_dialogues` 分岐を追加（width / height / maxHeight / fontSize / titleFontSize / itemFontSize）
+- [x] `static/js/broadcast/init.js` — 起動時に `_lessonOutlineRequest` postMessageを送信（リロード時のoutline復元要求）
+- [x] `scripts/routes/overlay.py` — `_OVERLAY_DEFAULTS.lesson_dialogues` を追加（右サイドバー配置）、`save_overlay_settings` の `fixed_items` に `lesson_dialogues` を追加（broadcast_itemsテーブル保存）
+- [x] プラン: [plans/lesson-dialogue-timeline.md](plans/lesson-dialogue-timeline.md) ステータスを「完了」に更新
+
 ## TTS消失バグ修正: clear-sources/add-url でバージョン成果物を保持
 
 - [x] `scripts/routes/teacher.py` — `_clear_lesson_data` から `clear_tts_cache(lesson_id)` と `db.delete_lesson_sections(lesson_id)` を除去。ソースクリア／URL追加は「ソース＋抽出テキスト」だけを操作し、各バージョンのセクション・TTSは保持
