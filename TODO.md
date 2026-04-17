@@ -4,7 +4,7 @@
 
 - [>] Phase 1-4: 実装済み（ビルド・動作確認待ち）
 - [>] Phase 5: バグ修正
-    - [ ] 最初のセリフしか読まれない問題が未解決 → 上記の一括送信方式で根本対策 lesson-full-bundle.md
+    - [ ] 最初のセリフしか読まれない問題 → PlaybackStopped未発火が原因と判明 [plans/lesson-playback-stopped-hang.md](plans/lesson-playback-stopped-hang.md)
 
 ## TTS完了待ちの過剰遅延改善（コメント応答用） → [plans/tts-wait-excess-delay.md](plans/tts-wait-excess-delay.md)
 
