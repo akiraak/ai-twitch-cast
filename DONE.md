@@ -1,5 +1,12 @@
 # DONE
 
+## TTS消失バグ修正: clear-sources/add-url でバージョン成果物を保持
+
+- [x] `scripts/routes/teacher.py` — `_clear_lesson_data` から `clear_tts_cache(lesson_id)` と `db.delete_lesson_sections(lesson_id)` を除去。ソースクリア／URL追加は「ソース＋抽出テキスト」だけを操作し、各バージョンのセクション・TTSは保持
+- [x] 原因: 既存コードは `clear_tts_cache(lesson_id)` を無フィルターで呼び、`shutil.rmtree(resources/audio/lessons/{id})` により **全バージョン・全言語・全ジェネレータの音声を一括削除** していた。ユーザーが「ソース追加」ボタンで画像/URLを追加するたびに v1〜v8 の成果物が巻き添えで消える状態
+- [x] `tests/test_api_teacher.py` — `test_clear_sources` を「セクション保持・TTSキャッシュ未呼び出し」で再アサート、`test_add_url_preserves_sections_and_tts` を新規追加
+- [x] エンドポイント docstring 更新
+
 ## 授業開始ボタン: TTSキャッシュ未完了時は開始不可
 
 - [x] `static/js/admin/teacher.js` — STEP 4 レンダリングで全セクションのTTSキャッシュ有無を判定、未生成があれば「授業開始」ボタンを灰色・disabled にして「TTS事前生成が必要 (N/M)」を表示、注意メッセージを赤字で表示

@@ -706,9 +706,7 @@ async def delete_lesson(lesson_id: int):
 
 
 def _clear_lesson_data(lesson_id: int):
-    """既存のソース・セクション・抽出テキスト・TTSキャッシュを全削除する"""
-    # TTSキャッシュ削除
-    clear_tts_cache(lesson_id)
+    """既存のソース・抽出テキストをクリアする（セクションとTTSは各バージョン単位の成果物なので保持）"""
     # 画像ファイル削除
     sources = db.get_lesson_sources(lesson_id)
     for src in sources:
@@ -723,8 +721,7 @@ def _clear_lesson_data(lesson_id: int):
             lesson_dir.rmdir()
         except OSError:
             pass
-    # DB削除
-    db.delete_lesson_sections(lesson_id)
+    # ソースDBレコード削除
     for src in sources:
         db.delete_lesson_source(src["id"])
     db.update_lesson(lesson_id, extracted_text="")
@@ -732,7 +729,7 @@ def _clear_lesson_data(lesson_id: int):
 
 @router.post("/api/lessons/{lesson_id}/clear-sources")
 async def clear_lesson_sources(lesson_id: int):
-    """既存ソース・セクション・抽出テキストを全クリアする"""
+    """既存ソースと抽出テキストをクリアする（セクション・TTSは各バージョンの成果物として保持）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}
@@ -819,7 +816,7 @@ async def extract_lesson_text(lesson_id: int):
 
 @router.post("/api/lessons/{lesson_id}/add-url")
 async def add_lesson_url(lesson_id: int, body: UrlAdd):
-    """URL追加（既存データを全クリアして置き換え、テキスト自動抽出）"""
+    """URL追加（既存ソース・抽出テキストを置き換え、セクション・TTSは保持、テキスト自動抽出）"""
     lesson = db.get_lesson(lesson_id)
     if not lesson:
         return {"ok": False, "error": "コンテンツが見つかりません"}

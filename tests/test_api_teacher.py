@@ -130,7 +130,7 @@ class TestLessonSources:
 
 
     def test_clear_sources(self, api_client, test_db, tmp_path):
-        """clear-sourcesで既存ソース・セクション・抽出テキストがクリアされる"""
+        """clear-sourcesで既存ソース・抽出テキストがクリアされ、セクション・TTSは保持される"""
         r1 = api_client.post("/api/lessons", json={"name": "ClearTest"})
         lid = r1.json()["lesson"]["id"]
 
@@ -145,13 +145,17 @@ class TestLessonSources:
         test_db.update_lesson(lid, extracted_text="old text")
 
         # クリア
-        resp = api_client.post(f"/api/lessons/{lid}/clear-sources")
-        assert resp.json()["ok"] is True
+        with patch("scripts.routes.teacher.clear_tts_cache") as mock_clear_tts:
+            resp = api_client.post(f"/api/lessons/{lid}/clear-sources")
+            assert resp.json()["ok"] is True
+            # TTSキャッシュは消さない
+            mock_clear_tts.assert_not_called()
 
         r = api_client.get(f"/api/lessons/{lid}")
         data = r.json()
         assert len(data["sources"]) == 0
-        assert len(data["sections"]) == 0
+        # セクションは既存バージョンの成果物として残る
+        assert len(data["sections"]) == 1
         assert data["lesson"]["extracted_text"] == ""
 
     def test_upload_multiple_images(self, api_client, tmp_path):
@@ -234,6 +238,44 @@ class TestLessonSources:
 
         # セクションが保護されている
         sections = test_db.get_lesson_sections(lid)
+        assert len(sections) == 1
+        assert sections[0]["content"] == "既存セクション"
+
+    def test_add_url_preserves_sections_and_tts(self, api_client, test_db, mock_gemini):
+        """add-url がセクション・TTSキャッシュを削除しない（バージョン保護）"""
+        r1 = api_client.post("/api/lessons", json={"name": "AddUrlPreserve"})
+        lid = r1.json()["lesson"]["id"]
+
+        # 既存セクション（v8想定の成果物）
+        test_db.add_lesson_section(lid, 0, "introduction", "既存セクション",
+                                   lang="ja", generator="claude", version_number=8)
+
+        mock_gemini.models.generate_content.side_effect = [
+            MagicMock(text="New text"),
+            MagicMock(text="[]"),
+        ]
+
+        with patch("src.lesson_generator.extractor.httpx.AsyncClient") as mock_http, \
+             patch("scripts.routes.teacher.clear_tts_cache") as mock_clear_tts:
+            mock_resp = AsyncMock()
+            mock_resp.text = "<html><body>New content</body></html>"
+            mock_resp.raise_for_status = MagicMock()
+            mock_http.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
+                get=AsyncMock(return_value=mock_resp)
+            ))
+            mock_http.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            resp = api_client.post(
+                f"/api/lessons/{lid}/add-url",
+                json={"url": "https://example.com/lesson"},
+            )
+            assert resp.json()["ok"] is True
+            # TTSキャッシュは消さない
+            mock_clear_tts.assert_not_called()
+
+        # セクションが保持されている
+        r2 = api_client.get(f"/api/lessons/{lid}")
+        sections = r2.json()["sections"]
         assert len(sections) == 1
         assert sections[0]["content"] == "既存セクション"
 
