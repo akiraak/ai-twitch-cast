@@ -675,7 +675,7 @@ public class MainForm : Form
                         });
                     }
                     // broadcast.htmlからのoutline要求（リロード後の復元）
-                    if (msg.TryGetProperty("_lessonOutlineRequest", out _))
+                    if (msg.TryGetProperty("_lessonOutlineRequest", out JsonElement _))
                     {
                         try { _lessonPlayer?.BroadcastOutline(); } catch (Exception ex) { Log.Debug(ex, "[Lesson] outline resend failed"); }
                     }
