@@ -76,9 +76,15 @@ def mock_env(monkeypatch):
 
 
 @pytest.fixture
-def api_client(test_db, mock_env, mock_gemini, monkeypatch):
+def api_client(test_db, mock_env, mock_gemini, monkeypatch, tmp_path):
     """FastAPI TestClient（全外部依存をモック化）"""
     from unittest.mock import AsyncMock
+
+    # 本番TTSキャッシュへの漏洩防止（api経由のclear_tts_cacheが本番dirをrmtreeするのを防ぐ）
+    import src.lesson_runner as lr
+    audio_dir = tmp_path / "audio_lessons"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(lr, "LESSON_AUDIO_DIR", audio_dir)
 
     import scripts.state as st
     # stateのグローバルオブジェクトをモック化

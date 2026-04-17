@@ -1,5 +1,11 @@
 # DONE
 
+## テスト実行時の本番TTSキャッシュ漏洩を修正
+
+- [x] 原因: `tests/test_api_teacher.py` の `test_delete_lesson` / `test_delete_tts_cache` / `test_delete_tts_cache_section` が `api_client` 経由で DELETE エンドポイントを叩く際、`LESSON_AUDIO_DIR` を monkeypatch していなかった。テスト用 in-memory DB は空から始まるため lesson_id=1 が最初に払い出され、サーバ側の `clear_tts_cache(1)` が本番 `resources/audio/lessons/1/` を `shutil.rmtree` していた。結果: **pytest を走らせるたびに English 1-1 の TTSキャッシュが全削除**される状態（「機能実装するたびにTTS再生成が必要」の根因）
+- [x] `tests/conftest.py` — `api_client` fixture に `monkeypatch.setattr(lr, "LESSON_AUDIO_DIR", tmp_path / "audio_lessons")` を追加。個別テストの monkeypatch 漏れを根絶
+- [x] 全862テストpassを確認
+
 ## 授業Dialogueタイムライン表示
 
 - [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `BroadcastOutline()` 新設: `LoadLesson` 完了時に全セクションの軽量outline（WAV/lipsync除外）をInjectJs経由で `window.lesson.setOutline(...)` に送信
