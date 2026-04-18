@@ -1,70 +1,122 @@
-# C#ローカルTTS再生のバッファ縮小でセリフ間ギャップを詰める
+# Claude Code 実況のセリフ間ギャップを詰める（バッファ縮小 + speak_batch 化）
 
-## ステータス: 未着手
+## ステータス: ステップ1完了・ステップ2未着手（本命）
 
-## 背景
+## 要旨
 
-`plans/claude-narration-chain-playback.md` のチェーン再生実装により、Claude Code 実況のエントリ間ギャップは Python 側の直列ポーリング起因分は解消済み。サーバー側は全TTSを並列生成→`speak_batch` で C# に一括送信→`tts_entry_started` Push 駆動で字幕/口パク/感情を発火する構成になっている。
+Claude Code 実況でセリフ間に最大4秒前後のギャップが残る問題の本命原因は、当初想定していた NAudio の再生バッファではなく、**`comment_reader.speak_event` マルチキャラパスが旧 `speak()` をループで呼んでおり `_wait_tts_complete` のポーリング（per-entry で数秒）を挟んでいること**だった（2026-04-18 の server.log 実測で判明）。
 
-一方でユーザーの体感としては、セリフとセリフの間にまだ短くない「間」が残っている。ソースを読むと、残るボトルネックは **C#ローカル再生（NAudio `WaveOutEvent`）の再生エンジン再起動コスト** に集中している。
+本プランは以下の2ステップ構成に更新する:
 
-### 残っている「間」の発生源（確認済み）
+1. **ステップ1 — NAudio バッファ縮小（完了）**: 単発再生の開始/終端レイテンシを 〜400ms 短縮
+2. **ステップ2 — `speak_event` マルチを `speak_batch` に移行（本命・未着手）**: per-entry の `_wait_tts_complete` 消滅でギャップを 500ms 以下に
 
-| 箇所 | 発生源 | 推定遅延 |
-|---|---|---|
-| `MainForm.cs:1475` | `new WaveOutEvent()`（`DesiredLatency` 既定=300ms）— バッファが埋まってから再生開始 | 〜300ms |
-| `MainForm.cs:1484` | `PlaybackStopped` は内部バッファが完全に空になってから発火 → `DequeueAndPlayNextLocal` への遷移遅延 | 〜300ms |
-| `MainForm.cs:1471-1476` | 毎エントリで `WaveFileReader` + `WaveChannel32` + `MeteringWaveProvider` + `WaveOutEvent` を新規生成・初期化 | 数十ms |
+## 背景（2026-04-18 実測）
 
-合算で **数百ms〜600ms** のエントリ間無音が残る。
+- 実装済みのチェーン再生（`plans/claude-narration-chain-playback.md`）は **`claude_watcher._play_conversation` 側だけ** に適用されていた
+- Hook 経由の `/api/avatar/speak` → `reader.speak_event` はマルチキャラでも旧 `_speech.speak()` をループで呼ぶ実装が残っていた（`src/comment_reader.py:600-635`）
+- 旧 `speak()` は `_wait_tts_complete`（`src/speech_pipeline.py:246-265`）で C# 側 `IsTtsActive` をポーリングし、duration × 0.5 秒を上限に追加待機する。これが **2〜6秒の余剰** を生む
 
-## 方針
+### server.log 実測（2026-04-18）
 
-`PlayTtsLocally` の `WaveOutEvent` に `DesiredLatency` と `NumberOfBuffers` を明示指定してバッファを縮める。デフォルトの `DesiredLatency=300, NumberOfBuffers=3`（合計 900ms のPCMを内部保持）から段階的に縮小する。
+```
+13:14:36  [tts] C#音声投入完了: 363ms       ← entry#0 送信
+          ... entry#0 再生中 ...
+13:14:48  [tts] TTS完了待ち: 4.0秒追加       ← _wait_tts_complete の余剰
+13:14:48  [tts] C#音声投入完了: 191ms       ← entry#1 送信
+13:14:54  [tts] TTS完了待ち: 2.0秒追加
+13:14:55  [tts] C#音声投入完了: 180ms       ← entry#2 送信
+13:15:11  [tts] TTS完了待ち: 5.4秒追加
+13:15:12  [tts] C#音声投入完了: 206ms       ← entry#3 送信
+13:15:19  [tts] TTS完了待ち: 2.2秒追加
+```
 
-### ステップ
+---
 
-1. **段階1（安全域）**: `DesiredLatency=100, NumberOfBuffers=3`
-   - 再生開始/終了の両端で約200msずつ短縮を狙う
-   - 音切れが出ないことを配信 + ローカルの両方で確認
-2. **段階2（積極）**: 段階1で問題なければ `NumberOfBuffers=2` に削る
-   - さらに100〜200ms短縮
-3. **段階3（要実装）**: 依然として不足なら以下を検討
-   - `WaveOutEvent` を使い回し、`BufferedWaveProvider` で差し替える（初期化コスト0）
-   - `PlaybackStopped` を待たず、現在再生中WAVの残時間が閾値以下になったら次エントリの `Init()` を先行実行（プリロール）
-   - TTS 生成時に WAV 末尾の無音をトリム（`src/tts.py`）
+## ステップ1（完了）: NAudio バッファ縮小
 
-## 対象ファイル
+### 変更
+
+`win-native-app/WinNativeApp/MainForm.cs:1475` の `PlayTtsLocally` 内 `WaveOutEvent` に `DesiredLatency=100, NumberOfBuffers=3` を明示指定。既定（300ms × 3 = 900msバッファ）→ 100ms × 3 = 300msバッファ。
+
+### 効果の評価
+
+- 単発再生の開始・終端で合算 〜400ms 短縮（計測待ち）
+- しかし本問題の主因（数秒の `_wait_tts_complete` 余剰）には効かないため、体感改善は限定的
+- ただし **ステップ2 実装後** は NAudio バッファが最後に残るギャップ源になるため、ここでの短縮は効いてくる
+
+### 検証待ち項目
+
+- 5 分以上の連続実況で音切れ・プツッとしたノイズが出ないか（Windows 側で要実配信確認）
+- 問題なければ `NumberOfBuffers=2` への更なる縮小（ステップ1-b）を検討
+
+---
+
+## ステップ2（本命・未着手）: `speak_event` マルチを `speak_batch` に移行
+
+### 方針
+
+`src/comment_reader.py:573-635` のマルチキャラパスを、`src/claude_watcher.py:373-495` の `_play_conversation` と同じ構造に書き換える:
+
+- TTS 並列生成 → 全 WAV 完了待ち → `entries` 組み立て → `self._speech.speak_batch(entries)` 一括送信
+- エントリごとの字幕・口パク・感情は C# からの `tts_entry_started` Push に乗せて発火（`speak_batch` 内部で既に実装済み）
+- DB 保存（`_save_avatar_comment`）は `speak_batch` 呼び出し前にまとめて行う（`_play_conversation` の前例に合わせる）
+- コメント割り込み監視（`_watch_interrupt` → `cancel_tts_batch`）も合わせて移植
+
+### 影響範囲
+
+`speak_event` マルチ経路は以下のイベントで使われている:
+
+| 入り口 | 経路 |
+|---|---|
+| Claude Code Hook（`/api/avatar/speak`） | `avatar.py:30` → `speak_event` |
+| Git コミット報告 | `comment_reader` のコミット監視 → `speak_event` |
+| Twitch 配信開始通知など | 同上 |
+| TTS テスト multi（`/api/tts/test-multi`） | segment_queue 経由（別系統、本プラン対象外） |
+
+### 実装ステップ
+
+1. `speak_event` マルチ分岐（line 574-635）を `speak_batch` ベースに書き換え
+   - `_play_conversation` を参考に構造を合わせる
+   - `chat_result` / `post_to_chat` / `first entry translation` の扱いは既存挙動を保つ
+2. `post_to_chat`（最初のエントリのみ）の発火タイミングを `speak_batch` 前または前後で適切に挟む
+3. 旧 `_wait_tts_complete` 呼び出しは `speak_batch` 経由では通らないため除去される（`speak()` 側は他経路で残る）
+4. テスト追加: `tests/test_comment_reader.py`（無ければ新設）で `speak_event` multi が `speak_batch` を1回呼び、per-entry の `speak` は呼ばれないことを確認
+5. 既存テスト `tests/test_speech_pipeline.py::TestSpeakBatch` と `tests/test_claude_watcher.py` が通ることを確認
+
+### 対象ファイル
 
 | ファイル | 想定変更 |
 |---|---|
-| `win-native-app/WinNativeApp/MainForm.cs` | `PlayTtsLocally` 内の `new WaveOutEvent()` に `DesiredLatency` / `NumberOfBuffers` を設定 |
-
-※ `PlayLessonAudioAsync`（授業用）は対象外。授業は既に `LessonPlayer` で独自のチェーン実装があり、挙動を揃える場合は別タスクとする。
+| `src/comment_reader.py` | `speak_event` マルチ分岐を `speak_batch` ベースに書き換え |
+| `tests/test_comment_reader.py` | （必要なら新設）マルチパスが `speak_batch` を呼ぶ回帰テスト |
+| `docs/speech-generation-flow.md` | マルチキャラ経路のフロー図を更新 |
+| `.claude/projects/.../memory/tts-audio.md` | チェーン再生の適用範囲を更新 |
 
 ## リスク
 
-1. **音切れ・プツッとしたノイズ**（最大リスク）
-   - バッファ縮小でGCポーズ・スレッドスケジューリング遅延時にアンダーランが起きる
-   - 本アプリは同時にFFmpegエンコード・WebView2・WGCキャプチャ・WS通信を走らせておりCPUスパイクの可能性がある
-2. **短いWAVでの `PlaybackStopped` 不安定**
-   - 極端にバッファを小さくすると NAudio の再生終了判定がずれる報告がある
-   - チェーン再生は `PlaybackStopped` に依存しているため、不安定化すると次エントリ未発火/二重発火の可能性
-3. **配信視聴者への影響は基本なし**
-   - NAudioローカル再生は開発者のスピーカー用。Twitch配信音声は FFmpeg経路（`TtsDecoder`）で別送
-   - ただし配信用ミキサーにもローカル経路のタイミング基準が間接的に使われていないか、実装時に再確認
+1. **字幕・口パク・感情の同期タイミングが微妙に変わる**
+   - 旧: Python 側が順番に `speak()` → 内部で `notify_overlay` / `apply_emotion` を発火
+   - 新: `speak_batch` が C# の `tts_entry_started` Push を受けて発火
+   - `_play_conversation` で既に動いている経路なので挙動は検証済み
+2. **`chat_result` / `post_to_chat` の発火タイミング**
+   - 旧: 最初のエントリの `speak()` 内で 2 秒遅延後に投稿
+   - 新: `speak_batch` には `chat_result` を渡すインターフェースがないため、`speak_batch` 呼び出しの直前または開始Push受信後に別途発火する必要がある
+3. **コメント割り込み時の中断**
+   - 旧: per-entry の `speak()` ループなので、次エントリの前にコメントキューを見ればよい
+   - 新: `speak_batch` 中は C# キューに全 WAV が積まれているため、`cancel_tts_batch` で中断する必要あり（`_play_conversation` の `_watch_interrupt` を移植）
 
 ## 検証
 
-- `stream.sh` で配信アプリ起動 → Claude Code実況が連続発話するシナリオで:
-  - エントリ間のギャップが体感で短縮されているか
-  - プツッとしたノイズ・音切れがないか
-  - `tts_entry_started` / `tts_batch_complete` Push が正常発火しているか（`jslog.txt` / `server.log`）
-- 授業再生は対象外だが、同じプロセス内で動くため副作用がないかざっと確認
-- `python3 -m pytest tests/ -q` でリグレッションチェック（C#側変更なのでPythonテストは影響ないはず）
+- `stream.sh` で配信アプリ起動 → `curl -X POST http://localhost:$WEB_PORT/api/avatar/speak ...` で multi 発話を連続でトリガー
+- `server.log` で `TTS完了待ち` が出なくなったこと、`[batch] 素材準備完了` + `[batch] C#へバッチ送信完了` + `tts_entry_started` のタイムスタンプ間隔が `duration + 0.5秒` 以内に収まることを確認
+- `jslog.txt` で `tts_entry_started` / `tts_batch_complete` Push が正常発火していることを確認
+- 5 分以上の連続実況で音切れ・字幕のずれ・感情切替の飛びが起きないこと
+- `python3 -m pytest tests/ -q` でリグレッションチェック
 
 ## 完了条件
 
-- Claude Code 実況のエントリ間ギャップが 200ms 以下に収まる（体感および server.log の `tts_entry_started` タイムスタンプ間隔）
-- 5分以上の連続実況でノイズ・音切れが発生しない
-- 配信・ローカル両方で音質劣化がない
+- Claude Code 実況の `C#音声投入完了` 間隔（entry#n → entry#n+1）が **`duration + 500ms 以下`** に収まる
+- `server.log` から `TTS完了待ち: N.N秒追加` が消える（または ステップ1-b 以降の小さな値に収まる）
+- 字幕・口パク・感情切替のズレが体感で目立たない
+- `python3 -m pytest tests/ -q` オールグリーン

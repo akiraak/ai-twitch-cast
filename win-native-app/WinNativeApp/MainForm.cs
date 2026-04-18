@@ -1472,7 +1472,9 @@ public class MainForm : Form
             var reader = new WaveFileReader(ms);
             var channel = new WaveChannel32(reader) { Volume = Math.Clamp(volume, 0f, 1f) };
             var meter = new MeteringWaveProvider(channel);
-            var waveOut = new WaveOutEvent();
+            // DesiredLatency を既定の300ms → 100ms に縮めてエントリ間ギャップを短縮
+            // （プラン: plans/tts-local-buffer-tuning.md ステップ1 安全域）
+            var waveOut = new WaveOutEvent { DesiredLatency = 100, NumberOfBuffers = 3 };
             waveOut.Init(meter);
             waveOut.Volume = 1.0f;
 

@@ -1,5 +1,12 @@
 # DONE
 
+## Claude Code 実況のローカル再生バッファ縮小（ステップ1）＋ プラン本命再特定
+
+- [x] `win-native-app/WinNativeApp/MainForm.cs:1475` — `PlayTtsLocally` 内の `WaveOutEvent` を `new WaveOutEvent { DesiredLatency = 100, NumberOfBuffers = 3 }` に変更。既定 300ms×3=900ms バッファ → 100ms×3=300ms バッファ。単発再生の開始/終端で合算 〜400ms 短縮を狙う
+- [x] `server.log`（2026-04-18 実測）で原因を再特定: 4秒前後のギャップは NAudio バッファではなく **`comment_reader.speak_event` マルチパスが `_speech.speak()` を per-entry でループ呼出し `_wait_tts_complete` ポーリングで 2〜6秒待っていた**ことが主因。`TTS完了待ち: 4.0秒 / 5.4秒 / 2.0秒 / 2.2秒` を複数確認
+- [x] `plans/tts-local-buffer-tuning.md` を2ステップ構成に更新。ステップ1（NAudioバッファ・完了）とステップ2（`speak_event` マルチを `speak_batch` 化・本命・未着手）に分け、claude_watcher._play_conversation を移植ベースとする方針・影響範囲・リスクを追記
+- [x] `TODO.md` のタイトルを「speak_batch 化＋NAudio バッファ縮小」に更新
+
 ## Claude Code 実況のチェーン再生（全件先送り → C#キュー順次再生）
 
 - [x] `win-native-app/WinNativeApp/MainForm.cs` — TTSローカル再生キュー (`_ttsLocalQueue` / `_ttsLocalCurrent` / `_ttsQueueLock` / `_ttsBatchActive`) を追加。`OnTtsAudioBatch` コールバックでキューに全件 enqueue、配信中は全 PCM を `_ffmpeg.WriteTtsData` へ一括投入、idle なら `DequeueAndPlayNextLocal` を呼ぶ。`OnTtsBatchCancel` でキュークリア + WaveOut Stop + `tts_batch_complete (cancelled=true)` Push

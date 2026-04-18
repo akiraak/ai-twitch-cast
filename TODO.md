@@ -6,6 +6,6 @@
 - [ ] 授業生成の授業内容とセリフのチェックと再生成を入れる
 
 ## その他
-- [ ] Claude Code実況のセリフ間ギャップをC#ローカル再生バッファ縮小で詰める → [plans/tts-local-buffer-tuning.md](plans/tts-local-buffer-tuning.md)
+- [ ] Claude Code実況のセリフ間ギャップを詰める（`speak_event` マルチを `speak_batch` 化＋NAudioバッファ縮小）→ [plans/tts-local-buffer-tuning.md](plans/tts-local-buffer-tuning.md)
 - [ ] テストの検証。不要なものを削除。必要なものがあれば追加
 - [ ] クライアントに動画撮影機能を入れる
