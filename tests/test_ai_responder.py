@@ -360,6 +360,43 @@ class TestGenerateMultiEventResponse:
         assert len(result) == 1
         assert result[0]["speaker"] == "teacher"
 
+    def test_dialogue_array_returned(self, test_db, mock_env, mock_gemini):
+        """掛け合い形式の2〜4エントリが返る"""
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {"speaker": "teacher", "speech": "コミットきた！", "emotion": "joy"},
+            {"speaker": "student", "speech": "何のコミット？", "emotion": "neutral"},
+            {"speaker": "teacher", "speech": "バグ修正だよ", "emotion": "neutral"},
+            {"speaker": "student", "speech": "えらい！", "emotion": "joy"},
+        ])
+        characters = {"teacher": DEFAULT_CHARACTER, "student": DEFAULT_STUDENT_CHARACTER}
+        result = generate_multi_event_response("commit", "fix bug", characters)
+        assert len(result) == 4
+        # 交互に話している
+        assert result[0]["speaker"] == "teacher"
+        assert result[1]["speaker"] == "student"
+
+    def test_max_4_entries(self, test_db, mock_env, mock_gemini):
+        """5件以上返しても4件に制限される"""
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {"speaker": "teacher", "speech": f"発話{i}", "emotion": "neutral"}
+            for i in range(6)
+        ])
+        characters = {"teacher": DEFAULT_CHARACTER, "student": DEFAULT_STUDENT_CHARACTER}
+        result = generate_multi_event_response("commit", "x", characters)
+        assert len(result) == 4
+
+    def test_prompt_contains_dialogue_rules(self, test_db, mock_env, mock_gemini):
+        """プロンプトに掛け合いの指示が含まれる"""
+        mock_gemini.models.generate_content.return_value.text = json.dumps([
+            {"speaker": "teacher", "speech": "ok", "emotion": "neutral"},
+        ])
+        characters = {"teacher": DEFAULT_CHARACTER, "student": DEFAULT_STUDENT_CHARACTER}
+        generate_multi_event_response("commit", "fix", characters)
+        call_args = mock_gemini.models.generate_content.call_args
+        system_instruction = call_args.kwargs.get("config").system_instruction
+        assert "2〜3往復" in system_instruction
+        assert "交互" in system_instruction
+
 
 class TestGetTtsConfig:
     """get_tts_config の言語対応テスト"""

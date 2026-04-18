@@ -1,5 +1,15 @@
 # DONE
 
+## Claude Code Hook の読み上げをキャラ2名の掛け合いに変更
+
+- [x] `src/ai_responder.py` — `generate_multi_event_response()` のプロンプトを「単独70%/両者30%」から「2〜3往復（2〜4エントリ）の掛け合い」に書き換え（日英両方）。結果配列を `result[:4]` で最大4エントリに制限
+- [x] `src/comment_reader.py` — `speak_event()` に `multi=True` パラメータを追加。`multi=False` のときは生徒キャラがいても単独キャラ経路を通す
+- [x] `scripts/routes/avatar.py` — `tts_test` / `tts_test_emotion` / `tts_voice_sample` の `speak_event` 呼び出しに `multi=False` を追加（TTSテスト・ボイスサンプルは単独発話を維持）
+- [x] `tests/test_ai_responder.py` — `test_dialogue_array_returned` / `test_max_4_entries` / `test_prompt_contains_dialogue_rules` を追加
+- [x] `docs/speech-generation-flow.md` — イベント応答フローの `speak_event` シグネチャと分岐条件（multiフラグ）を更新
+- [x] 全873テストpass（`python3 -m pytest tests/ -q`）
+- [x] プラン: [plans/claude-code-hook-dialogue.md](plans/claude-code-hook-dialogue.md) ステータスを「完了」に更新
+
 ## C#アプリ Lesson タブで停止した授業を再生し直せるように修正
 
 - [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `Stop()` と `PlayAsync()` finally で `_sections = null` を削除し、授業データを保持。`_state` は `_sections` が残っていれば `"loaded"` に戻す（完了・エラー・停止の全パス共通）。`Stop()` の非再生ブランチも「再生位置を先頭に戻して loaded 維持」に変更

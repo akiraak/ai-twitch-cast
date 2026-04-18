@@ -479,8 +479,13 @@ class CommentReader:
         except Exception as e:
             logger.error("チャット投稿失敗: %s", e)
 
-    async def speak_event(self, event_type, detail, voice=None, style=None, avatar_id="teacher"):
-        """イベントに対してアバターが発話する（コミット・作業開始等、マルチキャラ対応）"""
+    async def speak_event(self, event_type, detail, voice=None, style=None, avatar_id="teacher", multi=True):
+        """イベントに対してアバターが発話する（コミット・作業開始等、マルチキャラ対応）
+
+        Args:
+            multi: True の場合、生徒キャラがいれば二人の掛け合いで発話する。
+                   False の場合、常に単独キャラで発話する（TTSテスト・ボイスサンプル向け）。
+        """
         try:
             logger.info("[event] %s: %s", event_type, detail)
             # 直前のイベント応答を取得（繰り返し防止）
@@ -491,8 +496,8 @@ class CommentReader:
             except Exception:
                 pass
 
-            # マルチキャラモード
-            if self._characters and self._characters.get("student"):
+            # マルチキャラモード（multi=Trueかつ生徒キャラあり）
+            if multi and self._characters and self._characters.get("student"):
                 responses = await asyncio.to_thread(
                     generate_multi_event_response, event_type, detail,
                     self._characters, last_event_responses=last_responses,

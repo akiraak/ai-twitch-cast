@@ -254,15 +254,17 @@ Gitコミット通知、作業開始・停止など。
 イベント発生（コミット検出 / API呼出）
   │
   ▼
-comment_reader.speak_event(event_type, detail, voice=None, style=None, avatar_id="teacher")
+comment_reader.speak_event(event_type, detail, voice=None, style=None, avatar_id="teacher", multi=True)
   │
-  ├─ シングル: generate_event_response(event_type, detail, last_event_responses)
+  ├─ シングル (multi=False もしくは生徒キャラなし):
+  │    generate_event_response(event_type, detail, last_event_responses)
   │    system_prompt にキャラの system_prompt + emotions を含む
   │    直前3件のイベント応答を含めて繰り返し防止
   │    → {speech, tts_text, emotion, translation}
   │
-  └─ マルチ: generate_multi_event_response(event_type, detail, characters, last_event_responses)
-       先生約70%単独、約30%両者
+  └─ マルチ (multi=True かつ生徒キャラあり):
+       generate_multi_event_response(event_type, detail, characters, last_event_responses)
+       先生と生徒の2〜3往復（配列は2〜4エントリ）
        → [{speaker, speech, tts_text, emotion, translation}, ...]
   │
   ▼

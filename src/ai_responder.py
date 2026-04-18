@@ -897,9 +897,12 @@ def generate_multi_event_response(event_type, detail, characters, last_event_res
             f"Available emotions: {', '.join(student_emotions.keys())}",
             "",
             "## Rules",
-            "- Comment briefly on stream events (commits, work updates, etc.)",
-            "- 1-2 entries in the array. Each entry: 1 sentence, ~10 words",
-            f"- {teacher_name} alone (~70%) or both characters (~30%)",
+            "- Comment on the stream event (commit, work start, report, etc.) as a two-person dialogue",
+            f"- {teacher_name} explains the event naturally; {student_name} reacts, asks or comments",
+            "- 2-3 exchanges between the two characters (2-4 entries in the array)",
+            "- Each entry: 1-2 sentences, about 10 words",
+            "- Alternate speakers naturally — don't let one character monopolize",
+            "- Keep it casual and entertaining for viewers",
             "- Vary reactions — don't repeat the same expressions",
         ]
         if last_event_responses:
@@ -914,6 +917,8 @@ def generate_multi_event_response(event_type, detail, characters, last_event_res
             "## Output format",
             "Reply ONLY in a JSON array.",
             '[{"speaker": "teacher", "speech": "text", "tts_text": "TTS text", "emotion": "emotion", "translation": "translation"}]',
+            "- 2-4 entries (2-3 exchanges between the two characters)",
+            '- speaker: "teacher" or "student"',
         ])
         user_prompt = f"[{event_type} event] {detail}"
     else:
@@ -928,9 +933,12 @@ def generate_multi_event_response(event_type, detail, characters, last_event_res
             f"使用可能な感情: {', '.join(student_emotions.keys())}",
             "",
             "## ルール",
-            "- 配信中のイベント（コミット、作業開始など）について短くコメント",
-            "- 配列は1〜2エントリ。各エントリ: 1文、40文字以内",
-            f"- {teacher_name}単独（約70%）または両者応答（約30%）",
+            "- 配信中のイベント（コミット、作業開始、作業報告など）について二人で掛け合いしてコメント",
+            f"- {teacher_name}が出来事を自然に説明し、{student_name}がリアクション・質問・感想を返す",
+            "- 2〜3往復（配列は2〜4エントリ）",
+            "- 各発話: 1〜2文、40文字以内",
+            "- 二人が自然に交互に話す。片方だけが喋り続けないこと",
+            "- カジュアルで楽しい口調。視聴者にもわかるように",
             "- 毎回同じリアクションをしない。バリエーションを出す",
         ]
         if last_event_responses:
@@ -945,6 +953,8 @@ def generate_multi_event_response(event_type, detail, characters, last_event_res
             "## 出力形式",
             "必ずJSON配列で返答してください。",
             '[{"speaker": "teacher", "speech": "返答", "tts_text": "読み上げ用", "emotion": "感情", "translation": "翻訳"}]',
+            "- 配列は2〜4エントリ（二人の2〜3往復）",
+            '- speaker: "teacher" または "student"',
             "",
             "## speechとtts_textの違い",
             "- speech: 字幕表示用。タグなし。",
@@ -975,4 +985,6 @@ def generate_multi_event_response(event_type, detail, characters, last_event_res
     if not result:
         return [{"speaker": "teacher", "speech": detail, "emotion": "neutral", "translation": ""}]
 
+    # 最大4エントリに制限（二人の2〜3往復）
+    result = result[:4]
     return _validate_multi_response(result, characters)

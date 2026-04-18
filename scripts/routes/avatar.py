@@ -63,7 +63,7 @@ async def tts_test(body: TtsTestRequest):
         detail = f"{pattern} Mix {p_name} and {s_name}."
     else:
         detail = f"{pattern} Speak in {p_name}."
-    asyncio.create_task(state.reader.speak_event("TTSテスト", detail))
+    asyncio.create_task(state.reader.speak_event("TTSテスト", detail, multi=False))
     return {"ok": True}
 
 
@@ -83,7 +83,7 @@ async def tts_test_emotion(body: EmotionTestRequest):
         f"the emotion '{body.emotion}' ({emotion_desc}). "
         f"Be expressive and match the emotion."
     )
-    asyncio.create_task(state.reader.speak_event("感情テスト", detail))
+    asyncio.create_task(state.reader.speak_event("感情テスト", detail, multi=False))
     return {"ok": True}
 
 
@@ -143,6 +143,7 @@ async def tts_voice_sample(body: VoiceSampleRequest):
             voice=body.voice or None,
             style=body.style or None,
             avatar_id=body.avatar_id,
+            multi=False,
         )
     )
     return {"ok": True}
