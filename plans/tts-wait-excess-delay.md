@@ -61,6 +61,8 @@ waveOut.PlaybackStopped += (_, _) =>
 
 `_ttsWaveOut == waveOut` の条件により、次のTTSで強制Stop()された場合は通知しない（`PlayTtsLocally` が先に `_ttsWaveOut = null` してからStop()するため）。
 
+配信中も `OnTtsAudio` は常に `PlayTtsLocally` を呼ぶ（MainForm.cs:779）ので、NAudioのPlaybackStoppedが配信/非配信の両モードで完了シグナルになる。
+
 ### Step 2: Python — capture_client に tts_complete イベント追加
 
 **ファイル**: `scripts/services/capture_client.py`
@@ -77,13 +79,11 @@ def get_tts_complete_event() -> asyncio.Event:
     return _tts_complete_event
 ```
 
-`_read_capture_ws` のPush通知処理に `tts_complete` を追加:
+`_read_capture_ws` のPush通知処理に `tts_complete` を追加（`lesson_complete` ハンドラの直後、capture_client.py:200-204 の並び）:
 
 ```python
-# 既存の capture_changed の後に追加
 if data.get("type") == "tts_complete":
-    evt = get_tts_complete_event()
-    evt.set()
+    get_tts_complete_event().set()
     continue
 ```
 
@@ -135,15 +135,20 @@ await self.send_tts_to_native_app(wav_path)
 
 **ファイル**: `tests/test_speech_pipeline.py`
 
-`TestWaitTtsComplete` のテストをイベントベースに書き換え:
-- イベント即発火 → 即座にreturnすること
-- タイムアウト → fallbackで返ること
-- 例外 → 静かにスキップすること
+既存 `TestWaitTtsComplete` の5テスト（`test_polls_until_inactive` / `test_immediately_inactive` / `test_timeout_stops_polling` / `test_ws_failure_silently_skips` / `test_none_result_treated_as_inactive`）はポーリング前提なので全削除し、以下3本に置き換える:
+
+- `test_returns_when_event_set` — イベントがawait中に `set()` されたら即座にreturnすること
+- `test_returns_if_event_already_set` — 開始時点で既に `set()` 済みなら即座にreturnすること
+- `test_timeout_fallback` — `timeout` 秒経過で `TimeoutError` を握りつぶしてreturnすること
+
+インポート失敗（C#未接続相当）時の無音スキップは、`_wait_tts_complete` 内の `except Exception: pass` ブロックで担保されるため、個別テストは不要（`test_timeout_fallback` と `test_returns_when_event_set` がカバー）。
 
 ### Step 5: 旧コード削除
 
-- `HttpServer.cs` の `tts_status` アクション、`OnGetTtsStatus` プロパティ → 削除
-- `MainForm.cs` の `OnGetTtsStatus` コールバック設定 → 削除
+- `HttpServer.cs:469` の WebSocket dispatch `"tts_status" => HandleWsTtsStatus()` → 削除
+- `HttpServer.cs:663-666` の `HandleWsTtsStatus` メソッド → 削除
+- `HttpServer.cs:53` の `OnGetTtsStatus` プロパティ → 削除
+- `MainForm.cs:833-839` の `OnGetTtsStatus` コールバック設定 → 削除
 
 ## 変更ファイル
 
@@ -159,3 +164,4 @@ await self.send_tts_to_native_app(wav_path)
 
 - **C#未接続時**: イベントが届かずtimeout（duration + 3秒）で進む。従来のsleep(duration + 0.1)より最大3秒遅いが、C#未接続=音声なしなので実害なし
 - **PlaybackStopped発火タイミング**: NAudioの内部バッファ分だけ実際の聴取終了より早く発火する可能性がある（数十ms程度）。体感上は問題ない
+- **配信中のFFmpegキュー挙動変化**: 現行は `IsTtsActive`（FFmpegキュー）が空になるまで待つため、配信ストリーム上でも前TTSと次TTSが重ならない。NAudio完了ベースに変えると、高負荷でキューが遅れている間に次TTSが投入され、FFmpegキューに積み上がる。ただし次TTSは生成に約1秒かかる（TTS合成 + リップシンク解析）ため、その間にキューが捌けるケースが大半で実害は小さい。ポーリング方式に戻すほどの回帰ではないと判断
