@@ -1,7 +1,7 @@
 # TODO
 
 ## C#アプリ
-- [ ] Lessonタブに再生ボタン、停止ボタン、一時停止ボタンを入れる
+- [ ] Lessonタブに再生ボタン、停止ボタン、一時停止ボタンを入れる → [plans/control-panel-lesson-buttons.md](plans/control-panel-lesson-buttons.md)
 - [ ] C#画面のセクション進捗パネルが動いていない
 
 ## TTS完了待ちの過剰遅延改善（コメント応答用） → [plans/tts-wait-excess-delay.md](plans/tts-wait-excess-delay.md)
