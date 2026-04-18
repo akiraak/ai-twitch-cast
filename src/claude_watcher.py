@@ -371,11 +371,11 @@ class ClaudeWatcher:
         return result if result else None
 
     async def _play_conversation(self, dialogues):
-        """会話を順次再生する（コメント割り込み対応）。
+        """会話を順次再生する（コメント割り込み対応・チェーン再生）。
 
-        全発話のTTSを並列で事前生成し、先頭から順にawait→再生することで
-        エントリ間の「間」を詰める。各発話の前にコメントキューを確認し、
-        コメントがあれば残り発話をスキップする（未完了TTSタスクはキャンセル）。
+        全発話のTTSを並列で事前生成し、C#のバッチキューに一括投入して順次再生する。
+        C#からの `tts_entry_started` Push を受けて各発話の字幕・口パク・感情を発火する。
+        コメント割り込みが来たら `cancel_tts_batch` でC#キューをクリアする。
         """
         from src.ai_responder import get_chat_characters
 
@@ -403,68 +403,93 @@ class ClaudeWatcher:
             for r in resolved
         ]
 
-        try:
-            for i, (r, task) in enumerate(zip(resolved, tts_tasks)):
-                # コメント割り込みチェック
+        # 全TTSの完了を待ってエントリ組み立て
+        entries = []
+        for i, (r, task) in enumerate(zip(resolved, tts_tasks)):
+            try:
+                wav = await task
+            except Exception:
+                wav = None
+            if wav is None:
+                logger.warning("[watcher] 発話#%d TTS生成失敗 → スキップ", i)
+                continue
+            dlg, speaker, cfg = r["dlg"], r["speaker"], r["cfg"]
+            entries.append({
+                "wav_path": wav,
+                "subtitle": {
+                    "author": cfg.get("name", speaker),
+                    "trigger_text": "[Claude Code実況]",
+                    "result": dlg,
+                },
+                "emotion": dlg.get("emotion", "neutral"),
+                "avatar_id": speaker,
+                "character_config": cfg,
+                "_dlg": dlg,
+                "_speaker": speaker,
+            })
+
+        if not entries:
+            logger.warning("[watcher] 再生可能なエントリがない")
+            return
+
+        # DB保存（バッチ送信前にまとめて）
+        for e in entries:
+            try:
+                await self._save_avatar_comment(
+                    "claude_work",
+                    "[Claude Code実況]",
+                    e["_dlg"]["speech"],
+                    e["_dlg"].get("emotion", "neutral"),
+                    speaker=e["_speaker"],
+                )
+            except Exception as ex:
+                logger.warning("[watcher] DB保存失敗: %s", ex)
+
+        # コメント割り込み監視タスク（バッチ再生中に別タスクで走らせる）
+        interrupted = asyncio.Event()
+
+        async def _watch_interrupt():
+            from scripts.services import capture_client
+            while not interrupted.is_set():
                 if self._comment_reader and self._comment_reader.queue_size > 0:
-                    logger.info(
-                        "[watcher] コメント到着 → 残り%d発話をスキップ",
-                        len(dialogues) - i,
-                    )
-                    break
+                    logger.info("[watcher] コメント到着 → バッチ再生をキャンセル")
+                    try:
+                        await capture_client.cancel_tts_batch()
+                    except Exception as e:
+                        logger.warning("[watcher] cancel_tts_batch失敗: %s", e)
+                    interrupted.set()
+                    return
+                await asyncio.sleep(0.3)
 
-                dlg, speaker, cfg = r["dlg"], r["speaker"], r["cfg"]
-
-                wait_start = asyncio.get_event_loop().time()
-                try:
-                    wav = await task
-                except Exception:
-                    wav = None
-                logger.info("[watcher][parallel] 発話#%d await完了: %.0fms (wav=%s)",
-                            i, (asyncio.get_event_loop().time() - wait_start) * 1000,
-                            "pre-generated" if wav else "None=fallback")
-
-                # キャラ間の間
-                if i > 0:
-                    await asyncio.sleep(0.3)
-
-                try:
-                    self._speech.apply_emotion(
-                        dlg.get("emotion", "neutral"),
-                        avatar_id=speaker,
-                        character_config=cfg,
-                    )
-                    await self._speech.speak(
-                        dlg["speech"],
-                        subtitle={
-                            "author": cfg.get("name", speaker),
-                            "trigger_text": "[Claude Code実況]",
-                            "result": dlg,
-                        },
-                        tts_text=dlg.get("tts_text"),
-                        voice=cfg.get("tts_voice"),
-                        style=cfg.get("tts_style"),
-                        avatar_id=speaker,
-                        wav_path=wav,
-                    )
-                    self._speech.apply_emotion(
-                        "neutral", avatar_id=speaker, character_config=cfg,
-                    )
-                    await self._speech.notify_overlay_end()
-
-                    # DB保存（trigger_type="claude_work"）
-                    await self._save_avatar_comment(
-                        "claude_work",
-                        "[Claude Code実況]",
-                        dlg["speech"],
-                        dlg.get("emotion", "neutral"),
-                        speaker=speaker,
-                    )
-                except Exception as e:
-                    logger.error("[watcher] 発話失敗: %s", e, exc_info=True)
-                    break
+        watch_task = asyncio.create_task(_watch_interrupt())
+        try:
+            # speak_batch 呼び出し（内部でtts_batch_complete Push待ち）
+            batch_entries = [
+                {k: v for k, v in e.items() if not k.startswith("_")}
+                for e in entries
+            ]
+            await self._speech.speak_batch(batch_entries)
+        except Exception as e:
+            logger.error("[watcher] speak_batch失敗: %s", e, exc_info=True)
         finally:
-            # 割り込み・例外時に未完了タスクをキャンセル（リーク防止）
+            interrupted.set()
+            watch_task.cancel()
+            try:
+                await watch_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            # 感情リセット + 終了通知
+            try:
+                for e in entries:
+                    self._speech.apply_emotion(
+                        "neutral",
+                        avatar_id=e["_speaker"],
+                        character_config=e["character_config"],
+                    )
+                await self._speech.notify_overlay_end()
+            except Exception:
+                pass
+            # 未完了TTSタスクをキャンセル（リーク防止）
             for t in tts_tasks:
                 if not t.done():
                     t.cancel()

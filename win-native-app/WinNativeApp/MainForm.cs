@@ -62,6 +62,12 @@ public class MainForm : Form
     private WaveChannel32? _ttsChannel;
     private MeteringWaveProvider? _ttsMeter;
 
+    // TTSチェーン再生キュー（Claude Code実況などの連続発話用）
+    private readonly Queue<TtsBatchItem> _ttsLocalQueue = new();
+    private TtsBatchItem? _ttsLocalCurrent;
+    private readonly object _ttsQueueLock = new();
+    private bool _ttsBatchActive;  // バッチ再生中 (完了時に tts_batch_complete を Push)
+
     // SE state
     private WaveChannel32? _seChannel;
     private MeteringWaveProvider? _seMeter;
@@ -828,6 +834,22 @@ public class MainForm : Form
         {
             try
             {
+                // 単発TTSはバッチを中断する（未再生エントリを破棄）
+                bool hadBatch = false;
+                lock (_ttsQueueLock)
+                {
+                    if (_ttsLocalQueue.Count > 0 || _ttsBatchActive)
+                    {
+                        _ttsLocalQueue.Clear();
+                        hadBatch = _ttsBatchActive;
+                        _ttsBatchActive = false;
+                    }
+                }
+                if (hadBatch)
+                {
+                    _ = _httpServer.BroadcastWsEvent(new { type = "tts_batch_complete", cancelled = true });
+                }
+
                 // ローカル再生: WaveChannel32で音量制御（再生中の音量変更対応）
                 PlayTtsLocally(wavData, EffectiveTtsVolume());
                 // 配信中: PCMリサンプル → FFmpegミキサー（音量はMixTtsIntoでリアルタイム適用）
@@ -841,6 +863,79 @@ public class MainForm : Form
             {
                 Log.Error(ex, "[MainForm] TTS audio failed");
             }
+        };
+
+        // TTSバッチ受信: 全エントリをキューへ投入 → ローカルは順次再生、FFmpegは一括投入
+        _httpServer.OnTtsAudioBatch = (items) =>
+        {
+            BeginInvoke(() =>
+            {
+                try
+                {
+                    bool wasIdle;
+                    lock (_ttsQueueLock)
+                    {
+                        _ttsLocalQueue.Clear();
+                        foreach (var item in items)
+                        {
+                            _ttsLocalQueue.Enqueue(item);
+                        }
+                        _ttsBatchActive = items.Count > 0;
+                        wasIdle = _ttsLocalCurrent == null;
+                    }
+
+                    // 配信中: 全PCMをFFmpegキューに積む（ミキサーが自動でチェーン再生）
+                    if (_ffmpeg is { IsRunning: true })
+                    {
+                        foreach (var item in items)
+                        {
+                            try
+                            {
+                                var pcm = TtsDecoder.DecodeWav(item.WavData, 1.0f);
+                                _ffmpeg.WriteTtsData(pcm);
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Warning(ex, "[TTS] Batch item FFmpeg decode失敗 id={Id}", item.Id);
+                            }
+                        }
+                    }
+
+                    Log.Information("[TTS] Batch queued: count={Count} wasIdle={Idle}", items.Count, wasIdle);
+
+                    if (wasIdle && items.Count > 0)
+                    {
+                        DequeueAndPlayNextLocal();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "[TTS] Batch handler failed");
+                }
+            });
+        };
+
+        // TTSバッチキャンセル: キュークリア + 進行中の再生を停止
+        _httpServer.OnTtsBatchCancel = () =>
+        {
+            BeginInvoke(() =>
+            {
+                int cleared;
+                bool wasActive;
+                lock (_ttsQueueLock)
+                {
+                    cleared = _ttsLocalQueue.Count;
+                    _ttsLocalQueue.Clear();
+                    wasActive = _ttsBatchActive;
+                    _ttsBatchActive = false;
+                }
+                try { _ttsWaveOut?.Stop(); } catch { }
+                Log.Information("[TTS] Batch cancelled: cleared={Cleared} active={Active}", cleared, wasActive);
+                if (wasActive)
+                {
+                    _ = _httpServer.BroadcastWsEvent(new { type = "tts_batch_complete", cancelled = true });
+                }
+            });
         };
 
         // BGM制御コールバック（Task.Runから呼ばれるためBeginInvokeでUIスレッドに移動）
@@ -1353,10 +1448,12 @@ public class MainForm : Form
     /// <summary>
     /// TTS WAVをローカルスピーカーで再生する（NAudio WaveOutEvent + WaveChannel32）。
     /// WaveChannel32でサンプルレベル音量制御（再生中の音量変更対応）。
+    /// 自然終了時（Stopで上書きされなかった時）のみキュー次エントリを再生する。
     /// </summary>
     private void PlayTtsLocally(byte[] wavData, float volume)
     {
         // 前回の再生を停止（PlaybackStoppedで自動クリーンアップ）
+        // 注: 自然終了とStopを PlaybackStopped 内の `_ttsWaveOut == waveOut` で区別する
         var oldWaveOut = _ttsWaveOut;
         if (oldWaveOut != null)
         {
@@ -1388,7 +1485,9 @@ public class MainForm : Form
             {
                 if (disposed) return;
                 disposed = true;
-                if (_ttsWaveOut == waveOut)
+                // _ttsWaveOut == waveOut なら自然終了（新しい PlayTtsLocally に上書きされていない）
+                bool naturalEnd = _ttsWaveOut == waveOut;
+                if (naturalEnd)
                 {
                     _ttsWaveOut = null;
                     _ttsChannel = null;
@@ -1397,6 +1496,12 @@ public class MainForm : Form
                 try { waveOut.Dispose(); } catch { }
                 try { reader.Dispose(); } catch { }
                 try { ms.Dispose(); } catch { }
+
+                // 自然終了 → キューに次エントリがあればチェーン再生
+                if (naturalEnd)
+                {
+                    BeginInvoke(() => DequeueAndPlayNextLocal(finishedCurrent: true));
+                }
             };
 
             waveOut.Play();
@@ -1406,6 +1511,52 @@ public class MainForm : Form
         {
             Log.Error(ex, "[TTS] Local playback failed");
         }
+    }
+
+    /// <summary>
+    /// バッチキューから次のエントリを取り出してローカル再生を開始する。
+    /// 再生開始前に tts_entry_started を Push し、Python 側で字幕・口パクを発火させる。
+    /// キューが空ならバッチ完了を通知する。
+    /// </summary>
+    /// <param name="finishedCurrent">直前の再生が自然終了したか（_ttsLocalCurrentをクリアする）</param>
+    private void DequeueAndPlayNextLocal(bool finishedCurrent = false)
+    {
+        TtsBatchItem? next;
+        bool batchEnded;
+        lock (_ttsQueueLock)
+        {
+            if (finishedCurrent)
+            {
+                _ttsLocalCurrent = null;
+            }
+            if (_ttsLocalQueue.Count == 0)
+            {
+                _ttsLocalCurrent = null;
+                batchEnded = _ttsBatchActive;
+                _ttsBatchActive = false;
+                next = null;
+            }
+            else
+            {
+                next = _ttsLocalQueue.Dequeue();
+                _ttsLocalCurrent = next;
+                batchEnded = false;
+            }
+        }
+
+        if (batchEnded)
+        {
+            _ = _httpServer?.BroadcastWsEvent(new { type = "tts_batch_complete" });
+            Log.Information("[TTS] Batch complete → Push");
+            return;
+        }
+
+        if (next == null) return;
+
+        // Push → Play の順にする（Pythonが字幕を先に出す余裕を持たせる）
+        _ = _httpServer?.BroadcastWsEvent(new { type = "tts_entry_started", id = next.Id });
+        Log.Information("[TTS] Batch entry started: id={Id}", next.Id);
+        PlayTtsLocally(next.WavData, next.Volume);
     }
 
     /// <summary>

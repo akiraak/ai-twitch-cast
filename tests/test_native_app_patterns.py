@@ -237,6 +237,61 @@ def test_stop_returns_to_loaded_state():
     )
 
 
+# === TTSバッチ再生（チェーン再生） ===
+
+
+def test_httpserver_has_tts_batch_actions():
+    """HttpServer の WebSocket action 分岐に tts_audio_batch / tts_batch_cancel があること。"""
+    source = read_cs("Server/HttpServer.cs")
+    assert '"tts_audio_batch" =>' in source, (
+        "HandleWsMessage に tts_audio_batch 分岐がない — バッチ送信が届かない"
+    )
+    assert '"tts_batch_cancel" =>' in source, (
+        "HandleWsMessage に tts_batch_cancel 分岐がない — 割り込み時にキューが残る"
+    )
+    assert "public record TtsBatchItem" in source, (
+        "TtsBatchItem レコードが定義されていない"
+    )
+    assert "OnTtsAudioBatch" in source, "OnTtsAudioBatch コールバックが未定義"
+    assert "OnTtsBatchCancel" in source, "OnTtsBatchCancel コールバックが未定義"
+
+
+def test_mainform_has_tts_local_queue():
+    """MainForm に TTSローカル再生キューが存在すること。"""
+    source = read_cs("MainForm.cs")
+    assert "_ttsLocalQueue" in source, (
+        "_ttsLocalQueue フィールドがない — チェーン再生ができない"
+    )
+    assert "DequeueAndPlayNextLocal" in source, (
+        "DequeueAndPlayNextLocal メソッドがない — 次エントリが再生されない"
+    )
+    assert '"tts_entry_started"' in source, (
+        "tts_entry_started Push がない — Python 側で字幕が発火しない"
+    )
+    assert '"tts_batch_complete"' in source, (
+        "tts_batch_complete Push がない — Python 側で完了を検知できない"
+    )
+
+
+def test_mainform_batch_cancel_clears_queue():
+    """OnTtsBatchCancel がキューをクリアして WaveOut.Stop を呼ぶこと。"""
+    source = read_cs("MainForm.cs")
+    # OnTtsBatchCancel ブロック内で Clear() と Stop() が呼ばれている
+    cancel_match = re.search(
+        r"OnTtsBatchCancel\s*=\s*\(\)\s*=>\s*\{(.*?)\};\s*\n",
+        source,
+        re.DOTALL,
+    )
+    assert cancel_match, "OnTtsBatchCancel のハンドラ登録が見つからない"
+    body = cancel_match.group(1)
+    assert "_ttsLocalQueue.Clear()" in body, (
+        "OnTtsBatchCancel でキューをクリアしていない"
+    )
+    assert "_ttsWaveOut?.Stop()" in body or "_ttsWaveOut.Stop()" in body, (
+        "OnTtsBatchCancel で WaveOut を Stop していない — 現在再生中のエントリが止まらない"
+    )
+
+
 # === Program.cs ===
 
 

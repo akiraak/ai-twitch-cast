@@ -311,6 +311,203 @@ class SpeechPipeline:
                     return
             logger.warning("[tts] C#アプリへのTTS送信失敗 (%.0fms): %s", elapsed, e)
 
+    async def speak_batch(self, entries: list[dict]) -> None:
+        """複数エントリを一括送信してC#側キューで順次再生する（チェーン再生）。
+
+        Claude Code実況のような連続発話で、エントリ間の「間」を詰めるためのパス。
+        C#の `tts_entry_started` Push を受けて各エントリの字幕・口パク・感情を発火する。
+
+        Args:
+            entries: [{
+                "wav_path": Path,           # 事前生成済みWAV（必須）
+                "subtitle": dict | None,    # {author, trigger_text, result}
+                "emotion": str | None,      # 感情タグ（apply_emotionで使う）
+                "avatar_id": str,           # "teacher" or "student"
+                "character_config": dict,   # emotion_blendshapes参照用
+            }, ...]
+
+        Side effects:
+            - C#へTTSバッチ送信 → ローカルキューで順次再生
+            - 再生開始 Push を受けて `notify_overlay` / `lipsync` / `apply_emotion` を発火
+            - 全エントリ完了 Push を待ってから戻る
+            - エントリのテンポラリWAVを削除（キャッシュ済みは保持）
+        """
+        import uuid
+        from scripts.routes.stream_control import _get_volume
+        from scripts.services import capture_client
+
+        if not entries:
+            return
+
+        async with self._speak_lock:
+            await self._speak_batch_impl(entries, uuid, _get_volume, capture_client)
+
+    async def _speak_batch_impl(self, entries, uuid, _get_volume, capture_client):
+        """speak_batch の実体（ロック取得済み前提）"""
+        # 各エントリの素材を事前解析（base64 WAV・duration・lipsync）
+        t_prep = time.monotonic()
+        prepared: list[dict] = []
+
+        async def _prepare(entry: dict) -> dict:
+            wav_path: Path = entry["wav_path"]
+            wav_bytes = await asyncio.to_thread(wav_path.read_bytes)
+            wav_b64 = base64.b64encode(wav_bytes).decode("ascii")
+            try:
+                frames = await asyncio.to_thread(analyze_amplitude, wav_path)
+            except Exception as e:
+                logger.warning("[batch] リップシンク解析失敗: %s", e)
+                frames = None
+            try:
+                with wave.open(str(wav_path), "rb") as wf:
+                    duration = wf.getnframes() / wf.getframerate()
+            except Exception as e:
+                logger.warning("[batch] duration取得失敗: %s", e)
+                duration = 3.0
+            return {
+                "id": uuid.uuid4().hex[:12],
+                "wav_path": wav_path,
+                "wav_b64": wav_b64,
+                "frames": frames,
+                "duration": duration,
+                "subtitle": entry.get("subtitle"),
+                "emotion": entry.get("emotion"),
+                "avatar_id": entry.get("avatar_id", "teacher"),
+                "character_config": entry.get("character_config"),
+            }
+
+        prepared = await asyncio.gather(*[_prepare(e) for e in entries])
+        logger.info("[batch] 素材準備完了: %d件 %.0fms",
+                    len(prepared), (time.monotonic() - t_prep) * 1000)
+
+        # バッチ用イベントを初期化
+        ids = [p["id"] for p in prepared]
+        batch_event = capture_client.reset_tts_batch_events(ids)
+
+        # 音量計算（ブラウザ互換: min(1, tts²) × master²）
+        master = _get_volume("master")
+        tts_vol = _get_volume("tts")
+        volume = min(1.0, tts_vol * tts_vol) * (master * master)
+
+        # 送信アイテムを組み立て
+        send_items = [
+            {"id": p["id"], "data": p["wav_b64"], "volume": volume}
+            for p in prepared
+        ]
+
+        # C#へ一括送信
+        try:
+            t_send = time.monotonic()
+            result = await capture_client.send_tts_batch(send_items)
+            logger.info("[batch] C#へバッチ送信完了: queued=%s (%.0fms)",
+                        result.get("queued") if isinstance(result, dict) else "?",
+                        (time.monotonic() - t_send) * 1000)
+        except Exception as e:
+            logger.warning("[batch] C#バッチ送信失敗: %s", e)
+            # 送信失敗時はテンポラリを削除して終了
+            for p in prepared:
+                self._cleanup_wav(p["wav_path"])
+            return
+
+        # 各エントリの開始Pushを待って字幕・口パク・感情を発火
+        total_duration = sum(p["duration"] for p in prepared)
+        try:
+            for i, p in enumerate(prepared):
+                entry_event = capture_client.get_tts_entry_event(p["id"])
+                # 開始Push待ち（タイムアウト: 累積duration + 5秒）
+                try:
+                    await asyncio.wait_for(
+                        entry_event.wait(),
+                        timeout=total_duration + 5.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("[batch] entry#%d started Push未着（タイムアウト）", i)
+                    break
+
+                if capture_client.is_tts_batch_cancelled():
+                    logger.info("[batch] バッチがキャンセルされた → 残り発火スキップ")
+                    break
+
+                # 感情切替
+                if p["emotion"]:
+                    try:
+                        self.apply_emotion(
+                            p["emotion"],
+                            avatar_id=p["avatar_id"],
+                            character_config=p["character_config"],
+                        )
+                    except Exception as e:
+                        logger.warning("[batch] apply_emotion失敗: %s", e)
+
+                # 字幕
+                if p["subtitle"] and self._on_overlay:
+                    try:
+                        await self.notify_overlay(
+                            p["subtitle"]["author"],
+                            p["subtitle"]["trigger_text"],
+                            p["subtitle"]["result"],
+                            avatar_id=p["avatar_id"],
+                            duration=p["duration"],
+                        )
+                    except Exception as e:
+                        logger.warning("[batch] notify_overlay失敗: %s", e)
+
+                # 口パク
+                if p["frames"] and self._on_overlay:
+                    try:
+                        await self._on_overlay({
+                            "type": "lipsync",
+                            "frames": p["frames"],
+                            "autostart": True,
+                            "avatar_id": p["avatar_id"],
+                        })
+                    except Exception as e:
+                        logger.warning("[batch] lipsync送信失敗: %s", e)
+
+                logger.info("[batch] entry#%d 字幕・口パク発火: id=%s emotion=%s",
+                            i, p["id"], p["emotion"])
+
+            # 全エントリ完了を待つ
+            try:
+                await asyncio.wait_for(
+                    batch_event.wait(),
+                    timeout=total_duration + 10.0,
+                )
+                if capture_client.is_tts_batch_cancelled():
+                    logger.info("[batch] バッチ完了（キャンセル）")
+                else:
+                    logger.info("[batch] バッチ完了（正常）")
+            except asyncio.TimeoutError:
+                logger.warning("[batch] バッチ完了Push未着（タイムアウト %.1fs）",
+                               total_duration + 10.0)
+
+            # 口パク停止
+            for p in prepared:
+                if p["frames"] and self._on_overlay:
+                    try:
+                        await self._on_overlay({
+                            "type": "lipsync_stop",
+                            "avatar_id": p["avatar_id"],
+                        })
+                    except Exception:
+                        pass
+        finally:
+            # テンポラリWAVを削除
+            for p in prepared:
+                self._cleanup_wav(p["wav_path"])
+
+    def _cleanup_wav(self, wav_path: Path):
+        """テンポラリWAVを削除する（キャッシュ済みパスはスキップ）"""
+        try:
+            if "resources/audio/" in str(wav_path):
+                return
+            wav_path.unlink(missing_ok=True)
+            try:
+                wav_path.parent.rmdir()
+            except OSError:
+                pass
+        except Exception:
+            pass
+
     async def send_se_to_native_app(self, se):
         """SE音声をC#アプリに送信する"""
         t0 = time.monotonic()

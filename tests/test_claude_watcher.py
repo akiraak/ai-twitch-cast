@@ -430,9 +430,11 @@ def mock_speech():
     speech = MagicMock()
     speech.apply_emotion = MagicMock()
     speech.speak = AsyncMock()
+    speech.speak_batch = AsyncMock()
     speech.notify_overlay_end = AsyncMock()
-    # 並列TTS事前生成モック（デフォルトはNone=フォールバック）
-    speech.generate_tts = AsyncMock(return_value=None)
+    # 並列TTS事前生成モック（デフォルトは有効なパス=バッチに入る）
+    from pathlib import Path
+    speech.generate_tts = AsyncMock(return_value=Path("/tmp/dummy.wav"))
     return speech
 
 
@@ -679,15 +681,18 @@ class TestClaudeWatcherCheckAndConverse:
 
 
 class TestClaudeWatcherPlayConversation:
-    """_play_conversation の再生・割り込みテスト"""
+    """_play_conversation のチェーン再生テスト（speak_batchベース）"""
 
     @pytest.mark.asyncio
-    async def test_play_all_utterances(self, mock_speech):
-        """全発話が順次再生される"""
+    async def test_play_calls_speak_batch_once(self, mock_speech, tmp_path):
+        """speak_batch が1回だけ呼ばれ、全エントリが含まれる"""
         dialogues = [
             {"speaker": "teacher", "speech": "テストを実行中だよ", "emotion": "neutral"},
             {"speaker": "student", "speech": "どんなテスト？", "emotion": "joy"},
         ]
+        wav_path = tmp_path / "fake.wav"
+        wav_path.write_bytes(b"WAV")
+        mock_speech.generate_tts = AsyncMock(return_value=wav_path)
 
         watcher = ClaudeWatcher(speech=mock_speech)
         with patch("src.ai_responder.get_chat_characters", return_value={
@@ -696,63 +701,90 @@ class TestClaudeWatcherPlayConversation:
         }):
             await watcher._play_conversation(dialogues)
 
-        assert mock_speech.speak.call_count == 2
-        assert mock_speech.apply_emotion.call_count == 4  # emotion + neutral × 2
-        assert mock_speech.notify_overlay_end.call_count == 2
+        assert mock_speech.speak_batch.call_count == 1
+        entries = mock_speech.speak_batch.call_args.args[0]
+        assert len(entries) == 2
+        assert entries[0]["avatar_id"] == "teacher"
+        assert entries[1]["avatar_id"] == "student"
+        assert entries[0]["subtitle"]["author"] == "ちょビ"
+        assert entries[1]["subtitle"]["author"] == "なるこ"
+        assert entries[0]["emotion"] == "neutral"
+        assert entries[1]["emotion"] == "joy"
+        assert entries[0]["wav_path"] == wav_path
 
     @pytest.mark.asyncio
-    async def test_comment_interrupt_skips_remaining(self, mock_speech, mock_comment_reader):
-        """コメント到着で残り発話をスキップする"""
+    async def test_comment_interrupt_cancels_batch(self, mock_speech, mock_comment_reader, tmp_path):
+        """コメント到着時に cancel_tts_batch が呼ばれる"""
         dialogues = [
             {"speaker": "teacher", "speech": "1番目", "emotion": "neutral"},
             {"speaker": "student", "speech": "2番目", "emotion": "joy"},
-            {"speaker": "teacher", "speech": "3番目", "emotion": "neutral"},
         ]
+        wav_path = tmp_path / "fake.wav"
+        wav_path.write_bytes(b"WAV")
+        mock_speech.generate_tts = AsyncMock(return_value=wav_path)
 
-        # 2番目の発話前にコメント到着
-        call_count = 0
+        # speak_batch 開始直後にコメントキューにアイテムを置く
+        mock_comment_reader.queue_size = 0
 
-        def queue_size_side_effect():
-            nonlocal call_count
-            call_count += 1
-            # 1回目(1番目の前): 0, 2回目(2番目の前): 1
-            return 0 if call_count <= 1 else 1
+        async def fake_speak_batch(entries):
+            # 監視タスクが起動する時間を与える
+            mock_comment_reader.queue_size = 1
+            await asyncio.sleep(1.0)
 
-        type(mock_comment_reader).queue_size = property(lambda self: queue_size_side_effect())
+        mock_speech.speak_batch = AsyncMock(side_effect=fake_speak_batch)
 
-        watcher = ClaudeWatcher(speech=mock_speech, comment_reader=mock_comment_reader)
-        with patch("src.ai_responder.get_chat_characters", return_value={
-            "teacher": {"name": "ちょビ"},
-            "student": {"name": "なるこ"},
-        }):
+        cancel_called = asyncio.Event()
+
+        async def fake_cancel(*args, **kwargs):
+            cancel_called.set()
+            return {"ok": True}
+
+        with patch("scripts.services.capture_client.cancel_tts_batch",
+                   side_effect=fake_cancel), \
+             patch("src.ai_responder.get_chat_characters", return_value={
+                 "teacher": {"name": "ちょビ"},
+                 "student": {"name": "なるこ"},
+             }):
+            watcher = ClaudeWatcher(speech=mock_speech, comment_reader=mock_comment_reader)
             await watcher._play_conversation(dialogues)
 
-        # 1番目だけ再生（2番目の前にコメント到着でスキップ）
-        assert mock_speech.speak.call_count == 1
+        # cancel_tts_batch が呼ばれたこと
+        assert cancel_called.is_set()
 
     @pytest.mark.asyncio
-    async def test_play_stores_to_db(self, mock_speech):
-        """発話がDB保存される"""
+    async def test_play_stores_to_db(self, mock_speech, tmp_path):
+        """全エントリがDB保存される（バッチ送信前にまとめて）"""
         dialogues = [
             {"speaker": "teacher", "speech": "テスト発話", "emotion": "joy"},
+            {"speaker": "student", "speech": "ほんと？", "emotion": "surprise"},
         ]
+        wav_path = tmp_path / "fake.wav"
+        wav_path.write_bytes(b"WAV")
+        mock_speech.generate_tts = AsyncMock(return_value=wav_path)
 
         watcher = ClaudeWatcher(speech=mock_speech)
         with patch("src.ai_responder.get_chat_characters", return_value={
             "teacher": {"name": "ちょビ"},
+            "student": {"name": "なるこ"},
         }), patch.object(watcher, "_save_avatar_comment", new_callable=AsyncMock) as mock_save:
             await watcher._play_conversation(dialogues)
 
-        mock_save.assert_called_once_with(
-            "claude_work", "[Claude Code実況]", "テスト発話", "joy", speaker="teacher",
-        )
+        assert mock_save.call_count == 2
+        first_call = mock_save.call_args_list[0]
+        assert first_call.args[0] == "claude_work"
+        assert first_call.args[2] == "テスト発話"
+        assert first_call.args[3] == "joy"
+        assert first_call.kwargs["speaker"] == "teacher"
 
     @pytest.mark.asyncio
-    async def test_play_with_no_comment_reader(self, mock_speech):
-        """comment_reader=Noneでも正常動作"""
+    async def test_play_with_no_comment_reader(self, mock_speech, tmp_path):
+        """comment_reader=Noneでも正常動作（監視タスクは空回りするだけ）"""
         dialogues = [
             {"speaker": "teacher", "speech": "テスト", "emotion": "neutral"},
         ]
+        wav_path = tmp_path / "fake.wav"
+        wav_path.write_bytes(b"WAV")
+        mock_speech.generate_tts = AsyncMock(return_value=wav_path)
 
         watcher = ClaudeWatcher(speech=mock_speech, comment_reader=None)
         with patch("src.ai_responder.get_chat_characters", return_value={
@@ -760,47 +792,50 @@ class TestClaudeWatcherPlayConversation:
         }):
             await watcher._play_conversation(dialogues)
 
-        assert mock_speech.speak.call_count == 1
+        assert mock_speech.speak_batch.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_speak_error_breaks_loop(self, mock_speech):
-        """発話エラーでループが中断される"""
+    async def test_speak_batch_error_is_caught(self, mock_speech, tmp_path):
+        """speak_batch エラーでも例外が伝播せず、感情リセット等の後処理が走る"""
         dialogues = [
             {"speaker": "teacher", "speech": "1番目", "emotion": "neutral"},
-            {"speaker": "student", "speech": "2番目", "emotion": "joy"},
         ]
-        mock_speech.speak.side_effect = RuntimeError("TTS error")
+        wav_path = tmp_path / "fake.wav"
+        wav_path.write_bytes(b"WAV")
+        mock_speech.generate_tts = AsyncMock(return_value=wav_path)
+        mock_speech.speak_batch = AsyncMock(side_effect=RuntimeError("batch error"))
 
         watcher = ClaudeWatcher(speech=mock_speech)
         with patch("src.ai_responder.get_chat_characters", return_value={
             "teacher": {"name": "ちょビ"},
-            "student": {"name": "なるこ"},
         }):
-            await watcher._play_conversation(dialogues)
+            await watcher._play_conversation(dialogues)  # 例外を投げないこと
 
-        # 1番目でエラー → 2番目は試行されない
-        assert mock_speech.speak.call_count == 1
+        # 感情リセット + notify_overlay_end が呼ばれる
+        mock_speech.notify_overlay_end.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_tts_generated_in_parallel(self, mock_speech):
-        """全発話のTTSが並列起動される（先頭を再生する前にすべて起動済み）"""
+    async def test_tts_generated_in_parallel(self, mock_speech, tmp_path):
+        """全発話のTTSが並列起動される"""
         dialogues = [
             {"speaker": "teacher", "speech": "1番目", "emotion": "neutral"},
             {"speaker": "student", "speech": "2番目", "emotion": "joy"},
             {"speaker": "teacher", "speech": "3番目", "emotion": "neutral"},
         ]
+        wav_path = tmp_path / "fake.wav"
+        wav_path.write_bytes(b"WAV")
 
         start_order = []
         release_event = asyncio.Event()
 
         async def fake_generate_tts(text, voice=None, style=None, tts_text=None):
             start_order.append(text)
-            # 最初のspeakまで全員が待機 → 並列起動の証明
-            if len(start_order) < len(dialogues):
-                await release_event.wait()
-            else:
+            # 最後の起動で全タスクを解放
+            if len(start_order) == len(dialogues):
                 release_event.set()
-            return None  # フォールバック
+            else:
+                await release_event.wait()
+            return wav_path
 
         mock_speech.generate_tts = AsyncMock(side_effect=fake_generate_tts)
 
@@ -811,13 +846,13 @@ class TestClaudeWatcherPlayConversation:
         }):
             await watcher._play_conversation(dialogues)
 
-        # 3発話すべてが (1番目のspeakの前に) 起動済みであること
+        # 3発話すべてが 並列起動済みであること
         assert start_order == ["1番目", "2番目", "3番目"]
-        assert mock_speech.speak.call_count == 3
+        assert mock_speech.speak_batch.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_wav_path_passed_to_speak(self, mock_speech, tmp_path):
-        """事前生成されたwav_pathがspeakに渡される"""
+    async def test_wav_path_passed_to_speak_batch(self, mock_speech, tmp_path):
+        """事前生成されたwav_pathがspeak_batchに渡される"""
         dialogues = [
             {"speaker": "teacher", "speech": "テスト", "emotion": "neutral"},
         ]
@@ -831,61 +866,12 @@ class TestClaudeWatcherPlayConversation:
         }):
             await watcher._play_conversation(dialogues)
 
-        call_kwargs = mock_speech.speak.call_args.kwargs
-        assert call_kwargs["wav_path"] == wav_path
+        entries = mock_speech.speak_batch.call_args.args[0]
+        assert entries[0]["wav_path"] == wav_path
 
     @pytest.mark.asyncio
-    async def test_interrupt_cancels_pending_tts_tasks(self, mock_speech, mock_comment_reader):
-        """コメント割り込み時に未完了のTTSタスクがキャンセルされる"""
-        dialogues = [
-            {"speaker": "teacher", "speech": "1番目", "emotion": "neutral"},
-            {"speaker": "student", "speech": "2番目", "emotion": "joy"},
-            {"speaker": "teacher", "speech": "3番目", "emotion": "neutral"},
-        ]
-
-        # 2番目・3番目は完了しないgenerate_tts（割り込みで中断されるべき）
-        cancelled_texts = []
-
-        async def fake_generate_tts(text, voice=None, style=None, tts_text=None):
-            if text == "1番目":
-                return None
-            try:
-                await asyncio.sleep(10.0)  # 長時間待機
-                return None
-            except asyncio.CancelledError:
-                cancelled_texts.append(text)
-                raise
-
-        mock_speech.generate_tts = AsyncMock(side_effect=fake_generate_tts)
-
-        # 1番目の再生後に割り込み（queue_size > 0 を返す）
-        call_count = 0
-
-        def queue_size_side_effect():
-            nonlocal call_count
-            call_count += 1
-            # 1回目(1番目の前): 0, 2回目以降(2番目以降の前): 1
-            return 0 if call_count <= 1 else 1
-
-        type(mock_comment_reader).queue_size = property(lambda self: queue_size_side_effect())
-
-        watcher = ClaudeWatcher(speech=mock_speech, comment_reader=mock_comment_reader)
-        with patch("src.ai_responder.get_chat_characters", return_value={
-            "teacher": {"name": "ちょビ"},
-            "student": {"name": "なるこ"},
-        }):
-            await watcher._play_conversation(dialogues)
-
-        # 1番目だけ再生
-        assert mock_speech.speak.call_count == 1
-        # 未完了タスクがキャンセルされたことを確認
-        await asyncio.sleep(0.05)
-        assert "2番目" in cancelled_texts
-        assert "3番目" in cancelled_texts
-
-    @pytest.mark.asyncio
-    async def test_generate_tts_failure_falls_back(self, mock_speech):
-        """generate_tts が例外で失敗しても wav_path=None でフォールバックする"""
+    async def test_generate_tts_failure_skips_entry(self, mock_speech):
+        """generate_tts が例外で失敗したエントリはバッチから除外される"""
         dialogues = [
             {"speaker": "teacher", "speech": "テスト", "emotion": "neutral"},
         ]
@@ -897,9 +883,8 @@ class TestClaudeWatcherPlayConversation:
         }):
             await watcher._play_conversation(dialogues)
 
-        # speakは呼ばれ、wav_pathはNone
-        assert mock_speech.speak.call_count == 1
-        assert mock_speech.speak.call_args.kwargs["wav_path"] is None
+        # 全エントリTTS失敗 → speak_batch は呼ばれない
+        mock_speech.speak_batch.assert_not_called()
 
 
 class TestClaudeWatcherStatus:

@@ -344,6 +344,109 @@ class TestProxyRequest:
 # =====================================================
 
 
+class TestTtsBatchEvents:
+    """TTSバッチ再生用の Event 管理"""
+
+    def test_get_entry_event_reuses_existing(self):
+        import scripts.services.capture_client as cc
+        cc._tts_entry_events.clear()
+        ev1 = cc.get_tts_entry_event("abc")
+        ev2 = cc.get_tts_entry_event("abc")
+        assert ev1 is ev2
+        cc._tts_entry_events.clear()
+
+    def test_reset_creates_fresh_events(self):
+        import scripts.services.capture_client as cc
+        # 事前に余計なイベントを入れておく
+        cc._tts_entry_events["old"] = asyncio.Event()
+        cc._tts_entry_events["old"].set()
+
+        complete_ev = cc.reset_tts_batch_events(["a", "b"])
+
+        assert "old" not in cc._tts_entry_events
+        assert "a" in cc._tts_entry_events
+        assert "b" in cc._tts_entry_events
+        assert not cc._tts_entry_events["a"].is_set()
+        assert not cc._tts_entry_events["b"].is_set()
+        assert not complete_ev.is_set()
+        assert cc.is_tts_batch_cancelled() is False
+        cc._tts_entry_events.clear()
+        cc._tts_batch_complete_event = None
+
+    @pytest.mark.asyncio
+    async def test_read_ws_sets_entry_event(self):
+        """Push tts_entry_started が該当エントリの Event を set する"""
+        import scripts.services.capture_client as cc
+
+        cc.reset_tts_batch_events(["e0", "e1"])
+        mock_ws = MagicMock()
+
+        async def fake_iter():
+            yield json.dumps({"type": "tts_entry_started", "id": "e0"})
+
+        mock_ws.__aiter__ = lambda self: fake_iter()
+
+        original = cc._capture_ws
+        try:
+            cc._capture_ws = mock_ws
+            await cc._read_capture_ws()
+        finally:
+            cc._capture_ws = original
+
+        assert cc._tts_entry_events["e0"].is_set()
+        assert not cc._tts_entry_events["e1"].is_set()
+        cc._tts_entry_events.clear()
+        cc._tts_batch_complete_event = None
+
+    @pytest.mark.asyncio
+    async def test_read_ws_sets_batch_complete(self):
+        """Push tts_batch_complete が batch_complete_event を set する"""
+        import scripts.services.capture_client as cc
+
+        complete_ev = cc.reset_tts_batch_events(["e0"])
+        mock_ws = MagicMock()
+
+        async def fake_iter():
+            yield json.dumps({"type": "tts_batch_complete", "cancelled": True})
+
+        mock_ws.__aiter__ = lambda self: fake_iter()
+
+        original = cc._capture_ws
+        try:
+            cc._capture_ws = mock_ws
+            await cc._read_capture_ws()
+        finally:
+            cc._capture_ws = original
+
+        assert complete_ev.is_set()
+        assert cc.is_tts_batch_cancelled() is True
+        cc._tts_entry_events.clear()
+        cc._tts_batch_complete_event = None
+
+
+class TestSendTtsBatch:
+    """send_tts_batch / cancel_tts_batch のテスト"""
+
+    @pytest.mark.asyncio
+    async def test_send_batch_uses_ws(self):
+        import scripts.services.capture_client as cc
+
+        with patch.object(cc, "ws_request", new_callable=AsyncMock, return_value={"ok": True, "queued": 2}) as mock:
+            items = [{"id": "a", "data": "base64", "volume": 0.5}]
+            result = await cc.send_tts_batch(items)
+            mock.assert_called_once_with("tts_audio_batch", timeout=15.0, items=items)
+            assert result == {"ok": True, "queued": 2}
+
+    @pytest.mark.asyncio
+    async def test_cancel_batch_uses_ws(self):
+        import scripts.services.capture_client as cc
+
+        with patch.object(cc, "ws_request", new_callable=AsyncMock, return_value={"ok": True}) as mock:
+            result = await cc.cancel_tts_batch()
+            mock.assert_called_once_with("tts_batch_cancel", timeout=5.0)
+            assert result == {"ok": True}
+
+
 class TestCaptureRouteImports:
     """capture.py が capture_client の関数を正しく参照していること"""
 

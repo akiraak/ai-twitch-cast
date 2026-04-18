@@ -54,6 +54,11 @@ _ws_connect_cooldown_until: float = 0  # 接続失敗後のクールダウン期
 _lesson_complete_event: asyncio.Event | None = None
 _lesson_complete_payload: dict | None = None
 
+# TTSバッチ再生用のイベント管理（エントリ単位の開始Push + バッチ完了Push）
+_tts_entry_events: dict[str, asyncio.Event] = {}
+_tts_batch_complete_event: asyncio.Event | None = None
+_tts_batch_cancelled: bool = False  # 直近のバッチがキャンセル由来で完了したか
+
 
 def get_lesson_complete_event() -> asyncio.Event:
     """授業全体完了イベントを取得する（LessonRunnerで使用）"""
@@ -66,6 +71,49 @@ def get_lesson_complete_event() -> asyncio.Event:
 def get_lesson_complete_payload() -> dict | None:
     """直近の lesson_complete Push通知ペイロードを返す（reason/sections_played 等）"""
     return _lesson_complete_payload
+
+
+def get_tts_entry_event(entry_id: str) -> asyncio.Event:
+    """エントリIDに対応するEventを取得する（初回は新規作成）"""
+    ev = _tts_entry_events.get(entry_id)
+    if ev is None:
+        ev = asyncio.Event()
+        _tts_entry_events[entry_id] = ev
+    return ev
+
+
+def reset_tts_batch_events(entry_ids: list[str]) -> asyncio.Event:
+    """バッチ送信前に全Eventを初期化する。
+
+    Returns:
+        tts_batch_complete 用の Event（speak_batch が wait する対象）
+    """
+    global _tts_batch_complete_event, _tts_batch_cancelled
+    _tts_entry_events.clear()
+    for eid in entry_ids:
+        _tts_entry_events[eid] = asyncio.Event()
+    _tts_batch_complete_event = asyncio.Event()
+    _tts_batch_cancelled = False
+    return _tts_batch_complete_event
+
+
+def is_tts_batch_cancelled() -> bool:
+    """直近の tts_batch_complete がキャンセル由来か"""
+    return _tts_batch_cancelled
+
+
+async def send_tts_batch(items: list[dict], timeout: float = 15.0) -> dict:
+    """TTSバッチをC#アプリに送信する。
+
+    Args:
+        items: [{"id": str, "data": base64 WAV str, "volume": float}, ...]
+    """
+    return await ws_request("tts_audio_batch", timeout=timeout, items=items)
+
+
+async def cancel_tts_batch(timeout: float = 5.0) -> dict:
+    """進行中のTTSバッチ再生を中断する"""
+    return await ws_request("tts_batch_cancel", timeout=timeout)
 
 
 async def ensure_capture_ws():
@@ -201,6 +249,17 @@ async def _read_capture_ws():
                 global _lesson_complete_payload
                 _lesson_complete_payload = data
                 get_lesson_complete_event().set()
+                continue
+            if data.get("type") == "tts_entry_started":
+                eid = data.get("id", "")
+                if eid:
+                    get_tts_entry_event(eid).set()
+                continue
+            if data.get("type") == "tts_batch_complete":
+                global _tts_batch_cancelled
+                _tts_batch_cancelled = bool(data.get("cancelled"))
+                if _tts_batch_complete_event is not None:
+                    _tts_batch_complete_event.set()
                 continue
             rid = data.get("requestId")
             if rid and rid in _pending_requests:

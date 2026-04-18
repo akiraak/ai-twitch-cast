@@ -9,6 +9,11 @@ using WinNativeApp.Streaming;
 namespace WinNativeApp.Server;
 
 /// <summary>
+/// TTSバッチ再生用のアイテム（Id/WAVバイト/音量）。
+/// </summary>
+public record TtsBatchItem(string Id, byte[] WavData, float Volume);
+
+/// <summary>
 /// HTTP + WebSocketサーバー。
 /// キャプチャ管理・配信制御・WSL2サーバーとの通信を提供する。
 /// </summary>
@@ -40,6 +45,10 @@ public class HttpServer : IDisposable
 
     // TTS直接書き込みコールバック（MainFormが設定）
     public Action<byte[], float>? OnTtsAudio { get; set; }  // (wavData, volume)
+
+    // TTSバッチ再生コールバック（MainFormが設定）
+    public Action<List<TtsBatchItem>>? OnTtsAudioBatch { get; set; }  // 全エントリをキューに積む
+    public Action? OnTtsBatchCancel { get; set; }                       // 進行中のバッチを中断
 
     // BGM制御コールバック（MainFormが設定）
     public Action<string, float>? OnBgmPlay { get; set; }     // (url, trackVolume)
@@ -462,6 +471,8 @@ public class HttpServer : IDisposable
                 "preview_status" => new { open = false },
                 "quit" => HandleWsQuit(),
                 "tts_audio" => HandleWsTtsAudio(msg),
+                "tts_audio_batch" => HandleWsTtsAudioBatch(msg),
+                "tts_batch_cancel" => HandleWsTtsBatchCancel(),
                 "bgm_play" => HandleWsBgmPlay(msg),
                 "bgm_stop" => HandleWsBgmStop(),
                 "bgm_volume" => HandleWsBgmVolume(msg),
@@ -615,6 +626,45 @@ public class HttpServer : IDisposable
             Log.Error(ex, "[WebSocket] TTS audio decode failed");
             return new { ok = false, error = ex.Message };
         }
+    }
+
+    private object HandleWsTtsAudioBatch(JsonElement msg)
+    {
+        if (!msg.TryGetProperty("items", out var itemsEl) || itemsEl.ValueKind != JsonValueKind.Array)
+            return new { ok = false, error = "items array is required" };
+
+        if (OnTtsAudioBatch == null)
+            return new { ok = false, error = "TTS batch handler not available" };
+
+        var batch = new List<TtsBatchItem>();
+        try
+        {
+            foreach (var el in itemsEl.EnumerateArray())
+            {
+                var id = el.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "";
+                var data = el.TryGetProperty("data", out var dEl) ? dEl.GetString() ?? "" : "";
+                var volume = el.TryGetProperty("volume", out var vEl) ? (float)vEl.GetDouble() : 1.0f;
+                if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(data))
+                    continue;
+                var wavBytes = Convert.FromBase64String(data);
+                batch.Add(new TtsBatchItem(id, wavBytes, volume));
+            }
+            OnTtsAudioBatch(batch);
+            return new { ok = true, queued = batch.Count };
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[WebSocket] TTS batch decode failed");
+            return new { ok = false, error = ex.Message };
+        }
+    }
+
+    private object HandleWsTtsBatchCancel()
+    {
+        if (OnTtsBatchCancel == null)
+            return new { ok = false, error = "TTS batch cancel handler not available" };
+        OnTtsBatchCancel();
+        return new { ok = true };
     }
 
     private object HandleWsBgmPlay(JsonElement msg)

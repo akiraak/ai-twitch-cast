@@ -1,5 +1,31 @@
 # DONE
 
+## Claude Code 実況のチェーン再生（全件先送り → C#キュー順次再生）
+
+- [x] `win-native-app/WinNativeApp/MainForm.cs` — TTSローカル再生キュー (`_ttsLocalQueue` / `_ttsLocalCurrent` / `_ttsQueueLock` / `_ttsBatchActive`) を追加。`OnTtsAudioBatch` コールバックでキューに全件 enqueue、配信中は全 PCM を `_ffmpeg.WriteTtsData` へ一括投入、idle なら `DequeueAndPlayNextLocal` を呼ぶ。`OnTtsBatchCancel` でキュークリア + WaveOut Stop + `tts_batch_complete (cancelled=true)` Push
+- [x] `MainForm.cs` — `DequeueAndPlayNextLocal` を追加。Push `tts_entry_started {id}` → `PlayTtsLocally` の順で発火し、Python 側が字幕を先に出す余裕を作る。キュー空になったら `tts_batch_complete` Push
+- [x] `MainForm.cs` — `PlayTtsLocally` の `PlaybackStopped` ハンドラを修正。`_ttsWaveOut == waveOut` で自然終了を判定し、自然終了時のみ `DequeueAndPlayNextLocal(finishedCurrent: true)` を呼ぶ。Stop() で上書きされた場合は次エントリへ進まない
+- [x] `MainForm.cs` — `OnTtsAudio`（単発）でバッチ進行中のキューを破棄し `tts_batch_complete (cancelled=true)` を Push。単発TTSがバッチを中断する仕様を明示
+- [x] `win-native-app/WinNativeApp/Server/HttpServer.cs` — `public record TtsBatchItem(Id, WavData, Volume)` を定義。`OnTtsAudioBatch` / `OnTtsBatchCancel` デリゲートを追加。`tts_audio_batch` / `tts_batch_cancel` アクション分岐と `HandleWsTtsAudioBatch` / `HandleWsTtsBatchCancel` を追加（base64 デコード + 個別エントリ不正時はスキップ）
+- [x] `scripts/services/capture_client.py` — `_tts_entry_events` / `_tts_batch_complete_event` / `_tts_batch_cancelled` フィールドを追加。`get_tts_entry_event(id)` / `reset_tts_batch_events(ids)` / `is_tts_batch_cancelled()` を公開。Push `tts_entry_started` / `tts_batch_complete` を `_read_capture_ws` 分岐で受信。`send_tts_batch(items)` / `cancel_tts_batch()` ヘルパー追加
+- [x] `src/speech_pipeline.py` — `speak_batch(entries)` を追加。各エントリの WAV を `asyncio.gather` で並列に base64 化・duration 計算・振幅解析。`send_tts_batch` で一括送信 → 各エントリの開始 Push を `asyncio.wait_for` で待ち、`apply_emotion` / `notify_overlay` / `lipsync` を発火。全エントリ完了 Push を待って `lipsync_stop` 送信・テンポラリ WAV クリーンアップ。タイムアウトは `sum(durations) + 10秒`
+- [x] `src/claude_watcher.py` — `_play_conversation` を `speak_batch` ベースに変更。TTS 事前生成を全件 `await` してから entries を組み立て、DB 保存をバッチ送信前にまとめて実行。別タスクで `_comment_reader.queue_size` を監視し、コメント到着時は `capture_client.cancel_tts_batch()` を呼ぶ。`try/finally` で感情リセット + `notify_overlay_end` + 未完了 TTS タスクキャンセル
+- [x] `docs/speech-generation-flow.md` — 「Claude Code実況のチェーン再生（バッチ送信）」セクションを追加。Python ↔ C# の新フロー図と、割り込み・自然終了判定の設計を記述
+- [x] `tests/test_claude_watcher.py` — `TestClaudeWatcherPlayConversation` を再構成（9 テスト）。`speak_batch` が1回呼ばれる・エントリ内容検証・DB 保存・コメント割り込みで `cancel_tts_batch` 発火・TTS 失敗時にエントリ除外・並列 TTS 起動確認
+- [x] `tests/test_speech_pipeline.py` — `TestSpeakBatch` クラス追加（4 テスト）。空配列で即 return・全エントリを `send_tts_batch` に渡す・`tts_entry_started` Push で字幕/lipsync 発火・送信失敗時のテンポラリクリーンアップ
+- [x] `tests/test_capture_client.py` — `TestTtsBatchEvents` / `TestSendTtsBatch` クラス追加（6 テスト）。`get_tts_entry_event` の再利用・`reset_tts_batch_events` の初期化・`tts_entry_started` / `tts_batch_complete` Push 処理・`send_tts_batch` / `cancel_tts_batch` のアクション名確認
+- [x] `tests/test_native_app_patterns.py` — `test_httpserver_has_tts_batch_actions` / `test_mainform_has_tts_local_queue` / `test_mainform_batch_cancel_clears_queue` を追加。C# ソースコードの静的チェック（action 分岐・キュー・Push・キャンセル処理）
+- [x] `plans/claude-narration-chain-playback.md` → ステータス: 完了
+- [x] `plans/claude-narration-gap-investigation.md` → ステータス: 完了（対策実装済み）
+
+## Claude Code 実況のセリフ間隔が長い問題の調査
+
+- [x] `plans/claude-narration-gap-investigation.md` — 調査結果を追記（ステータス: 調査完了）。`server.log` 実測で `TTS完了待ち` の polling 余剰が 1.4〜6.0秒（中央値 2.4秒、外れ値 18.8秒）、entry#0→#1 の実測ギャップ 8秒（duration≈5.3s → 無音 2.7秒）を確認
+- [x] 原因特定: `_wait_tts_complete` がC#の `IsTtsActive`（FFmpegキューの在庫）をポーリングしており、NAudioローカル再生が終わっても FFmpeg キューの消費遅延で 2〜3秒余分に待つ。配信ストリームもreal-timeでエンコードされるため、この遅延がそのまま「セリフ間の無音」として現れる
+- [x] コード現状確認: `src/speech_pipeline.py:220-224` は旧ポーリング方式のまま。`MainForm.cs:1387-1400` の TTS用 `PlaybackStopped` は Push 通知を出していない（授業プレイヤーは既にイベント駆動化済みで参考になる）。`HttpServer.BroadcastWsEvent` と `capture_client._read_capture_ws` の Push 受信基盤は利用可能
+- [x] 対策方針決定: 既存プラン `plans/tts-wait-excess-delay.md`（`PlaybackStopped` → `tts_complete` Push → Python await）をそのまま実行する。仮説D（チェーン再生）は `MixTtsInto` が自動的に処理するため、イベント化だけで十分な見込み
+- [x] TODO更新: `plans/tts-wait-excess-delay.md` への実装タスクに差し替え
+
 ## 管理画面のDocsタブから plans をアーカイブへ移動するUI
 
 - [x] `scripts/routes/docs_viewer.py` — `POST /api/docs/archive-plan` を追加。`plans/<name>` を `plans/archive/<name>` に `Path.rename` で移動。**ファイル（.md）とディレクトリの両方に対応**。`/` `\` `..` / サブディレクトリ配下 / 存在する非 `.md` ファイル / `archive` 自身は400で拒否、未存在は404、archive 側に同名がある場合は409で上書きしない

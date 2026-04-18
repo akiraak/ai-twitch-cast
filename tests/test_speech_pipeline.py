@@ -489,6 +489,150 @@ class TestWaitTtsComplete:
 # =====================================================
 
 
+class TestSpeakBatch:
+    """speak_batch（チェーン再生）のテスト"""
+
+    def _make_wav(self, path, duration_sec=0.1, framerate=24000):
+        """テスト用の短いWAVファイルを作る"""
+        import wave
+        with wave.open(str(path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(framerate)
+            wf.writeframes(b"\x00\x00" * int(framerate * duration_sec))
+
+    @pytest.mark.asyncio
+    async def test_empty_entries_returns_immediately(self):
+        """空のエントリリストでは何もせずに戻る"""
+        sp = SpeechPipeline()
+        await sp.speak_batch([])  # 例外を出さずに終わること
+
+    @pytest.mark.asyncio
+    async def test_sends_batch_with_all_entries(self, tmp_path):
+        """全エントリがまとめて send_tts_batch に渡される"""
+        wav1 = tmp_path / "a.wav"
+        wav2 = tmp_path / "b.wav"
+        self._make_wav(wav1)
+        self._make_wav(wav2)
+
+        callback = AsyncMock()
+        sp = SpeechPipeline(on_overlay=callback)
+
+        entries = [
+            {
+                "wav_path": wav1,
+                "subtitle": {"author": "T", "trigger_text": "tt", "result": {"speech": "s1", "emotion": "joy"}},
+                "emotion": "joy",
+                "avatar_id": "teacher",
+                "character_config": {"name": "T"},
+            },
+            {
+                "wav_path": wav2,
+                "subtitle": {"author": "S", "trigger_text": "tt", "result": {"speech": "s2", "emotion": "neutral"}},
+                "emotion": "neutral",
+                "avatar_id": "student",
+                "character_config": {"name": "S"},
+            },
+        ]
+
+        # 各エントリの開始Pushを即発火するよう event をモック
+        import scripts.services.capture_client as cc
+        original_entries = cc._tts_entry_events.copy()
+        try:
+            sent_items_box = {}
+
+            async def fake_send_batch(items, timeout=15.0):
+                sent_items_box["items"] = items
+                # 開始Push を順次シミュレート
+                for item in items:
+                    cc.get_tts_entry_event(item["id"]).set()
+                # 完了Pushもシミュレート
+                cc._tts_batch_complete_event.set()
+                return {"ok": True, "queued": len(items)}
+
+            with patch("scripts.services.capture_client.send_tts_batch",
+                       side_effect=fake_send_batch), \
+                 patch("scripts.routes.stream_control._get_volume", return_value=0.8), \
+                 patch("src.speech_pipeline.analyze_amplitude", return_value=[0.1, 0.2, 0.3]):
+                await sp.speak_batch(entries)
+
+            assert "items" in sent_items_box
+            assert len(sent_items_box["items"]) == 2
+            for item in sent_items_box["items"]:
+                assert "id" in item
+                assert "data" in item
+                assert "volume" in item
+        finally:
+            cc._tts_entry_events.clear()
+            cc._tts_entry_events.update(original_entries)
+            cc._tts_batch_complete_event = None
+
+    @pytest.mark.asyncio
+    async def test_fires_subtitle_and_lipsync_per_entry(self, tmp_path):
+        """各エントリの tts_entry_started で字幕・lipsync が発火する"""
+        wav1 = tmp_path / "a.wav"
+        self._make_wav(wav1)
+
+        callback = AsyncMock()
+        sp = SpeechPipeline(on_overlay=callback)
+
+        entries = [{
+            "wav_path": wav1,
+            "subtitle": {"author": "T", "trigger_text": "tt", "result": {"speech": "s1", "emotion": "joy"}},
+            "emotion": "joy",
+            "avatar_id": "teacher",
+            "character_config": {"name": "T"},
+        }]
+
+        import scripts.services.capture_client as cc
+
+        async def fake_send_batch(items, timeout=15.0):
+            for item in items:
+                cc.get_tts_entry_event(item["id"]).set()
+            cc._tts_batch_complete_event.set()
+            return {"ok": True, "queued": 1}
+
+        with patch("scripts.services.capture_client.send_tts_batch",
+                   side_effect=fake_send_batch), \
+             patch("scripts.routes.stream_control._get_volume", return_value=0.8), \
+             patch("src.speech_pipeline.analyze_amplitude", return_value=[0.1, 0.2]):
+            await sp.speak_batch(entries)
+
+        # callback: comment → lipsync → lipsync_stop が含まれる
+        types = [c.args[0]["type"] for c in callback.call_args_list]
+        assert "comment" in types
+        assert "lipsync" in types
+        assert "lipsync_stop" in types
+
+    @pytest.mark.asyncio
+    async def test_send_failure_cleans_up(self, tmp_path):
+        """バッチ送信失敗時もテンポラリWAVは削除される（キャッシュ以外）"""
+        import tempfile
+        from pathlib import Path as _Path
+        tmpdir = _Path(tempfile.mkdtemp())
+        wav1 = tmpdir / "a.wav"
+        self._make_wav(wav1)
+
+        sp = SpeechPipeline(on_overlay=AsyncMock())
+
+        entries = [{
+            "wav_path": wav1,
+            "subtitle": None,
+            "emotion": None,
+            "avatar_id": "teacher",
+            "character_config": {},
+        }]
+
+        with patch("scripts.services.capture_client.send_tts_batch",
+                   side_effect=RuntimeError("ws down")), \
+             patch("scripts.routes.stream_control._get_volume", return_value=0.8), \
+             patch("src.speech_pipeline.analyze_amplitude", return_value=[]):
+            await sp.speak_batch(entries)
+
+        # テンポラリWAVがクリーンアップされていること
+        assert not wav1.exists()
+
+
 class TestModuleSeparation:
     def test_comment_reader_uses_speech_pipeline(self):
         """comment_reader.py が SpeechPipeline を使っていること"""
