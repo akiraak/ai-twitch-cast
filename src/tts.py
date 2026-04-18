@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Enceladus, Iapetus, Umbriel, Algieba, Despina, Erinome, Algenib, Rasalgethi,
 # Laomedeia, Achernar, Alnilam, Schedar, Gacrux, Pulcherrima, Achird,
 # Zubenelgenubi, Vindemiatrix, Sadachbia, Sadaltager, Sulafat
-DEFAULT_VOICE = "Despina"
+DEFAULT_VOICE = "Leda"
 DEFAULT_STYLE = "終始にこにこしているような、柔らかく楽しげなトーンで読み上げてください"
 
 
@@ -97,7 +97,7 @@ def synthesize(text, output_path, voice=None, style=None):
     Args:
         text: 読み上げるテキスト
         output_path: 出力ファイルパス (.wav)
-        voice: 音声名 (デフォルト: キャラDB設定 or Despina)
+        voice: 音声名 (デフォルト: キャラDB設定 or Leda)
         style: TTSスタイル指示（デフォルト: キャラDB設定 or 言語設定から自動生成）
     """
     # voice/style が未指定ならキャラDBから取得

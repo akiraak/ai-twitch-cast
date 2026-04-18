@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_CHARACTER_NAME = "ちょビ"
 DEFAULT_CHARACTER = {
     "role": "teacher",
-    "tts_voice": "Despina",
+    "tts_voice": "Leda",
     "tts_style": "終始にこにこしているような、柔らかく楽しげなトーンで読み上げてください",
     "tts_style_en": "Read in a warm, cheerful, always-smiling tone",
     "tts_style_bilingual": "にこにこしながら、日本語と英語を自然に切り替えて読み上げてください",
@@ -104,7 +104,7 @@ DEFAULT_CHARACTER = {
 DEFAULT_STUDENT_CHARACTER_NAME = "なるこ"
 DEFAULT_STUDENT_CHARACTER = {
     "role": "student",
-    "tts_voice": "Kore",
+    "tts_voice": "Aoede",
     "tts_style": "元気で明るい声で、好奇心いっぱいに読み上げてください",
     "tts_style_en": "Read in a bright, energetic voice full of curiosity",
     "tts_style_bilingual": "元気で明るく、日本語と英語を自然に切り替えて読み上げてください",

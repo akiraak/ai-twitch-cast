@@ -79,7 +79,7 @@
 | `rules` | 応答ルール（日本語） | 1文40字以内、2文まで | 先生より短めに |
 | `rules_en` | 英語版ルール | Max one ! per sentence | Keep it shorter than teacher |
 | `rules_bilingual` | バイリンガル版ルール | 日英を自然に混ぜる | 日英を自然に混ぜる |
-| `tts_voice` | TTS音声名 | Despina | Kore |
+| `tts_voice` | TTS音声名 | Leda | Aoede |
 | `tts_style` | TTS読み上げスタイル（日本語） | にこにこ柔らかトーン | テンション高めハキハキ |
 | `tts_style_en` | 英語版TTSスタイル | Warm, cheerful tone | Energetic, upbeat tone |
 | `tts_style_bilingual` | バイリンガル版TTSスタイル | 日英を自然に切り替えて | 日英を自然に切り替えて |
@@ -292,7 +292,7 @@ speech_pipeline.speak(text, voice, style, avatar_id, subtitle, chat_result, tts_
 `POST /api/avatar/speak` で外部から直接テキストを指定。内部的にはイベント応答と同じフローでAIテキスト生成も行われる。
 
 ```
-APIリクエスト {event_type: "手動", detail: "配信の調子を報告して", voice: "Despina"（任意）}
+APIリクエスト {event_type: "手動", detail: "配信の調子を報告して", voice: "Leda"（任意）}
   │
   ▼
 state.reader.speak_event(event_type, detail, voice=voice)

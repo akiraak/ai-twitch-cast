@@ -1,5 +1,14 @@
 # DONE
 
+## ちょび/なるこの声を昔の voice に戻す（Despina/Kore → Leda/Aoede）
+
+- [x] DB `characters` テーブル — ちょビ `tts_voice`: Despina→Leda、なるこ `tts_voice`: Kore→Aoede に更新（channel_id=2）
+- [x] `src/character_manager.py` — `DEFAULT_CHARACTER.tts_voice` を Leda、`DEFAULT_STUDENT_CHARACTER.tts_voice` を Aoede に変更（新規インストール時の既定値）
+- [x] `src/tts.py` — `DEFAULT_VOICE` を Despina→Leda、docstring 内の既定値表記も Leda に更新
+- [x] `docs/speech-generation-flow.md` — キャラ設定テーブルの `tts_voice` 欄と `POST /api/avatar/speak` の例を Leda/Aoede に更新
+- [x] 全873テストpass（`python3 -m pytest tests/ -q`）
+- [x] 注意: 授業の事前生成TTSキャッシュ（lesson_id/section/dlg別WAV）は旧voiceのままなので、既存授業を新voiceで鳴らすには管理画面で再生成が必要
+
 ## Claude Code Hook掛け合いが起動しないバグの修正（readerが未startでも動くように）
 
 - [x] `src/comment_reader.py` — `speak_event()` で `self._characters` が未ロード（`/api/start` 未実行 = `.server_state` なし）の場合、`get_chat_characters()` を遅延ロード。readerが start されていなくても掛け合いが発動する
