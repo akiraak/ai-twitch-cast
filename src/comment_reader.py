@@ -587,7 +587,7 @@ class CommentReader:
                         "voice": entry_voice, "style": entry_style,
                     })
 
-                # 全エントリのTTSを並列起動（エントリ間の「間」を詰めるため）
+                # 全エントリのTTSを並列生成（エントリ間ギャップを詰めるため）
                 logger.info("[event][parallel] %d件のTTSを並列起動", len(resolved))
                 tts_tasks = [
                     asyncio.create_task(self._speech.generate_tts(
@@ -597,39 +597,82 @@ class CommentReader:
                     ))
                     for r in resolved
                 ]
-                try:
-                    for i, (r, task) in enumerate(zip(resolved, tts_tasks)):
-                        entry, cfg = r["entry"], r["cfg"]
-                        entry_name = cfg.get("name", entry["speaker"])
-                        entry_avatar_id = entry["speaker"]
-                        logger.info("[event] [%s/%s] %s", entry["speaker"], entry["emotion"], entry["speech"])
 
-                        wait_start = asyncio.get_event_loop().time()
-                        wav = await task  # 並列生成の完了を待つ（後続はバックグラウンド継続）
-                        logger.info("[event][parallel] entry#%d await完了: %.0fms (wav=%s)",
-                                    i, (asyncio.get_event_loop().time() - wait_start) * 1000,
-                                    "pre-generated" if wav else "None=fallback")
-                        if i > 0:
-                            await asyncio.sleep(0.3)
-
-                        self._speech.apply_emotion(entry["emotion"], avatar_id=entry_avatar_id, character_config=cfg)
-                        await self._speech.speak(entry["speech"], voice=r["voice"], style=r["style"],
-                            avatar_id=entry_avatar_id, subtitle={
+                # 全TTSの完了を待ってエントリ組み立て
+                entries_for_batch = []
+                for i, (r, task) in enumerate(zip(resolved, tts_tasks)):
+                    try:
+                        wav = await task
+                    except Exception:
+                        wav = None
+                    if wav is None:
+                        logger.warning("[event] entry#%d TTS生成失敗 → スキップ", i)
+                        continue
+                    entry, cfg = r["entry"], r["cfg"]
+                    entry_name = cfg.get("name", entry["speaker"])
+                    entry_avatar_id = entry["speaker"]
+                    logger.info("[event] [%s/%s] %s", entry["speaker"], entry["emotion"], entry["speech"])
+                    entries_for_batch.append({
+                        "wav_path": wav,
+                        "subtitle": {
                             "author": entry_name,
                             "trigger_text": f"[{event_type}] {detail}",
                             "result": entry,
-                        }, chat_result=entry if i == 0 else None,
-                            tts_text=entry.get("tts_text"),
-                            wav_path=wav,
-                            post_to_chat=self._post_to_chat if i == 0 else None)
-                        self._speech.apply_emotion("neutral", avatar_id=entry_avatar_id, character_config=cfg)
-                        await self._speech.notify_overlay_end()
-                        await self._save_avatar_comment(
-                            "event", f"[{event_type}] {detail}",
-                            entry["speech"], entry["emotion"], speaker=entry["speaker"],
-                        )
+                        },
+                        "emotion": entry["emotion"],
+                        "avatar_id": entry_avatar_id,
+                        "character_config": cfg,
+                        "_entry": entry,
+                    })
+
+                if not entries_for_batch:
+                    logger.warning("[event] 再生可能なエントリがない")
+                    for t in tts_tasks:
+                        if not t.done():
+                            t.cancel()
+                    return
+
+                # DB保存（バッチ送信前にまとめて）
+                for e in entries_for_batch:
+                    entry = e["_entry"]
+                    await self._save_avatar_comment(
+                        "event", f"[{event_type}] {detail}",
+                        entry["speech"], entry["emotion"], speaker=entry["speaker"],
+                    )
+
+                # 最初のエントリをチャット投稿（2秒遅延でバックグラウンド実行、既存挙動踏襲）
+                first_entry = entries_for_batch[0]["_entry"]
+
+                async def _delayed_chat():
+                    try:
+                        await asyncio.sleep(2.0)
+                        await self._post_to_chat(first_entry)
+                    except Exception as ex:
+                        logger.warning("[event] チャット投稿失敗: %s", ex)
+
+                asyncio.create_task(_delayed_chat())
+
+                try:
+                    # speak_batch で C# キューに一括投入 → 順次再生
+                    # tts_entry_started Push を受けて字幕・口パク・感情が発火される
+                    batch_entries = [
+                        {k: v for k, v in e.items() if not k.startswith("_")}
+                        for e in entries_for_batch
+                    ]
+                    await self._speech.speak_batch(batch_entries)
                 finally:
-                    # 例外・早期終了時に未完了タスクをキャンセル
+                    # 感情リセット + 終了通知
+                    try:
+                        for e in entries_for_batch:
+                            self._speech.apply_emotion(
+                                "neutral",
+                                avatar_id=e["avatar_id"],
+                                character_config=e["character_config"],
+                            )
+                        await self._speech.notify_overlay_end()
+                    except Exception:
+                        pass
+                    # 未完了TTSタスクをキャンセル（リーク防止）
                     for t in tts_tasks:
                         if not t.done():
                             t.cancel()

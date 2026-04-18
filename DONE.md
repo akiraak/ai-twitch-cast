@@ -1,5 +1,14 @@
 # DONE
 
+## Claude Code 実況のセリフ間ギャップを詰める（ステップ2 `speak_event` マルチ → `speak_batch`）
+
+- [x] `src/comment_reader.py:573-680` — マルチキャラ分岐を `_play_conversation` と同じ構造に書き換え。TTS を並列生成 → 全 WAV 完了待ち → `entries_for_batch` 組み立て → `_save_avatar_comment` をバッチ送信前にまとめて実行 → `self._speech.speak_batch(batch_entries)` に一括投入。`speak()` の per-entry ループと `_wait_tts_complete`（duration×0.5秒のポーリング）経路が消え、エントリ間の 2〜6秒ギャップが解消される
+- [x] `src/comment_reader.py` — 最初のエントリの `_post_to_chat` は `asyncio.create_task(_delayed_chat())` で 2 秒遅延バックグラウンド実行（旧 `speak_impl` 内の挙動を踏襲）
+- [x] `src/comment_reader.py` — `try/finally` で `apply_emotion("neutral")` + `notify_overlay_end` + 未完了 TTS タスクキャンセルを保証。全 TTS 失敗時は `speak_batch` を呼ばずに早期 return
+- [x] `tests/test_comment_reader.py` — `TestSpeakEventMultiBatch` クラスを追加（4 テスト）。`speak_batch` が1回呼ばれ `speak` は per-entry で呼ばれないこと・エントリ内容（avatar_id / author / emotion / wav_path）検証・DB 保存がバッチ送信前にまとめて走ること・全 TTS 失敗時は `speak_batch` を呼ばないこと・最初のエントリだけ `_post_to_chat` に渡されること
+- [x] `plans/tts-local-buffer-tuning.md` → ステータス: 完了（ステップ2実装済み）
+- [x] `python3 -m pytest tests/ -q` — 913 テスト全件 PASS を確認
+
 ## Claude Code 実況のローカル再生バッファ縮小（ステップ1）＋ プラン本命再特定
 
 - [x] `win-native-app/WinNativeApp/MainForm.cs:1475` — `PlayTtsLocally` 内の `WaveOutEvent` を `new WaveOutEvent { DesiredLatency = 100, NumberOfBuffers = 3 }` に変更。既定 300ms×3=900ms バッファ → 100ms×3=300ms バッファ。単発再生の開始/終端で合算 〜400ms 短縮を狙う
