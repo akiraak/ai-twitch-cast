@@ -6,6 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>AI Twitch Cast</title>
 <link rel="stylesheet" href="/static/css/index.css?v=6">
+<script src="/static/js/lib/console-forwarder.js"></script>
 <script src="/static/js/lib/api-client.js?v=4"></script>
 <script src="/static/js/lib/text-variables.js"></script>
 </head>
@@ -228,7 +229,7 @@
           <div>
             <label class="field-label">声の種類（TTS Voice）</label>
             <select id="char-tts-voice" class="text-input">
-              <option value="">デフォルト (Despina)</option>
+              <option value="">（未設定 / システムデフォルト）</option>
               <option value="Zephyr">Zephyr</option>
               <option value="Puck">Puck</option>
               <option value="Charon">Charon</option>
@@ -654,7 +655,7 @@ users       1──N  comments      (user_id)</div>
 <script src="/static/js/admin/utils.js"></script>
 <script src="/static/js/admin/status.js"></script>
 <script src="/static/js/admin/panel-items.js"></script>
-<script src="/static/js/admin/character.js"></script>
+<script src="/static/js/admin/character.js?v=3"></script>
 <script src="/static/js/admin/language.js"></script>
 <script src="/static/js/admin/sound.js"></script>
 <script src="/static/js/admin/db.js"></script>

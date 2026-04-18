@@ -195,6 +195,21 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 - コミット時の動作: post-commit hook → `.pending_commit` にコミット情報保存 → サーバーkill → server.shが自動再起動 → startup復旧（アバター・Reader・Git監視） → コミット読み上げ
 - **Setup済みの状態は `.server_state` ファイルで管理**。このファイルが存在する場合、サーバー起動時に自動復旧する
 
+## ブラウザログ（必読）
+
+ブラウザ側の `console.log` / `console.warn` / `console.error` および uncaught error / unhandled rejection は、すべて自動的にサーバーへ転送され `jslog.txt`（プロジェクトルート）に追記される。Claude Code は Read/Grep/Bash で確認すること。
+
+- **転送スクリプト**: `static/js/lib/console-forwarder.js`（`index.html` と `broadcast.html` の最初の `<script>` で読み込み済み）
+- **エンドポイント**: `POST /api/debug/jslog` → `jslog.txt` に追記（`scripts/routes/overlay.py`）
+- **行フォーマット**: `HH:MM:SS.SSS [page] [LEVEL] message`（page = `admin` / `broadcast` / パス、LEVEL = `LOG`/`WARN`/`ERR`/`UNCAUGHT`/`UNHANDLED_REJECTION`）
+
+### ルール
+- **ブラウザ側のデバッグでは `console.log` を使う**（独自に `fetch('/api/debug/jslog', ...)` する必要はない）
+- 何かを `console.log` した時点で、Claude Code は `tail -n 100 jslog.txt` や `grep ... jslog.txt` で内容を読める
+- ユーザーに「ブラウザのコンソールを開いて貼り付けて」と頼む前に、まず `jslog.txt` を確認すること
+- ブラウザリロード後の挙動を調べるときは、先に `> jslog.txt` で空にしてからユーザーに再現してもらうとノイズが減る
+- `jslog.txt` は `.gitignore` 済み・無制限に追記される。肥大化したら手動で truncate する
+
 ## 音声アーキテクチャ
 
 - **broadcast.html** が音声再生を統合管理（WebSocket `/ws/broadcast` で全イベント受信）

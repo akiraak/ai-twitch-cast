@@ -1,26 +1,5 @@
 // broadcast.html 共有グローバル変数・DOM参照
-
-// console.logキャプチャ → サーバー送信（最初に実行）
-(function() {
-  const _buf = [];
-  const _orig = console.log;
-  const _origWarn = console.warn;
-  const _origErr = console.error;
-  function capture(level, args) {
-    const line = '[' + level + '] ' + Array.from(args).map(a => {
-      try { return typeof a === 'object' ? JSON.stringify(a) : String(a); } catch(e) { return String(a); }
-    }).join(' ');
-    _buf.push(new Date().toISOString().substr(11,12) + ' ' + line);
-  }
-  console.log = function() { capture('LOG', arguments); _orig.apply(console, arguments); };
-  console.warn = function() { capture('WARN', arguments); _origWarn.apply(console, arguments); };
-  console.error = function() { capture('ERR', arguments); _origErr.apply(console, arguments); };
-  setInterval(function() {
-    if (_buf.length === 0) return;
-    const lines = _buf.splice(0, 100);
-    fetch('/api/debug/jslog', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({lines}) }).catch(function(){});
-  }, 2000);
-})();
+// console.log キャプチャは /static/js/lib/console-forwarder.js が担当
 
 // === DOM参照 ===
 const subtitleEl = document.getElementById('subtitle');

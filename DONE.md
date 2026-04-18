@@ -1,5 +1,19 @@
 # DONE
 
+## ブラウザコンソールログをサーバーに転送（Claude Codeから確認可能化）
+
+- [x] `static/js/lib/console-forwarder.js` 新規作成 — `console.log` / `warn` / `error` と uncaught error / unhandled rejection を捕捉し `/api/debug/jslog` にバッチ送信。各行に `[admin]`/`[broadcast]`/path を埋め込む。`beforeunload` でフラッシュ
+- [x] `static/index.html` / `static/broadcast.html` の最初の `<script>` で読み込み
+- [x] `static/js/broadcast/globals.js` 内の重複する console キャプチャ IIFE を削除（共通ファイルに集約）
+- [x] `CLAUDE.md` に「ブラウザログ」セクションを追加 — `jslog.txt`（プロジェクトルート、`.gitignore` 済み）の確認方法と Claude のデバッグ手順を明記
+- [x] 既存の `POST /api/debug/jslog` エンドポイント（`scripts/routes/overlay.py`）をそのまま再利用
+
+## 管理画面の声ドロップダウンが「未設定」になるバグを修正
+
+- [x] `static/js/admin/character.js` — `renderRules` / `addRule` の id 構築に `.replace(/_/g, '-')` を追加。class名と同じくアンダースコアをハイフンに変換するように統一
+- [x] 原因: `renderRules('_en')` が `getElementById('char-rules_en')` を探していたが、HTML側の id は `char-rules-en`（ハイフン）。null参照で `el.innerHTML = ''` が throw → catch に飛び `char-tts-voice` のセットを含む後続処理が全部スキップされ、ドロップダウンが placeholder のまま「未設定」表示になっていた
+- [x] `static/index.html` — TTSボイス select の placeholder option を「デフォルト (Despina)」→「（未設定 / システムデフォルト）」に変更（特定ボイス名を含めると現状値と誤解を招くため）。`character.js` の cache-bust を `?v=3` に更新
+
 ## plans/ の完了済みプランを archive/ へ移動
 
 - [x] `plans/` 直下の `ステータス: 完了` プラン30件を `plans/archive/` へ `git mv`（履歴保持）

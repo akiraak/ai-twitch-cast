@@ -221,6 +221,7 @@ async function _loadCharacterFromApi(url) {
     }
   } catch (e) {
     document.getElementById('char-status').textContent = 'エラー: ' + e.message;
+    console.error('[char-load] threw for', url, e.message, e.stack);
   } finally {
     _autoSaveLoading = false;
   }
@@ -271,7 +272,7 @@ function updateCharacterBanner(charData, langData) {
 }
 
 function renderRules(rules, suffix = '') {
-  const el = document.getElementById('char-rules' + suffix);
+  const el = document.getElementById('char-rules' + suffix.replace(/_/g, '-'));
   el.innerHTML = '';
   const cls = 'char-rule' + suffix.replace(/_/g, '-');
   rules.forEach((rule) => {
@@ -284,7 +285,7 @@ function renderRules(rules, suffix = '') {
 }
 
 function addRule(suffix = '') {
-  const el = document.getElementById('char-rules' + suffix);
+  const el = document.getElementById('char-rules' + suffix.replace(/_/g, '-'));
   const cls = 'char-rule' + suffix.replace(/_/g, '-');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex; gap:4px; margin-bottom:3px;';
