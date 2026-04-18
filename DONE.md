@@ -1,5 +1,12 @@
 # DONE
 
+## Claude Code Hook掛け合いが起動しないバグの修正（readerが未startでも動くように）
+
+- [x] `src/comment_reader.py` — `speak_event()` で `self._characters` が未ロード（`/api/start` 未実行 = `.server_state` なし）の場合、`get_chat_characters()` を遅延ロード。readerが start されていなくても掛け合いが発動する
+- [x] `src/character_manager.py` — `seed_character()` / `seed_all_characters()` が `db.get_character_by_channel` / `db.get_characters_by_channel` の「他チャンネルへのフォールバック」に騙されてseedをスキップしていたバグを修正。当該 channel_id の行のみに絞って判定するように変更
+- [x] DB マイグレーション — `channel_id=1`（default）にあった既存2キャラ（ちょビ/なるこ）を `channel_id=2`（現在のTWITCH_CHANNEL=chobi_o_o）に付け替え（ユーザー編集のTTS設定をそのまま保持）
+- [x] 動作確認: `POST /api/avatar/speak` で teacher/student 交互の4エントリ掛け合いが発動することを実機で確認
+
 ## Claude Code Hook の読み上げをキャラ2名の掛け合いに変更
 
 - [x] `src/ai_responder.py` — `generate_multi_event_response()` のプロンプトを「単独70%/両者30%」から「2〜3往復（2〜4エントリ）の掛け合い」に書き換え（日英両方）。結果配列を `result[:4]` で最大4エントリに制限

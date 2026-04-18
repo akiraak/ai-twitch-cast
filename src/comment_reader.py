@@ -488,6 +488,12 @@ class CommentReader:
         """
         try:
             logger.info("[event] %s: %s", event_type, detail)
+            # キャラ設定が未ロード（readerがstart()されていない）なら遅延ロード
+            if self._characters is None:
+                try:
+                    self._characters = await asyncio.to_thread(get_chat_characters)
+                except Exception as e:
+                    logger.warning("[event] キャラ設定の遅延ロード失敗: %s", e)
             # 直前のイベント応答を取得（繰り返し防止）
             last_responses = None
             try:

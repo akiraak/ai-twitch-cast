@@ -182,7 +182,9 @@ def seed_character(channel_id):
     from src import db
 
     existing = db.get_character_by_channel(channel_id)
-    if existing:
+    # get_character_by_channelは他チャンネルの行にフォールバックするため、
+    # 真に当該チャンネルの行だけを受け入れる
+    if existing and existing.get("channel_id") == channel_id:
         return existing
 
     config = json.dumps(DEFAULT_CHARACTER, ensure_ascii=False)
@@ -202,8 +204,13 @@ def seed_all_characters(channel_id):
         config_str = json.dumps(teacher_config, ensure_ascii=False)
         db.update_character(teacher["id"], config=config_str)
 
-    # 生徒（role="student" のキャラが存在しなければ作成）
-    chars = db.get_characters_by_channel(channel_id)
+    # 生徒（role="student" のキャラが当該チャンネルに存在しなければ作成）
+    # get_characters_by_channel は他チャンネルの行にフォールバックするため、
+    # 当該チャンネルの行のみに絞って判定する
+    chars = [
+        c for c in db.get_characters_by_channel(channel_id)
+        if c.get("channel_id") == channel_id
+    ]
     student_exists = any(
         json.loads(c["config"]).get("role") == "student" for c in chars
     )
