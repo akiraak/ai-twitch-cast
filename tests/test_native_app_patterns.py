@@ -292,6 +292,76 @@ def test_mainform_batch_cancel_clears_queue():
     )
 
 
+def test_play_tts_locally_has_pad_with_zeroes_false():
+    """PlayTtsLocally の WaveChannel32 に PadWithZeroes=false が設定されていること。
+
+    NAudio デフォルト true だと WAV 終端後も無音ゼロを無限に返し続け、
+    WaveOutEvent.PlaybackStopped が自然発火しない → チェーン再生が entry#0 で止まる。
+    plans/tts-batch-playback-hang-fix.md Fix A。
+    """
+    source = read_cs("MainForm.cs")
+    body = _extract_method_body(source, r"private void PlayTtsLocally\(")
+    assert re.search(r"PadWithZeroes\s*=\s*false", body), (
+        "PlayTtsLocally の WaveChannel32 に PadWithZeroes=false がない。"
+        "チェーン再生で entry#0 以降が発火しないハングが再発する"
+    )
+
+
+def test_play_tts_locally_has_duration_fallback():
+    """PlayTtsLocally に duration ベースのフォールバックタイマーがあること。
+
+    PadWithZeroes=false だけでは NAudio 側の別不具合で PlaybackStopped が
+    発火しないケースを救えない。duration+余裕秒経過したら強制的に次エントリへ進める。
+    plans/tts-batch-playback-hang-fix.md Fix B。
+    """
+    source = read_cs("MainForm.cs")
+    body = _extract_method_body(source, r"private void PlayTtsLocally\(")
+    assert re.search(r"reader\.TotalTime\.TotalSeconds", body), (
+        "PlayTtsLocally で WAV の duration を計算していない"
+    )
+    assert re.search(r"Task\.Delay\(TimeSpan\.FromSeconds\(duration\s*\+", body), (
+        "PlayTtsLocally に duration ベースのフォールバック Task.Delay がない"
+    )
+    assert "Interlocked.CompareExchange" in body, (
+        "PlayTtsLocally でフォールバックと PlaybackStopped の競合制御がない。"
+        "二重実行で Dispose が壊れる可能性"
+    )
+
+
+def test_on_tts_audio_clears_local_current_on_batch_interrupt():
+    """OnTtsAudio（単発）がバッチを中断するときに _ttsLocalCurrent もクリアすること。
+
+    これがないと「バッチ再生中に単発が割り込む → 単発も中断される →
+    _ttsLocalCurrent が残留 → 次バッチが wasIdle=false で弾かれる」合わせ技でハングする。
+    plans/tts-batch-playback-hang-fix.md Fix C。
+    """
+    source = read_cs("MainForm.cs")
+    # OnTtsAudio ハンドラ本体を抽出
+    m = re.search(r"OnTtsAudio\s*=\s*\(wavData,\s*volume\)\s*=>\s*\{", source)
+    assert m, "OnTtsAudio のハンドラ登録が見つからない"
+    start = m.end() - 1
+    depth = 0
+    for i in range(start, len(source)):
+        c = source[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                handler_body = source[start : i + 1]
+                break
+    else:
+        raise AssertionError("OnTtsAudio ハンドラの閉じ括弧が見つからない")
+    # バッチ中断ブロック（Clear してから _ttsLocalCurrent を null）
+    assert re.search(r"_ttsLocalQueue\.Clear\(\)", handler_body), (
+        "OnTtsAudio にバッチキューのクリアがない"
+    )
+    assert re.search(r"_ttsLocalCurrent\s*=\s*null", handler_body), (
+        "OnTtsAudio のバッチ中断処理で _ttsLocalCurrent をクリアしていない。"
+        "単発割り込み後の残留で後続バッチがハングする"
+    )
+
+
 # === Program.cs ===
 
 

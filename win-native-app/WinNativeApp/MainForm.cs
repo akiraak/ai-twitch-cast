@@ -843,6 +843,9 @@ public class MainForm : Form
                         _ttsLocalQueue.Clear();
                         hadBatch = _ttsBatchActive;
                         _ttsBatchActive = false;
+                        // 単発が自然終了しない（さらに中断される）ケースで _ttsLocalCurrent が残留して
+                        // 次のバッチが wasIdle=false で弾かれるハングを防ぐ
+                        _ttsLocalCurrent = null;
                     }
                 }
                 if (hadBatch)
@@ -1470,7 +1473,14 @@ public class MainForm : Form
         {
             var ms = new MemoryStream(wavData);
             var reader = new WaveFileReader(ms);
-            var channel = new WaveChannel32(reader) { Volume = Math.Clamp(volume, 0f, 1f) };
+            var duration = reader.TotalTime.TotalSeconds;
+            // PadWithZeroes=false でWAV終端後にゼロ埋めせず Read() が 0 を返すようにする
+            // これで WaveOutEvent.PlaybackStopped が自然発火する（NAudio デフォルト true だと無限無音で発火しない）
+            var channel = new WaveChannel32(reader)
+            {
+                Volume = Math.Clamp(volume, 0f, 1f),
+                PadWithZeroes = false,
+            };
             var meter = new MeteringWaveProvider(channel);
             // DesiredLatency を既定の300ms → 100ms に縮めてエントリ間ギャップを短縮
             // （プラン: plans/tts-local-buffer-tuning.md ステップ1 安全域）
@@ -1482,11 +1492,14 @@ public class MainForm : Form
             _ttsChannel = channel;
             _ttsMeter = meter;
 
-            var disposed = false;
+            int completed = 0;  // 0=未完了, 1=完了処理開始済み（PlaybackStoppedとfallbackでCompareExchange原子化）
+            var fallbackCts = new CancellationTokenSource();
+            var playStart = DateTime.UtcNow;
+
             waveOut.PlaybackStopped += (_, _) =>
             {
-                if (disposed) return;
-                disposed = true;
+                if (Interlocked.CompareExchange(ref completed, 1, 0) != 0) return;
+                try { fallbackCts.Cancel(); } catch { }
                 // _ttsWaveOut == waveOut なら自然終了（新しい PlayTtsLocally に上書きされていない）
                 bool naturalEnd = _ttsWaveOut == waveOut;
                 if (naturalEnd)
@@ -1507,7 +1520,38 @@ public class MainForm : Form
             };
 
             waveOut.Play();
-            Log.Debug("[TTS] Local playback started ({Size} bytes, vol={Vol:F2})", wavData.Length, volume);
+            Log.Debug("[TTS] Local playback started ({Size} bytes, vol={Vol:F2}, duration={D:F2}s)",
+                wavData.Length, volume, duration);
+
+            // フォールバック: duration + 1.5秒 経過しても PlaybackStopped 未発火なら強制完了
+            // Fix A (PadWithZeroes=false) の多層防御。NAudio 側の不具合やデバイス停止に対する保険
+            if (duration > 0)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(duration + 1.5), fallbackCts.Token);
+                    }
+                    catch (OperationCanceledException) { return; }
+                    if (Interlocked.CompareExchange(ref completed, 1, 0) != 0) return;
+                    var elapsed = (DateTime.UtcNow - playStart).TotalSeconds;
+                    Log.Warning("[TTS] PlaybackStopped未発火のためタイムアウトで次へ (elapsed={E:F2}s, duration={D:F2}s)",
+                        elapsed, duration);
+                    bool naturalEnd = _ttsWaveOut == waveOut;
+                    if (naturalEnd)
+                    {
+                        _ttsWaveOut = null;
+                        _ttsChannel = null;
+                        _ttsMeter = null;
+                        try { waveOut.Dispose(); } catch { }
+                        try { reader.Dispose(); } catch { }
+                        try { ms.Dispose(); } catch { }
+                        BeginInvoke(() => DequeueAndPlayNextLocal(finishedCurrent: true));
+                    }
+                    // naturalEnd=false（別の再生に上書きされた）時は、上書き側が既に Stop/Dispose 済み
+                });
+            }
         }
         catch (Exception ex)
         {

@@ -1,6 +1,8 @@
 # PlayTtsLocally バッチチェーン再生ハングの修正
 
-## ステータス: 未着手
+## ステータス: 完了
+
+実装: MainForm.cs `PlayTtsLocally` に `PadWithZeroes=false` + duration フォールバック（`Interlocked.CompareExchange` 原子化、`CancellationTokenSource` で自動キャンセル）、`OnTtsAudio` に `_ttsLocalCurrent = null` を追加。tests/test_native_app_patterns.py に静的チェック 3 件追加（PadWithZeroes / duration フォールバック / _ttsLocalCurrent クリア）。docs/speech-generation-flow.md の「Claude Code実況のチェーン再生」にハング耐性の3層防御を追記。pytest 全件 916 PASS。
 
 ## 要旨
 

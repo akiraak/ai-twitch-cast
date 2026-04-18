@@ -1,5 +1,15 @@
 # DONE
 
+## Claude Code 実況チェーン再生ハング修正（`PadWithZeroes=false`＋duration フォールバック＋`_ttsLocalCurrent`クリア）
+
+- [x] `win-native-app/WinNativeApp/MainForm.cs` `PlayTtsLocally` — `WaveChannel32` に `PadWithZeroes = false` を追加（NAudio デフォルト true だと WAV 終端でゼロ埋めが無限に返り、`WaveOutEvent.PlaybackStopped` が自然発火しない。結果 `DequeueAndPlayNextLocal(finishedCurrent: true)` が呼ばれず `_ttsLocalCurrent` が永久残留 → 後続バッチが `wasIdle=false` で弾かれるハング）
+- [x] `MainForm.cs` `PlayTtsLocally` — `reader.TotalTime.TotalSeconds + 1.5s` の `Task.Delay` フォールバックを追加。`Interlocked.CompareExchange` で PlaybackStopped と原子化、`CancellationTokenSource` で再生停止時・上書き時にキャンセル。`PlayLessonAudioAsync` と同じ多層防御パターン
+- [x] `MainForm.cs` `OnTtsAudio`（単発）— バッチ中断ブロックで `_ttsLocalCurrent = null` を追加。「バッチ再生中に単発が割り込む → 単発が中断される → `_ttsLocalCurrent` 残留」の合わせ技ハングを防ぐ
+- [x] `tests/test_native_app_patterns.py` — 3 テスト追加（PadWithZeroes=false、duration フォールバック + Interlocked、OnTtsAudio の `_ttsLocalCurrent` クリア）
+- [x] `docs/speech-generation-flow.md` — 「Claude Code実況のチェーン再生」にハング耐性の3層防御を追記
+- [x] `plans/tts-batch-playback-hang-fix.md` → ステータス: 完了
+- [x] `python3 -m pytest tests/ -q` — 916 テスト全件 PASS
+
 ## Claude Code 実況のセリフ間ギャップを詰める（ステップ2 `speak_event` マルチ → `speak_batch`）
 
 - [x] `src/comment_reader.py:573-680` — マルチキャラ分岐を `_play_conversation` と同じ構造に書き換え。TTS を並列生成 → 全 WAV 完了待ち → `entries_for_batch` 組み立て → `_save_avatar_comment` をバッチ送信前にまとめて実行 → `self._speech.speak_batch(batch_entries)` に一括投入。`speak()` の per-entry ループと `_wait_tts_complete`（duration×0.5秒のポーリング）経路が消え、エントリ間の 2〜6秒ギャップが解消される
