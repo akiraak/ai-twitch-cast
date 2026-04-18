@@ -211,8 +211,20 @@
 ### CLAUDE.md 表との差分
 （Step 1-d で転記）
 
+### Step 1-b: 未使用シンボル検出（2026-04-18）
+
+- 実施内容: `tests/` 27 ファイル全てについて、`from src.X import ...` / `from scripts.X import ...`（複数行 `( ... )` 形式含む）および `patch("src.X.Y")` / `patch("scripts.X.Y")` の参照シンボルを抽出し、対象モジュール側に定義（`def` / `async def` / `class` / 変数代入 / `__all__` 経由の再エクスポート）が実在するかを `rg` で照合。
+- 結果: **未定義・消失シンボルはゼロ**。確認したモジュール:
+  - src: `ai_responder` / `claude_watcher` / `comment_reader` / `db`（パッケージ）/ `git_watcher` / `json_utils` / `lesson_generator`（パッケージ。`extractor` / `improver` / `utils`）/ `lesson_runner` / `lipsync` / `prompt_builder` / `scene_config` / `se_resolver` / `speech_pipeline` / `tts` / `tts_pregenerate` / `wsl_path`
+  - scripts: `routes/docs_viewer` / `routes/overlay` / `routes/stream_control` / `routes/teacher` / `services/capture_client` / `services/todo_service` / `state`
+- 補足:
+  - `from src.ai_responder import DEFAULT_CHARACTER / get_character / load_character / seed_character / invalidate_character_cache / get_chat_characters / get_tts_config` 等は `character_manager.py` からの再エクスポート（`src/ai_responder.py:10-63`）で解決される。分離後もテスト互換が維持されている
+  - `patch("src.lesson_runner.analyze_amplitude")` / `patch("src.speech_pipeline.{get_character, synthesize, analyze_amplitude}")` は各モジュールが `from ... import` で取り込んだエイリアス経由。正しくモジュール属性として存在する
+  - `patch("scripts.services.todo_service.TODO_PATH")` / `patch("scripts.routes.overlay.state")` も module-level 変数として実在
+- 判断: **Step 2（不要テスト削除）において「対象シンボルが存在しない」を理由に削除できるテストは無い**。削除判定は 1-c（モジュール分離に伴う重複）および 1-d（CLAUDE.md 差分）の結果に依拠する。
+
 ### 削除候補一覧
-（Step 1-b, 1-c の結果をもとに作成）
+（Step 1-c, 1-d の結果をもとに作成）
 
 ## 参考
 

@@ -8,7 +8,6 @@
 
 ## その他
 - [ ] テストの検証。不要なものを削除。必要なものがあれば追加 → [plans/test-suite-audit.md](plans/test-suite-audit.md)
-  - [ ] Step 1-b: 各テストが import する実装シンボルを `rg` で実在確認（未使用シンボル検出）
   - [ ] Step 1-c: `ai_responder`→`character_manager` 等のモジュール分離に伴う重複テストを洗い出し
   - [ ] Step 1-d: `CLAUDE.md` の「テスト構成」表と実在ファイルの差分をプランに転記
   - [ ] Step 2: 不要テストをケース単位で削除（カテゴリ別にコミット分割）
@@ -24,3 +23,5 @@
   - [ ] Step 5: `scripts/web.py` の `@app.on_event` を FastAPI lifespan ハンドラに移行（DeprecationWarning解消）
   - [ ] Step 6: `CLAUDE.md` のテスト構成表を実体と一致させ、`-m "not slow"` 運用を追記
 - [ ] クライアントに動画撮影機能を入れる
+
+- [ ] Claude Code が Yes/No を表示したタイミングでTTSの生成ができるか調べる

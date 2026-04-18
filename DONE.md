@@ -1,5 +1,12 @@
 # DONE
 
+## テストスイート棚卸し Step 1-b: テスト import シンボルの実在確認
+
+- [x] `tests/` 全 27 ファイルの `from src.X import ...` / `from scripts.X import ...`（複数行 `( ... )` 形式含む）および `patch("src.X.Y")` / `patch("scripts.X.Y")` の参照シンボルを抽出し、対象モジュール側に定義が存在するかを `rg` で照合
+- [x] 結果: **未定義・消失シンボルはゼロ**。`ai_responder` から分離された `character_manager` 由来のシンボル（`DEFAULT_CHARACTER` / `get_character` / `load_character` / `seed_character` / `invalidate_character_cache` / `get_chat_characters` / `get_tts_config` 等）は `src/ai_responder.py` の再エクスポート経由で解決、`patch("scripts.services.todo_service.TODO_PATH")` / `patch("scripts.routes.overlay.state")` なども module-level 属性として実在
+- [x] `plans/test-suite-audit.md` の「計測結果」に Step 1-b 節を追加し、対象モジュール・補足・判断を転記。Step 2（不要テスト削除）において「対象シンボルが存在しない」を理由に削除できるテストは **無い**ことを明確化
+- [x] `TODO.md` から Step 1-b を削除
+
 ## テストスイート棚卸し Step 1-a: `pytest --durations=30` 正式計測
 
 - [x] `python3 -m pytest tests/ --durations=30 -q` 実行 — 916 passed / 5 warnings / **526.91 秒（8:46）**
