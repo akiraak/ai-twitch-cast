@@ -221,7 +221,6 @@ public class LessonPlayer
         finally
         {
             _playing = false;
-            _state = "idle";
             _cts = null;
 
             // 授業全体の完了通知
@@ -240,11 +239,13 @@ public class LessonPlayer
             Log.Information("[Lesson] Lesson {Id} finished: reason={Reason} sections_played={Played}/{Total}",
                 _lessonId, reason, sectionsPlayed, _sections?.Count ?? 0);
 
-            _sections = null;
+            // 授業データは保持したまま再生位置だけリセットし、loaded に戻す
             _currentSectionIndex = -1;
             _currentDialogueIndex = -1;
             _currentDialogues = null;
             _currentKind = "main";
+            _totalDialogues = 0;
+            _state = (_sections != null && _sections.Count > 0) ? "loaded" : "idle";
 
             SendPanelUpdate();
         }
@@ -276,19 +277,23 @@ public class LessonPlayer
         SendPanelUpdate();
     }
 
-    /// <summary>再生を停止する。</summary>
+    /// <summary>再生を停止する。授業データ(_sections)は保持したまま再生位置だけリセットする。</summary>
     public void Stop()
     {
         if (!_playing)
         {
-            _state = "idle";
-            _sections = null;
+            // 再生していない時の停止操作 = 再生位置を先頭に戻す
+            _currentSectionIndex = -1;
+            _currentDialogueIndex = -1;
             _currentDialogues = null;
+            _currentKind = "main";
+            _totalDialogues = 0;
+            _state = (_sections != null && _sections.Count > 0) ? "loaded" : "idle";
             SendPanelUpdate();
             return;
         }
 
-        _state = "idle";
+        // 再生中: PlayAsync の finally で state を loaded に戻す
         _paused = false;
         _resumeTcs?.TrySetResult();  // pause待ちを解除
         try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
@@ -296,7 +301,7 @@ public class LessonPlayer
         InjectJs?.Invoke("if(window.lesson)window.lesson.endDialogue()");
         InjectJs?.Invoke("if(window.lesson)window.lesson.hideText()");
         Log.Information("[Lesson] Stopped");
-        // _playing は PlayAsync の finally で false に設定される
+        // _playing と _state は PlayAsync の finally で更新される
     }
 
     /// <summary>現在の再生状態を返す。</summary>

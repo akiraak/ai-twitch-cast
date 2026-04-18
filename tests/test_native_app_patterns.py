@@ -157,6 +157,86 @@ def test_lesson_player_exposes_is_paused():
     )
 
 
+# === LessonPlayer Stop/Replay — 授業データ保持 ===
+
+
+def _extract_method_body(source: str, signature_pattern: str) -> str:
+    """指定シグネチャに一致するメソッドの波括弧内ボディを返す（簡易）。"""
+    m = re.search(signature_pattern, source)
+    assert m, f"Method matching {signature_pattern} not found"
+    # メソッド開始の { を探す
+    start = source.find("{", m.end())
+    assert start != -1, "Opening brace not found"
+    depth = 0
+    for i in range(start, len(source)):
+        c = source[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start : i + 1]
+    raise AssertionError("Closing brace not found")
+
+
+def test_stop_preserves_sections():
+    """LessonPlayer.Stop() が _sections = null を行わないこと。
+
+    停止した授業を再生し直せるように、授業データは保持する必要がある。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    body = _extract_method_body(source, r"public void Stop\(\)")
+    assert not re.search(r"\b_sections\s*=\s*null", body), (
+        "Stop() 内で _sections = null している。停止後に再生できなくなる"
+    )
+
+
+def test_play_async_finally_preserves_sections():
+    """LessonPlayer.PlayAsync() の finally ブロックで _sections = null を行わないこと。
+
+    自然完了・エラー時にも授業データを保持する必要がある。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    body = _extract_method_body(source, r"public async Task PlayAsync\(\)")
+    # finally { ... } ブロックを抽出
+    finally_match = re.search(r"finally\s*\{", body)
+    assert finally_match, "PlayAsync に finally ブロックがない"
+    start = finally_match.end() - 1
+    depth = 0
+    finally_body = ""
+    for i in range(start, len(body)):
+        c = body[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                finally_body = body[start : i + 1]
+                break
+    assert finally_body, "finally ブロックの本体抽出に失敗"
+    assert not re.search(r"\b_sections\s*=\s*null", finally_body), (
+        "PlayAsync の finally で _sections = null している。停止後に再生できなくなる"
+    )
+
+
+def test_stop_returns_to_loaded_state():
+    """Stop() および PlayAsync() の終了時に _state = \"loaded\" に戻す経路があること。
+
+    停止・完了後は loaded 状態に戻り、再生ボタンを押せば再度先頭から再生できる必要がある。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    # Stop() と PlayAsync() の両方で _state = "loaded" への代入（条件式含む）が存在すること
+    stop_body = _extract_method_body(source, r"public void Stop\(\)")
+    play_body = _extract_method_body(source, r"public async Task PlayAsync\(\)")
+
+    assert re.search(r'_state\s*=.*"loaded"', stop_body), (
+        'Stop() で _state が "loaded" に戻される経路がない'
+    )
+    assert re.search(r'_state\s*=.*"loaded"', play_body), (
+        'PlayAsync() の finally で _state が "loaded" に戻される経路がない'
+    )
+
+
 # === Program.cs ===
 
 

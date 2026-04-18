@@ -1062,10 +1062,15 @@ function updateLesson(m) {
   // 上部メタ行（Section x/y [type]  Dialogue a/b）
   const prog = $('lessonProgress');
   if (total > 0) {
-    const dlgTotal = m.total_dialogues || 0;
-    const dlgCur = (typeof m.dialogue_index === 'number' && m.dialogue_index >= 0) ? m.dialogue_index + 1 : 0;
-    const secType = m.section_type ? ` [${m.section_type}]` : '';
-    prog.textContent = `Section ${cur + 1}/${total}${secType}  Dialogue ${dlgCur}/${dlgTotal}`;
+    if (cur >= 0) {
+      const dlgTotal = m.total_dialogues || 0;
+      const dlgCur = (typeof m.dialogue_index === 'number' && m.dialogue_index >= 0) ? m.dialogue_index + 1 : 0;
+      const secType = m.section_type ? ` [${m.section_type}]` : '';
+      prog.textContent = `Section ${cur + 1}/${total}${secType}  Dialogue ${dlgCur}/${dlgTotal}`;
+    } else {
+      // loaded（未再生・停止後）: セクション先頭で待機中
+      prog.textContent = `Ready (${total} sections)`;
+    }
   } else {
     prog.textContent = '';
   }
@@ -1087,6 +1092,9 @@ function updateLesson(m) {
     }
   } else if (_timelineState.autoFollow && cur >= 0) {
     _timelineState.viewSection = cur;
+  } else if (_timelineState.autoFollow && cur < 0 && total > 0) {
+    // 停止直後・ロード直後はセクション 1 をプレビュー表示
+    _timelineState.viewSection = 0;
   }
 
   _updateLessonButtons(m.state || 'idle');

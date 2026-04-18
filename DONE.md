@@ -1,5 +1,12 @@
 # DONE
 
+## C#アプリ Lesson タブで停止した授業を再生し直せるように修正
+
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `Stop()` と `PlayAsync()` finally で `_sections = null` を削除し、授業データを保持。`_state` は `_sections` が残っていれば `"loaded"` に戻す（完了・エラー・停止の全パス共通）。`Stop()` の非再生ブランチも「再生位置を先頭に戻して loaded 維持」に変更
+- [x] `win-native-app/WinNativeApp/control-panel.html` — `updateLesson()` で `cur < 0` のとき上部メタ行を `Ready (N sections)` 表示に変更。autoFollow 時 `cur < 0 && total > 0` のケースで `viewSection = 0` にフォールバックさせてタイムラインを先頭プレビュー表示
+- [x] `tests/test_native_app_patterns.py` — `test_stop_preserves_sections` / `test_play_async_finally_preserves_sections` / `test_stop_returns_to_loaded_state` を追加（メソッド本体抽出ヘルパ `_extract_method_body` 込み）
+- [x] プラン: [plans/lesson-stop-then-replay.md](plans/lesson-stop-then-replay.md) ステータスを「完了」に更新
+
 ## C#コントロールパネル Lesson タブに再生/一時停止/停止ボタンを追加（サーバ自動再生を廃止）
 
 - [x] `src/lesson_runner.py` — `_send_all_and_play` で `lesson_load` 直後の自動 `lesson_play` 送信を削除。再生開始は C# 側 control-panel の ▶ ボタンに委ねるフローへ変更。docstring も更新
