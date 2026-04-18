@@ -151,26 +151,62 @@
 
 ## 計測結果（Step 1 で埋める）
 
-### 実行時間プロファイル（初期計測 2026-04-18）
+### 実行時間プロファイル
 
-`--durations=15` の上位（単位: 秒）:
+#### 計測1: 2026-04-18 初回（`--durations=15`）
+スイート総時間: **532秒**／記録は下記の計測2に統合した（初回の詳細は git 履歴参照）。
 
-| 時間 | フェーズ | テスト |
-|-----:|---------|-------|
-| 66.96 | call | `test_lesson_runner.py::TestSendAllAndPlay::test_sends_lesson_load_with_all_sections` |
-| 63.83 | call | `test_lesson_runner.py::TestPlaybackPersistence::test_send_all_and_play_saves_state` |
-| 60.68 | call | `test_lesson_runner.py::TestSendAllAndPlay::test_resume_from_saved_index` |
-| 60.23 | call | `test_lesson_runner.py::TestSendAllAndPlay::test_tts_progress_notification` |
-| 5.01 | call | `test_speech_pipeline.py::TestSpeak::test_speak_no_chat_callback` |
-| 5.01 | call | `test_speech_pipeline.py::TestSpeak::test_speak_with_tts_failure` |
-| 1.11 | call | `test_tts_pregenerate.py::TestPregenerateSectionTts::test_retry_on_failure` |
-| 1.03 | setup | `test_db.py::TestBgmTracks::test_upsert_volume` |
-| 1.01 | call | `test_claude_watcher.py::TestClaudeWatcherPlayConversation::test_comment_interrupt_cancels_batch` |
+#### 計測2: 2026-04-18 Step 1-a 正式計測（`--durations=30`）
+
+- 実行コマンド: `python3 -m pytest tests/ --durations=30 -q`
+- **スイート総時間: 526.91 秒（8:46）／ 916 passed / 5 warnings**
+- 上位 call 6件で **261.7 秒（約 49.7%）** を占める。残りの 24 件（setup 中心）は合計約 15 秒で、「遅いのは一部の call、setup はフィクスチャコストが薄く広がっている」という構図。
+
+| # | 時間(s) | フェーズ | テスト |
+|--:|-------:|---------|-------|
+| 1 | 66.97 | call  | `test_lesson_runner.py::TestSendAllAndPlay::test_sends_lesson_load_with_all_sections` |
+| 2 | 63.83 | call  | `test_lesson_runner.py::TestPlaybackPersistence::test_send_all_and_play_saves_state` |
+| 3 | 60.67 | call  | `test_lesson_runner.py::TestSendAllAndPlay::test_resume_from_saved_index` |
+| 4 | 60.21 | call  | `test_lesson_runner.py::TestSendAllAndPlay::test_tts_progress_notification` |
+| 5 | 5.01  | call  | `test_speech_pipeline.py::TestSpeak::test_speak_with_tts_failure` |
+| 6 | 5.00  | call  | `test_speech_pipeline.py::TestSpeak::test_speak_no_chat_callback` |
+| 7 | 1.11  | call  | `test_tts_pregenerate.py::TestPregenerateSectionTts::test_retry_on_failure` |
+| 8 | 1.00  | call  | `test_claude_watcher.py::TestClaudeWatcherPlayConversation::test_comment_interrupt_cancels_batch` |
+| 9 | 0.98  | setup | `test_lesson_runner.py::TestPlaybackPersistence::test_stop_clears_playback_state` |
+| 10 | 0.80 | setup | `test_lesson_runner.py::TestLessonLifecycle::test_start_and_stop` |
+| 11 | 0.79 | setup | `test_lesson_runner.py::TestRestore::test_restore_no_sections` |
+| 12 | 0.78 | setup | `test_db.py::TestLessonLearnings::test_get_latest_nonexistent` |
+| 13 | 0.77 | setup | `test_db.py::TestLessonLearnings::test_get_learnings_all` |
+| 14 | 0.72 | setup | `test_api_docs_viewer.py::TestListDocFiles::test_list_docs` |
+| 15 | 0.72 | setup | `test_lesson_runner.py::TestLessonLifecycle::test_pause_and_resume` |
+| 16 | 0.72 | setup | `test_lesson_runner.py::TestLessonLifecycle::test_start_no_sections` |
+| 17 | 0.71 | setup | `test_api_teacher.py::TestPaceScale::test_set_pace_scale` |
+| 18 | 0.70 | setup | `test_lesson_runner.py::TestVersionedTtsCache::test_get_tts_cache_info_versioned` |
+| 19 | 0.70 | setup | `test_api_stream.py::TestVolume::test_set_volume` |
+| 20 | 0.69 | setup | `test_api_docs_viewer.py::TestListDocFiles::test_list_plans` |
+| 21 | 0.67 | setup | `test_api_items.py::TestCustomTextViaBroadcastItems::test_api_get_list` |
+| 22 | 0.67 | setup | `test_db.py::TestLessonLearnings::test_get_learnings_by_category` |
+| 23 | 0.66 | setup | `test_api_teacher.py::TestPaceScale::test_pace_scale_clamped` |
+| 24 | 0.64 | setup | `test_api_teacher.py::TestTtsCacheAPI::test_get_tts_cache_empty` |
+| 25 | 0.64 | setup | `test_api_character.py::TestListCharacters::test_returns_all_characters` |
+| 26 | 0.63 | setup | `test_lesson_runner.py::TestTtsCache::test_get_tts_cache_info` |
+| 27 | 0.63 | setup | `test_db.py::TestSectionVersionNumber::test_default_version` |
+| 28 | 0.63 | setup | `test_api_items.py::TestItemsAPI::test_post_item_layout` |
+| 29 | 0.63 | setup | `test_api_teacher.py::TestLessonCRUD::test_get_lesson` |
+| 30 | 0.63 | setup | `test_db.py::TestComments::test_get_recent_avatar_comments_includes_speaker` |
 
 **観察**:
-- 上位4件（合計 ≈ 251秒）がすべて `test_lesson_runner.py` の `TestSendAllAndPlay` / `TestPlaybackPersistence` 配下。**532秒の約半分がこの4テストに集中**。`lesson_runner.py` の再生ループ内の `asyncio.sleep` 等を実時間で待っている可能性が高い → `asyncio.sleep` をモックするか `@pytest.mark.slow` 退避の最有力候補
-- `test_speech_pipeline.py::TestSpeak::test_speak_no_chat_callback` / `test_speak_with_tts_failure` の5秒も同様に `_wait_tts_complete()` のポーリング待機を実時間で回している疑い
-- setup が1秒超えているケースは `api_client` フィクスチャ生成コストの可能性 → session スコープ化で短縮できるか要確認
+- **上位4件（合計 251.68 秒）がすべて `test_lesson_runner.py` の `TestSendAllAndPlay` / `TestPlaybackPersistence` 配下**。526秒中の約 47.8% がこの4テストに集中。`lesson_runner.py` の再生ループ内 `asyncio.sleep` 等を実時間で待っている可能性が高く、`asyncio.sleep` のモックor `@pytest.mark.slow` 退避の最有力候補
+- `test_speech_pipeline.py::TestSpeak::test_speak_no_chat_callback` / `test_speak_with_tts_failure` の 5 秒も同様に `_wait_tts_complete()` のポーリング待機を実時間で回している疑い
+- **setup が 0.6〜1.0 秒の帯域に 22 件並んでいる**のは `api_client` / `test_db` フィクスチャ生成コストの可能性が濃厚。そのほとんどが `test_lesson_runner.py` / `test_api_*.py` / `test_db.py`。session-scoped フィクスチャ化や `scripts.web` import 遅延で削れる余地がある（Step 4 で要検討）
+- 初回計測（532秒）と今回（526.91秒）はほぼ一致。計測ノイズは ±1% 程度で、削減効果の判定はこのベースラインを基準にする
+- 5件の `DeprecationWarning` は `scripts/web.py:167 / :302` の `@app.on_event("startup"/"shutdown")` 由来（Step 5 の lifespan 移行で解消対象）
+
+**Step 4 へのインプット（優先度順）**:
+1. `test_lesson_runner.py` の上位4件を `@pytest.mark.slow` or `asyncio.sleep` モック化で短縮 — 期待削減 ≈ 250秒
+2. `test_speech_pipeline.py::TestSpeak` の 2件（`_wait_tts_complete` ポーリング）を短縮 — 期待削減 ≈ 10秒
+3. setup の帯域（`api_client` フィクスチャ生成）を session スコープ化で均す — 期待削減 ≈ 10〜20秒
+4. 上記3点で目標 60 秒以内（526 → ≈ 250秒削減で 280秒前後まで → さらに上位以外の累積短縮が必要）に近づけられるかを評価
 
 ### CLAUDE.md 表との差分
 （Step 1-d で転記）

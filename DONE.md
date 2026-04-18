@@ -1,5 +1,12 @@
 # DONE
 
+## テストスイート棚卸し Step 1-a: `pytest --durations=30` 正式計測
+
+- [x] `python3 -m pytest tests/ --durations=30 -q` 実行 — 916 passed / 5 warnings / **526.91 秒（8:46）**
+- [x] `plans/test-suite-audit.md` の「計測結果」セクションを刷新 — 上位 30 件の表（call 6件＋setup 24件）、合計時間、合計占有率、DeprecationWarning の内訳を転記
+- [x] 観察と Step 4 へのインプット（優先度順）を追記: ①`test_lesson_runner.py` 上位4件（合計 251.68 秒・47.8%）を `@pytest.mark.slow` または `asyncio.sleep` モック化で短縮、②`test_speech_pipeline.py::TestSpeak` 2件（`_wait_tts_complete` ポーリング）で ≈10秒、③`api_client` / `test_db` フィクスチャを session スコープ化で setup 帯域（0.6〜1.0秒×22件）を削減
+- [x] `TODO.md` から Step 1-a を削除
+
 ## Claude Code 実況チェーン再生ハング修正（`PadWithZeroes=false`＋duration フォールバック＋`_ttsLocalCurrent`クリア）
 
 - [x] `win-native-app/WinNativeApp/MainForm.cs` `PlayTtsLocally` — `WaveChannel32` に `PadWithZeroes = false` を追加（NAudio デフォルト true だと WAV 終端でゼロ埋めが無限に返り、`WaveOutEvent.PlaybackStopped` が自然発火しない。結果 `DequeueAndPlayNextLocal(finishedCurrent: true)` が呼ばれず `_ttsLocalCurrent` が永久残留 → 後続バッチが `wasIdle=false` で弾かれるハング）

@@ -8,7 +8,6 @@
 
 ## その他
 - [ ] テストの検証。不要なものを削除。必要なものがあれば追加 → [plans/test-suite-audit.md](plans/test-suite-audit.md)
-  - [ ] Step 1-a: `pytest --durations=30` で最遅テスト上位を抽出しプランに転記
   - [ ] Step 1-b: 各テストが import する実装シンボルを `rg` で実在確認（未使用シンボル検出）
   - [ ] Step 1-c: `ai_responder`→`character_manager` 等のモジュール分離に伴う重複テストを洗い出し
   - [ ] Step 1-d: `CLAUDE.md` の「テスト構成」表と実在ファイルの差分をプランに転記
