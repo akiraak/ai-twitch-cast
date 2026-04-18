@@ -392,6 +392,7 @@ class ClaudeWatcher:
             resolved.append({"dlg": dlg, "speaker": speaker, "cfg": cfg})
 
         # 全発話のTTSを並列起動
+        logger.info("[watcher][parallel] %d件のTTSを並列起動", len(resolved))
         tts_tasks = [
             asyncio.create_task(self._speech.generate_tts(
                 r["dlg"]["speech"],
@@ -414,10 +415,14 @@ class ClaudeWatcher:
 
                 dlg, speaker, cfg = r["dlg"], r["speaker"], r["cfg"]
 
+                wait_start = asyncio.get_event_loop().time()
                 try:
                     wav = await task
                 except Exception:
                     wav = None
+                logger.info("[watcher][parallel] 発話#%d await完了: %.0fms (wav=%s)",
+                            i, (asyncio.get_event_loop().time() - wait_start) * 1000,
+                            "pre-generated" if wav else "None=fallback")
 
                 # キャラ間の間
                 if i > 0:

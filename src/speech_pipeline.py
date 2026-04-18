@@ -93,9 +93,11 @@ class SpeechPipeline:
         tmp_dir = Path(tempfile.mkdtemp())
         wav_path = tmp_dir / "speech.wav"
         t_start = time.monotonic()
+        preview = (text or "")[:20].replace("\n", " ")
+        logger.info("[tts] 事前生成開始: voice=%s, text='%s...'", voice, preview)
         try:
             await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice, style=style)
-            logger.info("[tts] 事前生成完了: %.0fms", (time.monotonic() - t_start) * 1000)
+            logger.info("[tts] 事前生成完了: %.0fms text='%s...'", (time.monotonic() - t_start) * 1000, preview)
             return wav_path
         except asyncio.CancelledError:
             wav_path.unlink(missing_ok=True)

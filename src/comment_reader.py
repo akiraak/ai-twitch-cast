@@ -588,6 +588,7 @@ class CommentReader:
                     })
 
                 # 全エントリのTTSを並列起動（エントリ間の「間」を詰めるため）
+                logger.info("[event][parallel] %d件のTTSを並列起動", len(resolved))
                 tts_tasks = [
                     asyncio.create_task(self._speech.generate_tts(
                         r["entry"]["speech"],
@@ -603,7 +604,11 @@ class CommentReader:
                         entry_avatar_id = entry["speaker"]
                         logger.info("[event] [%s/%s] %s", entry["speaker"], entry["emotion"], entry["speech"])
 
+                        wait_start = asyncio.get_event_loop().time()
                         wav = await task  # 並列生成の完了を待つ（後続はバックグラウンド継続）
+                        logger.info("[event][parallel] entry#%d await完了: %.0fms (wav=%s)",
+                                    i, (asyncio.get_event_loop().time() - wait_start) * 1000,
+                                    "pre-generated" if wav else "None=fallback")
                         if i > 0:
                             await asyncio.sleep(0.3)
 
