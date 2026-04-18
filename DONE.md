@@ -1,5 +1,16 @@
 # DONE
 
+## C#コントロールパネル Lesson タブに再生/一時停止/停止ボタンを追加（サーバ自動再生を廃止）
+
+- [x] `src/lesson_runner.py` — `_send_all_and_play` で `lesson_load` 直後の自動 `lesson_play` 送信を削除。再生開始は C# 側 control-panel の ▶ ボタンに委ねるフローへ変更。docstring も更新
+- [x] `tests/test_lesson_runner.py` — `test_sends_lesson_load_with_all_sections` のアサーションを `lesson_play not in call_actions` に変更。他の `_send_all_and_play` テスト5件は完了イベントを事前セットして `_wait_lesson_complete` を即時通過させるよう修正
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `IsPaused` プロパティを追加（`_paused` の公開）
+- [x] `win-native-app/WinNativeApp/MainForm.cs` — `OnPanelMessage` の switch に `lesson_play` / `lesson_pause` / `lesson_stop` を追加。`HandlePanelLessonPlay`（CanPlay なら `Task.Run(PlayAsync)`、`IsPlaying && IsPaused` なら `Resume()`）/ `HandlePanelLessonPause` / `HandlePanelLessonStop` を実装
+- [x] `win-native-app/WinNativeApp/control-panel.html` — Lesson タブの `lesson-header` セクション末尾に `.btn-row` を追加し、`lessonPlayBtn`（▶再生）/ `lessonPauseBtn`（⏸一時停止）/ `lessonStopBtn`（■停止）を配置
+- [x] `win-native-app/WinNativeApp/control-panel.html` — JS: `playLesson()` / `pauseLesson()` / `stopLesson()` 関数と `_updateLessonButtons(state)` を追加。state に応じて `disabled` と `textContent`（paused 時のみ「▶ 再開」）を切替。`setLessonOutline` 到着時は `loaded` で仮置き、`updateLesson` の末尾で state を反映
+- [x] `tests/test_native_app_patterns.py` — `test_control_panel_has_lesson_control_buttons` / `test_control_panel_sends_lesson_actions` / `test_mainform_handles_panel_lesson_actions` / `test_lesson_player_exposes_is_paused` を追加（全4テスト）
+- [x] プラン: [plans/control-panel-lesson-buttons.md](plans/control-panel-lesson-buttons.md) ステータスを「完了」に更新
+
 ## TTS生成に使用されたテキストを管理画面とC#サイドバーのLessonに表示
 
 - [x] `src/lesson_runner.py` — `_wav_to_bundle_entry()` の戻り辞書に `tts_text` を追加

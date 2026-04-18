@@ -1,7 +1,7 @@
 """授業再生エンジン — 全セクションを一括生成してC#に送信する
 
 PythonはTTS+リップシンクのバンドルを全セクション分事前生成し、
-lesson_load で一括送信 → lesson_play で再生開始。
+lesson_load で一括送信する（再生開始はC#側の control-panel の ▶ ボタンに委ねる）。
 C#はPythonなしで全セクションを自律再生し、完了時に lesson_complete を通知する。
 """
 
@@ -638,21 +638,15 @@ class LessonRunner:
             logger.error("[lesson] lesson_load 送信失敗: %s", e)
             return
 
-        # 3. 再生開始（完了イベントはクリアしてから play を送る）
+        # 3. 再生開始はC#側の control-panel の ▶ ボタンに委ねる。
+        #    ここでは完了イベントだけ準備して、配信者が ▶ を押してからの lesson_complete を待つ。
         evt = get_lesson_complete_event()
         evt.clear()
-
-        try:
-            play_result = await ws_request("lesson_play", timeout=5.0)
-            logger.info("[lesson]   lesson_play: %s", "ok" if play_result.get("ok") else play_result)
-        except Exception as e:
-            logger.error("[lesson] lesson_play 送信失敗: %s", e)
-            return
 
         # DB永続化（total_duration も保存）
         self._save_playback_state(total_duration=total_duration)
 
-        # 4. 授業全体の完了を待つ
+        # 4. 授業全体の完了を待つ（再生開始は control-panel 経由）
         await self._wait_lesson_complete(evt, total_duration)
 
         # 5. DB保存: 授業全体のアバター発話

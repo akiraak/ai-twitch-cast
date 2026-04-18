@@ -886,11 +886,12 @@ class TestPlaybackPersistence:
         runner._current_index = 0
         runner._episode_id = 50
 
+        # 再生開始は control-panel 側に委ねるため、完了イベントは事前セットして
+        # _wait_lesson_complete を即時通過させる
         lesson_evt = asyncio.Event()
+        lesson_evt.set()
 
         async def _ws(action, **kwargs):
-            if action == "lesson_play":
-                lesson_evt.set()
             return {"ok": True}
 
         with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
@@ -1125,11 +1126,11 @@ class TestSendAllAndPlay:
         ]
         runner._current_index = 0
 
+        # 再生開始は control-panel 側に委ねるため、完了イベントは事前セット
         mock_lesson_evt = asyncio.Event()
+        mock_lesson_evt.set()
 
         async def _ws(action, **kwargs):
-            if action == "lesson_play":
-                mock_lesson_evt.set()  # 即完了扱い
             return {"ok": True}
 
         mock_ws_request = AsyncMock(side_effect=_ws)
@@ -1139,10 +1140,10 @@ class TestSendAllAndPlay:
              patch("scripts.services.capture_client.get_lesson_complete_event", return_value=mock_lesson_evt):
             await runner._send_all_and_play()
 
-        # lesson_load と lesson_play の両方が呼ばれたか
+        # lesson_load は送られ、lesson_play は送られない（再生開始は control-panel 側）
         call_actions = [c.args[0] for c in mock_ws_request.call_args_list]
         assert "lesson_load" in call_actions
-        assert "lesson_play" in call_actions
+        assert "lesson_play" not in call_actions
 
         # lesson_load のペイロード検証
         load_call = [c for c in mock_ws_request.call_args_list if c.args[0] == "lesson_load"][0]
@@ -1187,8 +1188,9 @@ class TestSendAllAndPlay:
         lesson_evt = asyncio.Event()
 
         async def _ws(action, **kwargs):
-            if action == "lesson_play":
-                # 少し遅れてイベントをセット
+            if action == "lesson_load":
+                # lesson_load 到着後、少し遅れて完了イベントを発火
+                # （実運用では control-panel からの ▶ → C# 再生完了 → lesson_complete のルート）
                 asyncio.get_event_loop().call_later(0.05, lesson_evt.set)
             return {"ok": True}
 
@@ -1344,11 +1346,11 @@ class TestSendAllAndPlay:
         ]
         runner._current_index = 1  # section 0 をスキップ
 
+        # 再生開始は control-panel 側に委ねるため、完了イベントは事前セット
         lesson_evt = asyncio.Event()
+        lesson_evt.set()
 
         async def _ws(action, **kwargs):
-            if action == "lesson_play":
-                lesson_evt.set()
             return {"ok": True}
 
         with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \
@@ -1389,11 +1391,11 @@ class TestSendAllAndPlay:
         ]
         runner._current_index = 0
 
+        # 再生開始は control-panel 側に委ねるため、完了イベントは事前セット
         lesson_evt = asyncio.Event()
+        lesson_evt.set()
 
         async def _ws(action, **kwargs):
-            if action == "lesson_play":
-                lesson_evt.set()
             return {"ok": True}
 
         with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]), \

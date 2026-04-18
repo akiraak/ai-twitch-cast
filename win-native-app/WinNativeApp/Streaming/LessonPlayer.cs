@@ -91,6 +91,8 @@ public class LessonPlayer
     public bool CanPlay => _sections != null && !_playing;
     /// <summary>再生中か</summary>
     public bool IsPlaying => _playing;
+    /// <summary>一時停止中か</summary>
+    public bool IsPaused => _paused;
 
     // =====================================================
     // 公開メソッド

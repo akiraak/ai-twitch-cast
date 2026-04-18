@@ -617,6 +617,11 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
       <span class="lesson-badge idle" id="lessonBadge">idle</span>
     </div>
     <div class="stats" id="lessonProgress"></div>
+    <div class="btn-row" id="lessonControls" style="margin-top:8px;margin-bottom:0;">
+      <button class="btn btn-go" id="lessonPlayBtn" onclick="playLesson()" disabled>▶ 再生</button>
+      <button class="btn" id="lessonPauseBtn" onclick="pauseLesson()" disabled>⏸ 一時停止</button>
+      <button class="btn btn-stop" id="lessonStopBtn" onclick="stopLesson()" disabled>■ 停止</button>
+    </div>
   </div>
   <div class="section flex">
     <div id="lessonDialoguesTabs"></div>
@@ -842,7 +847,58 @@ function setLessonOutline(m) {
     clearTimeout(_timelineState.followTimer);
     _timelineState.followTimer = null;
   }
+  // outline 到着時点で state メッセージはまだかもしれないので loaded と仮置き
+  _updateLessonButtons('loaded');
   renderLessonTimeline();
+}
+
+// === 再生コントロール ===
+function playLesson() {
+  // 多重クリック防止: 送信直後に該当ボタンを disabled に
+  $('lessonPlayBtn').disabled = true;
+  send({action:'lesson_play'});
+}
+function pauseLesson() {
+  $('lessonPauseBtn').disabled = true;
+  send({action:'lesson_pause'});
+}
+function stopLesson() {
+  $('lessonStopBtn').disabled = true;
+  send({action:'lesson_stop'});
+}
+
+function _updateLessonButtons(state) {
+  const playBtn = $('lessonPlayBtn');
+  const pauseBtn = $('lessonPauseBtn');
+  const stopBtn = $('lessonStopBtn');
+  if (!playBtn || !pauseBtn || !stopBtn) return;
+
+  switch (state) {
+    case 'loaded':
+      playBtn.disabled = false;
+      playBtn.textContent = '▶ 再生';
+      pauseBtn.disabled = true;
+      stopBtn.disabled = true;
+      break;
+    case 'playing':
+      playBtn.disabled = true;
+      playBtn.textContent = '▶ 再生';
+      pauseBtn.disabled = false;
+      stopBtn.disabled = false;
+      break;
+    case 'paused':
+      playBtn.disabled = false;
+      playBtn.textContent = '▶ 再開';
+      pauseBtn.disabled = true;
+      stopBtn.disabled = false;
+      break;
+    default: // idle / unknown
+      playBtn.disabled = true;
+      playBtn.textContent = '▶ 再生';
+      pauseBtn.disabled = true;
+      stopBtn.disabled = true;
+      break;
+  }
 }
 
 function _setAutoFollow(enable) {
@@ -1033,6 +1089,7 @@ function updateLesson(m) {
     _timelineState.viewSection = cur;
   }
 
+  _updateLessonButtons(m.state || 'idle');
   renderLessonTimeline();
 }
 

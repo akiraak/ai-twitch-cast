@@ -109,6 +109,54 @@ def test_dialogue_data_has_tts_text():
     )
 
 
+# === Lesson control buttons (control-panel.html + MainForm.cs) ===
+
+
+def test_control_panel_has_lesson_control_buttons():
+    """control-panel.html の Lesson タブに再生/一時停止/停止ボタンが存在すること。"""
+    path = NATIVE_APP_DIR / "control-panel.html"
+    html = path.read_text(encoding="utf-8")
+    assert 'id="lessonPlayBtn"' in html, "lessonPlayBtn (▶再生) が存在しない"
+    assert 'id="lessonPauseBtn"' in html, "lessonPauseBtn (⏸一時停止) が存在しない"
+    assert 'id="lessonStopBtn"' in html, "lessonStopBtn (■停止) が存在しない"
+    # 初期状態で全ボタン disabled
+    for btn_id in ("lessonPlayBtn", "lessonPauseBtn", "lessonStopBtn"):
+        assert re.search(
+            rf'id="{btn_id}"[^>]*\bdisabled\b', html
+        ), f"{btn_id} が初期 disabled になっていない"
+    # state に応じたボタン更新関数
+    assert "_updateLessonButtons" in html, (
+        "_updateLessonButtons がない — state 遷移でボタンが更新されない"
+    )
+
+
+def test_control_panel_sends_lesson_actions():
+    """control-panel.html が lesson_play/pause/stop アクションを C# に送信すること。"""
+    html = (NATIVE_APP_DIR / "control-panel.html").read_text(encoding="utf-8")
+    assert "action:'lesson_play'" in html, "lesson_play 送信が欠落"
+    assert "action:'lesson_pause'" in html, "lesson_pause 送信が欠落"
+    assert "action:'lesson_stop'" in html, "lesson_stop 送信が欠落"
+
+
+def test_mainform_handles_panel_lesson_actions():
+    """MainForm.OnPanelMessage が lesson_play/pause/stop を分岐処理すること。"""
+    source = read_cs("MainForm.cs")
+    assert 'case "lesson_play":' in source, "lesson_play 分岐が MainForm に存在しない"
+    assert 'case "lesson_pause":' in source, "lesson_pause 分岐が MainForm に存在しない"
+    assert 'case "lesson_stop":' in source, "lesson_stop 分岐が MainForm に存在しない"
+    assert "HandlePanelLessonPlay" in source, "HandlePanelLessonPlay メソッドが存在しない"
+    assert "HandlePanelLessonPause" in source, "HandlePanelLessonPause メソッドが存在しない"
+    assert "HandlePanelLessonStop" in source, "HandlePanelLessonStop メソッドが存在しない"
+
+
+def test_lesson_player_exposes_is_paused():
+    """LessonPlayer に IsPaused プロパティがあり、MainForm から再開判定に使えること。"""
+    source = read_cs("Streaming/LessonPlayer.cs")
+    assert re.search(r"public bool IsPaused", source), (
+        "LessonPlayer.IsPaused が存在しない — MainForm が再生/再開を判別できない"
+    )
+
+
 # === Program.cs ===
 
 

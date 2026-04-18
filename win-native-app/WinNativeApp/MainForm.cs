@@ -347,6 +347,18 @@ public class MainForm : Form
                 case "syncDelay":
                     HandlePanelSyncDelay(msg);
                     break;
+
+                case "lesson_play":
+                    HandlePanelLessonPlay();
+                    break;
+
+                case "lesson_pause":
+                    HandlePanelLessonPause();
+                    break;
+
+                case "lesson_stop":
+                    HandlePanelLessonStop();
+                    break;
             }
         }
         catch (Exception ex)
@@ -508,6 +520,47 @@ public class MainForm : Form
                 }}
             }}, 200);";
         _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+    }
+
+    /// <summary>コントロールパネルの ▶再生 ボタン処理。loaded → 再生開始、paused → 再開。</summary>
+    private void HandlePanelLessonPlay()
+    {
+        var player = _lessonPlayer;
+        if (player == null)
+        {
+            PanelLog("授業未ロード", "error");
+            return;
+        }
+
+        if (player.IsPlaying && player.IsPaused)
+        {
+            player.Resume();
+            return;
+        }
+
+        if (!player.CanPlay)
+        {
+            PanelLog(player.IsPlaying ? "授業は既に再生中です" : "授業がロードされていません", "info");
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try { await player.PlayAsync(); }
+            catch (Exception ex) { Log.Error(ex, "[Lesson] Panel PlayAsync failed"); }
+        });
+    }
+
+    /// <summary>コントロールパネルの ⏸一時停止 ボタン処理。</summary>
+    private void HandlePanelLessonPause()
+    {
+        _lessonPlayer?.Pause();
+    }
+
+    /// <summary>コントロールパネルの ■停止 ボタン処理。</summary>
+    private void HandlePanelLessonStop()
+    {
+        _lessonPlayer?.Stop();
     }
 
     /// <summary>音量値を更新し、C#音声パイプラインに反映する。</summary>
