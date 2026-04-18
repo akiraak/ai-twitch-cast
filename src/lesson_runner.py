@@ -906,6 +906,7 @@ class LessonRunner:
             "speaker": dlg.get("speaker", "teacher"),
             "avatar_id": dlg.get("speaker", "teacher"),
             "content": dlg.get("content", ""),
+            "tts_text": dlg.get("tts_text", ""),
             "emotion": dlg.get("emotion", "neutral"),
             "gesture": SpeechPipeline.EMOTION_GESTURES.get(dlg.get("emotion", "neutral")),
             "lipsync_frames": lipsync_frames,

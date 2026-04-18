@@ -894,6 +894,9 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
             ${_dd.key_content ? `<div style="color:#6a1b9a; margin-top:1px;">key: ${esc(_dd.key_content)}</div>` : ''}
           </div>` : ''}
           <div style="margin-top:2px; color:#2a1f40;">${esc(dlg.content || '')}</div>
+          ${dlg.tts_text && dlg.tts_text !== dlg.content ? `<div style="margin-top:3px; padding:3px 6px; background:rgba(21,101,192,0.06); border-left:2px solid #90caf9; border-radius:2px; font-size:0.65rem; color:#1565c0;">
+            <span style="font-weight:500;">\u{1F3A4} TTS:</span> <span style="color:#2a1f40;">${esc(dlg.tts_text)}</span>
+          </div>` : ''}
           ${genHtml}
         </div>`;
       }

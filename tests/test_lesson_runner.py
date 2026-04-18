@@ -590,7 +590,7 @@ class TestBundleAssembly:
             _create_test_wav(wav_path, duration=0.5)
 
         dialogues = [
-            {"speaker": "teacher", "content": "Hello", "emotion": "joy"},
+            {"speaker": "teacher", "content": "Hello", "tts_text": "<en>Hello</en>", "emotion": "joy"},
             {"speaker": "student", "content": "Hi", "emotion": "neutral"},
         ]
 
@@ -604,6 +604,7 @@ class TestBundleAssembly:
         assert entry["speaker"] == "teacher"
         assert entry["avatar_id"] == "teacher"
         assert entry["content"] == "Hello"
+        assert entry["tts_text"] == "<en>Hello</en>"
         assert entry["emotion"] == "joy"
         assert entry["gesture"] == "nod"  # joy → nod
         assert entry["lipsync_frames"] == [0.1, 0.5, 0.3]
@@ -614,6 +615,8 @@ class TestBundleAssembly:
         assert entry2["speaker"] == "student"
         assert entry2["emotion"] == "neutral"
         assert entry2["gesture"] is None  # neutralにはgestureなし
+        # tts_textが未指定の場合は空文字
+        assert entry2["tts_text"] == ""
 
     @pytest.mark.asyncio
     async def test_build_bundle_single_speaker(self, mock_speech, tmp_path, monkeypatch):

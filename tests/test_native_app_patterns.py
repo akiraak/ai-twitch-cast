@@ -89,6 +89,26 @@ def test_frame_capture_uses_local_callback():
     )
 
 
+# === LessonPlayer.cs ===
+
+
+def test_dialogue_data_has_tts_text():
+    """DialogueDataにTtsTextプロパティが存在し、ParseDialogueで読み込まれること。
+
+    授業のアウトラインにTTSテキストを含めてUI表示するために必要。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    assert re.search(r"public string TtsText \{ get; set; \}", source), (
+        "DialogueDataにTtsTextプロパティが存在しない"
+    )
+    assert re.search(r'TtsText = d\.TryGetProperty\("tts_text"', source), (
+        "ParseDialogueでtts_textがTtsTextに読み込まれていない"
+    )
+    assert re.search(r"tts_text = d\.TtsText", source), (
+        "SendOutlineToPanelのdialogue/answer_dialoguesでtts_textが送信されていない"
+    )
+
+
 # === Program.cs ===
 
 

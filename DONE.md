@@ -1,5 +1,16 @@
 # DONE
 
+## TTS生成に使用されたテキストを管理画面とC#サイドバーのLessonに表示
+
+- [x] `src/lesson_runner.py` — `_wav_to_bundle_entry()` の戻り辞書に `tts_text` を追加
+- [x] `win-native-app/.../Streaming/LessonPlayer.cs` — `DialogueData` に `TtsText` プロパティ追加、`ParseDialogue` で読み込み、`SendOutlineToPanel` の main/answer projection に `tts_text` を追加
+- [x] `win-native-app/WinNativeApp/control-panel.html` — `_renderDialogueGroup` で `dlg.tts_text !== dlg.content` の場合のみ `.ld-row.ld-tts` を追加表示、CSSに `.ld-row.ld-tts` スタイルを追加
+- [x] `static/js/admin/teacher.js` — `_dlgs` レンダリングで `dlg.tts_text !== dlg.content` の場合のみ「🎤 TTS: …」行を追加
+- [x] `tests/test_lesson_runner.py` — `test_build_dialogue_bundle` に `tts_text` の検証を追加
+- [x] `tests/test_native_app_patterns.py` — `DialogueData.TtsText` / `ParseDialogue` / `SendOutlineToPanel` のパターン検証テストを追加
+- [x] 全863テストpass確認（`python3 -m pytest tests/ -q`）
+- [x] プラン: [plans/lesson-tts-text-display.md](plans/lesson-tts-text-display.md) ステータスを「完了」に更新
+
 ## 配信画面の授業タイムラインパネルを削除（サイドバーに一本化）
 
 - [x] `static/broadcast.html` — `#lesson-dialogues-panel` ブロックを削除

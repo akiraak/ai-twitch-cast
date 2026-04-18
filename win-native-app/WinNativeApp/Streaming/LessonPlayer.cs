@@ -13,6 +13,7 @@ public class DialogueData
     public string Speaker { get; set; } = "teacher";
     public string AvatarId { get; set; } = "teacher";
     public string Content { get; set; } = "";
+    public string TtsText { get; set; } = "";
     public string Emotion { get; set; } = "neutral";
     public string? Gesture { get; set; }
     public float[]? LipsyncFrames { get; set; }
@@ -154,6 +155,7 @@ public class LessonPlayer
                     kind = "main",
                     speaker = d.Speaker,
                     content = d.Content,
+                    tts_text = d.TtsText,
                     emotion = d.Emotion,
                 }).ToArray(),
                 question = s.Question == null ? null : (object)new
@@ -164,6 +166,7 @@ public class LessonPlayer
                         kind = "answer",
                         speaker = d.Speaker,
                         content = d.Content,
+                        tts_text = d.TtsText,
                         emotion = d.Emotion,
                     }).ToArray(),
                 },
@@ -600,6 +603,7 @@ public class LessonPlayer
             Speaker = d.TryGetProperty("speaker", out var sp) ? sp.GetString() ?? "teacher" : "teacher",
             AvatarId = d.TryGetProperty("avatar_id", out var ai) ? ai.GetString() ?? "teacher" : "teacher",
             Content = d.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "",
+            TtsText = d.TryGetProperty("tts_text", out var tt) ? tt.GetString() ?? "" : "",
             Emotion = d.TryGetProperty("emotion", out var em) ? em.GetString() ?? "neutral" : "neutral",
             Gesture = d.TryGetProperty("gesture", out var g) && g.ValueKind == JsonValueKind.String ? g.GetString() : null,
             LipsyncFrames = lipsyncFrames,
