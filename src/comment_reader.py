@@ -96,6 +96,11 @@ class CommentReader:
         self._note_task = None
         self._watcher_task = None
         self._queue.clear()
+        # セグメントキュー内の事前TTSタスクをキャンセルしてからクリア
+        for seg in self._segment_queue:
+            t = seg.get("tts_task")
+            if t is not None and not t.done():
+                t.cancel()
         self._segment_queue.clear()
         self._episode_id = None
         logger.info("コメント読み上げを停止しました")
@@ -121,6 +126,11 @@ class CommentReader:
                     # コメント最優先 → 残りセグメントはキャンセル
                     if self._segment_queue:
                         logger.info("[segment] コメント到着 → 残り%dセグメントをキャンセル", len(self._segment_queue))
+                        # 事前生成中のTTSタスクを確実にキャンセル（リーク防止）
+                        for seg in self._segment_queue:
+                            t = seg.get("tts_task")
+                            if t is not None and not t.done():
+                                t.cancel()
                         self._segment_queue.clear()
                     author, message = self._queue.popleft()
                     await self._respond(author, message)
@@ -145,6 +155,16 @@ class CommentReader:
             speaker = seg.get("speaker", "teacher")
             logger.info("[segment] セグメント発話: [%s/%s] %s", speaker, seg["emotion"], seg["content"])
 
+            # 事前生成されたTTSタスクがあれば待つ（失敗時はNone=フォールバック）
+            wav_path = None
+            tts_task = seg.get("tts_task")
+            if tts_task is not None:
+                try:
+                    wav_path = await tts_task
+                except Exception as e:
+                    logger.debug("[segment] 事前TTSタスク取得失敗、フォールバック: %s", e)
+                    wav_path = None
+
             # キャラ間の間（前のセグメントと異なるspeakerの場合）
             if seg.get("inter_speaker_pause"):
                 await asyncio.sleep(0.3)
@@ -156,6 +176,7 @@ class CommentReader:
                 "result": {"speech": seg["content"], "emotion": seg["emotion"], "translation": translation},
             }, chat_result={"speech": seg["content"], "translation": translation},
                 tts_text=seg.get("tts_text"), voice=voice, style=style, avatar_id=avatar_id,
+                wav_path=wav_path,
                 post_to_chat=self._post_to_chat)
             self._speech.apply_emotion("neutral", avatar_id=avatar_id, character_config=char_config)
             await self._speech.notify_overlay_end()
@@ -188,26 +209,54 @@ class CommentReader:
                 if first.get("se"):
                     from src.se_resolver import resolve_se
                     se_info = resolve_se(first["se"])
-                self._speech.apply_emotion(first["emotion"], avatar_id=first["speaker"], character_config=first_cfg)
-                await self._speech.speak(first["speech"], subtitle={
-                    "author": first_cfg.get("name", author), "trigger_text": message, "result": first,
-                }, tts_text=first.get("tts_text"), se=se_info,
-                    voice=first_cfg.get("tts_voice"), style=first_cfg.get("tts_style"),
-                    avatar_id=first["speaker"])
-                self._speech.apply_emotion("neutral", avatar_id=first["speaker"], character_config=first_cfg)
-                await self._speech.notify_overlay_end()
-                # 2エントリ目以降
-                for entry in responses[1:]:
-                    cfg = self._characters.get(entry["speaker"], self._characters["teacher"])
-                    await asyncio.sleep(0.3)
-                    self._speech.apply_emotion(entry["emotion"], avatar_id=entry["speaker"], character_config=cfg)
-                    await self._speech.speak(entry["speech"], subtitle={
-                        "author": cfg.get("name", entry["speaker"]), "trigger_text": message, "result": entry,
-                    }, tts_text=entry.get("tts_text"),
-                        voice=cfg.get("tts_voice"), style=cfg.get("tts_style"),
-                        avatar_id=entry["speaker"])
-                    self._speech.apply_emotion("neutral", avatar_id=entry["speaker"], character_config=cfg)
+
+                # 各エントリのキャラ設定を事前解決
+                resolved = [
+                    {
+                        "entry": e,
+                        "cfg": self._characters.get(e["speaker"], self._characters["teacher"]),
+                    }
+                    for e in responses
+                ]
+
+                # 全エントリのTTSを並列起動
+                tts_tasks = [
+                    asyncio.create_task(self._speech.generate_tts(
+                        r["entry"]["speech"],
+                        voice=r["cfg"].get("tts_voice"),
+                        style=r["cfg"].get("tts_style"),
+                        tts_text=r["entry"].get("tts_text"),
+                    ))
+                    for r in resolved
+                ]
+                try:
+                    # 1エントリ目: SE付きで再生
+                    first_wav = await tts_tasks[0]
+                    self._speech.apply_emotion(first["emotion"], avatar_id=first["speaker"], character_config=first_cfg)
+                    await self._speech.speak(first["speech"], subtitle={
+                        "author": first_cfg.get("name", author), "trigger_text": message, "result": first,
+                    }, tts_text=first.get("tts_text"), se=se_info,
+                        voice=first_cfg.get("tts_voice"), style=first_cfg.get("tts_style"),
+                        avatar_id=first["speaker"], wav_path=first_wav)
+                    self._speech.apply_emotion("neutral", avatar_id=first["speaker"], character_config=first_cfg)
                     await self._speech.notify_overlay_end()
+                    # 2エントリ目以降
+                    for i, (r, task) in enumerate(zip(resolved[1:], tts_tasks[1:]), start=1):
+                        entry, cfg = r["entry"], r["cfg"]
+                        wav = await task
+                        await asyncio.sleep(0.3)
+                        self._speech.apply_emotion(entry["emotion"], avatar_id=entry["speaker"], character_config=cfg)
+                        await self._speech.speak(entry["speech"], subtitle={
+                            "author": cfg.get("name", entry["speaker"]), "trigger_text": message, "result": entry,
+                        }, tts_text=entry.get("tts_text"),
+                            voice=cfg.get("tts_voice"), style=cfg.get("tts_style"),
+                            avatar_id=entry["speaker"], wav_path=wav)
+                        self._speech.apply_emotion("neutral", avatar_id=entry["speaker"], character_config=cfg)
+                        await self._speech.notify_overlay_end()
+                finally:
+                    for t in tts_tasks:
+                        if not t.done():
+                            t.cancel()
                 return first
             else:
                 # シングルキャラモード（既存動作）
@@ -266,20 +315,38 @@ class CommentReader:
                     if se_info:
                         logger.info("[se] AI選択: category=%s → %s", first["se"], se_info["filename"])
 
+                # 全エントリのTTSを並列起動（エントリ間の「間」を詰めるため）
+                resolved_cfgs = [
+                    self._characters.get(e["speaker"], self._characters["teacher"])
+                    for e in responses
+                ]
+                tts_tasks = [
+                    asyncio.create_task(self._speech.generate_tts(
+                        e["speech"],
+                        voice=cfg.get("tts_voice"),
+                        style=cfg.get("tts_style"),
+                        tts_text=e.get("tts_text"),
+                    ))
+                    for e, cfg in zip(responses, resolved_cfgs)
+                ]
+
                 # 1エントリ目: SE・字幕・チャット投稿付きで即再生
+                try:
+                    first_wav = await tts_tasks[0]
+                except Exception:
+                    first_wav = None
                 self._speech.apply_emotion(first["emotion"], avatar_id=first["speaker"], character_config=first_cfg)
                 await self._speech.speak(first["speech"], subtitle={
                     "author": first_name, "trigger_text": message, "result": first,
                 }, chat_result=first, tts_text=first.get("tts_text"),
                     voice=first_cfg.get("tts_voice"), style=first_cfg.get("tts_style"),
-                    avatar_id=first["speaker"],
+                    avatar_id=first["speaker"], wav_path=first_wav,
                     post_to_chat=self._post_to_chat, se=se_info)
                 self._speech.apply_emotion("neutral", avatar_id=first["speaker"], character_config=first_cfg)
                 await self._speech.notify_overlay_end()
 
                 # 2エントリ目以降はセグメントキューに入れる（コメント到着でキャンセル）
-                for entry in responses[1:]:
-                    cfg = self._characters.get(entry["speaker"], self._characters["teacher"])
+                for entry, cfg, task in zip(responses[1:], resolved_cfgs[1:], tts_tasks[1:]):
                     self._segment_queue.append({
                         "content": entry["speech"],
                         "emotion": entry["emotion"],
@@ -292,6 +359,7 @@ class CommentReader:
                         "char_name": cfg.get("name", entry["speaker"]),
                         "char_config": cfg,
                         "inter_speaker_pause": True,
+                        "tts_task": task,
                     })
             else:
                 # シングルキャラモード（既存動作）
@@ -508,32 +576,58 @@ class CommentReader:
                     generate_multi_event_response, event_type, detail,
                     self._characters, last_event_responses=last_responses,
                 )
+                # エントリ毎の設定を事前解決
+                resolved = []
                 for i, entry in enumerate(responses):
                     cfg = self._characters.get(entry["speaker"], self._characters["teacher"])
-                    entry_name = cfg.get("name", entry["speaker"])
                     entry_voice = voice if i == 0 and voice else cfg.get("tts_voice")
                     entry_style = style if i == 0 and style else cfg.get("tts_style")
-                    entry_avatar_id = entry["speaker"]
-                    logger.info("[event] [%s/%s] %s", entry["speaker"], entry["emotion"], entry["speech"])
+                    resolved.append({
+                        "entry": entry, "cfg": cfg,
+                        "voice": entry_voice, "style": entry_style,
+                    })
 
-                    if i > 0:
-                        await asyncio.sleep(0.3)
+                # 全エントリのTTSを並列起動（エントリ間の「間」を詰めるため）
+                tts_tasks = [
+                    asyncio.create_task(self._speech.generate_tts(
+                        r["entry"]["speech"],
+                        voice=r["voice"], style=r["style"],
+                        tts_text=r["entry"].get("tts_text"),
+                    ))
+                    for r in resolved
+                ]
+                try:
+                    for i, (r, task) in enumerate(zip(resolved, tts_tasks)):
+                        entry, cfg = r["entry"], r["cfg"]
+                        entry_name = cfg.get("name", entry["speaker"])
+                        entry_avatar_id = entry["speaker"]
+                        logger.info("[event] [%s/%s] %s", entry["speaker"], entry["emotion"], entry["speech"])
 
-                    self._speech.apply_emotion(entry["emotion"], avatar_id=entry_avatar_id, character_config=cfg)
-                    await self._speech.speak(entry["speech"], voice=entry_voice, style=entry_style,
-                        avatar_id=entry_avatar_id, subtitle={
-                        "author": entry_name,
-                        "trigger_text": f"[{event_type}] {detail}",
-                        "result": entry,
-                    }, chat_result=entry if i == 0 else None,
-                        tts_text=entry.get("tts_text"),
-                        post_to_chat=self._post_to_chat if i == 0 else None)
-                    self._speech.apply_emotion("neutral", avatar_id=entry_avatar_id, character_config=cfg)
-                    await self._speech.notify_overlay_end()
-                    await self._save_avatar_comment(
-                        "event", f"[{event_type}] {detail}",
-                        entry["speech"], entry["emotion"], speaker=entry["speaker"],
-                    )
+                        wav = await task  # 並列生成の完了を待つ（後続はバックグラウンド継続）
+                        if i > 0:
+                            await asyncio.sleep(0.3)
+
+                        self._speech.apply_emotion(entry["emotion"], avatar_id=entry_avatar_id, character_config=cfg)
+                        await self._speech.speak(entry["speech"], voice=r["voice"], style=r["style"],
+                            avatar_id=entry_avatar_id, subtitle={
+                            "author": entry_name,
+                            "trigger_text": f"[{event_type}] {detail}",
+                            "result": entry,
+                        }, chat_result=entry if i == 0 else None,
+                            tts_text=entry.get("tts_text"),
+                            wav_path=wav,
+                            post_to_chat=self._post_to_chat if i == 0 else None)
+                        self._speech.apply_emotion("neutral", avatar_id=entry_avatar_id, character_config=cfg)
+                        await self._speech.notify_overlay_end()
+                        await self._save_avatar_comment(
+                            "event", f"[{event_type}] {detail}",
+                            entry["speech"], entry["emotion"], speaker=entry["speaker"],
+                        )
+                finally:
+                    # 例外・早期終了時に未完了タスクをキャンセル
+                    for t in tts_tasks:
+                        if not t.done():
+                            t.cancel()
             else:
                 # シングルキャラモード（既存動作）
                 result = await asyncio.to_thread(generate_event_response, event_type, detail, last_event_responses=last_responses)

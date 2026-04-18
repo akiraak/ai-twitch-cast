@@ -1,5 +1,21 @@
 # DONE
 
+## 掛け合いTTSの並列事前生成（エントリ間の間を短縮）
+
+- [x] `src/speech_pipeline.py` `generate_tts()` — `CancelledError` を捕捉してテンポラリディレクトリをクリーンアップし再送出するように改善
+- [x] `src/comment_reader.py` `speak_event()` マルチキャラ分岐 — 全エントリのTTSを `asyncio.create_task` で並列起動、先頭から順に `await` → `speak(wav_path=...)` で再生。`try/finally` で未完了タスクをキャンセル
+- [x] `src/comment_reader.py` `respond_webui()` マルチキャラ分岐 — 同上の並列化
+- [x] `src/comment_reader.py` `_respond()` マルチキャラ分岐 — 全エントリのTTSを並列起動、2エントリ目以降は `tts_task` を segment に格納して `_segment_queue` へ
+- [x] `src/comment_reader.py` `_speak_segment()` — セグメントに `tts_task` があれば `await` して `wav_path` として `speak` に渡す（失敗時は `None` でフォールバック）
+- [x] `src/comment_reader.py` `_process_loop()` / `stop()` — `_segment_queue.clear()` 時に未完了の `tts_task` を `cancel()`（リーク防止）
+- [x] `src/claude_watcher.py` `_play_conversation()` — 全発話のTTSを並列起動。コメント割り込み時は未完了タスクを `cancel()`
+- [x] `tests/test_speech_pipeline.py` — `generate_tts` の成功・失敗・キャンセル時クリーンアップテストを追加
+- [x] `tests/test_claude_watcher.py` — `mock_speech` に `generate_tts` モックを追加。並列起動・wav_path伝達・割り込み時タスクキャンセル・フォールバックのテストを追加
+- [x] `tests/test_comment_reader.py` 新規 — `_speak_segment` の `tts_task` 対応、segment_queue クリア時のタスクキャンセルテスト
+- [x] `docs/speech-generation-flow.md` — 複数エントリ掛け合いの並列事前生成フロー図を追加
+- [x] 効果: 3エントリ掛け合いで合計 1〜4秒あった「間」が 0.6秒固定に短縮される（TTSが1〜1.5秒/回、3エントリなら従来 3〜4.5秒 → 0.6秒）
+- [x] `plans/dialogue-parallel-tts.md` → `plans/archive/dialogue-parallel-tts.md` に移動、ステータス: 完了
+
 ## ブラウザコンソールログをサーバーに転送（Claude Codeから確認可能化）
 
 - [x] `static/js/lib/console-forwarder.js` 新規作成 — `console.log` / `warn` / `error` と uncaught error / unhandled rejection を捕捉し `/api/debug/jslog` にバッチ送信。各行に `[admin]`/`[broadcast]`/path を埋め込む。`beforeunload` でフラッシュ

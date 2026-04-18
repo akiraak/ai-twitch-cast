@@ -349,6 +349,20 @@ speech_pipeline.speak(text, voice, style, subtitle, chat_result, tts_text,
 
 **感情BlendShapeの適用**: `apply_emotion()` は `speak()` の呼び出し元（comment_reader / lesson_runner）が `speak()` の前後で個別に呼び出す。speak前に感情適用 → speak → speak後にneutralリセット、のパターン。
 
+**複数エントリ掛け合いの並列TTS事前生成**: マルチキャラの掛け合い（2〜4エントリ）・Claude Code実況会話では、全エントリのTTSを `generate_tts()` + `asyncio.create_task` で並列起動し、先頭から順に `await` → `speak(wav_path=事前生成WAV)` で再生する。`speak(wav_path=...)` 指定時はTTS生成をスキップして再生のみ行うため、エントリ間の「間」は `asyncio.sleep(0.3)` の固定値に詰まる。
+
+```
+LLM生成 → TTS生成1・2・3を並列起動 → [1をawait→再生] → [2をawait→再生] → [3をawait→再生]
+                                        ^^^^^^^^^^^^^^^ 先頭が再生中に後続は生成済み
+```
+
+従来は各エントリごとに直列でTTS生成→再生していたため、3エントリで 1〜4.5秒の余計な待ちが発生していた。並列化後は 0.6秒（0.3秒×2）固定。
+
+- 呼び出し箇所: `comment_reader.speak_event()` / `respond_webui()` / `_respond()` / `claude_watcher._play_conversation()`
+- `_respond()` の2エントリ目以降は `_segment_queue` に `tts_task` として格納され、`_speak_segment()` が `await tts_task` してから再生する
+- コメント割り込み時は `_segment_queue.clear()` 前に未完了タスクを `cancel()` する（リーク防止）
+- `generate_tts()` は失敗時 `None` を返し、`speak(wav_path=None)` は通常の生成パスにフォールバックする
+
 **ジェスチャー連動**: `apply_emotion()` は `gesture` パラメータを受け取る（省略可）。未指定の場合、`EMOTION_GESTURES` マッピングから感情に対応するジェスチャーが自動選択される:
 
 | emotion | gesture |

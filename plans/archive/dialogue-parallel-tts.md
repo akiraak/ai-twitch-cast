@@ -1,6 +1,8 @@
 # 掛け合いTTSの並列事前生成
 
-## ステータス: 未着手
+## ステータス: 完了（2026-04-18）
+
+実装完了。`src/comment_reader.py` (`speak_event` / `respond_webui` / `_respond`+`_segment_queue`) と `src/claude_watcher.py` (`_play_conversation`) で全エントリのTTSを並列起動→順次再生する方式に変更。`generate_tts` はキャンセル時にテンポラリをクリーンアップして再送出。割り込み・stop時は未完了タスクを `cancel()` する。
 
 ## 背景
 

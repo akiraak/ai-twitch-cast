@@ -373,7 +373,9 @@ class ClaudeWatcher:
     async def _play_conversation(self, dialogues):
         """会話を順次再生する（コメント割り込み対応）。
 
-        各発話の前にコメントキューを確認し、コメントがあれば残り発話をスキップする。
+        全発話のTTSを並列で事前生成し、先頭から順にawait→再生することで
+        エントリ間の「間」を詰める。各発話の前にコメントキューを確認し、
+        コメントがあれば残り発話をスキップする（未完了TTSタスクはキャンセル）。
         """
         from src.ai_responder import get_chat_characters
 
@@ -382,56 +384,85 @@ class ClaudeWatcher:
         except Exception:
             characters = {}
 
-        for i, dlg in enumerate(dialogues):
-            # コメント割り込みチェック
-            if self._comment_reader and self._comment_reader.queue_size > 0:
-                logger.info(
-                    "[watcher] コメント到着 → 残り%d発話をスキップ",
-                    len(dialogues) - i,
-                )
-                break
-
+        # 各発話の設定を事前解決
+        resolved = []
+        for dlg in dialogues:
             speaker = dlg.get("speaker", "teacher")
             cfg = characters.get(speaker, characters.get("teacher", {}))
+            resolved.append({"dlg": dlg, "speaker": speaker, "cfg": cfg})
 
-            # キャラ間の間
-            if i > 0:
-                await asyncio.sleep(0.3)
+        # 全発話のTTSを並列起動
+        tts_tasks = [
+            asyncio.create_task(self._speech.generate_tts(
+                r["dlg"]["speech"],
+                voice=r["cfg"].get("tts_voice"),
+                style=r["cfg"].get("tts_style"),
+                tts_text=r["dlg"].get("tts_text"),
+            ))
+            for r in resolved
+        ]
 
-            try:
-                self._speech.apply_emotion(
-                    dlg.get("emotion", "neutral"),
-                    avatar_id=speaker,
-                    character_config=cfg,
-                )
-                await self._speech.speak(
-                    dlg["speech"],
-                    subtitle={
-                        "author": cfg.get("name", speaker),
-                        "trigger_text": "[Claude Code実況]",
-                        "result": dlg,
-                    },
-                    tts_text=dlg.get("tts_text"),
-                    voice=cfg.get("tts_voice"),
-                    style=cfg.get("tts_style"),
-                    avatar_id=speaker,
-                )
-                self._speech.apply_emotion(
-                    "neutral", avatar_id=speaker, character_config=cfg,
-                )
-                await self._speech.notify_overlay_end()
+        try:
+            for i, (r, task) in enumerate(zip(resolved, tts_tasks)):
+                # コメント割り込みチェック
+                if self._comment_reader and self._comment_reader.queue_size > 0:
+                    logger.info(
+                        "[watcher] コメント到着 → 残り%d発話をスキップ",
+                        len(dialogues) - i,
+                    )
+                    break
 
-                # DB保存（trigger_type="claude_work"）
-                await self._save_avatar_comment(
-                    "claude_work",
-                    "[Claude Code実況]",
-                    dlg["speech"],
-                    dlg.get("emotion", "neutral"),
-                    speaker=speaker,
-                )
-            except Exception as e:
-                logger.error("[watcher] 発話失敗: %s", e, exc_info=True)
-                break
+                dlg, speaker, cfg = r["dlg"], r["speaker"], r["cfg"]
+
+                try:
+                    wav = await task
+                except Exception:
+                    wav = None
+
+                # キャラ間の間
+                if i > 0:
+                    await asyncio.sleep(0.3)
+
+                try:
+                    self._speech.apply_emotion(
+                        dlg.get("emotion", "neutral"),
+                        avatar_id=speaker,
+                        character_config=cfg,
+                    )
+                    await self._speech.speak(
+                        dlg["speech"],
+                        subtitle={
+                            "author": cfg.get("name", speaker),
+                            "trigger_text": "[Claude Code実況]",
+                            "result": dlg,
+                        },
+                        tts_text=dlg.get("tts_text"),
+                        voice=cfg.get("tts_voice"),
+                        style=cfg.get("tts_style"),
+                        avatar_id=speaker,
+                        wav_path=wav,
+                    )
+                    self._speech.apply_emotion(
+                        "neutral", avatar_id=speaker, character_config=cfg,
+                    )
+                    await self._speech.notify_overlay_end()
+
+                    # DB保存（trigger_type="claude_work"）
+                    await self._save_avatar_comment(
+                        "claude_work",
+                        "[Claude Code実況]",
+                        dlg["speech"],
+                        dlg.get("emotion", "neutral"),
+                        speaker=speaker,
+                    )
+                except Exception as e:
+                    logger.error("[watcher] 発話失敗: %s", e, exc_info=True)
+                    break
+        finally:
+            # 割り込み・例外時に未完了タスクをキャンセル（リーク防止）
+            for t in tts_tasks:
+                if not t.done():
+                    t.cancel()
 
     async def _save_avatar_comment(
         self, trigger_type, trigger_text, text, emotion="neutral", speaker=None,

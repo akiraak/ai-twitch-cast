@@ -431,6 +431,8 @@ def mock_speech():
     speech.apply_emotion = MagicMock()
     speech.speak = AsyncMock()
     speech.notify_overlay_end = AsyncMock()
+    # 並列TTS事前生成モック（デフォルトはNone=フォールバック）
+    speech.generate_tts = AsyncMock(return_value=None)
     return speech
 
 
@@ -778,6 +780,126 @@ class TestClaudeWatcherPlayConversation:
 
         # 1番目でエラー → 2番目は試行されない
         assert mock_speech.speak.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_tts_generated_in_parallel(self, mock_speech):
+        """全発話のTTSが並列起動される（先頭を再生する前にすべて起動済み）"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "1番目", "emotion": "neutral"},
+            {"speaker": "student", "speech": "2番目", "emotion": "joy"},
+            {"speaker": "teacher", "speech": "3番目", "emotion": "neutral"},
+        ]
+
+        start_order = []
+        release_event = asyncio.Event()
+
+        async def fake_generate_tts(text, voice=None, style=None, tts_text=None):
+            start_order.append(text)
+            # 最初のspeakまで全員が待機 → 並列起動の証明
+            if len(start_order) < len(dialogues):
+                await release_event.wait()
+            else:
+                release_event.set()
+            return None  # フォールバック
+
+        mock_speech.generate_tts = AsyncMock(side_effect=fake_generate_tts)
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ"},
+            "student": {"name": "なるこ"},
+        }):
+            await watcher._play_conversation(dialogues)
+
+        # 3発話すべてが (1番目のspeakの前に) 起動済みであること
+        assert start_order == ["1番目", "2番目", "3番目"]
+        assert mock_speech.speak.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_wav_path_passed_to_speak(self, mock_speech, tmp_path):
+        """事前生成されたwav_pathがspeakに渡される"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "テスト", "emotion": "neutral"},
+        ]
+        wav_path = tmp_path / "fake.wav"
+        wav_path.write_bytes(b"WAV")
+        mock_speech.generate_tts = AsyncMock(return_value=wav_path)
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ"},
+        }):
+            await watcher._play_conversation(dialogues)
+
+        call_kwargs = mock_speech.speak.call_args.kwargs
+        assert call_kwargs["wav_path"] == wav_path
+
+    @pytest.mark.asyncio
+    async def test_interrupt_cancels_pending_tts_tasks(self, mock_speech, mock_comment_reader):
+        """コメント割り込み時に未完了のTTSタスクがキャンセルされる"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "1番目", "emotion": "neutral"},
+            {"speaker": "student", "speech": "2番目", "emotion": "joy"},
+            {"speaker": "teacher", "speech": "3番目", "emotion": "neutral"},
+        ]
+
+        # 2番目・3番目は完了しないgenerate_tts（割り込みで中断されるべき）
+        cancelled_texts = []
+
+        async def fake_generate_tts(text, voice=None, style=None, tts_text=None):
+            if text == "1番目":
+                return None
+            try:
+                await asyncio.sleep(10.0)  # 長時間待機
+                return None
+            except asyncio.CancelledError:
+                cancelled_texts.append(text)
+                raise
+
+        mock_speech.generate_tts = AsyncMock(side_effect=fake_generate_tts)
+
+        # 1番目の再生後に割り込み（queue_size > 0 を返す）
+        call_count = 0
+
+        def queue_size_side_effect():
+            nonlocal call_count
+            call_count += 1
+            # 1回目(1番目の前): 0, 2回目以降(2番目以降の前): 1
+            return 0 if call_count <= 1 else 1
+
+        type(mock_comment_reader).queue_size = property(lambda self: queue_size_side_effect())
+
+        watcher = ClaudeWatcher(speech=mock_speech, comment_reader=mock_comment_reader)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ"},
+            "student": {"name": "なるこ"},
+        }):
+            await watcher._play_conversation(dialogues)
+
+        # 1番目だけ再生
+        assert mock_speech.speak.call_count == 1
+        # 未完了タスクがキャンセルされたことを確認
+        await asyncio.sleep(0.05)
+        assert "2番目" in cancelled_texts
+        assert "3番目" in cancelled_texts
+
+    @pytest.mark.asyncio
+    async def test_generate_tts_failure_falls_back(self, mock_speech):
+        """generate_tts が例外で失敗しても wav_path=None でフォールバックする"""
+        dialogues = [
+            {"speaker": "teacher", "speech": "テスト", "emotion": "neutral"},
+        ]
+        mock_speech.generate_tts = AsyncMock(side_effect=RuntimeError("gen failed"))
+
+        watcher = ClaudeWatcher(speech=mock_speech)
+        with patch("src.ai_responder.get_chat_characters", return_value={
+            "teacher": {"name": "ちょビ"},
+        }):
+            await watcher._play_conversation(dialogues)
+
+        # speakは呼ばれ、wav_pathはNone
+        assert mock_speech.speak.call_count == 1
+        assert mock_speech.speak.call_args.kwargs["wav_path"] is None
 
 
 class TestClaudeWatcherStatus:

@@ -274,6 +274,75 @@ class TestSpeak:
 
 
 # =====================================================
+# generate_tts（並列事前生成）
+# =====================================================
+
+
+class TestGenerateTts:
+    @pytest.mark.asyncio
+    async def test_success_returns_wav_path(self, tmp_path):
+        """成功時: WAVパスを返す"""
+        sp = SpeechPipeline()
+        with patch("src.speech_pipeline.synthesize"):
+            result = await sp.generate_tts("テスト")
+
+        assert result is not None
+        assert result.name == "speech.wav"
+
+    @pytest.mark.asyncio
+    async def test_failure_returns_none_and_cleans_up(self):
+        """失敗時: Noneを返し、テンポラリディレクトリが削除される"""
+        sp = SpeechPipeline()
+        with patch("src.speech_pipeline.synthesize", side_effect=RuntimeError("TTS down")):
+            result = await sp.generate_tts("テスト")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_cancellation_cleans_up_and_reraises(self):
+        """キャンセル時: テンポラリをクリーンアップしCancelledErrorを再送出"""
+        import tempfile
+        from pathlib import Path
+
+        created_dirs = []
+        orig_mkdtemp = tempfile.mkdtemp
+
+        def track_mkdtemp(*args, **kwargs):
+            d = orig_mkdtemp(*args, **kwargs)
+            created_dirs.append(Path(d))
+            return d
+
+        sp = SpeechPipeline()
+
+        async def slow_synth(*args, **kwargs):
+            await asyncio.sleep(5.0)
+
+        with patch("src.speech_pipeline.tempfile.mkdtemp", side_effect=track_mkdtemp), \
+             patch("src.speech_pipeline.asyncio.to_thread", side_effect=slow_synth):
+            task = asyncio.create_task(sp.generate_tts("テスト"))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        # テンポラリディレクトリが削除されていること
+        assert len(created_dirs) == 1
+        assert not created_dirs[0].exists()
+
+    @pytest.mark.asyncio
+    async def test_voice_and_style_passed(self):
+        """voice/styleがsynthesizeに渡される"""
+        sp = SpeechPipeline()
+        with patch("src.speech_pipeline.synthesize") as mock_synth:
+            await sp.generate_tts("テスト", voice="Leda", style="happy", tts_text="TTS用")
+
+        args, kwargs = mock_synth.call_args
+        assert args[0] == "TTS用"  # tts_text優先
+        assert kwargs["voice"] == "Leda"
+        assert kwargs["style"] == "happy"
+
+
+# =====================================================
 # send_tts_to_native_app
 # =====================================================
 

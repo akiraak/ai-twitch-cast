@@ -88,17 +88,29 @@ class SpeechPipeline:
 
         Returns:
             Path | None: 生成されたWAVファイルのパス。失敗時はNone。
+            キャンセル時は CancelledError を再送出する（テンポラリは削除済み）。
         """
-        wav_path = Path(tempfile.mkdtemp()) / "speech.wav"
+        tmp_dir = Path(tempfile.mkdtemp())
+        wav_path = tmp_dir / "speech.wav"
         t_start = time.monotonic()
         try:
             await asyncio.to_thread(synthesize, tts_text or text, str(wav_path), voice=voice, style=style)
             logger.info("[tts] 事前生成完了: %.0fms", (time.monotonic() - t_start) * 1000)
             return wav_path
+        except asyncio.CancelledError:
+            wav_path.unlink(missing_ok=True)
+            try:
+                tmp_dir.rmdir()
+            except OSError:
+                pass
+            raise
         except Exception as e:
             logger.warning("[tts] 事前生成失敗: %s", e)
             wav_path.unlink(missing_ok=True)
-            wav_path.parent.rmdir()
+            try:
+                tmp_dir.rmdir()
+            except OSError:
+                pass
             return None
 
     async def speak(self, text, voice=None, style=None, subtitle=None, chat_result=None,
