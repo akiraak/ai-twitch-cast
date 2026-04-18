@@ -1,5 +1,12 @@
 # DONE
 
+## plans/ の完了済みプランを archive/ へ移動
+
+- [x] `plans/` 直下の `ステータス: 完了` プラン30件を `plans/archive/` へ `git mv`（履歴保持）
+- [x] 対象: category-evaluation-viewer, lesson-full-bundle, dialogue-tts-split, lesson-start-prepare-progress, claude-lesson-verification, prompts-in-docs-tab, claude-code-lesson-generator, improve-without-annotations, remove-gemini-lesson-generation, lesson-panel-size-control, display-text-readout-rule, teacher-mode-category-restructure, control-panel-lesson-buttons, hooks-recovery, tts-pregenerate, refactoring-2026-03-30, lesson-playback-stopped-hang, claude-watcher-conversation, remove-broadcast-lesson-dialogues-panel, tts-dialogue-fallback-fix, lesson-version-filter, lesson-versioning, lesson-dialogue-timeline, claude-code-hook-dialogue, subtitle-chunk-display, lesson-audio-deletion-bug, lesson-stop-then-replay, claude-code-lesson-docs, control-panel-lesson-timeline, lesson-tts-text-display
+- [x] `plans/` 直下に残るのは未着手・進行中・検証待ち・計画中の11件（auto-verify-improve-loop / capture-broadcast-items-migration / capture-window-audio / character-prompt-editor / client-driven-lesson / high-fps-capture-verification / latency-skip-catchup / lesson-content-improvement / stream-buffering-fix / subtitle-overflow-fix / tts-wait-excess-delay）
+- [x] TODO.md から「plansファイルの古いのはアーカイブへ移動」を削除
+
 ## ちょび/なるこの声を昔の voice に戻す（Despina/Kore → Leda/Aoede）
 
 - [x] DB `characters` テーブル — ちょビ `tts_voice`: Despina→Leda、なるこ `tts_voice`: Kore→Aoede に更新（channel_id=2）
