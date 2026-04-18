@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 logger = logging.getLogger(__name__)
 
@@ -64,3 +64,49 @@ async def get_doc_file(dir: str = "plans", name: str = ""):
         return PlainTextResponse("ファイルが見つかりません", status_code=404)
 
     return PlainTextResponse(target.read_text(encoding="utf-8"))
+
+
+@router.post("/api/docs/archive-plan")
+async def archive_plan(name: str = ""):
+    """plans/<name> を plans/archive/<name> に移動する
+
+    <name> は plans/ 直下の .md ファイル または サブディレクトリ（例: teacher-mode-v2/）。
+    サブディレクトリ内のファイル単体やパストラバーサルは拒否。
+    archive 自身の移動も拒否。同名が archive に既にある場合は上書きせずエラーにする。
+    """
+    if not name or "/" in name or "\\" in name or ".." in name:
+        return JSONResponse({"ok": False, "error": "不正な名前です"}, status_code=400)
+
+    plans_root = (PROJECT_ROOT / "plans").resolve()
+    archive_root = plans_root / "archive"
+    src = (plans_root / name).resolve()
+    dst = (archive_root / name).resolve()
+
+    # plans/ 配下から出ていないか確認（シンボリックリンク等の脱出対策）
+    try:
+        src.relative_to(plans_root)
+        dst.relative_to(archive_root)
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "不正なファイルパスです"}, status_code=400)
+
+    # plans/ 直下以外、または archive 自身は拒否
+    if src.parent != plans_root or src == archive_root:
+        return JSONResponse({"ok": False, "error": "plans/ 直下のファイル/ディレクトリのみアーカイブできます"}, status_code=400)
+
+    if not src.exists():
+        return JSONResponse({"ok": False, "error": "ファイル/ディレクトリが見つかりません"}, status_code=404)
+
+    # ファイルは .md のみ対応、ディレクトリはそのまま
+    if src.is_file() and not name.endswith(".md"):
+        return JSONResponse({"ok": False, "error": "ファイルは .md のみアーカイブできます"}, status_code=400)
+
+    if not src.is_file() and not src.is_dir():
+        return JSONResponse({"ok": False, "error": "通常ファイルまたはディレクトリではありません"}, status_code=400)
+
+    if dst.exists():
+        return JSONResponse({"ok": False, "error": f"archive に同名が既にあります: {name}"}, status_code=409)
+
+    archive_root.mkdir(parents=True, exist_ok=True)
+    src.rename(dst)
+    logger.info("plan をアーカイブ: %s → %s", src, dst)
+    return {"ok": True, "moved_to": f"archive/{name}"}

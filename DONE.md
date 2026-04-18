@@ -1,5 +1,15 @@
 # DONE
 
+## 管理画面のDocsタブから plans をアーカイブへ移動するUI
+
+- [x] `scripts/routes/docs_viewer.py` — `POST /api/docs/archive-plan` を追加。`plans/<name>` を `plans/archive/<name>` に `Path.rename` で移動。**ファイル（.md）とディレクトリの両方に対応**。`/` `\` `..` / サブディレクトリ配下 / 存在する非 `.md` ファイル / `archive` 自身は400で拒否、未存在は404、archive 側に同名がある場合は409で上書きしない
+- [x] `static/js/admin/docs.js` — `renderDocFileBtn` で plans 直下ファイルに 📦 ボタン、`renderDocTreeNode` で plans 直下サブディレクトリ（archive以外）の summary にも 📦 ボタンを表示。クリック時は `event.preventDefault() + stopPropagation()` でフォルダ展開を抑止。`archivePlan(name)` で `showConfirm()` → POST → 成功時は `showToast()` 通知＋一覧を再読み込み＋選択中ファイルが移動対象（または配下）だったらクリア（エラー時も `showToast('...', 'error')`）
+- [x] `static/js/admin/docs.js` — `buildDocTree()` + `renderDocTreeNode()` で **ファイル一覧を再帰的にツリー表示**。これにより `plans/archive/teacher-mode-v2/` のようにサブディレクトリとして移動されたプランも `archive/` の下に入れ子フォルダとして展開できるようになった。従来は先頭スラッシュで1段分しかグループ化しておらず、アーカイブ内のディレクトリ構造がフラットに潰れていた
+- [x] `CLAUDE.md` — 「管理画面UI（共通コンポーネントを使う）」セクションを追加。`confirm/alert/prompt` の代わりに `showConfirm/showModal/showToast` を使うルールを明記
+- [x] `static/css/index.css` — `.docs-file-archive-btn` と `.docs-folder-archive-btn` クラスを追加。`.docs-folder > summary` に `position: relative` を追加
+- [x] `tests/test_api_docs_viewer.py` — `TestArchivePlan` クラスで11ケースをカバー（ファイル移動成功・archive自動作成・ディレクトリ移動・/ 含む・.. 含む・非md実在ファイル・空名・未存在・archive自身・ファイル衝突・ディレクトリ衝突）
+- [x] `plans/plans-archive-ui.md` → ステータス: 完了
+
 ## 掛け合いTTSの並列事前生成（エントリ間の間を短縮）
 
 - [x] `src/speech_pipeline.py` `generate_tts()` — `CancelledError` を捕捉してテンポラリディレクトリをクリーンアップし再送出するように改善

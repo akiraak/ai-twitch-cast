@@ -30,6 +30,19 @@ C#ネイティブ配信アプリ（Windows側でbroadcast.htmlをオフスクリ
 - **バージョン更新**: 機能追加・大きな変更時は `VERSION` ファイルを更新する。基準は [docs/versioning.md](docs/versioning.md) を参照。コミット時にちょびが自動提案する
 - **ファイルの所有者**: Claude Code（root）が編集したファイルは PostToolUse フックで自動的に `ubuntu:ubuntu` に修正される（`.claude/hooks/fix-permissions.sh`）
 
+## 管理画面UI（共通コンポーネントを使う）
+
+管理画面（`static/index.html` + `static/js/admin/`）で確認・通知・入力を出すときは、ブラウザ標準の `confirm()` / `alert()` / `prompt()` ではなく、`static/js/admin/utils.js` の共通UIを使うこと。
+
+- 確認ダイアログ: `await showConfirm(message, { title, okLabel, danger })` — `confirm()` の代わり。Promise<boolean> を返す
+- 入力ダイアログ: `await showModal(message, { input, inputValue, textarea })` — `prompt()` の代わり。Promise<string|null>
+- 成功通知: `showToast(message)` — 緑のトースト（`alert()` の代わり）
+- エラー通知: `showToast(message, 'error')` — 赤のトースト（`alert()` の代わり）
+
+理由: デザインの一貫性、モーダルのキーバインド（Enter/Esc）、他のトーストとの重なり制御、Promise化で `await` フローが書けること。ブラウザネイティブの `confirm/alert/prompt` はUIから浮くうえ、タブ内のフローを途切れさせるので使わない。
+
+例外: 配信画面（`static/broadcast.html`）など共通UIを読み込んでいないページ、あるいは開発時の一時デバッグ用途のみ許容。
+
 ## リソース管理
 
 - リソース（画像・VRMモデル・音声・動画）は `resources/` 配下で一元管理
