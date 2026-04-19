@@ -12,6 +12,18 @@
 - [x] ローカル動作確認 — 1 回目: マーカー作成・API 送信成功、1 秒後 2 回目: クールダウン判定で早期 return（マーカータイムスタンプ不変）
 - [x] `plans/claude-permission-prompt-tts.md` → ステータス: 完了
 
+## テストスイート棚卸し Step 1-c / 1-d: 重複検出と CLAUDE.md 表差分の転記
+
+- [x] Step 1-c（重複検出）: 主要な分離コミット5件（`305177b` ai_responder→character_manager、`62a2666` db→パッケージ、`eeb1a26` lesson_generator→パッケージ、`3ee4773` comment_reader→speech_pipeline、`54cf5c2` ai_responder→prompt_builder）を対象に、旧・新モジュール側テストを照合。**同内容を2ファイルでテストしている重複はゼロ**。分離ごとに test ファイルも同時に分離されていた
+- [x] 「位置ずれ」として9ケース検出（`test_ai_responder.py` の `TestCharacterManagement` / `TestGetChatCharacters` / `TestGetTtsConfig`）。実対象は `src/character_manager.py`。re-export 経由で pass するので削除対象ではなく、Step 3-4 で新設する `tests/test_character_manager.py` への移動対象として扱う
+- [x] `TestModuleSeparation` クラス（`test_prompt_builder.py:416-466` と `test_speech_pipeline.py:636-672`、合計10ケース）は `test_native_app_patterns.py` と同じ「再発防止ガード」系で維持。Step 6 の CLAUDE.md 表更新時に「パターン検証テスト群」として明記する方針
+- [x] Step 1-d（CLAUDE.md 表差分）: `CLAUDE.md:252-267` の表16件と `tests/` の実在27ファイル（`conftest.py` / `__init__.py` 除く）を照合
+  - **対象パスが古くなった記載2件**: `test_db.py` の `src/db.py` → `src/db/` パッケージ（`audio` / `core` / `items` / `lessons`）、`test_capture_client.py` の `src/capture_client.py` → `scripts/services/capture_client.py`
+  - **表に載っていない実在ファイル11件**: `test_api_chat.py` / `test_api_custom_text.py` / `test_api_docs_viewer.py` / `test_api_items.py` / `test_api_se.py` / `test_broadcast_patterns.py` / `test_claude_watcher.py` / `test_comment_reader.py` / `test_json_utils.py` / `test_se_resolver.py` / `test_tts_pregenerate.py`
+  - Step 6 の更新方針を「パス修正 + 11件追加 + `src/` → `scripts/routes/` → `static/` → 統合テスト の並び替え」として記載
+- [x] `plans/test-suite-audit.md` に Step 1-c 節・Step 1-d 節を追加。**結論: Step 2（不要テスト削除）は削除対象ゼロのままスキップし、Step 3（追加）と Step 4（高速化）に進む**
+- [x] `TODO.md` から Step 1-c / Step 1-d を削除し、Step 2 を「削除ゼロ件でスキップ」と書き換え
+
 ## テストスイート棚卸し Step 1-b: テスト import シンボルの実在確認
 
 - [x] `tests/` 全 27 ファイルの `from src.X import ...` / `from scripts.X import ...`（複数行 `( ... )` 形式含む）および `patch("src.X.Y")` / `patch("scripts.X.Y")` の参照シンボルを抽出し、対象モジュール側に定義が存在するかを `rg` で照合

@@ -208,8 +208,55 @@
 3. setup の帯域（`api_client` フィクスチャ生成）を session スコープ化で均す — 期待削減 ≈ 10〜20秒
 4. 上記3点で目標 60 秒以内（526 → ≈ 250秒削減で 280秒前後まで → さらに上位以外の累積短縮が必要）に近づけられるかを評価
 
-### CLAUDE.md 表との差分
-（Step 1-d で転記）
+### Step 1-d: CLAUDE.md 表との差分（2026-04-18）
+
+- 実施内容: `CLAUDE.md:252-267` の「テスト構成」表（16ファイル記載）と `tests/` 配下の実在ファイル（`conftest.py` / `__init__.py` 除く27ファイル）を照合。
+- 結果:
+  - **表の項目で対象パスが古くなっているもの（2件）**:
+    - `test_db.py` — 表は `src/db.py` とあるが、`src/db.py` は既に削除済み。現行は **`src/db/` パッケージ**（`audio.py` / `core.py` / `items.py` / `lessons.py`。62a2666 でパッケージ化）。
+    - `test_capture_client.py` — 表は `src/capture_client.py` とあるが実在せず。現行は **`scripts/services/capture_client.py`**（bf913d1 で移設）。
+  - **実在するが表に載っていない（11件）**:
+    | ファイル | 実テスト対象 | 備考 |
+    |---------|-------------|------|
+    | `test_api_chat.py` | `scripts/routes/chat`（POST /api/chat/webui 等） | reader.respond_webui のモック |
+    | `test_api_custom_text.py` | `/api/overlay/custom-texts` | カスタムテキスト（broadcast_items系） |
+    | `test_api_docs_viewer.py` | `scripts/routes/docs_viewer` | plans/docs ファイル一覧API |
+    | `test_api_items.py` | `src/db` + broadcast_items API | テーブルCRUD＋API両方含む |
+    | `test_api_se.py` | `scripts/routes/se` | SE一覧・アップロード |
+    | `test_broadcast_patterns.py` | `static/broadcast.html` + `static/js/broadcast/*` | アイテム共通化（ITEM_REGISTRY等）の再発防止。`test_native_app_patterns.py` と同性質 |
+    | `test_claude_watcher.py` | `src/claude_watcher` | TranscriptParser / ClaudeWatcher |
+    | `test_comment_reader.py` | `src/comment_reader` | 並列TTS事前生成（3ee4773 の分離後残存機能） |
+    | `test_json_utils.py` | `src/json_utils` | parse_llm_json |
+    | `test_se_resolver.py` | `src/se_resolver` | カテゴリ別SE解決 |
+    | `test_tts_pregenerate.py` | `src/tts_pregenerate` | セクションTTS事前生成（授業系） |
+- **Step 6 で反映する更新方針**:
+  1. 上記2件の対象パスを最新に修正（`src/db/` パッケージ表記、`scripts/services/capture_client.py`）
+  2. 上記11件を表に追加
+  3. 表全体を `src/` 配下 → `scripts/routes/` 配下 → `static/` 系 → 統合テスト の順に並べ替えると見通しが良くなる（Step 6 で検討）
+
+### Step 1-c: モジュール分離に伴う重複テスト検出（2026-04-18）
+
+- 実施内容: git log で `src/` 配下の主要な分離・分割コミットを抽出し、旧モジュール側テストと分離後テストの重複可能性を照合。
+- 対象とした分離コミット（5件）:
+  1. `305177b`（2026-03-30）: `ai_responder.py` → `character_manager.py` 切り出し（12関数）
+  2. `62a2666`: `db.py` → `src/db/` パッケージ分割
+  3. `eeb1a26`: `lesson_generator.py` → `src/lesson_generator/` パッケージ分割
+  4. `3ee4773`（2026-03-16）: `comment_reader.py` → `speech_pipeline.py` 抽出（SpeechPipeline/25テスト追加）
+  5. `54cf5c2`（2026-03-16）: `ai_responder.py` → `prompt_builder.py` 抽出（LANGUAGE_MODES/build_system_prompt）
+- 結果: **同内容のケースを2ファイルでテストしている重複は無い**。分離コミットごとに対応する test ファイルも同時に分離済み（`test_speech_pipeline.py` / `test_prompt_builder.py` 新設、`test_comment_reader.py` は並列TTS事前生成のみに縮退）。
+- **検出された「位置ずれ」（削除対象ではなく Step 2/Step 3-4 での移動対象）**:
+  - `test_ai_responder.py::TestCharacterManagement`（5ケース）
+  - `test_ai_responder.py::TestGetChatCharacters`（1ケース）
+  - `test_ai_responder.py::TestGetTtsConfig`（3ケース）
+  - いずれも実対象は `src/character_manager.py`。`src/ai_responder.py` は re-export しているのでテストは pass するが、責務分離後の所在としては `tests/test_character_manager.py` が自然。
+  - 判断: **重複ではないので Step 2（削除）対象外**。Step 3-4（`character_manager.py` のテスト追加）で新設する `tests/test_character_manager.py` に**移動**するのが妥当。ただし新規ケースの追加が先で、移動は付随作業とする。
+- **特殊な `TestModuleSeparation` クラス（2ファイルに分散）**:
+  - `test_prompt_builder.py:416-466`（6ケース）: `src/prompt_builder.py` と `src/ai_responder.py` の import 境界を `inspect.getsource` で文字列検査
+  - `test_speech_pipeline.py:636-672`（4ケース）: `src/comment_reader.py` → `src/speech_pipeline.py` の import 方向と、旧メソッド名（`_speak` 等）が残っていないことを検査
+  - 判断: **維持**。`test_broadcast_patterns.py` / `test_native_app_patterns.py` と同じ「再発防止ガード」系で、過去に一度成立した境界が崩れるとすぐ落ちる設計。ただし **Step 6 の CLAUDE.md 表更新時に「パターン検証テスト群」のカテゴリとして明記**しておくと方針が一貫する。
+- **重複削除候補**: **なし**。Step 2 の削除対象は Step 1-a/1-b/1-c からはゼロ件。Step 2 は「削除ゼロのままスキップ」し、Step 3（追加）と Step 4（高速化）に進むのが妥当。
+
+
 
 ### Step 1-b: 未使用シンボル検出（2026-04-18）
 
