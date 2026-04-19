@@ -273,6 +273,38 @@
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
 
+### Step 3-7 実装結果: `twitch_api.py` / `twitch_chat.py` のテスト追加（2026-04-18）
+
+- 実施内容:
+  - `tests/test_twitch_api.py` を新規作成（**17ケース**）。`src/twitch_api.py` の全メソッド＋ヘッダ整形をカバー
+  - `tests/test_twitch_chat.py` を新規作成（**18ケース**）。`src/twitch_chat.py` の `TwitchChat` / `_ChatClient` をカバー
+  - `tests/conftest.py` の外部モジュールスタブを「インストール済みなら実体を優先、未インストール時のみ MagicMock」に変更
+- カテゴリ別内訳（twitch_api, 17ケース）:
+  - **`_headers`**（3ケース）: `oauth:` 接頭辞の除去＋Bearer変換、接頭辞無しトークンの passthrough、環境変数 `TWITCH_TOKEN` / `TWITCH_CLIENT_ID` の読み込み
+  - **`get_broadcaster_id`**（4ケース）: 成功（`/users?login=...`）、キャッシュ（2回目はHTTP未呼び出し）、チャンネル未発見で `ValueError`、`raise_for_status` 由来の例外伝搬
+  - **`get_channel_info`**（3ケース）: データあり（title/game_id/game_name/tags）、空データで `{}`、全フィールド欠落時のデフォルト空値
+  - **`update_channel_info`**（5ケース）: title 単独 PATCH、全フィールド同時、body 空で PATCH 短絡、PATCH エラー伝搬、None フィールドのスキップ
+  - **`search_categories`**（2ケース）: `box_art_url` 有無の正規化（`first=10` 固定）、空データで `[]`
+- カテゴリ別内訳（twitch_chat, 18ケース）:
+  - **`__init__`**（2ケース）: env 読み込み、明示引数の優先
+  - **`start`**（1ケース）: `_ChatClient` 作成 + `client.start()` の asyncio.Task 化
+  - **`stop`**（3ケース）: 正常停止（close＋task cancel＋フィールド None化）、タスク内例外の握りつぶし、start前の no-op
+  - **`send_message`**（4ケース）: 未接続時の warning、通常送信、チャンネル未発見時の warning、`channel.send` 例外の error ログ化（再スローしない）
+  - **`is_running`**（3ケース）: None/pending/完了 の3状態
+  - **`_ChatClient.event_message`**（4ケース）: `echo=True` 無視、`display_name` 優先、空時 `name` fallback、`author=None` で `"unknown"`
+  - **`_ChatClient.event_ready`**（1ケース）: ログ出力確認
+- 設計上のポイント:
+  - **conftest.py のスタブ挙動変更**: 従来は無条件に `sys.modules['twitchio'] = MagicMock()` としていたが、インストール済み環境では `__import__` で実体を読み込む方式に変更。これにより `_ChatClient(Client)` の本物の継承関係が成立し、直接 `event_message` を呼び出すテストが書けるようになった。他テストへの副作用は `src.twitch_api.aiohttp.ClientSession` / `src.twitch_chat._ChatClient` を必要箇所で直接 patch しているため無し
+  - **aiohttp.ClientSession のモック化ヘルパー**: `session.get` / `session.patch` は `async with` のネスト（`ClientSession()` と `session.get()` の両方）。`_make_session()` ヘルパーで `MagicMock` + `AsyncMock(__aenter__/__aexit__)` を組み合わせ、`resp.json` を `AsyncMock`、`raise_for_status` を `MagicMock(side_effect=...)` に分けて組み立てる
+  - **`_ChatClient.event_message` 直接呼び出し**: MagicMock の `.echo` / `.author` / `.content` 属性を手動で設定し、twitchio の WebSocket 層は迂回
+  - **task ライフサイクル**: `stop` のテストで `asyncio.create_task(_long())` を作って cancel を検証。例外握り潰しは、`asyncio.create_task(_bad())` → `await asyncio.sleep(0)` で task に例外を溜めてから stop に渡す
+  - **ログ検証**: `caplog.at_level("WARNING"/"ERROR")` で `"チャット未接続"` / `"見つかりません"` / `"チャット送信失敗"` を assert
+- 注意点・学び:
+  - 無条件 MagicMock スタブだと `from twitchio import Client` で Client が MagicMock 化し、`class _ChatClient(Client)` の時点で `_ChatClient` 自体が MagicMock 属性になる（type ではなくなる）。その結果 `client.event_message(...)` が MagicMock を返して `TypeError: object MagicMock can't be used in 'await' expression` になる。インストール済みなら実体を使う切り替えで解決
+  - `_headers` は `self.token.removeprefix("oauth:")` で、接頭辞が無ければトークンを変形しない
+  - `update_channel_info` は `body` 構築時に None 値を除外 → `body` が空なら PATCH を呼ばない（無意味な更新リクエストを避ける）
+- 結果: `python3 -m pytest tests/ -q` → **1270 passed / 4 warnings / 10:36**（1235 → 1270 / +35件・リグレッションなし）。warnings は Step 5 対象の `@app.on_event` DeprecationWarning（5→4 に減ったが残り4件は lifespan 移行でまとめて消える想定）
+
 ### Step 3-6 実装結果: `routes/bgm.py` / `files.py` / `prompts.py` のテスト追加（2026-04-18）
 
 - 実施内容:

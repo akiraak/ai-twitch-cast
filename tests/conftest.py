@@ -7,6 +7,8 @@ import pytest
 
 # twitchio等の外部モジュールがインストールされていない環境でも
 # scripts.state → src.comment_reader → src.twitch_chat のインポートチェーンが通るようにする
+# 実体がインストール済みならそちらを優先（test_twitch_chat.py のように
+# 本物の Client クラスへの継承関係を前提にするテストが走れるようにするため）
 _STUB_MODULES = [
     "twitchio",
     "aiohttp",
@@ -14,7 +16,10 @@ _STUB_MODULES = [
 
 for mod_name in _STUB_MODULES:
     if mod_name not in sys.modules:
-        sys.modules[mod_name] = MagicMock()
+        try:
+            __import__(mod_name)
+        except ImportError:
+            sys.modules[mod_name] = MagicMock()
 
 
 @pytest.fixture

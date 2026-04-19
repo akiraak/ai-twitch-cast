@@ -1,5 +1,30 @@
 # DONE
 
+## テストスイート棚卸し Step 3-7: `twitch_api.py` / `twitch_chat.py` のテスト追加
+
+- [x] `tests/test_twitch_api.py` 新規作成（**17ケース** / 全pass）。`src/twitch_api.py` の全メソッド＋ヘッダ整形をカバー
+  - **`_headers`**（3ケース）: `oauth:` 接頭辞の除去＋Bearer変換、接頭辞無しトークンの passthrough、環境変数 `TWITCH_TOKEN` / `TWITCH_CLIENT_ID` の読み込み
+  - **`get_broadcaster_id`**（4ケース）: 成功（`/users?login=...` 呼び出し）、キャッシュ（2回目はHTTP未呼び出し）、チャンネル未発見時の `ValueError`、`raise_for_status` 由来の例外伝搬
+  - **`get_channel_info`**（3ケース）: データあり（title/game_id/game_name/tags）、空データで `{}`、全フィールド欠落時のデフォルト空値
+  - **`update_channel_info`**（5ケース）: title 単独の PATCH、全フィールド同時、引数無しで PATCH 短絡、PATCH エラー伝搬、None フィールドのスキップ
+  - **`search_categories`**（2ケース）: `box_art_url` 有無の正規化（`first=10` 固定）、空データで `[]`
+- [x] `tests/test_twitch_chat.py` 新規作成（**18ケース** / 全pass）。`src/twitch_chat.py` の `TwitchChat` / `_ChatClient` をカバー
+  - **`__init__`**（2ケース）: env からの読み込み、明示引数の優先
+  - **`start`**（1ケース）: `_ChatClient` の作成＋ `client.start()` を asyncio.Task として spawn
+  - **`stop`**（3ケース）: 正常な停止（close＋task cancel＋フィールド None化）、タスク内例外の握りつぶし、start前のno-op
+  - **`send_message`**（4ケース）: 未接続時の warning（`チャット未接続`）、通常送信（`get_channel` → `channel.send`）、チャンネル未発見時の warning（`見つかりません`）、`channel.send` 例外の握りつぶし（error ログのみ）
+  - **`is_running`**（3ケース）: タスク None で False、pending タスクで True、完了タスクで False
+  - **`_ChatClient.event_message`**（4ケース）: `echo=True` で無視、`author.display_name` 優先、空時 `author.name` fallback、`author=None` で `"unknown"`
+  - **`_ChatClient.event_ready`**（1ケース）: ログ出力を確認
+- [x] **conftest.py の外部モジュールスタブを調整**: `twitchio` / `aiohttp` を無条件 MagicMock 化していたのを「未インストール時のみ MagicMock」に変更。インストール済み環境では実体の `twitchio.Client` / `aiohttp.ClientSession` が使われるようになり、本物のクラス継承（`_ChatClient(Client)`）を前提にするテストが書けるようになった。他テストは `src.twitch_api.aiohttp.ClientSession` を直接 patch する設計なので影響なし
+- [x] 設計上のポイント:
+  - **aiohttp.ClientSession のモック化ヘルパー**: `session.get` / `session.patch` は `async with` ネストの context manager。`MagicMock` ＋ `AsyncMock(__aenter__/__aexit__)` を組み合わせる `_make_session()` ヘルパーを作成
+  - **`_ChatClient.event_message` の直接呼び出し**: MagicMock の `.echo` / `.author` / `.content` 属性を手動で設定して関数単体を検証（twitchio の WebSocket 層は不要）
+  - **task ライフサイクル**: `stop` のテストで `asyncio.create_task(_long())` を作って cancel 動作を検証。例外握り潰しは、`asyncio.create_task(_bad())` → `await asyncio.sleep(0)` で例外発生済みタスクを stop に渡す
+  - **twitchio のロギング検証**: `pytest.caplog` の `caplog.at_level("WARNING")` / `"ERROR"` でログメッセージを直接assertし、警告・エラー時の挙動を検証
+- [x] 全スイート `python3 -m pytest tests/ -q` → **1270 passed / 4 warnings / 10:36**（1235 → 1270 / +35件・リグレッションなし）
+- [x] plans/test-suite-audit.md に実装結果を追記 / TODO.md の Step 3-7 を消去
+
 ## テストスイート棚卸し Step 3-6: `routes/bgm.py` / `files.py` / `prompts.py` のテスト追加
 
 - [x] `tests/test_api_bgm.py` 新規作成（**33ケース** / 全pass）。`scripts/routes/bgm.py` の全エンドポイント＋内部ヘルパーをカバー
