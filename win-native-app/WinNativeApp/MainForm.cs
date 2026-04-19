@@ -740,8 +740,13 @@ public class MainForm : Form
         Log.Information("[MainForm] Loaded, initializing WebView2...");
 
         // サーバーベースURLを抽出
+        // 通常: http://host:port/broadcast → http://host:port
+        // 検証用などパスが違う場合でもオリジン（scheme+host+port）だけを取る
         if (_url.Contains("/broadcast"))
             _serverBaseUrl = _url[.._url.IndexOf("/broadcast", StringComparison.Ordinal)];
+        else if (Uri.TryCreate(_url, UriKind.Absolute, out var uri)
+                 && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            _serverBaseUrl = $"{uri.Scheme}://{uri.Authority}";
         else if (_url.StartsWith("http"))
             _serverBaseUrl = _url.TrimEnd('/');
 

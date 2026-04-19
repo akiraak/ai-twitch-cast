@@ -1,5 +1,21 @@
 # DONE
 
+## 録画AV同期: 原因切り分け検証（wallclock採用決定、本実装は次セッション）
+
+- [x] 背景: `plans/recording-av-sync-fix.md` の実装前に、「映像PTS = frame_index ベース」が AV ズレの根本原因かを 3 ビルド（default / wallclock / pacer）で数値比較
+- [x] `static/av_sync_test.html` **新規**: 1秒ごとに全画面赤フラッシュ + 大きな数字を出す 60 秒の検証素材（音声なし）
+- [x] `scripts/verify_av_sync.py` **新規**: ffprobe で映像PTS取得 + ffmpeg で RGB24 抽出（`-fps_mode passthrough` で VFR/CFR 両対応）+ 赤フラッシュ検出で 1 秒ごとの実時刻 vs MP4時刻のドリフト集計（numpy 依存）
+- [x] `StreamConfig.cs`: 検証用に `VideoTimingMode { Default, Wallclock, Pacer }` enum を追加。`--video-timing` / `VIDEO_TIMING` で切替（次セッションで本実装時に enum 自体を削除する）
+- [x] `FfmpegProcess.cs`: `Wallclock` 時に映像入力へ `-use_wallclock_as_timestamps 1` を追加。`Pacer` 時は C# 側で 30Hz tick の書き込みスレッド（新フレームが無ければ前フレーム複製）
+- [x] `stream.sh`: `--av-sync-test` フラグで URL を `/static/av_sync_test.html` に差し替え
+- [x] `MainForm.cs`: `_serverBaseUrl` の抽出を修正。URL がオリジン以外のパス（`/static/av_sync_test.html` など）でも `Uri.TryCreate` でオリジンだけを取るようにし、録画アップロードや BGM 取得の base URL が壊れる問題を解消
+- [x] **計測結果（60秒録画で flash カウント 50+）**:
+  - **default**: +10.7ms/秒で線形累積、50秒で +533ms。長尺で悪化 → 不採用
+  - **wallclock**: flash 1 以降 ±1フレーム jitter のみ（stdev 95ms、累積 -33ms/50秒）。初期に -700ms の定数オフセットあり。**採用**
+  - **pacer**: flash 1 以降 steady（stdev 366ms）。初期 +2667ms の定数オフセット。原因は FFmpeg init 遅延中のパイプブロック → init 完了後に catch-up ループが NVENC ドレイン速度（~100fps）で書き込み burst。`-framerate 30 -f rawvideo` が到着順で PTS を打つため MP4 時間が引き伸びる実装バグ → 不採用
+- [x] `plans/recording-av-sync-verification.md` **新規**: 検証計画・計測結果・wallclock 採用の根拠を記録
+- [x] 次セッションの引継ぎ: TODO.md の `[>]` と本プランの「検証後の扱い」節に具体手順記載（pacer コード削除 → `VideoTimingMode` enum 削除 → 録画時常時 wallclock → 実 TTS 発話でリップシンク確認 → `recording-av-sync-fix.md` を wallclock 単独方針で書き直し）
+
 ## クライアント動画撮影機能（C# → サーバアップロード方式）
 
 - [x] 背景: C#ネイティブ配信アプリはTwitch配信のみで、ローカル録画手段がなかった。切り抜き素材の確保・レイアウト検証・オフライン確認のためにローカル録画を追加

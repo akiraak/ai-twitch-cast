@@ -7,15 +7,18 @@
 #   ./stream.sh --stop           # アプリ停止
 #   ./stream.sh --status         # 動作状況確認
 #   ./stream.sh --save-frames    # デバッグ: フレームをPNG保存
+#   ./stream.sh --av-sync-test --video-timing wallclock  # AV同期検証モード
 #
 # オプション:
-#   --stream          配信開始（TWITCH_STREAM_KEY必須）
-#   --stop            アプリ停止
-#   --status          動作状況確認
-#   --save-frames     キャプチャフレームをPNG保存（デバッグ用）
-#   --resolution WxH  解像度（デフォルト: 1920x1080）
-#   --fps N           フレームレート（デフォルト: 30）
-#   --bitrate Nk      映像ビットレート（デフォルト: 2500k）
+#   --stream                          配信開始（TWITCH_STREAM_KEY必須）
+#   --stop                            アプリ停止
+#   --status                          動作状況確認
+#   --save-frames                     キャプチャフレームをPNG保存（デバッグ用）
+#   --av-sync-test                    URL を av_sync_test.html に差し替え（録画検証用）
+#   --video-timing default|wallclock|pacer  映像PTS方式（録画AV同期検証）
+#   --resolution WxH                  解像度（デフォルト: 1920x1080）
+#   --fps N                           フレームレート（デフォルト: 30）
+#   --bitrate Nk                      映像ビットレート（デフォルト: 2500k）
 
 cd "$(dirname "$0")"
 
@@ -111,12 +114,17 @@ EXE_PATH="$BUILD_DIR/bin/Release/net8.0-windows10.0.22621.0/${APP_NAME}.exe"
 # ネイティブアプリのresources/ffmpeg/ffmpeg.exeはビルド時に自動コピーされるため
 # 通常は--ffmpeg-pathの指定は不要（FindFfmpeg()が自動検出する）
 
-# broadcast.html URL
+# broadcast.html URL（--av-sync-test で検証用 HTML に差し替え）
 URL="${SERVER_URL}/broadcast"
+STREAM_MODE=false
+for arg in "$@"; do
+    if [ "$arg" = "--av-sync-test" ]; then
+        URL="${SERVER_URL}/static/av_sync_test.html"
+    fi
+done
 
 # コマンドライン引数を構築
 NATIVE_ARGS="$URL"
-STREAM_MODE=false
 
 # FFmpegパスは常に渡す（Go Live APIから後で配信開始される場合にも必要）
 if [ -n "$FFMPEG_PATH" ]; then
@@ -132,6 +140,9 @@ for arg in "$@"; do
     case "$arg" in
         --stream)
             STREAM_MODE=true
+            ;;
+        --av-sync-test)
+            # URL は既に差し替え済み。ネイティブ側には渡さない
             ;;
         *)
             NATIVE_ARGS="$NATIVE_ARGS $arg"

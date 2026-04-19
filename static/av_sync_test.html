@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>AV Sync Test</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden;
+    background: #000; color: #fff;
+    font-family: "Consolas", "Courier New", monospace;
+  }
+  #flash {
+    position: fixed; inset: 0; background: #000;
+    transition: none;
+  }
+  #flash.on { background: #ff0000; }
+  #num {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 50vh; font-weight: 900; color: #fff;
+    text-shadow: 0 0 20px #000;
+    pointer-events: none;
+  }
+  #clock {
+    position: fixed; bottom: 2vh; left: 2vh;
+    font-size: 4vh; color: #ccc;
+    text-shadow: 0 0 10px #000;
+  }
+  #legend {
+    position: fixed; top: 2vh; left: 2vh;
+    font-size: 2.5vh; color: #888;
+    text-shadow: 0 0 10px #000;
+  }
+  #startBtn {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 5vh; padding: 2vh 4vh;
+    background: #333; color: #fff; border: 2px solid #666;
+    cursor: pointer; z-index: 100;
+  }
+  #startBtn:hover { background: #555; }
+</style>
+</head>
+<body>
+  <div id="flash"></div>
+  <div id="num"></div>
+  <div id="clock">--</div>
+  <div id="legend">AV Sync Test — 60s / flash 100ms @ sec boundary</div>
+  <button id="startBtn">▶ Start (60s)</button>
+<script>
+  "use strict";
+  const DURATION_SEC = 60;
+  const FLASH_MS = 100;
+
+  const flash = document.getElementById("flash");
+  const numEl = document.getElementById("num");
+  const clockEl = document.getElementById("clock");
+  const startBtn = document.getElementById("startBtn");
+
+  let t0 = 0;
+
+  function tick() {
+    const elapsedMs = performance.now() - t0;
+    const elapsedSec = elapsedMs / 1000;
+
+    if (elapsedSec >= DURATION_SEC + 0.2) {
+      numEl.textContent = "END";
+      flash.classList.remove("on");
+      clockEl.textContent = "done (" + elapsedSec.toFixed(3) + "s)";
+      return;
+    }
+
+    const sec = Math.floor(elapsedSec);
+    const msInSec = elapsedMs - sec * 1000;
+    const inFlashWindow = msInSec < FLASH_MS && sec < DURATION_SEC;
+
+    flash.classList.toggle("on", inFlashWindow);
+    numEl.textContent = String(sec).padStart(2, "0");
+    clockEl.textContent = elapsedSec.toFixed(3) + "s";
+
+    requestAnimationFrame(tick);
+  }
+
+  startBtn.addEventListener("click", () => {
+    startBtn.remove();
+    t0 = performance.now();
+    requestAnimationFrame(tick);
+  });
+</script>
+</body>
+</html>

@@ -24,11 +24,21 @@ public sealed class FfmpegProcess : IDisposable
     private NamedPipeServerStream? _audioPipe;
     private long _frameCount;
     private long _dropCount;
+    private long _dupCount; // Pacer: 前フレーム複製回数（新規キャプチャが間に合わなかった tick 数）
     private DateTime _startTime;
     private volatile bool _stopping;
     private volatile bool _writingVideo;
     private volatile bool _encodingStarted; // FFmpegエンコード開始検知フラグ
     private bool _disposed;
+
+    // Pacer モード用: 最新 BGRA フレーム + staging + 書き込み状態
+    private byte[]? _pacerLatestBgra;
+    private byte[]? _pacerStagingBgra;
+    private readonly object _pacerBgraLock = new();
+    private volatile bool _pacerDirty;
+    private Thread? _pacerThread;
+    private long _pacerStartTick;
+    private long _pacerWrittenCount;
 
     // ダブルバッファ: BGRA入力コピー用
     private byte[]? _videoBufA;
@@ -89,6 +99,7 @@ public sealed class FfmpegProcess : IDisposable
     public bool IsRunning => _process is { HasExited: false };
     public long FrameCount => Interlocked.Read(ref _frameCount);
     public long DropCount => Interlocked.Read(ref _dropCount);
+    public long DupCount => Interlocked.Read(ref _dupCount);
     public long AudioDropCount => Interlocked.Read(ref _audioDropCount);
     public TimeSpan Uptime => IsRunning ? DateTime.UtcNow - _startTime : TimeSpan.Zero;
     public double LastSpeed => _lastSpeed;
@@ -141,8 +152,8 @@ public sealed class FfmpegProcess : IDisposable
         // エンコーダ選択（auto=HW自動検出→libx264フォールバック）
         var encoder = ResolveEncoder(_config.Encoder, FindFfmpeg());
         var encoderArgs = BuildEncoderArgs(encoder, _config);
-        Log.Information("[FFmpeg] Mode: {Mode}, Encoder: {Encoder}, AudioOffset: {Offset}s",
-            _config.Mode, encoder, _config.AudioOffset);
+        Log.Information("[FFmpeg] Mode: {Mode}, Encoder: {Encoder}, AudioOffset: {Offset}s, VideoTiming: {Timing}",
+            _config.Mode, encoder, _config.AudioOffset, _config.VideoTiming);
 
         // 出力モード別の最終引数と低遅延系フラグの有無を決定
         string outputArgs;
@@ -166,10 +177,18 @@ public sealed class FfmpegProcess : IDisposable
             lowLatencyArgs = "-flags +low_delay -fflags +nobuffer -flush_packets 1";
         }
 
+        // 録画AV同期検証: VideoTiming に応じて映像入力オプションを切替
+        // Wallclock → -use_wallclock_as_timestamps 1 を追加（PTSを読み取り実時刻で付与）
+        // plans/recording-av-sync-verification.md
+        var wallclockOpt = _config.VideoTiming == VideoTimingMode.Wallclock
+            ? "-use_wallclock_as_timestamps 1"
+            : "";
+
         var args = string.Join(" ",
             "-y -nostdin",
             // Video input (named pipe — 8MBバッファ + NV12でデータ量63%削減)
             "-thread_queue_size 64",
+            wallclockOpt,
             "-f rawvideo -pixel_format nv12",
             $"-video_size {_config.Width}x{_config.Height}",
             $"-framerate {_config.Framerate}",
@@ -215,6 +234,7 @@ public sealed class FfmpegProcess : IDisposable
         _startTime = DateTime.UtcNow;
         _frameCount = 0;
         _dropCount = 0;
+        _dupCount = 0;
         _audioDropCount = 0;
         _stopping = false;
 
@@ -278,6 +298,12 @@ public sealed class FfmpegProcess : IDisposable
         _audioWriter.Start();
         Log.Information("[FFmpeg] Audio writer thread started");
 
+        // Pacer モード: 映像を 30Hz tick で出すスレッドを起動
+        if (_config.VideoTiming == VideoTimingMode.Pacer)
+        {
+            StartVideoPacer();
+        }
+
         // ヘルスチェック: 5秒後にFFmpegの状態を確認
         _ = Task.Run(async () =>
         {
@@ -299,6 +325,14 @@ public sealed class FfmpegProcess : IDisposable
         if (bgraData.Length != expectedSize)
         {
             Interlocked.Increment(ref _dropCount);
+            return;
+        }
+
+        // Pacer モード: キャプチャ側はBGRAを保存するだけ。
+        // 実際のNV12変換とパイプ書き込みは PacerLoop が 30Hz tick で実行する。
+        if (_config.VideoTiming == VideoTimingMode.Pacer)
+        {
+            UpdatePacerLatestFrame(bgraData);
             return;
         }
 
@@ -367,6 +401,128 @@ public sealed class FfmpegProcess : IDisposable
             }
         });
     }
+
+    // ==================== Pacer モード実装 ====================
+    // 目的: FFmpeg 視点で常に 30fps CFR を維持し、映像 PTS を実時間と一致させる。
+    // ドロップ禁止・複製許容。キャプチャから来たBGRAは最新フレームとして保存し、
+    // 専用スレッドが 33ms tick で NV12 変換→パイプ書き込みする。
+    // 新フレームが来ていない tick では前フレームの NV12 を使い回し（複製）。
+
+    private void UpdatePacerLatestFrame(byte[] bgraData)
+    {
+        lock (_pacerBgraLock)
+        {
+            if (_pacerLatestBgra == null || _pacerLatestBgra.Length != bgraData.Length)
+                _pacerLatestBgra = new byte[bgraData.Length];
+            Buffer.BlockCopy(bgraData, 0, _pacerLatestBgra, 0, bgraData.Length);
+            _pacerDirty = true;
+        }
+    }
+
+    /// <summary>
+    /// Pacer ループ: fps Hz tick で最新フレームを NV12 変換→パイプに書き込む。
+    /// 新フレームが無ければ前回の NV12 を再利用（_dupCount++）。
+    /// 壁時計ベースで catch-up するため、タイマージッター時は複数枚をまとめて出す。
+    /// </summary>
+    private void StartVideoPacer()
+    {
+        var w = _config.Width;
+        var h = _config.Height;
+        var bgraSize = w * h * 4;
+        _pacerStagingBgra = new byte[bgraSize];
+        _pacerWrittenCount = 0;
+        _pacerStartTick = Environment.TickCount64;
+
+        _pacerThread = new Thread(PacerLoop)
+        {
+            IsBackground = true,
+            Name = "VideoPacer",
+            Priority = ThreadPriority.AboveNormal,
+        };
+        _pacerThread.Start();
+        Log.Information("[FFmpeg] Video pacer thread started (target {Fps}fps CFR)", _config.Framerate);
+    }
+
+    private void PacerLoop()
+    {
+        var fps = _config.Framerate;
+        var tickMs = 1000.0 / fps;
+        var nv12Size = ColorConverter.Nv12Size(_config.Width, _config.Height);
+
+        while (!_stopping)
+        {
+            var pipe = _videoPipe;
+            if (pipe is not { IsConnected: true }) break;
+
+            var elapsed = Environment.TickCount64 - _pacerStartTick;
+            var targetFrames = (long)(elapsed / tickMs);
+
+            // catch-up: 壁時計ベースで書くべきフレームに追いつくまで出す
+            while (_pacerWrittenCount < targetFrames && !_stopping)
+            {
+                try
+                {
+                    WritePacerFrame(pipe, nv12Size);
+                    _pacerWrittenCount++;
+                }
+                catch (IOException)
+                {
+                    return; // パイプ切断
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+            }
+
+            // 次 tick まで寝る
+            var nextTargetMs = (long)((_pacerWrittenCount + 1) * tickMs);
+            var sleepMs = (int)(nextTargetMs - (Environment.TickCount64 - _pacerStartTick));
+            if (sleepMs > 0) Thread.Sleep(Math.Min(sleepMs, 50));
+            else Thread.Yield();
+        }
+
+        Log.Information("[FFmpeg] Video pacer exiting (written={W} dup={D})",
+            _pacerWrittenCount, Interlocked.Read(ref _dupCount));
+    }
+
+    private void WritePacerFrame(NamedPipeServerStream pipe, int nv12Size)
+    {
+        bool hasNew = _pacerDirty;
+        if (hasNew)
+        {
+            lock (_pacerBgraLock)
+            {
+                if (_pacerLatestBgra != null && _pacerStagingBgra != null)
+                {
+                    Buffer.BlockCopy(_pacerLatestBgra, 0, _pacerStagingBgra, 0, _pacerLatestBgra.Length);
+                    _pacerDirty = false;
+                }
+                else
+                {
+                    hasNew = false;
+                }
+            }
+        }
+
+        if (hasNew && _pacerStagingBgra != null && _nv12Buf != null)
+        {
+            ColorConverter.BgraToNv12(_pacerStagingBgra, _nv12Buf, _config.Width, _config.Height);
+        }
+        else
+        {
+            // 前フレーム複製（_nv12Buf は StartAsync で初期化された黒フレームまたは直前の変換結果）
+            Interlocked.Increment(ref _dupCount);
+        }
+
+        if (_nv12Buf != null)
+        {
+            pipe.Write(_nv12Buf, 0, nv12Size);
+            Interlocked.Increment(ref _frameCount);
+        }
+    }
+
+    // ==================== Pacer モード実装 ここまで ====================
 
     /// <summary>
     /// 音声データをキューに追加（WASAPIコールバックから呼ばれる、絶対にブロックしない）。
@@ -693,6 +849,7 @@ public sealed class FfmpegProcess : IDisposable
 
         var totalFrames = FrameCount;
         var totalDrops = DropCount;
+        var totalDups = DupCount;
         var totalAudioDrops = AudioDropCount;
         var dropRate = totalFrames > 0 ? (double)totalDrops / (totalFrames + totalDrops) * 100 : 0;
         var slowWrites = Interlocked.Read(ref _slowWriteCount);
@@ -700,12 +857,12 @@ public sealed class FfmpegProcess : IDisposable
         var uptime = Uptime;
 
         Log.Information("[FFmpeg] === 配信終了レポート ({Uptime:hh\\:mm\\:ss}) === " +
-            "フレーム: {Frames} ドロップ: {Drops} ({DropRate:F1}%) | " +
+            "フレーム: {Frames} ドロップ: {Drops} ({DropRate:F1}%) 複製: {Dups} | " +
             "音声ドロップ: {AudioDrops} | 最終speed: {Speed:F3}x fps: {Fps} | " +
-            "パイプ遅延: slow={SlowWrites}回 max={MaxWrite}ms",
-            uptime, totalFrames, totalDrops, dropRate,
+            "パイプ遅延: slow={SlowWrites}回 max={MaxWrite}ms | VideoTiming: {Timing}",
+            uptime, totalFrames, totalDrops, dropRate, totalDups,
             totalAudioDrops, _lastSpeed, _lastFps,
-            slowWrites, maxWrite);
+            slowWrites, maxWrite, _config.VideoTiming);
 
         try
         {
@@ -732,6 +889,10 @@ public sealed class FfmpegProcess : IDisposable
             // パイプ閉鎖後に音声書き込みスレッドの終了を待つ
             _audioWriter?.Join(2000);
             _audioWriter = null;
+
+            // Pacer スレッドも終了を待つ
+            _pacerThread?.Join(2000);
+            _pacerThread = null;
 
             // Wait up to 5 seconds for graceful exit
             using var cts = new CancellationTokenSource(5000);
