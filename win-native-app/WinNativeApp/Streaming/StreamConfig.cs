@@ -7,20 +7,6 @@ public enum OutputMode
 }
 
 /// <summary>
-/// 映像タイムスタンプ方式。録画時のAV同期ドリフト検証用（plans/recording-av-sync-verification.md）。
-/// 検証完了後、採用案以外は削除する。
-/// </summary>
-public enum VideoTimingMode
-{
-    /// <summary>現行: rawvideo + -framerate で frame_index × (1/fps) の PTS 付与</summary>
-    Default,
-    /// <summary>映像入力に -use_wallclock_as_timestamps 1 を付与し、読み取り時刻で PTS 付与</summary>
-    Wallclock,
-    /// <summary>C#側で fps Hz の tick タイマーを持ち、各 tick で最新フレーム（なければ前フレーム複製）を書き込む</summary>
-    Pacer,
-}
-
-/// <summary>
 /// パイプライン状態。配信・録画・アップロードを排他管理する。
 /// Uploading中は録画中のファイルをサーバへ送出中で、次の録画・配信は両方ブロックされる。
 /// </summary>
@@ -51,12 +37,6 @@ public class StreamConfig
 
     public OutputMode Mode { get; set; } = OutputMode.Rtmp;
     public string? OutputPath { get; set; }
-
-    /// <summary>
-    /// 映像タイムスタンプ方式。録画時のAV同期検証用。
-    /// `--video-timing default|wallclock|pacer` または環境変数 `VIDEO_TIMING=...` で切替。
-    /// </summary>
-    public VideoTimingMode VideoTiming { get; set; } = VideoTimingMode.Default;
 
     /// <summary>
     /// 音声タイムスタンプのオフセット（秒）。音声パイプライン遅延を補正する。
@@ -103,9 +83,6 @@ public class StreamConfig
                         System.Globalization.CultureInfo.InvariantCulture, out var offset))
                         config.AudioOffset = offset;
                     break;
-                case "--video-timing" when i + 1 < args.Length:
-                    config.VideoTiming = ParseVideoTiming(args[++i]);
-                    break;
             }
         }
 
@@ -122,19 +99,8 @@ public class StreamConfig
             System.Globalization.CultureInfo.InvariantCulture, out var envOffset))
             config.AudioOffset = envOffset;
 
-        var videoTimingEnv = Environment.GetEnvironmentVariable("VIDEO_TIMING");
-        if (!string.IsNullOrEmpty(videoTimingEnv))
-            config.VideoTiming = ParseVideoTiming(videoTimingEnv);
-
         return config;
     }
-
-    private static VideoTimingMode ParseVideoTiming(string value) => value.ToLowerInvariant() switch
-    {
-        "wallclock" => VideoTimingMode.Wallclock,
-        "pacer" => VideoTimingMode.Pacer,
-        _ => VideoTimingMode.Default,
-    };
 
     private static void ParseResolution(string value, StreamConfig config)
     {

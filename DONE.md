@@ -1,5 +1,15 @@
 # DONE
 
+## 録画AV同期: wallclock 方式の本実装（Pacer / VideoTimingMode 削除）
+
+- [x] 背景: `plans/recording-av-sync-verification.md` の検証で wallclock 採用が確定したため、切替フラグや競合案（Pacer）を削除して録画時常時 wallclock に統一
+- [x] `FfmpegProcess.cs`: 録画モード（`OutputMode.File`）で**常に** `-use_wallclock_as_timestamps 1` を映像入力に付与する実装に変更。配信モード（RTMP）は従来通り
+- [x] `FfmpegProcess.cs`: Pacer 実装をすべて削除（`StartVideoPacer` / `PacerLoop` / `WritePacerFrame` / `UpdatePacerLatestFrame` / `_pacerLatestBgra` / `_pacerStagingBgra` / `_pacerBgraLock` / `_pacerDirty` / `_pacerThread` / `_pacerStartTick` / `_pacerWrittenCount` / `WriteVideoFrame` の Pacer 分岐 / `StopAsync` の Pacer スレッド Join）。関連して `_dupCount` / `DupCount` フィールド・プロパティ・ログも撤去
+- [x] `StreamConfig.cs`: `VideoTimingMode` enum・`VideoTiming` プロパティ・`--video-timing` / `VIDEO_TIMING` パース処理を削除
+- [x] `stream.sh`: `--video-timing default|wallclock|pacer` フラグを Usage / オプション説明から削除。`--av-sync-test` は将来の回帰検証用に残置（検証素材 `static/av_sync_test.html` と計測スクリプト `scripts/verify_av_sync.py` も残す）
+- [x] `plans/recording-av-sync-fix.md` を「録画時のみ `-use_wallclock_as_timestamps 1`・WASAPI Loopback は不採用」の本実装版に書き換え。Phase 2（Loopback）は不要として記載
+- [x] 残課題（TODO.md 反映済み）: 実 TTS 発話ありでのリップシンク目視確認、長尺（30分）でのドリフト累積確認、必要に応じて `-itsoffset` での定数オフセット補正
+
 ## 録画AV同期: 原因切り分け検証（wallclock採用決定、本実装は次セッション）
 
 - [x] 背景: `plans/recording-av-sync-fix.md` の実装前に、「映像PTS = frame_index ベース」が AV ズレの根本原因かを 3 ビルド（default / wallclock / pacer）で数値比較

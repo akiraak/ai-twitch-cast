@@ -7,15 +7,14 @@
 #   ./stream.sh --stop           # アプリ停止
 #   ./stream.sh --status         # 動作状況確認
 #   ./stream.sh --save-frames    # デバッグ: フレームをPNG保存
-#   ./stream.sh --av-sync-test --video-timing wallclock  # AV同期検証モード
+#   ./stream.sh --av-sync-test   # AV同期検証用HTMLで起動（回帰検証用）
 #
 # オプション:
 #   --stream                          配信開始（TWITCH_STREAM_KEY必須）
 #   --stop                            アプリ停止
 #   --status                          動作状況確認
 #   --save-frames                     キャプチャフレームをPNG保存（デバッグ用）
-#   --av-sync-test                    URL を av_sync_test.html に差し替え（録画検証用）
-#   --video-timing default|wallclock|pacer  映像PTS方式（録画AV同期検証）
+#   --av-sync-test                    URL を av_sync_test.html に差し替え（録画AV同期の回帰検証用）
 #   --resolution WxH                  解像度（デフォルト: 1920x1080）
 #   --fps N                           フレームレート（デフォルト: 30）
 #   --bitrate Nk                      映像ビットレート（デフォルト: 2500k）
