@@ -8,7 +8,6 @@
 
 ## その他
 - [ ] テストの検証。不要なものを削除。必要なものがあれば追加 → [plans/test-suite-audit.md](plans/test-suite-audit.md)
-  - [ ] Step 5: `scripts/web.py` の `@app.on_event` を FastAPI lifespan ハンドラに移行（DeprecationWarning解消）
   - [ ] Step 6: `CLAUDE.md` のテスト構成表を実体と一致させ、`-m "not slow"` 運用を追記
 - [ ] クライアントに動画撮影機能を入れる
 - [ ] Claude Code Hook の Yes/No の時も会話のかけあいになるけどちょびが一言言うだけでいい

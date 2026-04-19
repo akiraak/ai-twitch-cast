@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -44,7 +45,55 @@ from scripts.routes.twitch import router as twitch_router
 from src.ai_responder import load_character
 from src import scene_config
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """起動時にキャラクターをDBにシード＆前回の接続状態を自動復旧する"""
+    try:
+        load_character()
+    except Exception:
+        pass
+
+    # 配信言語設定を復元
+    try:
+        from src.prompt_builder import set_stream_language
+        primary = scene_config.load_config_value("stream_lang_primary")
+        if primary:
+            sub = scene_config.load_config_value("stream_lang_sub") or "none"
+            mix = scene_config.load_config_value("stream_lang_mix") or "low"
+            set_stream_language(primary, sub, mix)
+            logger.info("配信言語復元: primary=%s, sub=%s, mix=%s", primary, sub, mix)
+    except Exception:
+        pass
+
+    # SE自動登録
+    from scripts.routes.se import scan_and_register_se
+    scan_and_register_se()
+
+    # TODO.mdファイル監視を開始
+    from scripts.routes.overlay import start_todo_watcher
+    start_todo_watcher()
+
+    # Setup済みの状態ファイルがあれば復旧処理をバックグラウンド起動
+    if STATE_FILE.exists():
+        asyncio.create_task(_restore_session())
+        asyncio.create_task(_notify_server_restart())
+
+    yield
+
+    # 終了時にリソースを解放
+    try:
+        await state.reader.stop()
+    except Exception:
+        pass
+    try:
+        await state.git_watcher.stop()
+    except Exception:
+        pass
+    logger.info("シャットダウン完了")
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -164,45 +213,6 @@ async def start():
     return {"ok": True}
 
 
-@app.on_event("startup")
-async def startup():
-    """起動時にキャラクターをDBにシード＆前回の接続状態を自動復旧する"""
-    try:
-        load_character()
-    except Exception:
-        pass
-
-    # 配信言語設定を復元
-    try:
-        from src.prompt_builder import set_stream_language
-        primary = scene_config.load_config_value("stream_lang_primary")
-        if primary:
-            sub = scene_config.load_config_value("stream_lang_sub") or "none"
-            mix = scene_config.load_config_value("stream_lang_mix") or "low"
-            set_stream_language(primary, sub, mix)
-            logger.info("配信言語復元: primary=%s, sub=%s, mix=%s", primary, sub, mix)
-    except Exception:
-        pass
-
-    # SE自動登録
-    from scripts.routes.se import scan_and_register_se
-    scan_and_register_se()
-
-    # TODO.mdファイル監視を開始
-    from scripts.routes.overlay import start_todo_watcher
-    start_todo_watcher()
-
-    # Setup済みの状態ファイルがなければ復旧しない
-    if not STATE_FILE.exists():
-        return
-
-    # 復旧処理はバックグラウンドで実行（サーバーを即座に応答可能にする）
-    asyncio.create_task(_restore_session())
-
-    # WebSocketクライアントにサーバー再起動を通知（ポーリング不要化）
-    asyncio.create_task(_notify_server_restart())
-
-
 async def _notify_server_restart():
     """WebSocketクライアントにサーバー再起動を通知する（クライアント接続を少し待つ）"""
     await asyncio.sleep(2)
@@ -297,20 +307,6 @@ async def _speak_pending_commits(pending_file):
         logger.info("保留コミット読み上げ完了・ファイル削除")
     except Exception as e:
         logger.warning("保留コミット読み上げ失敗: %s", e)
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    """終了時にリソースを解放する"""
-    try:
-        await state.reader.stop()
-    except Exception:
-        pass
-    try:
-        await state.git_watcher.stop()
-    except Exception:
-        pass
-    logger.info("シャットダウン完了")
 
 
 if __name__ == "__main__":

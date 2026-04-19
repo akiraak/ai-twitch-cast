@@ -1,5 +1,28 @@
 # DONE
 
+## テストスイート棚卸し Step 5: `scripts/web.py` の `@app.on_event` を FastAPI lifespan に移行
+
+- [x] 背景: Step 4-b 完了時点で残っていた 4 件の `DeprecationWarning` はすべて `scripts/web.py:167` (`@app.on_event("startup")`) と `:302` (`@app.on_event("shutdown")`) 由来。FastAPI の推奨は lifespan context manager への移行
+- [x] 実施内容:
+  - `from contextlib import asynccontextmanager` を追加
+  - `@asynccontextmanager async def lifespan(app: FastAPI)` を定義して `app = FastAPI(lifespan=lifespan)` に渡す
+  - 旧 `startup()` 関数のロジック（load_character / set_stream_language / scan_and_register_se / start_todo_watcher / STATE_FILE チェック + `_restore_session` / `_notify_server_restart` のバックグラウンド起動）を `yield` の前に移動
+  - 旧 `shutdown()` 関数のロジック（reader.stop / git_watcher.stop）を `yield` の後に移動
+  - `@app.on_event("startup")` / `@app.on_event("shutdown")` 関数定義を削除
+  - ヘルパー（`_restore_session` / `_notify_server_restart` / `_speak_pending_commits`）は lifespan より後に定義されているが、Python の名前解決は呼び出し時なので問題なし
+- [x] 設計上のポイント:
+  - lifespan 関数は `STATE_FILE` / `SERVER_STARTED_AT` / `PROJECT_DIR` / `_restore_session` 等を参照するが、それらは `app = FastAPI(lifespan=lifespan)` より後に定義されている。lifespan の本体はサーバー起動時（全モジュールトップレベルコード実行後）に呼ばれるので、参照時点では全て存在する
+  - `app = FastAPI(lifespan=lifespan)` を経由したうえで `app.mount(...)` / `app.include_router(...)` / `app.middleware(...)` を続ける、という既存構造を保てるように lifespan を上に挿入した
+  - smoke test: `python3 -c "from scripts.web import app; ..."` で `app.router.lifespan_context is not None` を確認
+- [x] リグレッション検証:
+  - `-m "not slow"`: 1264 passed / 6 deselected / 377.22s / **0 warnings**（Step 4-b の 349.75s, 4 warnings → DeprecationWarning 4件が消失・時間は計測ノイズ内）
+  - `-m "slow"`: 6 passed / 1264 deselected / 264.46s（regression 無し）
+- [x] 完了条件との関係:
+  - 「DeprecationWarning なし」の完了条件を達成（4 → 0）
+  - 実行時間への影響はなし（lifespan の init/teardown コストは on_event と同等）
+  - テストは TestClient を `with` 文なしで利用しているため、lifespan 本体はテスト中には呼ばれない（on_event 時代と挙動同じ）
+- 残タスク: Step 6（`CLAUDE.md` のテスト構成表更新 + `-m "not slow"` 運用の追記）
+
 ## テストスイート棚卸し Step 4-b: 実 `asyncio.sleep` を使うテストをモック/イベント待ちに置換
 
 - [x] 棚卸し: `tests/` 配下の `time.sleep` / `asyncio.sleep` を全件列挙し、本番コードの sleep が実時間で走っているテストを抽出

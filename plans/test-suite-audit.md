@@ -1,6 +1,6 @@
 # テストスイートの棚卸し（不要削除・不足補完）
 
-## ステータス: 進行中（Step 4-b 完了）
+## ステータス: 進行中（Step 5 完了）
 
 ## 背景
 
@@ -272,6 +272,31 @@
 
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
+
+### Step 5 実装結果: `scripts/web.py` の `@app.on_event` を FastAPI lifespan に移行（2026-04-18）
+
+- 背景: Step 4-b 完了時点で残っていた 4 件の `DeprecationWarning` はすべて `scripts/web.py:167`（`@app.on_event("startup")`）と `:302`（`@app.on_event("shutdown")`）由来。FastAPI 公式の推奨は lifespan context manager への移行
+- 実施内容:
+  1. `from contextlib import asynccontextmanager` を追加
+  2. `@asynccontextmanager async def lifespan(app: FastAPI)` を定義。本体は旧 `startup()` のロジック（`load_character` / 言語復元 / `scan_and_register_se` / `start_todo_watcher` / `STATE_FILE` チェック後の `_restore_session` & `_notify_server_restart` 起動）→ `yield` → 旧 `shutdown()` のロジック（`reader.stop` / `git_watcher.stop` / ログ）
+  3. `app = FastAPI()` を `app = FastAPI(lifespan=lifespan)` に変更
+  4. 旧 `@app.on_event("startup") async def startup(): ...` / `@app.on_event("shutdown") async def shutdown(): ...` を削除
+  5. `_restore_session` / `_notify_server_restart` / `_speak_pending_commits` はそのまま残置（lifespan の後で定義されるが、呼び出し時解決で問題なし）
+- 設計上のポイント:
+  - **lifespan を `app = FastAPI(lifespan=lifespan)` より上に置く必要がある**（コンストラクタに渡すため）。lifespan 本体は `STATE_FILE` / `PROJECT_DIR` / `_restore_session` などを参照するが、いずれもモジュールトップレベルのコード実行後（= lifespan 呼出時）には存在する
+  - TestClient を `with` なしで使っている既存テスト（`conftest.py:128`）の挙動は変わらない（on_event 時代と同じく startup/shutdown が呼ばれない）ため、**テスト側の変更は不要**
+  - smoke test: `python3 -c "from scripts.web import app, lifespan; print(app.router.lifespan_context is not None)"` → `OK: True`
+- 計測結果:
+  - `-m "not slow"`: 1264 passed / 6 deselected / 377.22s / **0 warnings**（Step 4-b: 349.75s, 4 warnings → 全 DeprecationWarning 解消 / 時間は計測ノイズ ±10s 程度）
+  - `-m "slow"`: 6 passed / 1264 deselected / 264.46s（regression 無し）
+  - 全件: 1270 passed / 0 warnings
+- 完了条件との関係:
+  - 「DeprecationWarning なし」の完了条件を達成（4 → 0）
+  - 実行時間への影響は計測ノイズ内。lifespan の init/teardown コストは on_event とほぼ同等
+- 注意点・学び:
+  - TestClient でも lifespan は `with TestClient(app) as c:` 文で初めて発火する。`TestClient(app)` 単独呼出しでは lifespan は呼ばれない（on_event と同じ挙動）。既存テストが `with` を使っていなかったのはそれで問題なく、lifespan 移行後も同じ
+  - 既存の `asyncio.create_task(_restore_session())` のような非同期バックグラウンド起動は lifespan の `yield` 前でそのまま使える。実運用時は uvicorn のイベントループに載る
+- 残タスク: Step 6（`CLAUDE.md` のテスト構成表更新 + `-m "not slow"` 運用の追記）
 
 ### Step 4-b 実装結果: 実 `asyncio.sleep` を使うテストをモック/イベント待ちに置換（2026-04-18）
 
