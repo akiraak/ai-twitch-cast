@@ -273,6 +273,34 @@
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
 
+### Step 3-4 実装結果: `character_manager.py` のテスト追加（2026-04-18）
+
+- 実施内容: `tests/test_character_manager.py` を新規作成（**32ケース**）。`src/character_manager.py` の全12関数＋DEFAULT_*定数を10のテストクラスに分けて網羅
+- カテゴリ別内訳:
+  - **モジュール定数**（3ケース）: `DEFAULT_CHARACTER` / `DEFAULT_STUDENT_CHARACTER` の必須キー確認（`role` / `tts_voice` / `tts_style` / `system_prompt` / `emotions` / `emotion_blendshapes`）、先生と生徒の `tts_voice` が異なることを保証
+  - **`get_channel_id`**（2ケース）: `TWITCH_CHANNEL` 環境変数での解決、未設定時の `"default"` フォールバック
+  - **`seed_character`**（3ケース）: 作成・冪等・**他チャンネル由来のフォールバック行を採用しない**（`get_character_by_channel` が他chのキャラを返すため、channel_id 一致確認で二度作りしないロジック）。name UNIQUE 制約ゆえ他ch でも既存「ちょビ」が返る挙動を明示
+  - **`seed_all_characters`**（5ケース）: 先生＋生徒の同時作成、冪等、既存teacher の config に role が無い場合の補填、**「まなび」→「なるこ」マイグレーション**（name rename + `system_prompt` 文字列の「「まなび」→「なるこ」」置換）、生徒既存時に追加作成しない
+  - **`load_character` / `get_character` / `get_character_id` / `invalidate_character_cache`**（5ケース）: DB ロード、モジュールレベルキャッシュ（`_character` / `_character_id`）の lazy load、無効化後の再ロード
+  - **`build_character_context`**（5ケース）: teacher/student の `{id, name, role, config, persona, self_note}` 返却、未知role で None、`update_character_persona` / `update_character_self_note` 経由で persona/self_note が次回取得時に反映、config dict に `name` が注入される
+  - **`build_all_character_contexts`**（1ケース）: teacher/student が同時取得できる
+  - **`get_all_characters`**（2ケース）: teacher+student が含まれる、各エントリに `id` と展開後の config キー（`role` / `system_prompt` 等）が両方ある
+  - **`get_chat_characters`**（1ケース）: teacher/student 両方の config が返る
+  - **`get_tts_config`**（5ケース）: 言語別（ja/en/bilingual）の style 選択、`character_id` 指定時にそのキャラの voice/style を返す、**存在しないIDなら現行キャラ（先生）にフォールバック**
+- 設計上のポイント:
+  - `test_db` のインメモリSQLite上で **実DBを使ってマイグレーションロジックを検証**（モックせず `get_or_create_character` / `update_character` などの本物の挙動を通す）
+  - `invalidate_character_cache()` を各クラスの `setup_method` で呼び、テスト間のモジュール状態汚染を防止
+  - `get_tts_config` のstyle分岐は `src.prompt_builder.set_stream_language` のグローバル状態に依存するので `setup/teardown` で `("ja", "en", "low")` に戻す
+  - `build_character_context` のテストは `update_character_persona` / `update_character_self_note` を直接呼び出して次回 build 時に反映されることを確認（`get_character_memory` の lazy upsert 挙動も兼ねてカバー）
+- **テスト整理（Step 1-c 指摘への対応）**:
+  - Step 1-c で「位置ずれ」として識別された既存ケースを `tests/test_ai_responder.py` から `tests/test_character_manager.py` に吸収:
+    - `TestCharacterManagement`（5ケース）
+    - `TestGetChatCharacters`（1ケース）
+    - `TestGetTtsConfig`（3ケース）
+  - これらは実対象が `src/character_manager.py`（`ai_responder` は re-export のみ）だったので、責務分離後の所在として test_character_manager 側に集約。旧ファイルからは重複削除した上で未使用 import（`MagicMock` / `patch` / `DEFAULT_CHARACTER_NAME` / `DEFAULT_STUDENT_CHARACTER_NAME` / `get_character` / `get_chat_characters` / `get_tts_config` / `load_character` / `seed_character`）も掃除
+  - 吸収＋新規33ケース相当だが、旧9ケースと新規ケースで重複する内容（seed idempotent / load / lazy load / invalidate / get_chat_characters / get_tts_config 言語分岐）は新規側に統合し直し、**最終的に test_character_manager.py は 32ケース**になった
+- 結果: `python3 -m pytest tests/ -q` → **1069 passed / 5 warnings / 9:47**（1046 → 1069 / +23件・リグレッションなし）。warnings は Step 5 で解消予定の `@app.on_event` DeprecationWarning のみ
+
 ### Step 3-3 実装結果: `scripts/routes/capture.py` のテスト追加（2026-04-18）
 
 - 実施内容: `tests/test_api_capture.py` を新規作成（595行 / 53ケース）。サーバー状態・ウィンドウ一覧・保存済み設定CRUD・復元・キャプチャ開始/停止/一覧/レイアウト・スクリーンショット・配信ストリーミング・内部ヘルパーを網羅

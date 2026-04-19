@@ -1,16 +1,16 @@
-"""ai_responder のテスト（キャラクター管理・AI応答生成）
+"""ai_responder のテスト（AI応答生成）
 
-注: 言語モード・プロンプト構築のテストは test_prompt_builder.py を参照
+注:
+- 言語モード・プロンプト構築のテストは test_prompt_builder.py を参照
+- キャラクター管理（seed/load/cache/get_tts_config 等）のテストは
+  test_character_manager.py を参照（character_manager.py に責務分離済み）
 """
 
 import json
-from unittest.mock import MagicMock, patch
 
 from src.ai_responder import (
     DEFAULT_CHARACTER,
-    DEFAULT_CHARACTER_NAME,
     DEFAULT_STUDENT_CHARACTER,
-    DEFAULT_STUDENT_CHARACTER_NAME,
     generate_multi_event_response,
     generate_multi_response,
     generate_persona_from_prompt,
@@ -18,48 +18,10 @@ from src.ai_responder import (
     generate_event_response,
     generate_user_notes,
     generate_self_note,
-    get_character,
-    get_chat_characters,
-    get_tts_config,
     invalidate_character_cache,
-    load_character,
-    seed_character,
     _validate_multi_response,
 )
 from src.prompt_builder import set_stream_language
-from src.prompt_builder import set_stream_language
-
-
-class TestCharacterManagement:
-    def setup_method(self):
-        invalidate_character_cache()
-
-    def test_seed_character_creates(self, test_db):
-        ch = test_db.get_or_create_channel("test_ch")
-        char = seed_character(ch["id"])
-        assert char["name"] == DEFAULT_CHARACTER_NAME
-
-    def test_seed_character_idempotent(self, test_db):
-        ch = test_db.get_or_create_channel("test_ch")
-        c1 = seed_character(ch["id"])
-        c2 = seed_character(ch["id"])
-        assert c1["id"] == c2["id"]
-
-    def test_load_character_from_db(self, test_db, mock_env):
-        result = load_character()
-        assert result["name"] == DEFAULT_CHARACTER_NAME
-
-    def test_get_character_lazy_loads(self, test_db, mock_env):
-        char = get_character()
-        assert "system_prompt" in char
-        assert "emotions" in char
-
-    def test_invalidate_cache(self, test_db, mock_env):
-        load_character()
-        invalidate_character_cache()
-        # _character is None, get_character will reload
-        char = get_character()
-        assert char is not None
 
 
 class TestGenerateResponse:
@@ -230,18 +192,6 @@ class TestGeneratePersonaFromPrompt:
         assert result == ""
 
 
-class TestGetChatCharacters:
-    def setup_method(self):
-        invalidate_character_cache()
-
-    def test_returns_teacher_and_student(self, test_db, mock_env):
-        result = get_chat_characters()
-        assert result["teacher"] is not None
-        assert result["teacher"]["name"] == DEFAULT_CHARACTER_NAME
-        assert result["student"] is not None
-        assert result["student"]["name"] == DEFAULT_STUDENT_CHARACTER_NAME
-
-
 class TestValidateMultiResponse:
     def test_validates_teacher_emotion(self):
         characters = {
@@ -398,36 +348,3 @@ class TestGenerateMultiEventResponse:
         assert "交互" in system_instruction
 
 
-class TestGetTtsConfig:
-    """get_tts_config の言語対応テスト"""
-
-    def setup_method(self):
-        set_stream_language("ja", "en", "low")
-        invalidate_character_cache()
-
-    def test_ja_returns_default_style(self, test_db, mock_env):
-        set_stream_language("ja", "none", "low")
-        config = get_tts_config()
-        style = config["style"]
-        # 日本語版tts_styleが返る
-        assert style is not None
-        assert isinstance(style, str)
-
-    def test_en_returns_en_style(self, test_db, mock_env):
-        set_stream_language("en", "none", "low")
-        config = get_tts_config()
-        style = config["style"]
-        # 英語版tts_style_enがあればそれが返る、なければ日本語版にフォールバック
-        assert style is not None
-        assert isinstance(style, str)
-
-    def test_bilingual_returns_bilingual_style(self, test_db, mock_env):
-        set_stream_language("ja", "en", "low")
-        config = get_tts_config()
-        style = config["style"]
-        # バイリンガル版tts_style_bilingualがあればそれが返る
-        assert style is not None
-        assert isinstance(style, str)
-
-    def teardown_method(self):
-        set_stream_language("ja", "en", "low")
