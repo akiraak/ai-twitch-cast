@@ -8,8 +8,7 @@
 
 ## その他
 - [ ] テストの検証。不要なものを削除。必要なものがあれば追加 → [plans/test-suite-audit.md](plans/test-suite-audit.md)
-  - [ ] Step 4-a: 遅いテストに `@pytest.mark.slow` 付与 + `pytest.ini` にマーカー登録（目標: `-m "not slow"` で 60秒以内）
-  - [ ] Step 4-b: `time.sleep` / 実I/O を使うテストを `freezegun` / モック化で置換
+  - [ ] Step 4-b: `time.sleep` / 実I/O を使うテストを `freezegun` / モック化で置換（`-m "not slow"` を更に 60 秒以内まで短縮する）
   - [ ] Step 5: `scripts/web.py` の `@app.on_event` を FastAPI lifespan ハンドラに移行（DeprecationWarning解消）
   - [ ] Step 6: `CLAUDE.md` のテスト構成表を実体と一致させ、`-m "not slow"` 運用を追記
 - [ ] クライアントに動画撮影機能を入れる

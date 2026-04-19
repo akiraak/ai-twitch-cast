@@ -1,6 +1,6 @@
 # テストスイートの棚卸し（不要削除・不足補完）
 
-## ステータス: 未着手
+## ステータス: 進行中（Step 4-a 完了）
 
 ## 背景
 
@@ -272,6 +272,31 @@
 
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
+
+### Step 4-a 実装結果: 遅いテストへの `@pytest.mark.slow` 付与（2026-04-18）
+
+- 実施内容:
+  - `pytest.ini` の `[pytest]` セクションに `markers = slow: long-running tests (除外するには -m "not slow")` を追記
+  - Step 1-a で特定した遅い call 上位6件に `@pytest.mark.slow` を付与:
+    - `tests/test_lesson_runner.py::TestPlaybackPersistence::test_send_all_and_play_saves_state`（63.81s）
+    - `tests/test_lesson_runner.py::TestSendAllAndPlay::test_sends_lesson_load_with_all_sections`（66.98s）
+    - `tests/test_lesson_runner.py::TestSendAllAndPlay::test_resume_from_saved_index`（60.67s）
+    - `tests/test_lesson_runner.py::TestSendAllAndPlay::test_tts_progress_notification`（60.22s）
+    - `tests/test_speech_pipeline.py::TestSpeak::test_speak_with_tts_failure`（5.01s）
+    - `tests/test_speech_pipeline.py::TestSpeak::test_speak_no_chat_callback`（5.01s）
+- 計測結果:
+  - **`-m "not slow"`**: 1264 passed / 6 deselected / **358.81 秒（5:58）** — 元 526.91 秒から **約168秒削減（≒32%短縮）**
+  - **`-m "slow"`**: 6 passed / 1264 deselected / **263.72 秒（4:23）** — 上位 4 件で 251.68 秒、speech_pipeline 2 件で 10.02 秒。Step 1-a 計測と完全一致しており、付与漏れ無し
+  - 通常実行と slow を分けたことで、開発フローでは `-m "not slow"` を回せば 6 分弱で済む（元 9 分弱）
+- 注意点:
+  - 完了条件「通常実行 60 秒以内」は Step 4-a 単独では達成不可（358 秒で打ち止め）。残りの削減は **`api_client` フィクスチャ生成コスト**（setup の 0.6〜1.0 秒帯 22 件）と Step 4-b（`asyncio.sleep` モック化）による。Step 4-a の責務はマーカー仕分けまでで、この後の高速化は別ステップで取り組む
+  - 5 件の `@app.on_event` `DeprecationWarning` は引き続き残存（Step 5 の lifespan 移行で解消予定）
+  - **マーカー運用ルール**:
+    - 開発中の通常実行: `python3 -m pytest tests/ -q -m "not slow"`
+    - フル実行（コミット前 / CI）: `python3 -m pytest tests/ -q`
+    - `-m "slow"` 単独実行: 遅いテスト群が壊れていないかピンポイント確認用
+  - Step 6 の CLAUDE.md 更新時に「テスト実行方法」セクションへ `-m "not slow"` の使い分けを明記する
+- 結果: マーカー付与＋計測のみで実装変更なし。将来 lesson_runner.py の `asyncio.sleep` ループをフェイクタイマー化すれば、slow マーカーを外して通常実行に戻せる候補
 
 ### Step 3-7 実装結果: `twitch_api.py` / `twitch_chat.py` のテスト追加（2026-04-18）
 

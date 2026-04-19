@@ -1,5 +1,24 @@
 # DONE
 
+## テストスイート棚卸し Step 4-a: 遅いテストへの `@pytest.mark.slow` 付与
+
+- [x] `pytest.ini` にマーカーを登録（`markers = slow: long-running tests (除外するには -m "not slow")`）
+- [x] Step 1-a で特定した遅い call 上位 6 件に `@pytest.mark.slow` を付与:
+  - `tests/test_lesson_runner.py::TestPlaybackPersistence::test_send_all_and_play_saves_state`（63.81s）
+  - `tests/test_lesson_runner.py::TestSendAllAndPlay::test_sends_lesson_load_with_all_sections`（66.98s）
+  - `tests/test_lesson_runner.py::TestSendAllAndPlay::test_resume_from_saved_index`（60.67s）
+  - `tests/test_lesson_runner.py::TestSendAllAndPlay::test_tts_progress_notification`（60.22s）
+  - `tests/test_speech_pipeline.py::TestSpeak::test_speak_with_tts_failure`（5.01s）
+  - `tests/test_speech_pipeline.py::TestSpeak::test_speak_no_chat_callback`（5.01s）
+- [x] 計測結果:
+  - **`-m "not slow"`**: 1264 passed / 6 deselected / **358.81 秒（5:58）** — 元 526.91 秒から **約 168 秒削減（≒32% 短縮）**
+  - **`-m "slow"`**: 6 passed / 1264 deselected / **263.72 秒（4:23）** — Step 1-a 計測値と完全一致（付与漏れなし）
+- [x] マーカー運用ルール:
+  - 開発中の通常実行: `python3 -m pytest tests/ -q -m "not slow"`
+  - フル実行（コミット前 / CI）: `python3 -m pytest tests/ -q`
+  - `-m "slow"` 単独実行: 遅いテスト群が壊れていないかピンポイント確認用
+- 備考: 完了条件「通常実行 60 秒以内」は Step 4-a 単独では未達（358 秒で打ち止め）。残りは Step 4-b（`asyncio.sleep` モック化）と setup コスト削減で対応予定。5 件の `@app.on_event` `DeprecationWarning` は引き続き残存（Step 5 の lifespan 移行で解消）
+
 ## テストスイート棚卸し Step 3-7: `twitch_api.py` / `twitch_chat.py` のテスト追加
 
 - [x] `tests/test_twitch_api.py` 新規作成（**17ケース** / 全pass）。`src/twitch_api.py` の全メソッド＋ヘッダ整形をカバー

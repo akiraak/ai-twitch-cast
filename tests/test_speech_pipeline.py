@@ -233,6 +233,7 @@ class TestApplyEmotion:
 
 
 class TestSpeak:
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_speak_with_tts_failure(self):
         """TTS生成失敗時にチャット投稿とテキスト表示のみ行うこと"""
@@ -259,6 +260,7 @@ class TestSpeak:
 
         assert sp._current_audio is None
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_speak_no_chat_callback(self):
         """post_to_chatがNoneでもエラーにならないこと"""

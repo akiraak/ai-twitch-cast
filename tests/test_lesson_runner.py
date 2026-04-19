@@ -859,6 +859,7 @@ class TestPlaybackPersistence:
 
         assert LessonRunner.get_playback_state() is None
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_send_all_and_play_saves_state(self, mock_speech, tmp_path, monkeypatch, test_db):
         """_send_all_and_play 実行後にDBに状態が保存される"""
@@ -1088,6 +1089,7 @@ class TestRestore:
 class TestSendAllAndPlay:
     """全セクション一括送信方式（Phase B）のテスト"""
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_sends_lesson_load_with_all_sections(self, mock_speech, tmp_path, monkeypatch):
         """_send_all_and_playが全セクションを1つのlesson_loadで送信する"""
@@ -1317,6 +1319,7 @@ class TestSendAllAndPlay:
         # IDLEなので lesson_load も送られない
         mock_ws.assert_not_called()
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_resume_from_saved_index(self, mock_speech, tmp_path, monkeypatch):
         """self._current_index > 0 の場合、そのセクションから送信を開始する"""
@@ -1364,6 +1367,7 @@ class TestSendAllAndPlay:
         # 再度 mock_ws_request を検査するため別パッチで再実行は不要
         # このテストではバンドル生成とdurationの整合性を暗黙確認
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_tts_progress_notification(self, mock_speech, tmp_path, monkeypatch):
         """TTS生成中のプログレスが on_overlay で通知される"""
