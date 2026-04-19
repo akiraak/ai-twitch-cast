@@ -1,5 +1,15 @@
 # DONE
 
+## 録画停止時の NullReferenceException クラッシュ修正（WriteVideoFrame × StopAsync race）
+
+- [x] 背景: 録画停止直後に C# アプリが NRE で落ち、MP4 アップロードが走らずローカルに残る事象。原因は `FfmpegProcess.WriteVideoFrame` が ThreadPool にキューした書き込みラムダと `StopAsync` の `_videoPipe?.Dispose()` → `_videoPipe = null` のレース。ラムダ側のガード通過〜`_videoPipe!.Write(...)` の間に Stop が割り込むと NRE → AppDomain.UnhandledException → プロセス終了
+- [x] Fix A: `FfmpegProcess.WriteVideoFrame` のラムダ先頭でローカル `pipe = _videoPipe` を取り、`_stopping || pipe is null` なら早期 return。以降は `pipe.Write(...)` を使い `_videoPipe!` の null 化レースを排除
+- [x] Fix B: ラムダの `catch (IOException)` を `catch (Exception ex) when (ex is IOException or ObjectDisposedException or NullReferenceException)` に拡張。race で起きる ODE/NRE も握り潰し、`_stopping=false` のときだけ Debug ログを残す（本物のバグを隠蔽しない）
+- [x] Fix C: `FfmpegProcess.StopAsync` の `_videoPipe?.Dispose()` の直前に、`_writingVideo` が false になるのを 200ms までスピンウェイト。キュー済みの映像ラムダが走り終わる前に pipe を dispose しないようにする
+- [x] `tests/test_native_app_patterns.py` **ガード追加**: `test_write_video_frame_lambda_early_returns_on_stopping` / `test_write_video_frame_catch_covers_race_exceptions` / `test_stop_async_waits_for_writing_video_before_pipe_dispose` の3件を追加して再発防止
+- [x] `plans/recording-stop-crash-fix.md` を「ステータス: 完了」に更新
+- [x] `python3 -m pytest tests/ -q -m "not slow"`: 1278 passed
+
 ## 録画AV同期: wallclock 方式の本実装（Pacer / VideoTimingMode 削除）
 
 - [x] 背景: `plans/recording-av-sync-verification.md` の検証で wallclock 採用が確定したため、切替フラグや競合案（Pacer）を削除して録画時常時 wallclock に統一

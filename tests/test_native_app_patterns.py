@@ -362,6 +362,82 @@ def test_on_tts_audio_clears_local_current_on_batch_interrupt():
     )
 
 
+# === FfmpegProcess.cs: WriteVideoFrame / StopAsync のレース防止 ===
+
+
+def test_write_video_frame_lambda_early_returns_on_stopping():
+    """WriteVideoFrame のラムダ先頭で _stopping / _videoPipe null チェックして早期 return すること。
+
+    StopAsync が _videoPipe = null にした後にラムダが走ると NRE → プロセス終了。
+    plans/recording-stop-crash-fix.md Fix A。
+    """
+    source = read_cs("Streaming/FfmpegProcess.cs")
+    body = _extract_method_body(source, r"public void WriteVideoFrame\(")
+    # ThreadPool.QueueUserWorkItem のラムダ内を抽出
+    lambda_match = re.search(
+        r"ThreadPool\.QueueUserWorkItem\(_\s*=>\s*\{(.*?)\}\s*\);",
+        body,
+        re.DOTALL,
+    )
+    assert lambda_match, "ThreadPool.QueueUserWorkItem のラムダが見つからない"
+    lambda_body = lambda_match.group(1)
+    # 先頭 try ブロックの最初の方に stopping/null チェックがあること
+    assert re.search(
+        r"if\s*\(\s*_stopping\s*\|\|\s*pipe\s+is\s+null\s*\)\s*return\s*;",
+        lambda_body,
+    ) or re.search(
+        r"if\s*\(\s*_stopping\s*\|\|\s*_videoPipe\s+is\s+null\s*\)\s*return\s*;",
+        lambda_body,
+    ), (
+        "WriteVideoFrame ラムダに stopping/null の早期 return がない。"
+        "StopAsync との race で NullReferenceException → プロセスクラッシュが再発する"
+    )
+
+
+def test_write_video_frame_catch_covers_race_exceptions():
+    """WriteVideoFrame のラムダが IOException に加え ObjectDisposedException /
+    NullReferenceException も catch すること。
+
+    race で起きる NRE/ODE を握り潰さないと AppDomain.UnhandledException に到達してプロセス終了。
+    plans/recording-stop-crash-fix.md Fix B。
+    """
+    source = read_cs("Streaming/FfmpegProcess.cs")
+    body = _extract_method_body(source, r"public void WriteVideoFrame\(")
+    lambda_match = re.search(
+        r"ThreadPool\.QueueUserWorkItem\(_\s*=>\s*\{(.*?)\}\s*\);",
+        body,
+        re.DOTALL,
+    )
+    assert lambda_match, "ThreadPool.QueueUserWorkItem のラムダが見つからない"
+    lambda_body = lambda_match.group(1)
+    # catch 節に ObjectDisposedException / NullReferenceException が入っていること
+    assert "ObjectDisposedException" in lambda_body, (
+        "WriteVideoFrame の catch が ObjectDisposedException を拾っていない"
+    )
+    assert "NullReferenceException" in lambda_body, (
+        "WriteVideoFrame の catch が NullReferenceException を拾っていない"
+    )
+
+
+def test_stop_async_waits_for_writing_video_before_pipe_dispose():
+    """StopAsync が _videoPipe.Dispose() の前に _writingVideo の収束を待つこと。
+
+    ThreadPool にキュー済みの映像書き込みラムダが走り終わる前にパイプを dispose すると、
+    ラムダ内 Write() が NRE/ODE を投げる。
+    plans/recording-stop-crash-fix.md Fix C。
+    """
+    source = read_cs("Streaming/FfmpegProcess.cs")
+    body = _extract_method_body(source, r"public async Task StopAsync\(\)")
+    dispose_pos = body.find("_videoPipe?.Dispose()")
+    assert dispose_pos != -1, "_videoPipe?.Dispose() が StopAsync に存在しない"
+    before_dispose = body[:dispose_pos]
+    # dispose より前に _writingVideo を待つループがあること
+    assert re.search(r"while\s*\([^)]*_writingVideo", before_dispose), (
+        "StopAsync で _videoPipe.Dispose() の前に _writingVideo の収束を待つループがない。"
+        "ThreadPool にキュー済みの書き込みラムダが pipe dispose 後に走って NRE → クラッシュする"
+    )
+
+
 # === Program.cs ===
 
 

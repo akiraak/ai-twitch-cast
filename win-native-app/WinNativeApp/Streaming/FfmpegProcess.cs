@@ -334,6 +334,11 @@ public sealed class FfmpegProcess : IDisposable
         {
             try
             {
+                // StopAsync と競合した場合、pipe が dispose/null 化されているので早期 return
+                // （ローカル変数 pipe に取り出すことで以降のチェック〜Write 間の null 化レースを排除）
+                var pipe = _videoPipe;
+                if (_stopping || pipe is null) return;
+
                 var sw = Stopwatch.StartNew();
 
                 // BGRA → NV12 変換（3.7MB → 1.4MB @1280x720）
@@ -341,7 +346,7 @@ public sealed class FfmpegProcess : IDisposable
                 var convertMs = sw.ElapsedMilliseconds;
 
                 // NV12をパイプに書き込み
-                _videoPipe!.Write(nv12, 0, nv12WriteSize);
+                pipe.Write(nv12, 0, nv12WriteSize);
                 sw.Stop();
                 Interlocked.Increment(ref _frameCount);
                 var writeMs = sw.ElapsedMilliseconds;
@@ -368,9 +373,14 @@ public sealed class FfmpegProcess : IDisposable
                     Log.Debug("[FFmpeg] NV12 convert={ConvMs}ms write={TotalMs}ms, frames={F} drops={D}",
                         convertMs, writeMs, fc, DropCount);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException
+                                    or ObjectDisposedException
+                                    or NullReferenceException)
             {
                 Interlocked.Increment(ref _dropCount);
+                // 停止中は想定内のレース（StopAsync と競合）。停止外で起きていたら痕跡を残す
+                if (!_stopping)
+                    Log.Debug("[FFmpeg] Video write race caught: {Type}", ex.GetType().Name);
             }
             finally
             {
@@ -730,6 +740,14 @@ public sealed class FfmpegProcess : IDisposable
             _bgmPcm = null;
             _seCurrentChunk = null;
             while (_seQueue.TryDequeue(out _)) { }
+
+            // パイプ dispose 前に、ThreadPool にキュー済みの映像書き込みラムダの終了を待つ
+            // （Fix A のラムダ先頭チェックだけでは、チェック〜Write 間に窓が残るため）
+            var spinStart = Environment.TickCount64;
+            while (_writingVideo && Environment.TickCount64 - spinStart < 200)
+                Thread.Sleep(5);
+            if (_writingVideo)
+                Log.Warning("[FFmpeg] Video writer did not finish within 200ms; forcing close");
 
             // パイプを先に閉じる → AudioWriterLoopのブロック中Write()を解除
             try { _videoPipe?.Dispose(); }
