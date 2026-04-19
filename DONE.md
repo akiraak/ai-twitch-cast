@@ -1,5 +1,20 @@
 # DONE
 
+## テストスイート棚卸し Step 3-2: `scripts/routes/avatar.py` のテスト追加
+
+- [x] `tests/test_api_avatar.py` 新規作成（27ケース / 全pass）。アバター制御APIをエンドポイント単位でクラス分けし、入口検証に徹する方針
+  - **発話系**（7ケース）: `/api/avatar/speak`（overlay current_task通知＋speak_event入口） / `/api/tts/test`（pattern文言・未知fallback・sub=none時の単一言語） / `/api/tts/test-emotion`（emotions辞書活用・未登録emotion） / `/api/tts/voice-sample`（ensure_reader＋voice/style/avatar_id伝搬、空文字→None）
+  - **連続発話**（1ケース）: `/api/tts/test-multi` — `generate_event_response` をモック、`SpeechPipeline.split_sentences` で句読点分割されたsegments/countの整合性を検証（30文字超のテキスト必須）
+  - **Claude Watcher制御**（6ケース）: status取得、config更新（interval最小60秒クランプ、全フィールド、max_utterances上限8、enable/disable時のstart/stop呼び出し）
+  - **チャット系**（4ケース）: `/api/chat/send`（`_chat.send_message`呼び出し）、`/api/chat/history`（空DB、pagination引数echo、avatar_comments混在）
+  - **TTS音声**（2ケース）: `/api/tts/audio` — 音声なし時の`{"error":"no audio"}`、ファイル存在時のFileResponse+Cache-Control
+  - **会話デモ**（5ケース）: status（meta未存在 / 整形済みdialogues）、play（meta未存在エラー / スケジュール成功）、generate（SSEで先生・生徒キャラ未登録エラー）
+- [x] `asyncio.create_task(reader.speak_event(...))` は `AsyncMock.__call__` が呼び出しを即座に記録する性質を利用して、TestClient の同期ブロック内でも入口検証が成立することを確認
+- [x] `_CONV_DEMO_DIR` は `monkeypatch.setattr(avatar_mod, "_CONV_DEMO_DIR", tmp_path / ...)` で差し替え、`resources/audio/conv_demo/` への書き込み漏洩を防止
+- [x] `state.ensure_reader` は呼び出す経路では AsyncMock 化し、本番の `db.get_or_create_channel` / `reader.start()` を走らせない
+- [x] `/api/chat/webui` は既存の `tests/test_api_chat.py` がカバー済みなので重複テスト追加はしない
+- [x] 全スイート `python3 -m pytest tests/ -q` → **993 passed** （966 → 993 / +27件・リグレッションなし）
+
 ## テストスイート棚卸し Step 3-1: `lesson_generator/improver.py` のテスト追加
 
 - [x] `tests/test_lesson_improver.py` 新規作成（50ケース / 全pass）

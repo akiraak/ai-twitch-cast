@@ -273,6 +273,35 @@
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
 
+### Step 3-2 実装結果: `scripts/routes/avatar.py` のテスト追加（2026-04-18）
+
+- 実施内容: `tests/test_api_avatar.py` を新規作成（452行 / 27ケース）。発話・TTSテスト・会話デモ・Claude Watcher制御・チャット履歴を一通りカバー
+- エンドポイントごとの内訳:
+  - **`/api/avatar/speak`**（2ケース）: overlay `current_task` 通知 + `speak_event` 入口検証、`event_type` / `voice` のpassthrough
+  - **`/api/tts/test`**（3ケース）: 既知pattern の文言確認、未知patternのランダムフォールバック、`sub=none` 時の単一言語指示
+  - **`/api/tts/test-emotion`**（2ケース）: `character.emotions` からの説明文取得、未登録感情のフォールバック
+  - **`/api/tts/voice-sample`**（2ケース）: `ensure_reader` 呼び出し + voice/style/avatar_id の伝搬、空文字をNone扱い
+  - **`/api/tts/test-multi`**（1ケース）: `generate_event_response` の応答を句読点分割、segments と count の整合性
+  - **`/api/claude-watcher/status`**（1ケース）: watcher.status 辞書をそのまま返す
+  - **`/api/claude-watcher/config`**（5ケース）: interval最小60秒クランプ、全フィールド更新、`max_utterances` 上限8、enable時start呼び出し、disable時stop呼び出し
+  - **`/api/chat/send`**（1ケース）: `_chat.send_message` 呼び出し
+  - **`/api/chat/history`**（3ケース）: 空DB、pagination引数echo、avatar_comments混在
+  - **`/api/tts/audio`**（2ケース）: 音声なし時の `{"error": "no audio"}`、ファイル存在時のFileResponse + Cache-Control
+  - **`/api/debug/conversation-demo/status`**（2ケース）: meta未存在 / meta+wav揃い（speaker/wav_url整形）
+  - **`/api/debug/conversation-demo/play`**（2ケース）: meta未存在のエラー、meta在でplayスケジュール成功
+  - **`/api/debug/conversation-demo/generate`**（1ケース）: 先生・生徒キャラ未登録時のSSEエラー経路
+- 設計上のポイント:
+  - `asyncio.create_task(reader.speak_event(...))` 経路は、`AsyncMock.__call__` が呼び出しを即座に記録する性質を利用して、TestClient 同期ブロック内でも `assert_called_once()` が成立することを確認
+  - `_CONV_DEMO_DIR`（module-level Path）は `monkeypatch.setattr(avatar_mod, "_CONV_DEMO_DIR", tmp_path / ...)` で差し替え、`resources/audio/conv_demo/` への漏洩を防止
+  - `state.ensure_reader` は呼び出す経路では AsyncMock 化して、本番の `db.get_or_create_channel` / `reader.start()` を走らせない
+  - `/api/debug/conversation-demo/generate` のSSEはフル生成（Gemini + TTS + ファイルI/O）を再現せず、先生・生徒キャラ未登録エラーの入口のみ検証（`src.lesson_generator.get_lesson_characters` を直接monkeypatch。関数内 `from src.lesson_generator import ...` なのでモジュール属性差し替えで届く）
+  - `/api/chat/webui` は既存の `tests/test_api_chat.py` がカバー済みなので対象外
+- 注意点・学び:
+  - `SUPPORTED_LANGUAGES["ja"]` は `"日本語"`（カタカナ表記なし）なので、detail文言アサートは `"日本語"` で行う
+  - `SpeechPipeline.split_sentences` は30文字以下のテキストを分割しない — test-multi のモック応答は長文を用意
+  - conv-demo/generate のキャラ未登録エラーメッセージは `"先生・生徒キャラがDBに登録されていません"`（「キャラクター」ではなく「キャラ」）
+- 結果: `python3 -m pytest tests/ -q` → **993 passed / 5 warnings / 10:06**（966 → 993 / +27件・リグレッションなし）。warnings は `scripts/web.py` の `@app.on_event` DeprecationWarning 5件で Step 5 の対象
+
 ### Step 3-1 実装結果: `lesson_generator/improver.py` のテスト追加（2026-04-18）
 
 - 実施内容: `tests/test_lesson_improver.py` を新規作成し、improver.py の15関数を4カテゴリに分けて計50ケースのテストを追加
