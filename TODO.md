@@ -8,7 +8,6 @@
 
 ## その他
 - [ ] テストの検証。不要なものを削除。必要なものがあれば追加 → [plans/test-suite-audit.md](plans/test-suite-audit.md)
-  - [ ] Step 3-5: `lesson_generator/extractor.py` / `utils.py` のテスト追加
   - [ ] Step 3-6: `routes/bgm.py` / `files.py` / `prompts.py` のテスト追加
   - [ ] Step 3-7: `twitch_api.py` / `twitch_chat.py` のテスト追加
   - [ ] Step 4-a: 遅いテストに `@pytest.mark.slow` 付与 + `pytest.ini` にマーカー登録（目標: `-m "not slow"` で 60秒以内）

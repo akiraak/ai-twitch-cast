@@ -273,6 +273,39 @@
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
 
+### Step 3-5 実装結果: `lesson_generator/extractor.py` / `utils.py` のテスト追加（2026-04-18）
+
+- 実施内容:
+  - `tests/test_lesson_extractor.py` を新規作成（**31ケース**）。`src/lesson_generator/extractor.py` の全公開・プライベート関数（`clean_extracted_text` / `_normalize_roles` / `extract_main_content` / `extract_text_from_image` / `extract_text_from_url`）をカバー
+  - `tests/test_lesson_utils.py` を新規作成（**37ケース**）。`src/lesson_generator/utils.py` の全公開・プライベート関数（`_is_english_mode` / `_get_model` / `_parse_json_response` / `_guess_mime` / `_build_image_parts` / `get_lesson_characters` / `_format_character_for_prompt` / `_format_main_content_for_prompt`）をカバー
+- カテゴリ別内訳（extractor, 31ケース）:
+  - **`clean_extracted_text`**（10ケース）: 空文字・None passthrough、HTMLエンティティ6種（`&nbsp;` / `&amp;` / `&lt;` / `&gt;` / `&quot;` / `&#39;` / `&apos;`）置換、3個以上のハイフン→改行・等号/アスタリスク/チルダ/アンダースコアの3個以上連続除去、装飾記号（★☆●○■□◆◇▲△▼▽◎※♪♫♬♩）の3個以上連続除去、2個の`--`保持、4行以上の空行→3行圧縮、先頭末尾strip
+  - **`_normalize_roles`**（10ケース）: 空入力、main ゼロ時の先頭昇格＋他 sub 補完、main 複数時の先頭以外を sub へ降格、main 1個保持、read_aloud デフォルト（main+conversation/passage→True、word_list→False、sub→False）、明示 read_aloud 値の保持、role キー欠落時の sub デフォルト
+  - **`extract_main_content`**（5ケース）: 空文字・ブランク時のLLM呼び出しスキップ、list応答の正規化、dict応答の`[item]`ラップ＋role="main"付与、壊れJSONでの空配列フォールバック、list/dict以外の応答で空配列
+  - **`extract_text_from_image`**（3ケース）: 存在しないファイルで `FileNotFoundError`、正常系で Vision呼び出し + `clean_extracted_text` 経由、`.jpg` 拡張子 → `image/jpeg` MIME
+  - **`extract_text_from_url`**（3ケース）: HTML取得→LLM送信（User-Agent付与・HTMLエンティティ解除）、`raise_for_status` 例外伝搬（LLM未呼び出し）、50000文字HTMLの30000文字切り詰め
+- カテゴリ別内訳（utils, 37ケース）:
+  - **`_is_english_mode`**（3ケース）: `set_stream_language("ja", ...)` で False、`"en"` / `"ko"` で True（primary が ja 以外ならすべて英語モード扱い）
+  - **`_get_model`**（3ケース）: 環境変数 `GEMINI_CHAT_MODEL` 使用、未設定時の `"gemini-3-flash-preview"` フォールバック、**モジュールレベル `_CHAT_MODEL` キャッシュ挙動**（初回読み込み後は環境変数変更が反映されない）
+  - **`_parse_json_response`**（3ケース）: 素のJSONパース、````json ... ``` コードブロック剥がし、末尾カンマ/シングルクォートの `json_repair` 修復
+  - **`_guess_mime`**（6ケース）: png/jpg/jpeg/webp/gif、大文字拡張子、未知拡張子のpngフォールバック
+  - **`_build_image_parts`**（5ケース）: None/空リスト、存在ファイルの`Part`変換（mime+bytesまで検証）、存在しないパスのスキップ、複数ファイルの順序・MIME維持
+  - **`get_lesson_characters`**（4ケース）: teacher/student 同時取得（`seed_all_characters`経由で自動作成）、config に `name` が注入、`update_character_persona` / `update_character_self_note` 経由で persona/self_note が反映、未設定時は空文字
+  - **`_format_character_for_prompt`**（6ケース）: 最小config整形（`### role: name (speaker: "role")` ヘッダ）、`name`欠落時の role_label フォールバック、emotions の日本語/英語ラベル、emotions 無しで該当セクション省略、空 `system_prompt` で本文行を出さない
+  - **`_format_main_content_for_prompt`**（7ケース）: 空入力、main+conversation+read_aloud の全文表示（🔊マーカー付き）、sub の200文字切り詰め、main+read_aloud の2000文字切り詰め、英語モード（`★ PRIMARY` / `🔊 READ ALOUD`）、複数アイテム番号付け、role キー欠落時のデフォルト（1件目 main / 2件目 sub）
+- 設計上のポイント:
+  - **`mock_gemini` フィクスチャを活用**: `conftest.py:63-64` で `src.lesson_generator.utils.get_client` をパッチ済み。`extractor.py` は `from . import utils` → `utils.get_client()` で取得しているので追加パッチ不要
+  - **`httpx.AsyncClient` のスタブ化**: `monkeypatch.setattr(extractor.httpx, "AsyncClient", _FakeClient)` で置換。`__aenter__`/`__aexit__`/`get` を持つ簡易モック
+  - **`_CHAT_MODEL` グローバルキャッシュ**: `setup_method`/`teardown_method` で `lg_utils._CHAT_MODEL = None` にリセット。キャッシュ挙動そのものを検証するテストも別途追加
+  - **`test_db` フィクスチャ + 実DB**: `get_lesson_characters` は本物の `seed_all_characters` / `get_character_by_role` / `update_character_persona` を通す（モックせず挙動を検証）
+  - **channel_id は int**: `get_character_by_role` は `db.get_or_create_channel(name)` が返す int id を要求。テスト側で `get_channel_id()` を呼んで取得
+  - **label文字列による `.count()` ずれ**: 切り詰めテストの `count("y")` で label `"body"` の `y` も計上されて +1 ずれた。`z` + label `"本文"` に変更して回避
+- 注意点・学び:
+  - `clean_extracted_text` の `---` 処理は単純な置換（`\n`）で、結果がさらに空行圧縮に掛かるため、assert は「除去されたこと」と「周辺文字が残っていること」に留めるのが安全
+  - `extract_main_content` の dict応答は `result["role"] = "main"` 代入のみで `_normalize_roles` を通さない — 仕様通りでテストもその前提で書く
+  - `httpx.HTTPStatusError` は `raise_for_status` で発生。`request=None, response=None` を渡して mock 用に簡略化
+- 結果: `python3 -m pytest tests/ -q` → **1137 passed / 5 warnings / 9:41**（1069 → 1137 / +68件・リグレッションなし）。warnings は Step 5 で解消予定の `@app.on_event` DeprecationWarning のみ
+
 ### Step 3-4 実装結果: `character_manager.py` のテスト追加（2026-04-18）
 
 - 実施内容: `tests/test_character_manager.py` を新規作成（**32ケース**）。`src/character_manager.py` の全12関数＋DEFAULT_*定数を10のテストクラスに分けて網羅

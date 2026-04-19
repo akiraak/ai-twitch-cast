@@ -1,5 +1,30 @@
 # DONE
 
+## テストスイート棚卸し Step 3-5: `lesson_generator/extractor.py` / `utils.py` のテスト追加
+
+- [x] `tests/test_lesson_extractor.py` 新規作成（**31ケース** / 全pass）。`src/lesson_generator/extractor.py` の全関数をカバー
+  - **clean_extracted_text**（10ケース）: 空/None passthrough、HTMLエンティティ7種置換、3個以上のハイフン→改行・等号/アスタリスク/チルダ/アンダースコアの3個以上連続除去、装飾記号（★☆●○■□◆◇▲△▼▽◎※♪♫♬♩）連続除去、2個の`--`保持、4行以上の空行→3行圧縮、先頭末尾strip
+  - **_normalize_roles**（10ケース）: 空入力、main ゼロ時の先頭昇格＋他 sub 補完、main 複数時の先頭以外を sub 降格、main 1個保持、read_aloud デフォルト（main+conversation/passage→True、word_list→False、sub→False）、明示値の保持、role キー欠落時の sub デフォルト
+  - **extract_main_content**（5ケース）: 空文字でLLM未呼び出し、list応答の正規化、dict応答の `[item]` ラップ + role="main"、壊れJSONの空配列フォールバック、list/dict以外の応答で空配列
+  - **extract_text_from_image**（3ケース）: 存在しないファイルで `FileNotFoundError`、Vision呼び出し + `clean_extracted_text` 経由、`.jpg` → `image/jpeg` MIME
+  - **extract_text_from_url**（3ケース）: HTML取得 → LLM送信（User-Agent付与・HTMLエンティティ解除）、`raise_for_status` 例外伝搬（LLM未呼び出し）、50000文字HTMLの30000文字切り詰め
+- [x] `tests/test_lesson_utils.py` 新規作成（**37ケース** / 全pass）。`src/lesson_generator/utils.py` の全関数をカバー
+  - **_is_english_mode**（3ケース）: ja/en/ko の primary 判定（ja以外はすべて英語モード扱い）
+  - **_get_model**（3ケース）: 環境変数 `GEMINI_CHAT_MODEL` 使用、未設定時の `"gemini-3-flash-preview"`、**モジュールレベル `_CHAT_MODEL` キャッシュ挙動**（初回後は環境変数変更が反映されない）
+  - **_parse_json_response**（3ケース）: 素のJSON、````json``` コードブロック剥がし、末尾カンマ/シングルクォートの json_repair 修復
+  - **_guess_mime**（6ケース）: png/jpg/jpeg/webp/gif、大文字拡張子、未知拡張子のpngフォールバック
+  - **_build_image_parts**（5ケース）: None/空リスト、存在ファイルの `Part` 変換（mime + bytes 検証）、存在しないパスのスキップ、複数ファイルの順序・MIME維持
+  - **get_lesson_characters**（4ケース）: teacher/student 同時取得（`seed_all_characters` 経由で自動作成）、config に `name` 注入、`update_character_persona` / `update_character_self_note` 経由で persona/self_note が反映、未設定時は空文字
+  - **_format_character_for_prompt**（6ケース）: 最小config整形（`### role: name (speaker: "role")` ヘッダ）、`name` 欠落時の role_label フォールバック、emotions の日本語/英語ラベル、emotions無しでセクション省略、空 `system_prompt` で本文行を出さない
+  - **_format_main_content_for_prompt**（7ケース）: 空入力、main+conversation+read_aloud の全文表示（🔊マーカー）、sub の200文字切り詰め、main+read_aloud の2000文字切り詰め、英語モード（`★ PRIMARY` / `🔊 READ ALOUD`）、複数アイテム番号付け、role 欠落時のデフォルト（1件目 main / 2件目以降 sub）
+- [x] 設計上のポイント:
+  - **`mock_gemini` フィクスチャ流用**: `conftest.py` で `src.lesson_generator.utils.get_client` をパッチ済み。`extractor.py` は `from . import utils` 経由なので追加パッチ不要
+  - **`httpx.AsyncClient` のスタブ**: `__aenter__`/`__aexit__`/`get` を持つ簡易クラスを `monkeypatch.setattr(extractor.httpx, "AsyncClient", _FakeClient)` で差し替え
+  - **`_CHAT_MODEL` グローバルキャッシュ**: `setup_method`/`teardown_method` で `lg_utils._CHAT_MODEL = None` にリセット
+  - **`test_db` + 実DB**: `get_lesson_characters` は本物の `seed_all_characters` / `get_character_by_role` / `update_character_persona` を通し、モックを噛ませない
+  - **channel_id は int**: `get_character_by_role` は `db.get_or_create_channel(name)` の戻り値の int id を要求（テスト側で `get_channel_id()` を呼んで取得）
+- [x] 全スイート `python3 -m pytest tests/ -q` → **1137 passed / 5 warnings / 9:41**（1069 → 1137 / +68件・リグレッションなし）。warnings は Step 5 で解消予定の `@app.on_event` DeprecationWarning のみ
+
 ## テストスイート棚卸し Step 3-4: `character_manager.py` のテスト追加
 
 - [x] `tests/test_character_manager.py` 新規作成（32ケース / 全pass）。`src/character_manager.py` の12関数＋DEFAULT_*定数を10クラスに分けてカバー
