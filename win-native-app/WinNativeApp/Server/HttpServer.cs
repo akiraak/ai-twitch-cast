@@ -43,6 +43,12 @@ public class HttpServer : IDisposable
     public Func<Task<string?>>? OnScreenshot { get; set; }  // → base64 PNG
     public Action? OnQuit { get; set; }
 
+    // 録画制御コールバック（MainFormが設定）
+    public Func<Task<object>>? OnStartRecord { get; set; }
+    public Func<Task<object>>? OnStopRecord { get; set; }
+    public Func<object>? OnGetRecordStatus { get; set; }
+    public Func<Task<object>>? OnRetryUpload { get; set; }
+
     // TTS直接書き込みコールバック（MainFormが設定）
     public Action<byte[], float>? OnTtsAudio { get; set; }  // (wavData, volume)
 
@@ -175,6 +181,15 @@ public class HttpServer : IDisposable
                 await HandleStreamStop(res);
             else if (path == "/stream/status" && method == "GET")
                 await HandleStreamStatus(res);
+            // 録画制御系
+            else if (path == "/record/start" && method == "POST")
+                await HandleRecordStart(res);
+            else if (path == "/record/stop" && method == "POST")
+                await HandleRecordStop(res);
+            else if (path == "/record/status" && method == "GET")
+                await HandleRecordStatus(res);
+            else if (path == "/record/retry-upload" && method == "POST")
+                await HandleRetryUpload(res);
             else if (path == "/quit" && method == "POST")
                 await HandleQuit(res);
             // Phase 7: UIパネルHTML配信
@@ -320,8 +335,17 @@ public class HttpServer : IDisposable
             return;
         }
 
-        var result = await OnStartStream(streamKey ?? "", serverUrl);
-        await WriteJson(res, result);
+        try
+        {
+            var result = await OnStartStream(streamKey ?? "", serverUrl);
+            await WriteJson(res, result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // 状態違反（録画中・アップロード中など）→ 409 Conflict
+            res.StatusCode = 409;
+            await WriteJson(res, new { ok = false, error = ex.Message });
+        }
     }
 
     private async Task HandleStreamStop(HttpListenerResponse res)
@@ -339,6 +363,64 @@ public class HttpServer : IDisposable
     {
         var result = OnGetStreamStatus?.Invoke() ?? new { streaming = false };
         await WriteJson(res, result);
+    }
+
+    private async Task HandleRecordStart(HttpListenerResponse res)
+    {
+        if (OnStartRecord == null)
+        {
+            res.StatusCode = 500;
+            await WriteJson(res, new { ok = false, error = "Recording not available" });
+            return;
+        }
+        try
+        {
+            var result = await OnStartRecord();
+            await WriteJson(res, result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // 状態違反（配信中・録画中・アップロード中など） → 409 Conflict
+            res.StatusCode = 409;
+            await WriteJson(res, new { ok = false, error = ex.Message });
+        }
+    }
+
+    private async Task HandleRecordStop(HttpListenerResponse res)
+    {
+        if (OnStopRecord == null)
+        {
+            await WriteJson(res, new { ok = false, error = "Recording not available" });
+            return;
+        }
+        var result = await OnStopRecord();
+        await WriteJson(res, result);
+    }
+
+    private async Task HandleRecordStatus(HttpListenerResponse res)
+    {
+        var result = OnGetRecordStatus?.Invoke() ?? new { state = "standby" };
+        await WriteJson(res, result);
+    }
+
+    private async Task HandleRetryUpload(HttpListenerResponse res)
+    {
+        if (OnRetryUpload == null)
+        {
+            res.StatusCode = 500;
+            await WriteJson(res, new { ok = false, error = "Upload retry not available" });
+            return;
+        }
+        try
+        {
+            var result = await OnRetryUpload();
+            await WriteJson(res, result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            res.StatusCode = 409;
+            await WriteJson(res, new { ok = false, error = ex.Message });
+        }
     }
 
     private async Task HandleQuit(HttpListenerResponse res)

@@ -48,6 +48,19 @@ public class MainForm : Form
     private DateTime _streamStartTime;
     private string? _activeStreamKey;
 
+    // Recording pipeline
+    private PipelineState _pipelineState = PipelineState.Standby;
+    private readonly object _pipelineStateLock = new();
+    private DateTime _recordingStartTime;
+    private string? _currentRecordingPath;
+    private Uploader? _activeUploader;
+    private string? _pendingUploadPath; // アップロード未完/失敗で残っているパス（再送用）
+    private string? _lastUploadError;
+    private static readonly string RecordingsDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "AITwitchCast", "recordings");
+    private const int RecordingRetentionDays = 7;
+
     // BGM state
     private WaveOutEvent? _bgmWaveOut;
     private WaveChannel32? _bgmChannel;
@@ -210,13 +223,15 @@ public class MainForm : Form
         }
 
         // Phase 7: UIパネルに状態送信
+        var recStatus = GetRecordStatus();
         SendPanelMessage(new
         {
             type = "status",
             streaming,
             uptime = uptime.ToString(@"hh\:mm\:ss"),
             frames,
-            drops
+            drops,
+            record = recStatus,
         });
         SendPanelCaptures();
     }
@@ -328,6 +343,18 @@ public class MainForm : Form
                     await HandlePanelStopStream();
                     break;
 
+                case "record":
+                    await HandlePanelRecord();
+                    break;
+
+                case "stopRecord":
+                    await HandlePanelStopRecord();
+                    break;
+
+                case "retryUpload":
+                    await HandlePanelRetryUpload();
+                    break;
+
                 case "refreshWindows":
                     var wins = WindowEnumerator.GetWindows();
                     SendPanelMessage(new
@@ -414,6 +441,70 @@ public class MainForm : Form
             Log.Error(ex, "[Panel] HandlePanelStopStream failed");
             PanelLog($"配信停止失敗: {ex.Message}", "error");
             SendPanelMessage(new { type = "streamResult", action = "stop", ok = false });
+        }
+    }
+
+    private async Task HandlePanelRecord()
+    {
+        try
+        {
+            await StartRecordingAsync();
+            PanelLog("録画を開始しました", "success");
+            SendPanelMessage(new { type = "streamResult", action = "record", ok = true });
+            OnTrayUpdate(null, EventArgs.Empty);
+        }
+        catch (InvalidOperationException ex)
+        {
+            PanelLog($"録画開始失敗: {ex.Message}", "error");
+            SendPanelMessage(new { type = "streamResult", action = "record", ok = false, error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[Panel] HandlePanelRecord failed");
+            PanelLog($"録画開始失敗: {ex.Message}", "error");
+            SendPanelMessage(new { type = "streamResult", action = "record", ok = false, error = ex.Message });
+        }
+    }
+
+    private async Task HandlePanelStopRecord()
+    {
+        Log.Information("[Panel] HandlePanelStopRecord called, state={State}", _pipelineState);
+        try
+        {
+            await StopRecordingAsync();
+            PanelLog("録画を停止しました（アップロード開始）", "success");
+            SendPanelMessage(new { type = "streamResult", action = "stopRecord", ok = true });
+            OnTrayUpdate(null, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[Panel] HandlePanelStopRecord failed");
+            PanelLog($"録画停止失敗: {ex.Message}", "error");
+            SendPanelMessage(new { type = "streamResult", action = "stopRecord", ok = false, error = ex.Message });
+        }
+    }
+
+    private async Task HandlePanelRetryUpload()
+    {
+        try
+        {
+            var ok = await RetryUploadAsync();
+            if (ok)
+            {
+                PanelLog("アップロード再送成功", "success");
+                SendPanelMessage(new { type = "streamResult", action = "retryUpload", ok = true });
+            }
+            else
+            {
+                PanelLog($"アップロード再送失敗: {_lastUploadError}", "error");
+                SendPanelMessage(new { type = "streamResult", action = "retryUpload", ok = false, error = _lastUploadError });
+            }
+            OnTrayUpdate(null, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[Panel] HandlePanelRetryUpload failed");
+            SendPanelMessage(new { type = "streamResult", action = "retryUpload", ok = false, error = ex.Message });
         }
     }
 
@@ -654,6 +745,30 @@ public class MainForm : Form
         else if (_url.StartsWith("http"))
             _serverBaseUrl = _url.TrimEnd('/');
 
+        // 録画ローカル一時領域: 起動時に7日超の残骸をgc
+        try
+        {
+            Directory.CreateDirectory(RecordingsDir);
+            var removed = Uploader.GarbageCollect(RecordingsDir, RecordingRetentionDays);
+            if (removed > 0) Log.Information("[MainForm] Recordings GC removed {N} old files", removed);
+
+            // 前回起動時に残った未アップロードファイルがあれば pending に積む（再送用）
+            var orphan = Directory.EnumerateFiles(RecordingsDir, "*.mp4")
+                .Where(p => !File.Exists(p + ".uploaded"))
+                .OrderByDescending(p => new FileInfo(p).LastWriteTimeUtc)
+                .FirstOrDefault();
+            if (orphan != null)
+            {
+                _pendingUploadPath = orphan;
+                _lastUploadError = "upload not completed in previous session";
+                Log.Warning("[MainForm] Orphan recording detected (retry available): {Path}", orphan);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[MainForm] Recordings GC/scan failed");
+        }
+
         try
         {
             // broadcast.html用WebView2（autoplay音声許可 + バックグラウンドスロットリング無効化）
@@ -818,6 +933,27 @@ public class MainForm : Form
         };
 
         _httpServer.OnGetStreamStatus = () => GetStreamStatusDict();
+
+        // 録画制御コールバック
+        _httpServer.OnStartRecord = async () =>
+        {
+            await StartRecordingAsync();
+            return (object)new { ok = true, state = _pipelineState.ToString().ToLowerInvariant() };
+        };
+
+        _httpServer.OnStopRecord = async () =>
+        {
+            await StopRecordingAsync();
+            return (object)new { ok = true, state = _pipelineState.ToString().ToLowerInvariant() };
+        };
+
+        _httpServer.OnGetRecordStatus = () => (object)GetRecordStatus();
+
+        _httpServer.OnRetryUpload = async () =>
+        {
+            var ok = await RetryUploadAsync();
+            return (object)new { ok, error = ok ? null : _lastUploadError };
+        };
 
         _httpServer.OnScreenshot = async () =>
         {
@@ -1261,18 +1397,36 @@ public class MainForm : Form
 
     private async Task StartStreamingWithKeyAsync(string streamKey)
     {
-        if (_capture == null)
-        {
-            Log.Error("[MainForm] Cannot stream: no capture running");
-            throw new InvalidOperationException("No capture running");
-        }
+        EnsureStandbyOrThrow("stream start");
 
         var config = StreamConfig.FromArgs(_args);
         config.StreamKey = streamKey;
+        config.Mode = OutputMode.Rtmp;
 
         Log.Information("[MainForm] Starting streaming pipeline...");
         Log.Information("[MainForm] Resolution={W}x{H} FPS={F} Bitrate={B}",
             config.Width, config.Height, config.Framerate, config.VideoBitrate);
+
+        await StartPipelineAsync(config);
+
+        _streamStartTime = DateTime.UtcNow;
+        SetPipelineState(PipelineState.Streaming);
+        Text = "AI Twitch Cast - 配信中";
+        Log.Information("[MainForm] Streaming pipeline active (direct audio, no WASAPI)");
+    }
+
+    /// <summary>
+    /// 配信・録画で共通のパイプライン起動処理。
+    /// FFmpeg起動 → 音声ジェネレータ → キャプチャ結線 → BGMデコード まで一括で行う。
+    /// 呼び出し側は事前に state==Standby を確認し、事後に適切な state に遷移させること。
+    /// </summary>
+    private async Task StartPipelineAsync(StreamConfig config)
+    {
+        if (_capture == null)
+        {
+            Log.Error("[MainForm] Cannot start pipeline: no capture running");
+            throw new InvalidOperationException("No capture running");
+        }
 
         // WASAPI不要 — 全音声はC#が直接パイプに書き込む
         _ffmpeg = new FfmpegProcess(config);
@@ -1299,18 +1453,210 @@ public class MainForm : Form
                 {
                     var pcm = DecodeBgmToPcm(bgmPath);
                     ffmpeg?.SetBgm(pcm, EffectiveBgmVolume());
-                    Log.Information("[BGM] PCM decoded for streaming (on start): {Size} bytes", pcm.Length);
+                    Log.Information("[BGM] PCM decoded for pipeline start: {Size} bytes", pcm.Length);
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, "[BGM] PCM decode failed on streaming start");
+                    Log.Error(ex, "[BGM] PCM decode failed on pipeline start");
                 }
             });
         }
+    }
 
-        _streamStartTime = DateTime.UtcNow;
-        Text = "AI Twitch Cast - 配信中";
-        Log.Information("[MainForm] Streaming pipeline active (direct audio, no WASAPI)");
+    /// <summary>録画を開始する。Standby状態でのみ遷移可能。</summary>
+    public async Task StartRecordingAsync()
+    {
+        EnsureStandbyOrThrow("record start");
+
+        Directory.CreateDirectory(RecordingsDir);
+        var filename = $"broadcast_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
+        var path = Path.Combine(RecordingsDir, filename);
+
+        var config = StreamConfig.FromArgs(_args);
+        config.Mode = OutputMode.File;
+        config.OutputPath = path;
+        config.StreamKey = null; // 録画時は不要
+
+        Log.Information("[MainForm] Starting recording pipeline → {Path}", path);
+        Log.Information("[MainForm] Resolution={W}x{H} FPS={F} Bitrate={B}",
+            config.Width, config.Height, config.Framerate, config.VideoBitrate);
+
+        await StartPipelineAsync(config);
+
+        _recordingStartTime = DateTime.UtcNow;
+        _currentRecordingPath = path;
+        SetPipelineState(PipelineState.Recording);
+        Text = "AI Twitch Cast - 録画中";
+        Log.Information("[MainForm] Recording pipeline active");
+    }
+
+    /// <summary>録画を停止する。停止後にバックグラウンドでアップロードを開始する。</summary>
+    public async Task StopRecordingAsync()
+    {
+        if (_pipelineState != PipelineState.Recording)
+        {
+            Log.Warning("[MainForm] StopRecording called in state={State}", _pipelineState);
+            return;
+        }
+
+        // キャプチャコールバックを先に切断（_ffmpeg=null後のコールバック→NRE防止）
+        if (_capture != null)
+        {
+            _capture.OnFrameReady = null;
+            _capture.TargetFps = 0;
+        }
+
+        var ffmpeg = _ffmpeg;
+        _ffmpeg = null;
+        var recordingPath = _currentRecordingPath;
+        Text = "AI Twitch Cast - 待機中";
+
+        if (ffmpeg != null)
+        {
+            Log.Information("[Rec] ffmpeg.StopAsync()...");
+            try { await ffmpeg.StopAsync(); }
+            catch (Exception ex) { Log.Error(ex, "[Rec] ffmpeg.StopAsync() failed"); }
+            try { ffmpeg.Dispose(); } catch { /* already disposed */ }
+            Log.Information("[Rec] ffmpeg stopped");
+        }
+
+        if (string.IsNullOrEmpty(recordingPath) || !File.Exists(recordingPath))
+        {
+            Log.Error("[Rec] Recording file missing after stop: {Path}", recordingPath);
+            SetPipelineState(PipelineState.Standby);
+            _currentRecordingPath = null;
+            return;
+        }
+
+        // アップロード開始
+        _pendingUploadPath = recordingPath;
+        _lastUploadError = null;
+        SetPipelineState(PipelineState.Uploading);
+        _ = Task.Run(() => RunUploadAsync(recordingPath));
+
+        // 古いローカル一時ファイルをgc（7日以上経過＋.uploadedマーカー付き）
+        try
+        {
+            var removed = Uploader.GarbageCollect(RecordingsDir, RecordingRetentionDays);
+            if (removed > 0) Log.Information("[Rec] GC removed {N} old recordings", removed);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[Rec] GC failed");
+        }
+    }
+
+    /// <summary>アップロード失敗時にUIから再送するためのエントリ。</summary>
+    public async Task<bool> RetryUploadAsync()
+    {
+        var path = _pendingUploadPath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            _lastUploadError = "no pending upload";
+            return false;
+        }
+        if (_pipelineState != PipelineState.Standby || _activeUploader is { IsRunning: true })
+        {
+            _lastUploadError = "pipeline busy";
+            return false;
+        }
+        SetPipelineState(PipelineState.Uploading);
+        await RunUploadAsync(path);
+        return _lastUploadError == null;
+    }
+
+    private async Task RunUploadAsync(string recordingPath)
+    {
+        var uploader = new Uploader(recordingPath, _serverBaseUrl);
+        _activeUploader = uploader;
+        try
+        {
+            var ok = await uploader.UploadAsync();
+            if (ok)
+            {
+                _lastUploadError = null;
+                _pendingUploadPath = null;
+                _currentRecordingPath = null;
+            }
+            else
+            {
+                _lastUploadError = uploader.LastError ?? "unknown error";
+            }
+        }
+        finally
+        {
+            _activeUploader = null;
+            SetPipelineState(PipelineState.Standby);
+        }
+    }
+
+    /// <summary>録画状態のスナップショットを返す（HTTP /record/status 用）。</summary>
+    public Dictionary<string, object?> GetRecordStatus()
+    {
+        var state = _pipelineState;
+        var uploader = _activeUploader;
+        var effectiveState = state == PipelineState.Standby && _lastUploadError != null
+            ? "upload_failed"
+            : state.ToString().ToLowerInvariant();
+
+        var result = new Dictionary<string, object?>
+        {
+            ["state"] = effectiveState,
+        };
+
+        if (state == PipelineState.Recording)
+        {
+            result["elapsed_sec"] = (int)(DateTime.UtcNow - _recordingStartTime).TotalSeconds;
+            result["file_path"] = _currentRecordingPath;
+            if (_currentRecordingPath != null && File.Exists(_currentRecordingPath))
+            {
+                try { result["size_mb"] = Math.Round(new FileInfo(_currentRecordingPath).Length / 1024.0 / 1024.0, 1); }
+                catch { result["size_mb"] = null; }
+            }
+        }
+
+        if (uploader != null)
+        {
+            result["upload"] = new Dictionary<string, object?>
+            {
+                ["file_path"] = uploader.FilePath,
+                ["bytes_sent"] = uploader.BytesSent,
+                ["bytes_total"] = uploader.BytesTotal,
+                ["progress"] = uploader.BytesTotal > 0
+                    ? Math.Round(uploader.BytesSent * 100.0 / uploader.BytesTotal, 1)
+                    : 0,
+                ["error"] = uploader.LastError,
+            };
+        }
+        else if (_lastUploadError != null)
+        {
+            result["upload"] = new Dictionary<string, object?>
+            {
+                ["file_path"] = _pendingUploadPath,
+                ["error"] = _lastUploadError,
+            };
+        }
+
+        return result;
+    }
+
+    private void EnsureStandbyOrThrow(string action)
+    {
+        lock (_pipelineStateLock)
+        {
+            if (_pipelineState != PipelineState.Standby)
+                throw new InvalidOperationException(
+                    $"Cannot {action} in state={_pipelineState}");
+        }
+    }
+
+    private void SetPipelineState(PipelineState next)
+    {
+        lock (_pipelineStateLock)
+        {
+            _pipelineState = next;
+        }
+        Log.Information("[MainForm] PipelineState → {State}", next);
     }
 
     // =====================================================
@@ -1965,6 +2311,8 @@ public class MainForm : Form
         _ffmpeg = null;
         _activeStreamKey = null;
         Text = "AI Twitch Cast - 待機中";
+        if (_pipelineState == PipelineState.Streaming)
+            SetPipelineState(PipelineState.Standby);
         Log.Information("[Stop] State cleared. Starting cleanup...");
 
         if (ffmpeg != null)

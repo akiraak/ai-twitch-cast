@@ -37,6 +37,7 @@ from scripts.routes.db_viewer import router as db_viewer_router
 from scripts.routes.docs_viewer import router as docs_viewer_router
 from scripts.routes.overlay import router as overlay_router
 from scripts.routes.prompts import router as prompts_router
+from scripts.routes.recordings import router as recordings_router
 from scripts.routes.stream_control import router as stream_control_router
 from scripts.routes.files import router as files_router
 from scripts.routes.items import router as items_router
@@ -123,9 +124,12 @@ BGM_DIR.mkdir(parents=True, exist_ok=True)
 SE_DIR = PROJECT_DIR / "resources" / "audio" / "se"
 SE_DIR.mkdir(parents=True, exist_ok=True)
 RESOURCES_DIR = PROJECT_DIR / "resources"
+VIDEOS_DIR = PROJECT_DIR / "videos"
+VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/bgm", StaticFiles(directory=str(BGM_DIR)), name="bgm")
 app.mount("/se", StaticFiles(directory=str(SE_DIR)), name="se")
 app.mount("/resources", StaticFiles(directory=str(RESOURCES_DIR)), name="resources")
+app.mount("/videos", StaticFiles(directory=str(VIDEOS_DIR)), name="videos")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
@@ -149,6 +153,7 @@ app.include_router(files_router)
 app.include_router(items_router)
 app.include_router(overlay_router)
 app.include_router(prompts_router)
+app.include_router(recordings_router)
 app.include_router(teacher_router)
 app.include_router(twitch_router)
 

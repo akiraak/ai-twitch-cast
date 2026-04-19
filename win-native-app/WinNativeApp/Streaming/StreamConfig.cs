@@ -1,5 +1,23 @@
 namespace WinNativeApp.Streaming;
 
+public enum OutputMode
+{
+    Rtmp,
+    File,
+}
+
+/// <summary>
+/// パイプライン状態。配信・録画・アップロードを排他管理する。
+/// Uploading中は録画中のファイルをサーバへ送出中で、次の録画・配信は両方ブロックされる。
+/// </summary>
+public enum PipelineState
+{
+    Standby,
+    Streaming,
+    Recording,
+    Uploading,
+}
+
 public class StreamConfig
 {
     public int Width { get; set; } = 1280;
@@ -16,6 +34,9 @@ public class StreamConfig
     public string? StreamKey { get; set; }
     public string RtmpUrl { get; set; } = "rtmp://live-tyo.twitch.tv/app";
     public string? FfmpegPath { get; set; }
+
+    public OutputMode Mode { get; set; } = OutputMode.Rtmp;
+    public string? OutputPath { get; set; }
 
     /// <summary>
     /// 音声タイムスタンプのオフセット（秒）。音声パイプライン遅延を補正する。

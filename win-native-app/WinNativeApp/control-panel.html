@@ -123,6 +123,17 @@ body {
 .btn-go:hover { background: var(--green-hover); }
 .btn-stop { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
 .btn-stop:hover { background: var(--red-hover); }
+.btn-rec { background: #7a1f1f; border-color: #7a1f1f; color: #fff; font-weight: 600; }
+.btn-rec:hover { background: #9a2f2f; }
+.btn-rec.active { background: #d83a3a; border-color: #d83a3a; animation: rec-blink 1s infinite; }
+@keyframes rec-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+.rec-status { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+.rec-status.recording { color: #f87171; }
+.rec-status.uploading { color: #fbbf24; }
+.rec-status.upload_failed { color: #f87171; }
+.rec-progress { height: 4px; background: #2a2a2a; border-radius: 2px; margin-top: 4px; overflow: hidden; display: none; }
+.rec-progress.active { display: block; }
+.rec-progress-bar { height: 100%; background: #fbbf24; width: 0; transition: width 0.3s; }
 
 .btn-row { display: flex; gap: 6px; margin-bottom: 8px; }
 
@@ -511,9 +522,15 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
     <div class="btn-row">
       <button class="btn btn-go" id="goLiveBtn" onclick="goLive()">● Go Live</button>
       <button class="btn btn-stop" id="stopBtn" onclick="stopStream()" disabled>■ Stop</button>
+      <button class="btn btn-rec" id="recBtn" onclick="toggleRecord()">● Rec</button>
     </div>
     <div class="status" id="streamStatus">Standby</div>
     <div class="stats" id="streamStats"></div>
+    <div class="rec-status" id="recStatus"></div>
+    <div class="rec-progress" id="recProgress"><div class="rec-progress-bar" id="recProgressBar"></div></div>
+    <div class="btn-row" id="retryUploadRow" style="display:none;margin-top:4px;">
+      <button class="btn" id="retryUploadBtn" onclick="retryUpload()">↺ 再送</button>
+    </div>
   </div>
 
   <div class="section">
@@ -701,6 +718,26 @@ function stopStream() {
   btn.textContent = '停止中…';
   send({action:'stopStream'});
 }
+function toggleRecord() {
+  const btn = $('recBtn');
+  if (btn.dataset.mode === 'recording') {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.textContent = '停止中…';
+    send({action:'stopRecord'});
+  } else {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.textContent = '準備中…';
+    send({action:'record'});
+  }
+}
+function retryUpload() {
+  const btn = $('retryUploadBtn');
+  btn.disabled = true;
+  btn.textContent = '送信中…';
+  send({action:'retryUpload'});
+}
 function refreshWindows() { send({action:'refreshWindows'}); }
 
 function startCapture() {
@@ -732,25 +769,118 @@ function handleStreamResult(m) {
     btn.classList.remove('loading');
     btn.textContent = '■ Stop';
     if (!m.ok) btn.disabled = false;
+  } else if (m.action === 'record' || m.action === 'stopRecord') {
+    const btn = $('recBtn');
+    btn.classList.remove('loading');
+    // ボタン文言/モードは後続の status で更新されるので、失敗時だけ即座に戻す
+    if (!m.ok) {
+      btn.disabled = false;
+      btn.textContent = '● Rec';
+      btn.dataset.mode = '';
+    }
+  } else if (m.action === 'retryUpload') {
+    const btn = $('retryUploadBtn');
+    btn.disabled = false;
+    btn.textContent = '↺ 再送';
+  }
+}
+
+function formatSeconds(s) {
+  s = Math.max(0, Math.floor(s || 0));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function updateRecordUi(rec) {
+  const btn = $('recBtn');
+  const stat = $('recStatus');
+  const prog = $('recProgress');
+  const bar = $('recProgressBar');
+  const retryRow = $('retryUploadRow');
+
+  if (!rec) {
+    btn.textContent = '● Rec';
+    btn.classList.remove('active');
+    btn.dataset.mode = '';
+    btn.disabled = false;
+    stat.textContent = '';
+    stat.className = 'rec-status';
+    prog.classList.remove('active');
+    retryRow.style.display = 'none';
+    return;
+  }
+
+  const state = rec.state || 'standby';
+  if (state === 'recording') {
+    btn.textContent = '■ Stop Rec';
+    btn.classList.add('active');
+    btn.dataset.mode = 'recording';
+    btn.disabled = false;
+    const sz = rec.size_mb != null ? ` — ${rec.size_mb} MB` : '';
+    stat.textContent = `● 録画中 ${formatSeconds(rec.elapsed_sec)}${sz}`;
+    stat.className = 'rec-status recording';
+    prog.classList.remove('active');
+    retryRow.style.display = 'none';
+  } else if (state === 'uploading') {
+    btn.textContent = '● Rec';
+    btn.classList.remove('active');
+    btn.dataset.mode = '';
+    btn.disabled = true;
+    const up = rec.upload || {};
+    const pct = up.progress != null ? up.progress : 0;
+    const mbSent = up.bytes_sent != null ? Math.round(up.bytes_sent / 1048576) : 0;
+    const mbTotal = up.bytes_total != null ? Math.round(up.bytes_total / 1048576) : 0;
+    stat.textContent = `⇡ アップロード中 ${pct}% (${mbSent} / ${mbTotal} MB)`;
+    stat.className = 'rec-status uploading';
+    prog.classList.add('active');
+    bar.style.width = Math.min(100, pct) + '%';
+    retryRow.style.display = 'none';
+  } else if (state === 'upload_failed') {
+    btn.textContent = '● Rec';
+    btn.classList.remove('active');
+    btn.dataset.mode = '';
+    btn.disabled = false;
+    const err = (rec.upload && rec.upload.error) || 'unknown error';
+    stat.textContent = `✕ アップロード失敗: ${err}`;
+    stat.className = 'rec-status upload_failed';
+    prog.classList.remove('active');
+    retryRow.style.display = 'flex';
+  } else { // standby
+    btn.textContent = '● Rec';
+    btn.classList.remove('active');
+    btn.dataset.mode = '';
+    btn.disabled = false;
+    stat.textContent = '';
+    stat.className = 'rec-status';
+    prog.classList.remove('active');
+    retryRow.style.display = 'none';
   }
 }
 
 // UI updates
 function updateStatus(s) {
   const el = $('streamStatus'), st = $('streamStats');
+  const recState = s.record?.state || 'standby';
+  const isRecording = recState === 'recording';
+  const isUploading = recState === 'uploading';
+
   if (s.streaming) {
     el.textContent = 'Live  ' + (s.uptime || '');
     el.className = 'status live';
     st.textContent = '';
     $('goLiveBtn').disabled = true;
     $('stopBtn').disabled = false;
+    $('recBtn').disabled = true;  // 配信中は録画不可
   } else {
     el.textContent = 'Standby';
     el.className = 'status';
     st.textContent = '';
-    $('goLiveBtn').disabled = false;
+    $('goLiveBtn').disabled = isRecording || isUploading;  // 録画/アップロード中は配信不可
     $('stopBtn').disabled = true;
+    // Recボタンはu updateRecordUiが制御（ただし recording/uploading 以外で active 解除）
   }
+  updateRecordUi(s.record);
 }
 
 function updateWindows(wins) {

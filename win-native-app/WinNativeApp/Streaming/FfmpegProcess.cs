@@ -138,12 +138,33 @@ public sealed class FfmpegProcess : IDisposable
         var nv12Size = ColorConverter.Nv12Size(_config.Width, _config.Height);
         _nv12Buf = new byte[nv12Size];
 
-        var rtmpTarget = $"{_config.RtmpUrl}/{_config.StreamKey}";
-
         // エンコーダ選択（auto=HW自動検出→libx264フォールバック）
         var encoder = ResolveEncoder(_config.Encoder, FindFfmpeg());
         var encoderArgs = BuildEncoderArgs(encoder, _config);
-        Log.Information("[FFmpeg] Encoder: {Encoder}, AudioOffset: {Offset}s", encoder, _config.AudioOffset);
+        Log.Information("[FFmpeg] Mode: {Mode}, Encoder: {Encoder}, AudioOffset: {Offset}s",
+            _config.Mode, encoder, _config.AudioOffset);
+
+        // 出力モード別の最終引数と低遅延系フラグの有無を決定
+        string outputArgs;
+        string lowLatencyArgs;
+        if (_config.Mode == OutputMode.File)
+        {
+            var outputPath = _config.OutputPath
+                ?? throw new InvalidOperationException("OutputPath is required for File mode");
+            var dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            // +frag_keyframe はクラッシュ耐性、+faststart はmoov先頭配置（アップロード後のseek最適化）
+            outputArgs = $"-f mp4 -movflags +faststart+frag_keyframe \"{outputPath}\"";
+            // 録画は画質優先のため低遅延フラグを使わない
+            lowLatencyArgs = "";
+            Log.Information("[FFmpeg] Recording to file: {Path}", outputPath);
+        }
+        else
+        {
+            var rtmpTarget = $"{_config.RtmpUrl}/{_config.StreamKey}";
+            outputArgs = $"-f flv -flvflags no_duration_filesize \"{rtmpTarget}\"";
+            lowLatencyArgs = "-flags +low_delay -fflags +nobuffer -flush_packets 1";
+        }
 
         var args = string.Join(" ",
             "-y -nostdin",
@@ -164,13 +185,11 @@ public sealed class FfmpegProcess : IDisposable
             $"-bufsize {ParseBitrateKbps(_config.VideoBitrate) * 2}k",
             "-pix_fmt yuv420p",
             $"-g {_config.Framerate * 2}",
-            "-flags +low_delay",
-            "-fflags +nobuffer",
-            "-flush_packets 1",
+            lowLatencyArgs,
             // Audio encode
             $"-c:a aac -b:a {_config.AudioBitrate} -ar 44100",
-            // Output
-            $"-f flv -flvflags no_duration_filesize \"{rtmpTarget}\""
+            // Output (RTMP or File)
+            outputArgs
         );
 
         Log.Information("[FFmpeg] Command: ffmpeg {Args}", args);

@@ -1,5 +1,23 @@
 # DONE
 
+## クライアント動画撮影機能（C# → サーバアップロード方式）
+
+- [x] 背景: C#ネイティブ配信アプリはTwitch配信のみで、ローカル録画手段がなかった。切り抜き素材の確保・レイアウト検証・オフライン確認のためにローカル録画を追加
+- [x] 方針: 配信と録画は排他。既存FFmpegパイプラインの最終出力を RTMP / ファイル で分岐させることで実装コストを最小化。録画は Windows 側ローカルに書き、停止後に Python サーバ (`<repo>/videos/`) へストリーミングアップロード
+- [x] `plans/client-video-recording.md` を決定事項反映版で書き直し（ステータス: 承認済み）
+- [x] `StreamConfig.cs`: `OutputMode { Rtmp, File }`・`OutputPath` と `PipelineState { Standby, Streaming, Recording, Uploading }` を追加
+- [x] `FfmpegProcess.cs`: Fileモードで `-f mp4 -movflags +faststart+frag_keyframe` に分岐。低遅延フラグは録画時のみ除去
+- [x] `MainForm.cs`: `StartPipelineAsync` 抽出（配信/録画で共通化）・`StartRecordingAsync` / `StopRecordingAsync` / `RetryUploadAsync` / `GetRecordStatus` 追加。状態違反は `InvalidOperationException`
+- [x] `Streaming/Uploader.cs` **新規**: `HttpClient + StreamContent + ProgressReadStream` で進捗計測付きアップロード。成功時に `.uploaded` マーカー作成。起動時に7日超+マーカー付きファイルを自動gc
+- [x] `Server/HttpServer.cs`: `/record/start` / `/record/stop` / `/record/status` / `/record/retry-upload` 追加。状態違反は 409 Conflict
+- [x] `control-panel.html`: Recボタン追加。録画中は赤点滅＋経過時間＋ファイルサイズ、アップロード中は進捗% + プログレスバー + Rec無効、失敗時は再送ボタン。配信↔録画↔アップロードを相互 disabled で排他表示
+- [x] `scripts/routes/recordings.py` **新規**: `POST /api/recordings/upload`（X-Filenameヘッダ＋`application/octet-stream`）・`GET /api/recordings`（一覧 mtime降順）・`GET /api/recordings/{filename}/download`（`FileResponse` attachment）・`DELETE /api/recordings/{filename}`。ファイル名は `^[A-Za-z0-9_.\-]+\.mp4$` で検証（トラバーサル対策）
+- [x] `scripts/web.py`: `recordings_router` 登録と `/videos` StaticFiles マウント、`videos/` 自動作成
+- [x] `static/index.html` + `static/js/admin/recordings.js` **新規**: 「録画」タブ（ファイル名 / 作成日時 / サイズ / ⬇️ダウンロード / 🗑削除）。`showConfirm` / `showToast` 使用（CLAUDE.md準拠）。インライン再生は v1 スコープ外
+- [x] `static/js/admin/utils.js`: `TAB_NAMES` に `recordings` 追加、`switchTab('recordings')` で `loadRecordings()`
+- [x] `tests/test_api_recordings.py` **新規**: 一覧・アップロード・削除・ダウンロード・パストラバーサル拒否の9テスト。全1275 passed
+- [x] `.gitignore`: `videos/` を追記
+
 ## 承認待ち通知を単独発話にする（Claude Code Hook の Yes/No）
 
 - [x] 背景: `PermissionRequest` フックの発話が `multi=True` デフォルト経由で先生・生徒の掛け合いになり、Yes/No 押下までに発話が終わらない／長すぎる問題があった

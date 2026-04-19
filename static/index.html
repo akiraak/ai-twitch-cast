@@ -44,6 +44,7 @@
   <div class="tab" onclick="switchTab('debug', this)">Debug</div>
   <div class="tab" onclick="switchTab('db', this)">DB</div>
   <div class="tab" onclick="switchTab('docs', this)">Docs</div>
+  <div class="tab" onclick="switchTab('recordings', this)">録画</div>
 </div>
 
 <div class="main">
@@ -647,6 +648,21 @@ users       1──N  comments      (user_id)</div>
     </div>
   </div>
 
+  <!-- ===== 録画 ===== -->
+  <div class="tab-content" id="tab-recordings">
+    <div class="card">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <h2 style="margin:0;">録画ファイル</h2>
+        <button onclick="loadRecordings()" style="padding:3px 10px; font-size:0.75rem; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer;">↻ 更新</button>
+        <span id="recordings-count" style="font-size:0.75rem; color:#9a88b5;"></span>
+      </div>
+      <p style="font-size:0.75rem; color:#9a88b5; margin-bottom:8px;">
+        C#ネイティブ配信アプリの「Rec」で録画したMP4が <code>videos/</code> に保存されます。
+      </p>
+      <div id="recordings-list" style="font-size:0.85rem;">読み込み中...</div>
+    </div>
+  </div>
+
 </div>
 
 <script src="/static/js/panel-ui.js"></script>
@@ -668,6 +684,7 @@ users       1──N  comments      (user_id)</div>
 <script src="/static/js/admin/layout.js"></script>
 <script src="/static/js/admin/files.js"></script>
 <script src="/static/js/admin/teacher.js?v=21"></script>
+<script src="/static/js/admin/recordings.js"></script>
 <script src="/static/js/admin/init.js"></script>
 </body>
 </html>
