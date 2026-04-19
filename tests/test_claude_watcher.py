@@ -725,15 +725,15 @@ class TestClaudeWatcherPlayConversation:
 
         # speak_batch 開始直後にコメントキューにアイテムを置く
         mock_comment_reader.queue_size = 0
+        cancel_called = asyncio.Event()
 
         async def fake_speak_batch(entries):
-            # 監視タスクが起動する時間を与える
+            # コメント到着を模擬し、監視タスクが cancel を呼ぶのを待つ
             mock_comment_reader.queue_size = 1
-            await asyncio.sleep(1.0)
+            # 監視ループは 0.3s 間隔なのでタイムアウト 2s で十分
+            await asyncio.wait_for(cancel_called.wait(), timeout=2.0)
 
         mock_speech.speak_batch = AsyncMock(side_effect=fake_speak_batch)
-
-        cancel_called = asyncio.Event()
 
         async def fake_cancel(*args, **kwargs):
             cancel_called.set()

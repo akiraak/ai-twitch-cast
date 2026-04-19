@@ -4,7 +4,7 @@ import asyncio
 import json
 
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 
 class TestGenerateOne:
@@ -284,7 +284,8 @@ class TestPregenerateSectionTts:
 
         section = {"content": "短い文", "tts_text": None}
 
-        with patch("src.tts_pregenerate.synthesize", side_effect=fake_synthesize):
+        with patch("src.tts_pregenerate.synthesize", side_effect=fake_synthesize), \
+             patch("src.tts_pregenerate.asyncio.sleep", new_callable=AsyncMock):
             result = asyncio.get_event_loop().run_until_complete(
                 pregenerate_section_tts(
                     lesson_id=1, section=section, order_index=0,

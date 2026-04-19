@@ -1,5 +1,29 @@
 # DONE
 
+## テストスイート棚卸し Step 4-b: 実 `asyncio.sleep` を使うテストをモック/イベント待ちに置換
+
+- [x] 棚卸し: `tests/` 配下の `time.sleep` / `asyncio.sleep` を全件列挙し、本番コードの sleep が実時間で走っているテストを抽出
+  - `time.sleep` の使用は**0件**
+  - `asyncio.sleep` は多数あるが、大半が `await asyncio.sleep(0)`（yield用）、cancel 済みタスク内 `sleep(10)`（実行前に cancel）、POLL_INTERVAL=0.01 へ短縮済み、または既に `patch("asyncio.sleep", AsyncMock)` 済み
+  - **実時間待ちが発生していた実テスト 2 件**に絞り込み
+- [x] `tests/test_tts_pregenerate.py::TestPregenerateSectionTts::test_retry_on_failure`（1.11s → <0.01s）
+  - `patch("src.tts_pregenerate.asyncio.sleep", new_callable=AsyncMock)` を `with` に追加
+  - 本番コード側の `await asyncio.sleep(1)`（リトライ前）＋`await asyncio.sleep(0.1)`（生成後ウェイト）を素通りさせる
+- [x] `tests/test_claude_watcher.py::TestClaudeWatcherPlayConversation::test_comment_interrupt_cancels_batch`（1.00s → <0.01s）
+  - `fake_speak_batch` の固定 `await asyncio.sleep(1.0)` を `await asyncio.wait_for(cancel_called.wait(), timeout=2.0)` に置換
+  - 監視ループ（0.3s間隔）が queue_size 変化を拾って `cancel_tts_batch` を呼んだ瞬間に `cancel_called` が set されるので、テストは最小待機で終わる。タイムアウト保険 2s を付けてハング防止
+- [x] リグレッション検証:
+  - フル実行（`python3 -m pytest tests/ -q`）: **1270 passed / 4 warnings / 629.20s**（10:29、Step 3-7 時の 10:36 から微減）
+  - `-m "not slow"`: 1264 passed / 6 deselected / 349.75s（358.81s → -9s、実質削減 ≒2秒は全体計測の揺らぎに埋もれるレベル）
+- 判断（完了条件との関係）:
+  - 「`-m "not slow"` を 60 秒以内」という目標値は **Step 4-b のスコープでは達成不可**が確定。`rg` で全件棚卸しした結果、実時間待ちテストは上記2件で尽きている
+  - 残り時間（≈350秒）は**構造的な要因**: フィクスチャ setup コスト（0.5〜1.3s帯が約30件 = 20〜30秒）＋ 1264 件の call 0.1〜0.3s 帯の積み上げ
+  - TestClient(app) 生成＋`@app.on_event("startup")` 実行の合算が大きいが、Step 5 の lifespan 移行でも本質的には変わらない（lifespan も TestClient の `with` ブロックで発火する）。根本解法は session スコープ TestClient 共有だが、monkeypatch 依存度が高く大改修になる
+  - 従って「60秒以内」という目標値は現実的ではなく、**`-m "not slow"` で 5〜6 分台を維持できること**を実運用の基準にするのが妥当。Step 6 で `CLAUDE.md` のテスト運用指針に明示する
+- 学び:
+  - `asyncio.sleep` を patch する際は、**モジュールグローバルではなく `src.tts_pregenerate.asyncio.sleep` のようにテスト対象モジュールの属性経由で patch** する。グローバル `asyncio.sleep` を patch すると pytest-asyncio 自体の内部 sleep も止まってしまい、テストが hang する
+  - `cancel_called` のような `asyncio.Event` を使った「イベント待ち」方式は、固定 sleep より**正確で速い**。本番側の挙動が変わっても（例: POLL_INTERVAL を 0.3 → 0.5 に変えた）テストは自動的に追従する
+
 ## テストスイート棚卸し Step 4-a: 遅いテストへの `@pytest.mark.slow` 付与
 
 - [x] `pytest.ini` にマーカーを登録（`markers = slow: long-running tests (除外するには -m "not slow")`）

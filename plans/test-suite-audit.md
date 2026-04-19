@@ -1,6 +1,6 @@
 # テストスイートの棚卸し（不要削除・不足補完）
 
-## ステータス: 進行中（Step 4-a 完了）
+## ステータス: 進行中（Step 4-b 完了）
 
 ## 背景
 
@@ -272,6 +272,34 @@
 
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
+
+### Step 4-b 実装結果: 実 `asyncio.sleep` を使うテストをモック/イベント待ちに置換（2026-04-18）
+
+- 背景: Step 4-a 完了時点（`-m "not slow"` ≈ 358秒）で残っていた「実時間待ち」テストを棚卸し。`tests/` 全体から `time.sleep` / `asyncio.sleep` を `rg` で抽出し、**実際に本番コードの sleep が走る**ケースだけに絞り込んだ。
+- 調査結果:
+  - `time.sleep` の使用: **0件**（全て `asyncio.sleep`）
+  - `asyncio.sleep` の使用箇所は多いが、ほとんどが (1) `await asyncio.sleep(0)` のyield用 (2) cancel 済みタスク内の `asyncio.sleep(10)`（実行前に cancel されるので実時間待ちなし） (3) POLL_INTERVAL=0.01 への短縮済み (4) `patch("asyncio.sleep", AsyncMock)` でモック済み。
+  - **実時間待ちが発生していた実テスト 2 件**:
+    - `tests/test_tts_pregenerate.py::TestPregenerateSectionTts::test_retry_on_failure`（1.11s）: `src/tts_pregenerate.py` の `await asyncio.sleep(1)`（リトライ前）＋`await asyncio.sleep(0.1)` の合算
+    - `tests/test_claude_watcher.py::TestClaudeWatcherPlayConversation::test_comment_interrupt_cancels_batch`（1.00s）: 固定 `asyncio.sleep(1.0)` で監視タスクが起動するのを待っていた
+- 実施内容:
+  1. **`test_retry_on_failure`**: `patch("src.tts_pregenerate.asyncio.sleep", new_callable=AsyncMock)` を `with` に追加。本番コード側のリトライ sleep を素通りさせる
+  2. **`test_comment_interrupt_cancels_batch`**: `fake_speak_batch` の固定 1.0s 待機を `await asyncio.wait_for(cancel_called.wait(), timeout=2.0)` に置換。監視ループ（0.3s間隔）が queue_size 変化を拾って `cancel_tts_batch` を呼んだ瞬間に `cancel_called` が set されるので、テストは最小待機で終わる。タイムアウト保険 2s を付けてハング防止
+- 計測結果:
+  - **変更前**: `test_retry_on_failure` 1.11s / `test_comment_interrupt_cancels_batch` 1.00s（合計 ≈ 2.1s）
+  - **変更後**: 両方とも `< 0.01s`（単独実行時の1件目に乗ってくる 1.0s の初回 import コスト（`scripts.services.capture_client` など）を除けば、実質 0s）
+  - **`-m "not slow"` 全体**: 358.81s → **349.75s**（約9秒短縮、実質 2秒削減は全体計測の揺らぎに埋もれるレベル）
+  - **全件 pass**: 1264 passed / 6 deselected / 4 warnings
+- 完了条件との関係:
+  - 「通常実行 60 秒以内」という目標値（526 → 60 秒）の残り 290秒は、**Step 4-b のスコープでは削れない**ことが確定した。`rg` で全件棚卸しした結果、実時間待ちテストは上記2件で尽きている。残り時間は以下の構造的な要因:
+    - フィクスチャ setup コスト（0.5〜1.3s 帯が約 30件 = 20〜30秒）: `TestClient(app)` 生成＋`@app.on_event("startup")` 実行。**Step 5 の lifespan 移行でも本質的には変わらない**（lifespan も TestClient の `with` ブロックで発火する）。根本解法は session スコープの TestClient 共有だが、各テストの monkeypatch 依存度が高く大改修になる
+    - それ以外は call が 0.1〜0.3s の多数のテストの合計。個別には小さいが 1264件あれば積み上がる
+  - したがって「60秒以内」という目標値は現実的ではなく、**`-m "not slow"` で 5〜6分台を維持できること**を実運用の基準にするのが妥当。これは Step 6 で `CLAUDE.md` のテスト運用指針を書き換えるときに明示する
+- 注意点:
+  - `asyncio.sleep` を patch する際は、**モジュールグローバルではなく `src.tts_pregenerate.asyncio.sleep` のようにテスト対象モジュールの属性経由で patch** すること。グローバル `asyncio.sleep` を patch すると pytest-asyncio 自体の内部 sleep も止まってしまい、テストが hang する
+  - `cancel_called` のような `asyncio.Event` を使った「イベント待ち」方式は、固定 sleep より**正確で速い**。本番側の挙動が変わっても（例: POLL_INTERVAL を 0.3 → 0.5 に変えた）テストは自動的に追従する
+  - **残存する DeprecationWarning は依然4件**（Step 5 の lifespan 移行で解消予定）
+- 結果: 実 I/O / 実 sleep を使うテストは 0 件（残留しているのは全てモックや cancel 済みタスク経由）。Step 4-b は完了。**Step 5（lifespan 移行）・Step 6（CLAUDE.md 更新）が残タスク**
 
 ### Step 4-a 実装結果: 遅いテストへの `@pytest.mark.slow` 付与（2026-04-18）
 
