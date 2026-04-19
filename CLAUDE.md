@@ -241,37 +241,79 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 
 ### 実行方法
 ```bash
-python3 -m pytest tests/ -q          # 全テスト実行
-python3 -m pytest tests/test_db.py   # 特定ファイルのみ
+python3 -m pytest tests/ -q -m "not slow"   # 通常実行（slowを除外、5〜6分）— 開発中はこれ
+python3 -m pytest tests/ -q                 # フル実行（slow含む、9〜10分）— コミット前/CI
+python3 -m pytest tests/ -q -m "slow"       # slowのみ（lesson_runner / speech_pipeline 一部）
+python3 -m pytest tests/test_db.py          # 特定ファイルのみ
 ```
 
+- `-m "not slow"` と `-m "slow"` は pytest マーカーで切り替える（`pytest.ini` で登録済み）。`@pytest.mark.slow` は実時間待ちが大きい少数のテストにだけ付ける運用
+- 「60秒以内」という目標は TestClient のstartup/lifespan コスト（1件あたり 0.5〜1s 帯）の積み上げで非現実的。**`-m "not slow"` で 5〜6 分台を維持できること**を実運用の基準とする
+
 ### テスト構成（`tests/`）
+
+#### 共通
 | ファイル | 対象 | 備考 |
 |---------|------|------|
-| `conftest.py` | 共通フィクスチャ | `test_db`(インメモリSQLite), `api_client`(FastAPI TestClient), `mock_gemini`, `mock_env` |
-| `test_db.py` | `src/db.py` | テーブル作成・全CRUD関数のテスト |
-| `test_ai_responder.py` | `src/ai_responder.py` | キャラクター管理・AI応答生成・ユーザーメモ |
-| `test_prompt_builder.py` | `src/prompt_builder.py` | 言語モード・システムプロンプト構築 |
-| `test_speech_pipeline.py` | `src/speech_pipeline.py` | TTS・リップシンク・オーバーレイ・感情連動 |
+| `conftest.py` | 共通フィクスチャ | `test_db`(インメモリSQLite), `api_client`(FastAPI TestClient), `mock_gemini`, `mock_env`、twitchio/aiohttp のスタブ |
+
+#### `src/` 配下
+| ファイル | 対象 | 備考 |
+|---------|------|------|
+| `test_db.py` | `src/db/` パッケージ | テーブル作成・全CRUD関数のテスト |
+| `test_ai_responder.py` | `src/ai_responder.py` | AI応答生成・会話履歴・ユーザーメモ（キャラ管理は test_character_manager に分離済み） |
+| `test_character_manager.py` | `src/character_manager.py` | キャラDB操作・キャッシュ・seed / migrate / tts_config |
+| `test_prompt_builder.py` | `src/prompt_builder.py` | 言語モード・システムプロンプト構築・ai_responder との境界検証 |
+| `test_speech_pipeline.py` | `src/speech_pipeline.py` | TTS・リップシンク・オーバーレイ・感情連動・comment_reader との境界検証 |
 | `test_tts.py` | `src/tts.py` | 言語タグ変換・TTSスタイル |
+| `test_tts_pregenerate.py` | `src/tts_pregenerate.py` | セクション単位のTTS並列事前生成・リトライ |
+| `test_comment_reader.py` | `src/comment_reader.py` | 並列TTS事前生成の残存機能（speech_pipeline 抽出後） |
+| `test_claude_watcher.py` | `src/claude_watcher.py` | TranscriptParser / ClaudeWatcher・承認待ち / 長時間実行検知 |
 | `test_git_watcher.py` | `src/git_watcher.py` | コミット検出・ライフサイクル・バッチ通知 |
 | `test_scene_config.py` | `src/scene_config.py` | 設定読み書き |
 | `test_wsl_path.py` | `src/wsl_path.py` | WSLパス変換・IP取得 |
+| `test_json_utils.py` | `src/json_utils.py` | `parse_llm_json`（コードブロック剥がし・壊れJSON修復） |
+| `test_se_resolver.py` | `src/se_resolver.py` | カテゴリ別SE解決 |
+| `test_lipsync.py` | `src/lipsync.py` | 振幅解析 |
+| `test_twitch_api.py` | `src/twitch_api.py` | Helix API（broadcaster_id / channel_info / categories） |
+| `test_twitch_chat.py` | `src/twitch_chat.py` | twitchio ラッパー（start/stop/send/event） |
+| `test_lesson_runner.py` | `src/lesson_runner.py` | 状態管理・ライフサイクル（一部 `slow`） |
+| `test_lesson_improver.py` | `src/lesson_generator/improver.py` | セクション改善・品質評価・プロンプト編集 |
+| `test_lesson_extractor.py` | `src/lesson_generator/extractor.py` | 画像・URLテキスト抽出 |
+| `test_lesson_utils.py` | `src/lesson_generator/utils.py` | 共有ユーティリティ（キャラ情報・プロンプト整形） |
+
+#### `scripts/` 配下
+| ファイル | 対象 | 備考 |
+|---------|------|------|
+| `test_api_avatar.py` | `scripts/routes/avatar.py` | 発話・TTSテスト・会話デモ・Claude Watcher制御・チャット履歴 |
+| `test_api_bgm.py` | `scripts/routes/bgm.py` | BGM一覧/再生/停止/音量/削除/YouTube取り込み |
+| `test_api_capture.py` | `scripts/routes/capture.py` | ウィンドウ一覧・保存済み設定・配信ストリーミング・スクリーンショット |
+| `test_api_character.py` | `scripts/routes/character.py` | キャラCRUD・言語モード |
+| `test_api_chat.py` | `scripts/routes/chat.py` | WebUIチャット（POST /api/chat/webui 等） |
+| `test_api_custom_text.py` | `scripts/routes/overlay.py` のカスタムテキストAPI | `/api/overlay/custom-texts` |
+| `test_api_docs_viewer.py` | `scripts/routes/docs_viewer.py` | plans/docs ファイル一覧API |
+| `test_api_files.py` | `scripts/routes/files.py` | ファイル一覧・アップロード・選択・削除 |
+| `test_api_items.py` | `scripts/routes/overlay.py` + `src/db` の broadcast_items | テーブルCRUD＋API両方 |
+| `test_api_prompts.py` | `scripts/routes/prompts.py` | プロンプト一覧/取得/編集/AI差分編集 |
+| `test_api_se.py` | `scripts/routes/se.py` | SE一覧・アップロード |
+| `test_api_stream.py` | `scripts/routes/stream_control.py` | シーン・音量・アバター |
+| `test_api_teacher.py` | `scripts/routes/teacher.py` | コンテンツCRUD・JSONインポート・授業制御 |
 | `test_overlay.py` | `scripts/routes/overlay.py` | TODOパース・ブロードキャスト |
-| `test_capture_client.py` | `src/capture_client.py` | URL生成・WS通信・プロキシ |
-| `test_lipsync.py` | リップシンク | 振幅解析 |
-| `test_native_app_patterns.py` | C#ソースコード | 危険パターンの再発防止（ソース解析のみ） |
-| `test_api_character.py` | キャラクターAPI | CRUD・言語モード |
-| `test_api_stream.py` | 配信制御API | シーン・音量・アバター |
-| `test_api_teacher.py` | 教師モードAPI | コンテンツCRUD・JSONインポート・授業制御 |
-| `test_lesson_runner.py` | LessonRunner | 状態管理・ライフサイクル |
+| `test_capture_client.py` | `scripts/services/capture_client.py` | URL生成・WS通信・プロキシ |
+
+#### パターン検証系（再発防止ガード）
+| ファイル | 対象 | 備考 |
+|---------|------|------|
+| `test_broadcast_patterns.py` | `static/broadcast.html` + `static/js/broadcast/*` | アイテム共通化（ITEM_REGISTRY/applyCommonStyle/data-editable）の再発防止 |
+| `test_native_app_patterns.py` | `win-native-app/` の C#ソース | 危険パターンの再発防止（ソース解析のみ） |
 
 ### テスト規約
 - **新しいDB関数を追加したら `test_db.py` にテストを追加すること**
 - **新しいAPIエンドポイントを追加したら対応する `test_api_*.py` にテストを追加すること**
+- 実時間待ちが発生するテストは `@pytest.mark.slow` を付け、通常実行（`-m "not slow"`）から外す
 - フィクスチャ `test_db` はインメモリSQLiteを使用（本番DBに影響しない）
 - フィクスチャ `api_client` は全外部依存（Gemini/Twitch/WebSocket）をモック化
-- 外部モジュール（twitchio, aiohttp）は `conftest.py` でスタブ化済み
+- 外部モジュール（twitchio, aiohttp）は `conftest.py` でスタブ化済み（インストール済みなら実体を優先）
 
 ## 機能変更時の必須チェック（リグレッション防止）
 
@@ -279,7 +321,8 @@ python3 -m pytest tests/test_db.py   # 特定ファイルのみ
 
 ### 1. テスト実行
 ```bash
-python3 -m pytest tests/ -q          # 全テスト通ることを確認
+python3 -m pytest tests/ -q -m "not slow"   # 通常実行（開発中）
+python3 -m pytest tests/ -q                 # フル実行（コミット前/CI）
 ```
 
 ### 2. サーバー起動確認

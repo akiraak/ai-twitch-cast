@@ -1,6 +1,6 @@
 # テストスイートの棚卸し（不要削除・不足補完）
 
-## ステータス: 進行中（Step 5 完了）
+## ステータス: 完了（2026-04-18 Step 6 完了）
 
 ## 背景
 
@@ -150,6 +150,30 @@
 - [ ] `DONE.md` に完了記録、本プランを「ステータス: 完了」に更新
 
 ## 計測結果（Step 1 で埋める）
+
+### Step 6 実装結果: `CLAUDE.md` のテスト構成表を現行実体に同期＋slow マーカー運用を明記（2026-04-18）
+
+- 実施内容:
+  1. `CLAUDE.md` の「テスト構成」表を **共通 → `src/` 配下 → `scripts/` 配下 → パターン検証系** の4グループに並べ替え、Step 1-d で洗い出した差分（対象パス修正2件＋未掲載11件）および Step 3 で追加したファイルを反映
+     - 対象パス修正: `test_db.py` → `src/db/` パッケージ、`test_capture_client.py` → `scripts/services/capture_client.py`
+     - 未掲載 → 追加（計22件）: Step 1-d 指摘の11件 + Step 3 で追加した11件
+  2. 「実行方法」セクションに `-m "not slow"` / `-m "slow"` / フル実行のコマンドを明記
+  3. 「機能変更時の必須チェック（リグレッション防止）」の 1. テスト実行 にも `-m "not slow"` / フル実行の使い分けを追記
+  4. テスト規約に「実時間待ちテストには `@pytest.mark.slow` を付け、通常実行から外す」を追記
+  5. 「60秒以内」という当初の完了条件は TestClient startup/lifespan コスト由来で非現実的と判明したため、**運用基準を「`-m "not slow"` で 5〜6 分台を維持」と明記**（Step 4-b の学びを反映）
+  6. TODO.md から該当エントリを削除、DONE.md に Step 6 記録を追加、本プランのステータスを「完了」に更新
+- コード変更: **なし**（ドキュメントのみ）
+- 完了条件との関係:
+  - ✅ `python3 -m pytest tests/ -q` が全件 pass（DeprecationWarning なし）— Step 5 で達成
+  - ⚠️ 通常実行 60 秒以内: **構造的に不可能**と判明したため「`-m "not slow"` で 5〜6 分台」に運用基準を差し替え（349秒 = 5分49秒 で達成）
+  - ✅ カバレッジギャップ（improver / routes/avatar / routes/capture / character_manager / extractor / utils / routes/bgm / files / prompts / twitch_api / twitch_chat）すべてに最低1ケース存在
+  - ✅ 不要テストの削除: Step 1-c の調査で重複削除候補ゼロと判明（記録済み）
+  - ✅ `CLAUDE.md` の「テスト構成」表が実体と一致
+  - ✅ `DONE.md` に完了記録、本プランを「ステータス: 完了」に更新
+- プラン全体の集計:
+  - 開始時: 916 passed / 27ファイル / 12,551行 / 526.91秒（実行時間ベースライン）/ 5 DeprecationWarnings
+  - 完了時: **1270 passed / 37ファイル / 0 warnings / `-m "not slow"` 349秒 / `-m "slow"` 264秒 / フル実行 629秒**
+  - 追加テスト 354件（+38.6%）、DeprecationWarning 全消、slow マーカー仕分けで開発フロー実行時間 約33%短縮（526→349秒）
 
 ### 実行時間プロファイル
 

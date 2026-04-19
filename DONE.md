@@ -1,5 +1,23 @@
 # DONE
 
+## テストスイート棚卸し Step 6: `CLAUDE.md` のテスト構成表を現行実体に同期＋slow マーカー運用を明記
+
+- [x] 背景: Step 1-d で洗い出した差分（CLAUDE.md の「テスト構成」表に未掲載11件／対象パスが古い2件）と、Step 4-a/4-b で導入した `@pytest.mark.slow` 運用がドキュメントに反映されていなかった
+- [x] `CLAUDE.md` の「テスト構成」表を実体と一致させる:
+  - 対象パス修正（2件）: `test_db.py` → `src/db/` パッケージ、`test_capture_client.py` → `scripts/services/capture_client.py`
+  - 追加（11件）: `test_api_chat.py` / `test_api_custom_text.py` / `test_api_docs_viewer.py` / `test_api_items.py` / `test_api_se.py` / `test_broadcast_patterns.py` / `test_claude_watcher.py` / `test_comment_reader.py` / `test_json_utils.py` / `test_se_resolver.py` / `test_tts_pregenerate.py`
+  - 新規追加分も掲載（Step 3 で追加）: `test_api_avatar.py` / `test_api_bgm.py` / `test_api_capture.py` / `test_api_files.py` / `test_api_prompts.py` / `test_character_manager.py` / `test_lesson_extractor.py` / `test_lesson_improver.py` / `test_lesson_utils.py` / `test_twitch_api.py` / `test_twitch_chat.py`
+  - 表全体を **共通 → `src/` 配下 → `scripts/` 配下 → パターン検証系** の順に並べ替え
+- [x] `-m "not slow"` 運用を「実行方法」と「機能変更時の必須チェック」に追記:
+  - 通常実行: `python3 -m pytest tests/ -q -m "not slow"`（5〜6分）— 開発中
+  - フル実行: `python3 -m pytest tests/ -q`（9〜10分）— コミット前/CI
+  - slow のみ: `python3 -m pytest tests/ -q -m "slow"`
+  - 「60秒以内」という当初の完了条件は TestClient startup/lifespan コスト由来で非現実的と判明したため、**実運用基準を「`-m "not slow"` で 5〜6 分台を維持」と明記**
+- [x] テスト規約に「実時間待ちテストには `@pytest.mark.slow` を付ける」を追記
+- [x] TODO.md から該当エントリを削除
+- [x] `plans/test-suite-audit.md` のステータスを「完了」に更新
+- [x] 結果: コード変更なし、ドキュメントのみ。全プラン完了で、ベースライン 916 passed 526秒 → **1270 passed / 0 warnings / `-m "not slow"` 349秒**・構成表と実体・マーカー運用が一致
+
 ## テストスイート棚卸し Step 5: `scripts/web.py` の `@app.on_event` を FastAPI lifespan に移行
 
 - [x] 背景: Step 4-b 完了時点で残っていた 4 件の `DeprecationWarning` はすべて `scripts/web.py:167` (`@app.on_event("startup")`) と `:302` (`@app.on_event("shutdown")`) 由来。FastAPI の推奨は lifespan context manager への移行
