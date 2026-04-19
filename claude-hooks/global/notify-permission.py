@@ -48,8 +48,6 @@ def main():
     if is_in_cooldown():
         return
 
-    tool_name = data.get("tool_name", "") or "unknown"
-
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "")
     project_name = os.path.basename(project_dir) if project_dir else "unknown"
 
@@ -58,7 +56,14 @@ def main():
     else:
         event_type = f"承認待ち（{project_name}）"
 
-    payload = json.dumps({"event_type": event_type, "detail": tool_name}).encode()
+    # tool_name は配信のsecret誤爆防止のため送らない。
+    # 固定の汎用detailをLLMに渡し、キャラ口調＋40字以内のフランクな1文に
+    # 自動変換させる（毎回バリエーションが出る）。
+    payload = json.dumps({
+        "event_type": event_type,
+        "detail": "ユーザー入力待ち。選択肢から選んでほしい",
+        "multi": False,
+    }).encode()
     req = urllib.request.Request(
         f"http://localhost:{get_port()}/api/avatar/speak",
         data=payload,

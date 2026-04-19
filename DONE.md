@@ -1,5 +1,17 @@
 # DONE
 
+## 承認待ち通知を単独発話にする（Claude Code Hook の Yes/No）
+
+- [x] 背景: `PermissionRequest` フックの発話が `multi=True` デフォルト経由で先生・生徒の掛け合いになり、Yes/No 押下までに発話が終わらない／長すぎる問題があった
+- [x] `scripts/routes/avatar.py` の `SpeakRequest` に `multi: bool = True` を追加し、`speak_event()` に転送
+- [x] `claude-hooks/global/notify-permission.py`: `tool_name` 送信を撤廃し、固定の汎用 detail（`"ユーザー入力待ち。選択肢から選んでほしい"`）と `"multi": false` を送るよう変更（secret 誤爆防止＋単独発話）
+- [x] `tests/test_api_avatar.py`: `multi=False` 経路と `multi` 省略時のデフォルト `True` 経路をテスト追加
+- [x] `bash scripts/setup-hooks.sh` で `~/.claude/hooks/notify-permission.py` を更新（冪等）
+- [x] `python3 -m pytest tests/ -q -m "not slow"` 全1266件パス
+- [x] 既存イベント（コミット通知・指示受信・作業報告・長時間実行）は `multi` を送らないため、デフォルト `True` のまま掛け合い維持（リグレッションなし）
+- [x] `plans/claude-permission-single-utterance.md` を「ステータス: 完了」に更新
+- [x] TODO.md から該当行削除
+
 ## テストスイート棚卸し Step 6: `CLAUDE.md` のテスト構成表を現行実体に同期＋slow マーカー運用を明記
 
 - [x] 背景: Step 1-d で洗い出した差分（CLAUDE.md の「テスト構成」表に未掲載11件／対象パスが古い2件）と、Step 4-a/4-b で導入した `@pytest.mark.slow` 運用がドキュメントに反映されていなかった

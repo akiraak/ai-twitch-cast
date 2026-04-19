@@ -49,6 +49,27 @@ class TestAvatarSpeak:
         assert args[1] == "やあ"
         assert kwargs.get("voice") == "Leda"
 
+    def test_default_multi_is_true(self, api_client):
+        import scripts.state as st
+        st.reader.speak_event = AsyncMock()
+        resp = api_client.post("/api/avatar/speak", json={"detail": "デフォルト"})
+        assert resp.status_code == 200
+        kwargs = st.reader.speak_event.call_args.kwargs
+        assert kwargs.get("multi") is True
+
+    def test_multi_false_passed_through(self, api_client):
+        """承認待ちフックなど、単独発話したい呼び出し元向け"""
+        import scripts.state as st
+        st.reader.speak_event = AsyncMock()
+        resp = api_client.post(
+            "/api/avatar/speak",
+            json={"event_type": "承認待ち", "detail": "ユーザー入力待ち", "multi": False},
+        )
+        assert resp.status_code == 200
+        args, kwargs = st.reader.speak_event.call_args
+        assert args[0] == "承認待ち"
+        assert kwargs.get("multi") is False
+
 
 class TestTtsTest:
     """POST /api/tts/test"""

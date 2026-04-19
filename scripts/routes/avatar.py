@@ -17,6 +17,7 @@ class SpeakRequest(BaseModel):
     event_type: str = "手動"
     detail: str
     voice: str | None = None
+    multi: bool = True
 
 
 @router.post("/api/avatar/speak")
@@ -27,7 +28,9 @@ async def avatar_speak(body: SpeakRequest):
         "type": "current_task",
         "task": body.detail,
     })
-    asyncio.create_task(state.reader.speak_event(body.event_type, body.detail, voice=body.voice))
+    asyncio.create_task(
+        state.reader.speak_event(body.event_type, body.detail, voice=body.voice, multi=body.multi)
+    )
     return {"ok": True}
 
 
