@@ -273,6 +273,48 @@
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
 
+### Step 3-6 実装結果: `routes/bgm.py` / `files.py` / `prompts.py` のテスト追加（2026-04-18）
+
+- 実施内容:
+  - `tests/test_api_bgm.py` を新規作成（**33ケース**）。`scripts/routes/bgm.py` の全エンドポイント＋内部ヘルパーをカバー
+  - `tests/test_api_files.py` を新規作成（**32ケース**）。`scripts/routes/files.py` の全エンドポイント＋アバターVRM関連ヘルパーをカバー
+  - `tests/test_api_prompts.py` を新規作成（**33ケース**）。`scripts/routes/prompts.py` の全エンドポイント＋ユーティリティをカバー
+- カテゴリ別内訳（bgm, 33ケース）:
+  - **GET `/api/bgm/list`**（5ケース）: 空ディレクトリ、対応拡張子フィルタ（mp3/wav/ogg/m4a のみ）、DB保存の volume / source_url マージ、settings 経由の現在曲、BGM_DIR 自動作成
+  - **POST `/api/bgm`**（4ケース）: play で `bgm_play` broadcast＋曲別volume適用＋settings保存、未設定時はデフォルト1.0、stop で `bgm_stop` broadcast＋track クリア、不明action のエラー
+  - **POST `/api/bgm/track-volume`**（3ケース）: DB保存、再生中なら `bgm_volume` broadcast、非再生中なら broadcast しない
+  - **DELETE `/api/bgm/track`**（3ケース）: ファイル＋DBレコード削除、再生中なら停止してから削除、存在しないファイルはエラー
+  - **POST `/api/bgm/youtube`**（5ケース）: 空URL エラー、正常ダウンロード（sanitize後の名前でMP3保存＋source_url DB保存）、既存ファイルはダウンロードせずURLのみ補完、ダウンロード失敗（例外伝搬）、ファイル未生成時のエラー
+  - **ヘルパー**（13ケース）: `_get_youtube_title`（yt-dlp 成功/失敗）、`_download_youtube_audio`（コマンド構築/失敗例外）、`_sanitize_filename`（禁止文字/前後空白/空文字→untitled/100文字切詰/Unicode保持）、`load_bgm_settings`（未設定で空、DB保存値）、`_save_bgm`（DB保存、None で no-op）
+- カテゴリ別内訳（files, 32ケース）:
+  - **GET `/api/files/{cat}/list`**（7ケース）: 不明カテゴリエラー、空リスト、拡張子フィルタ、active フラグ、アバターは characters.config.vrm から、characters 無し時は settings fallback、ディレクトリ自動作成
+  - **POST `/api/files/{cat}/upload`**（4ケース）: 不明カテゴリ、対応外拡張子、sanitize 適用＋保存、同名衝突時の連番付与、大文字拡張子 → lower
+  - **POST `/api/files/{cat}/select`**（5ケース）: 不明カテゴリ、存在しないファイル、background で `background_change` broadcast＋settings保存、avatar で characters.config.vrm 更新＋`avatar_vrm_change` broadcast、avatar2 で student 側に反映＋`avatar2_vrm_change`、teaching は broadcast しない
+  - **DELETE `/api/files/{cat}`**（5ケース）: 不明カテゴリ、存在しないファイル、ファイル削除、active 削除時の settings クリア、avatar 削除時の characters.config.vrm クリア
+  - **ヘルパー**（11ケース）: `_sanitize_filename`（禁止文字/空/前後ドット/200文字切詰）、`_get_active_vrm`（characters 優先 / settings fallback / 非対応カテゴリで空）、`_set_active_vrm`（characters 更新 / characters 無し時 settings fallback）
+- カテゴリ別内訳（prompts, 33ケース）:
+  - **`_validate_name`**（6ケース）: 正常 .md、ネストパス、空文字却下、`..` 含む却下、非 .md 拒否、絶対パス（PROMPTS_DIR 外）却下
+  - **GET `/api/prompts`**（5ケース）: PROMPTS_DIR 無しで空リスト、空ディレクトリ、メタ情報付き一覧（title は先頭行 `# ...`）、ネストファイル含む、非 .md は除外
+  - **GET `/api/prompts/{name}`**（5ケース）: 本文返却、ネストパス、非 .md で400、`..` で400、存在しないで404
+  - **PUT `/api/prompts/{name}`**（4ケース）: 上書き保存、不正名エラー、存在しないファイルエラー、update 専用（新規作成しない）
+  - **`_escape_html`**（2ケース）: 基本文字（<, >, &, "）、`&` 先行エスケープ（二重エスケープ回避）
+  - **`_make_diff_html`**（4ケース）: 追加/削除行のクラス付与、`@@` ハンクヘッダの紫色 ctx、同一入力で空、HTMLエスケープ適用
+  - **POST `/api/prompts/ai-edit`**（7ケース）: 空指示エラー、不正名、存在しないファイル、LLM 差分プレビュー（ファイル自体は書き換えない）、``` ``` コードブロック剥がし、LLM 例外伝搬、contents / system_instruction の検証
+- 設計上のポイント:
+  - **scenes.json フォールバック対策**: `load_config_value("bgm.track", "")` は DB空時に scenes.json の実ファイルを読みに行くため、`bgm.track` の既定値がテストに混入する。affected tests では `monkeypatch.setattr(sc, "CONFIG_PATH", empty_config)` で空JSONに差し替え
+  - **BGM_DIR / PROMPTS_DIR / CATEGORIES の module-level パス差し替え**: `monkeypatch.setattr(mod, "BGM_DIR", tmp_path/...)` / `monkeypatch.setattr(mod, "PROMPTS_DIR", ...)` / `monkeypatch.setattr(mod, "CATEGORIES", new_cats)` で resources/ 配下への副作用を全て隔離
+  - **yt-dlp のモック**: `_get_youtube_title` / `_download_youtube_audio` 両方をモジュール属性として差し替え（`asyncio.to_thread` 経由なので直接差し替えで届く）。単体テストのみ `subprocess.run` を `patch.object` で差し替え
+  - **Path.stem の挙動**: `files_upload` は `Path(filename).stem + ext` で保存名を構築するため、`/` を含むテスト文字列はパス分離で消える。`_sanitize_filename` が弾く文字（`?`, `*`, `|`）で検証
+  - **ai-edit の LLM モック**: `mock_gemini.models.generate_content.return_value.text` を直接差し替え。例外テストは `get_client` 自体を例外スロー版に差し替え
+  - **`_seed_character` ヘルパー**: files テストで teacher/student を characters テーブルに作成する際に `get_or_create_character` + config JSON を直接叩く
+  - **assert でアサーションする broadcast 回数**: 1テスト内で broadcast が呼ばれる経路と呼ばれない経路を明示的に `assert_called_once()` / `assert_not_called()` で検証
+- 注意点・学び:
+  - `Path(filename).suffix.lower()` で比較 → 大文字 `.JPG` も対応リスト `{.jpg}` と一致するが、最終ファイル名は lower 済みの `.jpg` で保存される
+  - `_validate_name` は絶対パスを `.startswith()` で弾くが、先に `".."` チェックが無いパスも resolve 後に PROMPTS_DIR 外になれば None を返す
+  - `_make_diff_html` の同一入力は `unified_diff` が空を返すので html_parts も空 → 結果は空文字列
+  - `test_api_bgm.py` の `bgm.track` テストで、scenes.json のデフォルト値が `"Morning Cafe Jazz - Piano & Guitar Bossa Nova Music for Study, Work.mp3"` になっており、これに気づかずに `== ""` を assert すると fail する
+- 結果: `python3 -m pytest tests/ -q` → **1235 passed / 5 warnings / 10:18**（1137 → 1235 / +98件・リグレッションなし）。warnings は Step 5 で解消予定の `@app.on_event` DeprecationWarning のみ
+
 ### Step 3-5 実装結果: `lesson_generator/extractor.py` / `utils.py` のテスト追加（2026-04-18）
 
 - 実施内容:
