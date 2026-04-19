@@ -273,6 +273,35 @@
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
 
+### Step 3-3 実装結果: `scripts/routes/capture.py` のテスト追加（2026-04-18）
+
+- 実施内容: `tests/test_api_capture.py` を新規作成（595行 / 53ケース）。サーバー状態・ウィンドウ一覧・保存済み設定CRUD・復元・キャプチャ開始/停止/一覧/レイアウト・スクリーンショット・配信ストリーミング・内部ヘルパーを網羅
+- エンドポイントごとの内訳:
+  - **`/api/capture/status`**（2ケース）: proxy成功時の `{running: True, ...}`、失敗時の `{running: False}` フォールバック
+  - **`/api/capture/windows`**（2ケース）: 一覧、接続失敗時502
+  - **`/api/capture/saved`** GET（2ケース）: 空、DB保存行のAPI形式（`window_name` / `label` / `layout`）変換
+  - **`/api/capture/saved`** DELETE（2ケース）: `window_name` 指定削除、空bodyでの短絡
+  - **`/api/capture/saved/layout`**（2ケース）: 部分更新（未指定カラムは据え置き）、`window_name` 欠落時の短絡
+  - **`/api/capture/restore`**（4ケース）: 保存ゼロ時の `message`、windows取得失敗時の `ok=false`、完全一致マッチ＋`broadcast_to_broadcast`、visible=false/active重複のskip
+  - **`/api/capture/start`**（5ケース）: レイアウト永続化＋broadcast、保存済みレイアウト再利用、502（proxy失敗）、400（ok=false）、nameなし時の `/captures` フォールバック
+  - **`/api/capture/{id}`** DELETE（2ケース）: `capture_remove` broadcast、proxy失敗でもクライアント側同期
+  - **`/api/capture/sources`**（3ケース）: 保存済みレイアウトマージ、proxy失敗時[]、未保存エントリのデフォルトレイアウト
+  - **`/api/capture/{id}/layout`**（2ケース）: None除外、`window_name` 経由の永続テーブル同期
+  - **`/api/capture/screenshot`**（3ケース）: WS成功時のbase64デコード＋ファイル書き出し、502/400
+  - **`/api/capture/screenshots`** GET一覧（2ケース）: ディレクトリ無しで空、mtime降順
+  - **`/api/capture/screenshots/{filename}`**（6ケース）: GET存在/404/パストラバーサル（parametrize 3件）、DELETE成功/404/バックスラッシュ400
+  - **`/api/capture/stream/start`**（4ケース）: env TWITCH_STREAM_KEY + `get_windows_host_ip` 由来の `serverUrl`、body優先、未設定時400、ws失敗時502
+  - **`/api/capture/stream/{stop,status}`**（4ケース）: ws結果passthrough、失敗時502
+  - **内部ヘルパー**（6ケース）: `_save_capture_layout` / `_load_capture_sources` / `_update_capture_layout` / `_remove_capture_layout` のSQLite経由roundtrip、壊れたJSON耐性、`_row_to_layout` の visible→bool キャスト
+- 設計上のポイント:
+  - `capture.py` は `from scripts.services.capture_client import proxy_request, ws_request, capture_base_url` で import しているので、`monkeypatch.setattr(cap_mod, "proxy_request", AsyncMock(...))` とモジュール属性レベルで差し替える。ヘルパー関数 `_patch_capture_client(monkeypatch, *, proxy=None, ws=None, base_url="...")` に集約
+  - `SCREENSHOT_DIR` は module-level `Path` なので `monkeypatch.setattr(cap_mod, "SCREENSHOT_DIR", tmp_path)` で `/tmp/screenshots/` への書き込み漏洩を防止
+  - `test_db` フィクスチャのインメモリSQLiteで `capture_windows` テーブルと `capture.sources` 設定JSONを実体込みで検証（モックせず本物のDB関数を叩く）
+  - `state.broadcast_to_broadcast` は `api_client` で AsyncMock 済み。呼び出し内容の辞書一致を `call_args.args[0]` で検証
+  - パストラバーサルは `parametrize` で `"../etc/passwd"` / `"..\\windows"` / `"sub/dir.png"` を流し込み。FastAPIのルーティング仕様上 `/` 入りは 404 になるので assert は `status_code in (400, 404)` で両受け
+- **副産物バグ修正**: テスト追加時に `scripts/routes/capture.py:488` の `capture_stream_start` で `get_windows_host_ip()` を呼んでいるのに import が無いことを発見（bf913d1 の CaptureAppClient 抽出リファクタで `from src.wsl_path import get_windows_host_ip` が削除されたまま復帰していなかった）。`/api/capture/stream/start` 実行時に `NameError` になる隠れバグだったため、import を復活させて修正
+- 結果: `python3 -m pytest tests/ -q` → **1046 passed / 5 warnings / 9:18**（993 → 1046 / +53件・リグレッションなし）。warnings は Step 5 で解消予定の `@app.on_event` DeprecationWarning のみ
+
 ### Step 3-2 実装結果: `scripts/routes/avatar.py` のテスト追加（2026-04-18）
 
 - 実施内容: `tests/test_api_avatar.py` を新規作成（452行 / 27ケース）。発話・TTSテスト・会話デモ・Claude Watcher制御・チャット履歴を一通りカバー

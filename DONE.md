@@ -1,5 +1,23 @@
 # DONE
 
+## テストスイート棚卸し Step 3-3: `scripts/routes/capture.py` のテスト追加
+
+- [x] `tests/test_api_capture.py` 新規作成（53ケース / 全pass）。ウィンドウキャプチャAPIをエンドポイント単位でクラス分けし、proxy_request/ws_requestの入口検証＋DB永続化の実体確認まで行う方針
+  - **サーバー状態系**（3ケース）: `/api/capture/status`（proxy成功＋失敗時のrunning=false）、`/api/capture/windows`（一覧＋接続失敗時502）
+  - **保存済み設定CRUD**（6ケース）: `/api/capture/saved`（空・API形式変換）、`DELETE /api/capture/saved`（window_name指定削除・空body短絡）、`POST /api/capture/saved/layout`（部分更新・window_name欠落時short-circuit）
+  - **復元**（4ケース）: `/api/capture/restore` — 保存ゼロ時のmessage／windows取得失敗時ok=false／完全一致マッチ＋broadcast／visible=falseとactive重複のskip
+  - **キャプチャ開始/停止/一覧/レイアウト**（13ケース）: `/api/capture/start` — レイアウト永続化＋broadcast、保存済みレイアウト再利用、502/400分岐、name欠落時の`/captures`フォールバック／`DELETE /api/capture/{id}` — capture_remove通知、proxy失敗でもクライアント側同期／`/api/capture/sources` — 保存済みレイアウトマージ、proxy失敗時[]、未保存エントリのデフォルトレイアウト／`/api/capture/{id}/layout` — None除外、window_name経由の永続テーブル同期
+  - **スクリーンショット**（11ケース）: `/api/capture/screenshot` — WS成功時のbase64デコード＋ファイル書き出し、502/400／`/api/capture/screenshots` — ディレクトリ無し空、mtime降順ソート／`/api/capture/screenshots/{filename}` — GET（存在/404/パストラバーサル3件）、DELETE（成功/404/バックスラッシュ400）
+  - **配信ストリーミング**（8ケース）: `/api/capture/stream/start` — env TWITCH_STREAM_KEY＋get_windows_host_ipベースのserverUrl、body優先、未設定時400、ws失敗時502／`/api/capture/stream/stop` と `/api/capture/stream/status` — ws結果passthrough、失敗時502
+  - **内部ヘルパー**（6ケース）: `_save_capture_layout` / `_load_capture_sources` / `_update_capture_layout` / `_remove_capture_layout` のSQLite経由roundtrip、壊れたJSON耐性、`_row_to_layout` の visible→bool キャスト
+- [x] 設計上のポイント:
+  - capture.py は `from scripts.services.capture_client import proxy_request, ws_request, capture_base_url` で import しているので、`monkeypatch.setattr(cap_mod, "proxy_request", AsyncMock(...))` のようにモジュール属性レベルで差し替える（ヘルパー関数 `_patch_capture_client` に集約）
+  - `SCREENSHOT_DIR` は module-level Path なので `monkeypatch.setattr(cap_mod, "SCREENSHOT_DIR", tmp_path)` で `/tmp/screenshots/` への漏洩を防止
+  - `test_db` フィクスチャのインメモリSQLiteで `capture_windows` テーブルへの永続化と `capture.sources` 設定のjsonシリアライズを実体込みで検証
+  - `state.broadcast_to_broadcast` は `api_client` で AsyncMock 済みなので、呼び出し内容の辞書一致を検証
+- [x] **副産物バグ修正**: `scripts/routes/capture.py:488` の `capture_stream_start` で `get_windows_host_ip()` を呼んでいたが、`from src.wsl_path import get_windows_host_ip` が bf913d1（CaptureAppClient抽出リファクタ）で削除されたまま復帰していなかった。`/api/capture/stream/start` 実行時に NameError になる隠れバグを発見し、import を復活させて修正。テスト追加時に初めて発覚した
+- [x] 全スイート `python3 -m pytest tests/ -q` → **1046 passed** （993 → 1046 / +53件・リグレッションなし）
+
 ## テストスイート棚卸し Step 3-2: `scripts/routes/avatar.py` のテスト追加
 
 - [x] `tests/test_api_avatar.py` 新規作成（27ケース / 全pass）。アバター制御APIをエンドポイント単位でクラス分けし、入口検証に徹する方針

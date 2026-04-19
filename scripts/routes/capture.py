@@ -18,6 +18,7 @@ from scripts.services.capture_client import (
     ws_request,
 )
 from src import db
+from src.wsl_path import get_windows_host_ip
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
