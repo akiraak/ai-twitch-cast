@@ -1,5 +1,17 @@
 # DONE
 
+## Claude Code 承認プロンプト発火時のTTS通知（PermissionRequest フック）
+
+- [x] `claude-hooks/global/notify-permission.py` 新規作成 — stdin から `tool_name` を読み、`/api/avatar/speak` に `{"event_type":"承認待ち","detail":tool_name}` を POST。`/tmp/claude_permission_last` に最終発火時刻を記録し 60 秒クールダウン。サーバー未起動時は silent fail（クールダウン開始もしない＝次の承認で再試行できる）
+- [x] `CLAUDE_PROJECT_DIR` が ai-twitch-cast 以外なら `event_type = "承認待ち（{project_name}）"` に変形（既存 `notify-prompt.py` と同パターン）
+- [x] コマンド内容（`tool_input.command`）は一切渡さない — 配信での secret 誤爆を防ぐ（プラン設計D準拠）
+- [x] `claude-hooks/settings-global.json` に `PermissionRequest` エントリ追加（`async: true` で非ブロッキング）
+- [x] `scripts/setup-hooks.sh` のコピー対象に `notify-permission.py` 追加、ファイル数 `3 → 4`、完了メッセージに Permission フックの行を追加
+- [x] `CLAUDE.md` 「作業実況」セクションに承認待ち通知の仕様を追記、関連ファイル一覧に `notify-permission.py` 追加
+- [x] `bash scripts/setup-hooks.sh` 実行 — `~/.claude/hooks/` に展開、`~/.claude/settings.json` にマージ完了
+- [x] ローカル動作確認 — 1 回目: マーカー作成・API 送信成功、1 秒後 2 回目: クールダウン判定で早期 return（マーカータイムスタンプ不変）
+- [x] `plans/claude-permission-prompt-tts.md` → ステータス: 完了
+
 ## テストスイート棚卸し Step 1-b: テスト import シンボルの実在確認
 
 - [x] `tests/` 全 27 ファイルの `from src.X import ...` / `from scripts.X import ...`（複数行 `( ... )` 形式含む）および `patch("src.X.Y")` / `patch("scripts.X.Y")` の参照シンボルを抽出し、対象モジュール側に定義が存在するかを `rg` で照合

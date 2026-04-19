@@ -23,5 +23,3 @@
   - [ ] Step 5: `scripts/web.py` の `@app.on_event` を FastAPI lifespan ハンドラに移行（DeprecationWarning解消）
   - [ ] Step 6: `CLAUDE.md` のテスト構成表を実体と一致させ、`-m "not slow"` 運用を追記
 - [ ] クライアントに動画撮影機能を入れる
-
-- [ ] Claude Code が Yes/No を表示したタイミングでキャラがしゃべる（ただし連発しないように１分間は反応しないようにする） → [plans/claude-permission-prompt-tts.md](plans/claude-permission-prompt-tts.md)

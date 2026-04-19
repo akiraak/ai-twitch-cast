@@ -172,6 +172,7 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 - 短い応答（10文字未満）はスキップ
 - **他リポジトリ対応**: `CLAUDE_PROJECT_DIR` からプロジェクト名を抽出し、ai-twitch-cast以外なら「作業報告（リポジトリ名）」として報告
 - **長時間実行タイマー**: UserPromptSubmitでバックグラウンドタイマー起動、3分以上かかるとtranscript_pathから直近の作業内容を読み取り「○分作業中、直近の作業: ○○」と報告（3分間隔で繰り返し）。Stopで自動停止。transcript未更新2分でアイドル判定→タイマー自動終了
+- **承認待ち通知**: Yes/No 承認ダイアログ表示時に `PermissionRequest` フックが発火し、`tool_name` を「承認待ち」として報告。**60秒クールダウン**で連発防止（`/tmp/claude_permission_last` に最終発火時刻を記録）。コマンド内容は渡さない（secret 誤爆防止）
 
 ### 疎結合設計
 - フックは **`"async": true`** で非ブロッキング実行
@@ -187,6 +188,7 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 ### 関連ファイル
 - `claude-hooks/global/notify-stop.py` — Stopフック正本（作業完了報告 + タイマー停止）
 - `claude-hooks/global/notify-prompt.py` — UserPromptSubmitフック正本（指示受信報告 + タイマー起動）
+- `claude-hooks/global/notify-permission.py` — PermissionRequestフック正本（承認待ち報告 + 60秒クールダウン）
 - `claude-hooks/global/long-execution-timer.py` — 長時間実行タイマー正本（バックグラウンド、transcript解析）
 - `claude-hooks/local/fix-permissions.sh` — PostToolUseフック正本（ファイル所有者修正）
 - `claude-hooks/settings-global.json` — `~/.claude/settings.json` のフック設定テンプレート

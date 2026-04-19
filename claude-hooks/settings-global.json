@@ -21,6 +21,17 @@
           }
         ]
       }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/notify-permission.py",
+            "async": true
+          }
+        ]
+      }
     ]
   }
 }

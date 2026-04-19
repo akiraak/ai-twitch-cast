@@ -23,9 +23,10 @@ echo "[1/4] グローバルフックをコピー..."
 mkdir -p "$GLOBAL_HOOKS_DIR"
 cp "$HOOKS_SRC/global/notify-stop.py" "$GLOBAL_HOOKS_DIR/"
 cp "$HOOKS_SRC/global/notify-prompt.py" "$GLOBAL_HOOKS_DIR/"
+cp "$HOOKS_SRC/global/notify-permission.py" "$GLOBAL_HOOKS_DIR/"
 cp "$HOOKS_SRC/global/long-execution-timer.py" "$GLOBAL_HOOKS_DIR/"
 chmod +x "$GLOBAL_HOOKS_DIR"/*.py
-echo "  -> $GLOBAL_HOOKS_DIR/ (3ファイル)"
+echo "  -> $GLOBAL_HOOKS_DIR/ (4ファイル)"
 
 # --- ローカルフック ---
 echo "[2/4] ローカルフックをコピー..."
@@ -104,5 +105,6 @@ echo ""
 echo "設置されたフック:"
 echo "  [グローバル] Stop        -> notify-stop.py     (作業完了報告 + タイマー停止)"
 echo "  [グローバル] Prompt      -> notify-prompt.py    (指示受信報告 + タイマー起動)"
+echo "  [グローバル] Permission  -> notify-permission.py (承認待ち報告, 60秒クールダウン)"
 echo "  [グローバル] Timer       -> long-execution-timer.py (3分以上で定期報告)"
 echo "  [ローカル]   PostToolUse -> fix-permissions.sh  (ファイル所有者修正)"
