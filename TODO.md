@@ -8,8 +8,6 @@
 
 ## その他
 - [ ] テストの検証。不要なものを削除。必要なものがあれば追加 → [plans/test-suite-audit.md](plans/test-suite-audit.md)
-  - [ ] Step 2: 削除候補ゼロ件（1-a/1-b/1-c で確認済み）。スキップして Step 3 へ
-  - [ ] Step 3-1: `lesson_generator/improver.py` のテスト追加（最優先・授業品質の中核）
   - [ ] Step 3-2: `scripts/routes/avatar.py` のテスト追加（発話API入口）
   - [ ] Step 3-3: `scripts/routes/capture.py` のテスト追加（配信アプリ連携）
   - [ ] Step 3-4: `character_manager.py` のテスト追加

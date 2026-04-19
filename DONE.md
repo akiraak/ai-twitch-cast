@@ -1,5 +1,16 @@
 # DONE
 
+## テストスイート棚卸し Step 3-1: `lesson_generator/improver.py` のテスト追加
+
+- [x] `tests/test_lesson_improver.py` 新規作成（50ケース / 全pass）
+  - **純粋ロジック系**（14ケース）: `_format_sections_for_prompt`（対話JSONパース/壊れたJSON耐性/注釈ラベル変換） / `determine_targets`（weak・contradiction・missing・major/minor重複解消） / `apply_prompt_diff`（replace成功/old_text未発見/add成功/空content/不明action/ファイル無し） / `_format_annotated_for_prompt`（空/300文字超切詰め）
+  - **ファイルI/O系**（9ケース）: `_load_prompt`（存在/FileNotFoundError） / `load_learnings`（common+category/commonのみ/両方なし/category=""時はcommonのみ） / `save_learnings_to_files`（両ファイル書出し/空スキップ/category=""で共通のみ）
+  - **LLM呼び出し系**（17ケース）: `verify_lesson` / `evaluate_lesson_quality` / `evaluate_category_fit` / `improve_sections`（list/dictラップ） / `analyze_learnings`（DB空時の短絡/データありでLLM呼び出し） / `improve_prompt`（learnings欠落・prompt_file欠落・prompt_content成功・非dict fallback） / `create_category_prompt`（base欠落・成功）。LLM応答は `mock_gemini` のテキスト差し替えで制御
+  - **DB系**（4ケース）: `_collect_annotated_sections`（空DB / カテゴリフィルタ / good・needs_improvement・redo分類 / improve_source_version経由の改善ペア構築）
+- [x] `PROMPTS_DIR` / `LEARNINGS_DIR` は `monkeypatch.setattr(improver, ...)` で `tmp_path` 配下に差し替え、本番ファイルへの書き込み漏洩を防止
+- [x] 他テストとの干渉対策: 初回 `asyncio.run()` 使用で `test_tts_pregenerate.py` の `asyncio.get_event_loop()`（Python3.12で非推奨）が失敗していたため、`pytest.ini` の `asyncio_mode = auto` に合わせて全LLM系を `async def` に変更して解消
+- [x] 全スイート `python3 -m pytest tests/ -q` → **966 passed** （916 → 966 / +50件・リグレッションなし）
+
 ## Claude Code 承認プロンプト発火時のTTS通知（PermissionRequest フック）
 
 - [x] `claude-hooks/global/notify-permission.py` 新規作成 — stdin から `tool_name` を読み、`/api/avatar/speak` に `{"event_type":"承認待ち","detail":tool_name}` を POST。`/tmp/claude_permission_last` に最終発火時刻を記録し 60 秒クールダウン。サーバー未起動時は silent fail（クールダウン開始もしない＝次の承認で再試行できる）

@@ -273,6 +273,20 @@
 ### 削除候補一覧
 （Step 1-c, 1-d の結果をもとに作成）
 
+### Step 3-1 実装結果: `lesson_generator/improver.py` のテスト追加（2026-04-18）
+
+- 実施内容: `tests/test_lesson_improver.py` を新規作成し、improver.py の15関数を4カテゴリに分けて計50ケースのテストを追加
+- カテゴリ別内訳:
+  - **純粋ロジック系（14ケース）**: `_format_sections_for_prompt` / `determine_targets` / `apply_prompt_diff` / `_format_annotated_for_prompt`
+  - **ファイルI/O系（9ケース）**: `_load_prompt` / `load_learnings` / `save_learnings_to_files`（`PROMPTS_DIR` / `LEARNINGS_DIR` を `monkeypatch` で `tmp_path` 配下に差し替え）
+  - **LLM呼び出し系（17ケース）**: `verify_lesson` / `evaluate_lesson_quality` / `evaluate_category_fit` / `improve_sections` / `analyze_learnings` / `improve_prompt` / `create_category_prompt`（既存 `mock_gemini` フィクスチャの `generate_content.return_value.text` を差し替えて応答制御）
+  - **DB系（4ケース）**: `_collect_annotated_sections`（`test_db` フィクスチャ + `create_lesson` / `create_lesson_version` / `add_lesson_section` / `update_section_annotation`）
+- 注意点（他テストへの影響）:
+  - 初回 `asyncio.run()` 利用で `test_tts_pregenerate.py` の `asyncio.get_event_loop()` が失敗（Python3.12で非推奨挙動）
+  - 対策として全LLM系テストを `async def` に変更し、`pytest.ini` の `asyncio_mode = auto` に委ねる形に統一
+- 結果: `python3 -m pytest tests/ -q` で **966 passed**（916 → 966 / +50件・リグレッションなし）
+
+
 ## 参考
 
 - 現行テスト一覧: `tests/` 配下 27 ファイル
