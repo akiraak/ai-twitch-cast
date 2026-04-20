@@ -30,6 +30,13 @@ public sealed class FfmpegProcess : IDisposable
     private volatile bool _encodingStarted; // FFmpegエンコード開始検知フラグ
     private bool _disposed;
 
+    // AV同期診断用: ffmpeg起動時刻を0とする相対tick（ms）。File モード時のみ有効
+    private long _diagStartTick;
+    private long _diagFirstRealVideoTick = -1;
+    private long _diagFirstTtsEnqueueTick = -1;
+    private long _diagFirstTtsMixTick = -1;
+    private long _diagAudioGenStartTick = -1;
+
     // ダブルバッファ: BGRA入力コピー用
     private byte[]? _videoBufA;
     private byte[]? _videoBufB;
@@ -188,6 +195,11 @@ public sealed class FfmpegProcess : IDisposable
             // Audio input (named pipe)
             "-thread_queue_size 1024",
             _ffmpegAudioFormat,
+            // AudioOffset: 音声入力PTSをオフセット（負=早める、正=遅らせる）
+            // wallclock映像との乖離を吸収。0 なら無効化（引数省略）
+            _config.AudioOffset != 0
+                ? $"-itsoffset {_config.AudioOffset.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}"
+                : "",
             $@"-i \\.\pipe\{_audioPipeName}",
             // Video encode (encoder-specific)
             encoderArgs,
@@ -224,6 +236,11 @@ public sealed class FfmpegProcess : IDisposable
 
         _process.Start();
         _startTime = DateTime.UtcNow;
+        _diagStartTick = Environment.TickCount64;
+        _diagFirstRealVideoTick = -1;
+        _diagFirstTtsEnqueueTick = -1;
+        _diagFirstTtsMixTick = -1;
+        _diagAudioGenStartTick = -1;
         _frameCount = 0;
         _dropCount = 0;
         _audioDropCount = 0;
@@ -247,6 +264,7 @@ public sealed class FfmpegProcess : IDisposable
             _videoPipe.Write(blackFrame, 0, blackFrame.Length);
             _videoPipe.Flush();
             Log.Debug("[FFmpeg] Initial black frame sent (NV12, {Size} bytes)", nv12Size);
+            Log.Information("[AVSync] t={T}ms: black frame written", Environment.TickCount64 - _diagStartTick);
         }
         catch (IOException ex)
         {
@@ -273,6 +291,8 @@ public sealed class FfmpegProcess : IDisposable
             _audioPipe.Flush();
             Log.Information("[FFmpeg] Initial silence sent ({Bytes} bytes, {Sec:F1}s)",
                 totalSilenceBytes, totalSilenceBytes / 384000.0);
+            Log.Information("[AVSync] t={T}ms: audio primed silence written ({Bytes}B)",
+                Environment.TickCount64 - _diagStartTick, totalSilenceBytes);
         }
         catch (IOException ex)
         {
@@ -351,6 +371,10 @@ public sealed class FfmpegProcess : IDisposable
                 Interlocked.Increment(ref _frameCount);
                 var writeMs = sw.ElapsedMilliseconds;
 
+                var relVideo = Environment.TickCount64 - _diagStartTick;
+                if (Interlocked.CompareExchange(ref _diagFirstRealVideoTick, relVideo, -1) == -1)
+                    Log.Information("[AVSync] t={T}ms: first real video frame written", relVideo);
+
                 // パイプ書き込み遅延の追跡（FFmpegがRTMP送信に追いつけないと100ms超）
                 if (writeMs > 100)
                 {
@@ -423,6 +447,10 @@ public sealed class FfmpegProcess : IDisposable
         _ttsQueue.Enqueue(f32lePcm);
         Log.Information("[FFmpeg] TTS PCM enqueued: {Size} bytes ({Dur:F1}s)",
             f32lePcm.Length, f32lePcm.Length / (48000.0 * 2 * 4));
+        var rel = Environment.TickCount64 - _diagStartTick;
+        if (Interlocked.CompareExchange(ref _diagFirstTtsEnqueueTick, rel, -1) == -1)
+            Log.Information("[AVSync] t={T}ms: first TTS enqueued ({Size}B, {Dur:F2}s) audioQueue={Q}",
+                rel, f32lePcm.Length, f32lePcm.Length / (48000.0 * 2 * 4), _audioQueue.Count);
     }
 
     /// <summary>TTS音量を変更する（再生中のミキシングにリアルタイム反映）。</summary>
@@ -461,6 +489,8 @@ public sealed class FfmpegProcess : IDisposable
         // 48kHz stereo f32le = 384 bytes per ms
         const int bytesPerMs = 48000 * 2 * 4 / 1000;
         _audioGenLastTick = Environment.TickCount64;
+        _diagAudioGenStartTick = _audioGenLastTick - _diagStartTick;
+        Log.Information("[AVSync] t={T}ms: audio generator started", _diagAudioGenStartTick);
         _audioGenTimer = new System.Threading.Timer(_ =>
         {
             if (_stopping || _audioPipe is not { IsConnected: true }) return;
@@ -567,6 +597,13 @@ public sealed class FfmpegProcess : IDisposable
                 if (!_ttsQueue.TryDequeue(out _ttsCurrentChunk))
                     break;
                 _ttsCurrentOffset = 0;
+                var rel = Environment.TickCount64 - _diagStartTick;
+                var dur = _ttsCurrentChunk.Length / (48000.0 * 2 * 4);
+                Log.Information("[AVSync] t={T}ms: TTS chunk pulled ({Bytes}B, {Dur:F2}s, audioQ={Q})",
+                    rel, _ttsCurrentChunk.Length, dur, _audioQueue.Count);
+                if (Interlocked.CompareExchange(ref _diagFirstTtsMixTick, rel, -1) == -1)
+                    Log.Information("[AVSync] t={T}ms: first TTS mix start (enqueued→mix lag={Lag}ms)",
+                        rel, _diagFirstTtsEnqueueTick >= 0 ? rel - _diagFirstTtsEnqueueTick : -1);
             }
 
             int available = _ttsCurrentChunk.Length - _ttsCurrentOffset;
@@ -712,6 +749,9 @@ public sealed class FfmpegProcess : IDisposable
         if (_process == null) return;
         _stopping = true;
 
+        Log.Information("[AVSync] === summary === firstVideo={V}ms audioGenStart={G}ms firstTtsEnq={E}ms firstTtsMix={M}ms",
+            _diagFirstRealVideoTick, _diagAudioGenStartTick, _diagFirstTtsEnqueueTick, _diagFirstTtsMixTick);
+
         var totalFrames = FrameCount;
         var totalDrops = DropCount;
         var totalAudioDrops = AudioDropCount;
@@ -814,6 +854,8 @@ public sealed class FfmpegProcess : IDisposable
                 {
                     _encodingStarted = true;
                     Log.Information("[FFmpeg] Encoding started detected (audio queue will flush)");
+                    Log.Information("[AVSync] t={T}ms: ffmpeg encoding started (first frame=)",
+                        Environment.TickCount64 - _diagStartTick);
                 }
 
                 // speed & fps追跡

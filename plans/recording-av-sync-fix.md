@@ -1,6 +1,6 @@
 # 録画モードのAV同期ずれ修正
 
-## ステータス: 実装完了（2026-04-19）／実リップシンク目視確認は未実施
+## ステータス: wallclock対応は実装完了／目視確認で音声遅れ（約2秒）が判明、C→B1 まで実施、B2 残
 
 ## 背景
 
@@ -46,15 +46,69 @@
 - **先頭 -700ms の定数オフセット**: FFmpeg 初期化中にパイプへ書いた初期黒フレームが init 完了時刻で刻印され、後続の実フレームと時間的に詰まるため、最初のフラッシュが理想より 700ms 早く見える。2秒目以降は ±1 フレームの量子化のみで追従するため、録画長に依存せず定数。
 - 音声も同じ初期遅延を経由するため、**音声との相対位置はゼロで吸収される**見込み（要目視確認）。もしズレる場合は `-itsoffset` で補正する。
 
-## 未実施の確認
+## 目視確認で判明した残課題（2026-04-19）
 
-次セッション以降で:
+実TTS発話ありの 60〜90 秒録画を VLC で目視確認したところ、**音声が口パクに対して約 2 秒遅れる**問題が判明した。
 
-1. **TTS 発話ありの実リップシンク目視確認** — 通常の broadcast.html に戻してちょびに発話させながら 60〜90 秒録画し、話し始め・話し終わりの映像/音声のズレを VLC 等で目視。
-2. **長尺（30分）録画でドリフトが累積しないこと** — 検証は 60 秒のみで完了しているため、長尺時の傾向を確認。
-3. **AudioOffset（現デフォルト -0.5）の見直し** — wallclock 化で映像側の遅延特性が変わったため、最適値が変わる可能性あり。
+### C: 診断ログから判明した原因
 
-いずれも結果次第で追加対応（`-itsoffset` やデフォルト値調整）を判断。
+C# 側の FfmpegProcess.cs に `[AVSync]` 診断ログを追加し、1 本の録画で以下のタイムラインを実測（`t=` は FFmpeg プロセス起動を 0 とする相対 ms）:
+
+```
+t=   78ms : FFmpeg起動 → 黒フレーム書き込み・音声パイプに 300ms silence プライム
+t=  594ms : audio generator 起動（TickCount64 駆動、10ms tick）
+t=  672ms : 最初の実WGC映像フレーム書き込み
+t= 6656ms : FFmpeg エンコード開始（stderr "frame=" 初出）
+t=25265ms : 最初のTTS到着 → 即 mix 開始（enqueue→mix lag=0ms）
+...       : TTS chunk pulled audioQ=100（＝_audioQueue 上限飽和）
+```
+
+**根本原因**: generator → AudioWriterLoop 間の `_audioQueue` が恒常的に満杯（`MaxAudioQueueChunks = 100` ＝ 約 1 秒分）。generator は 10ms ごとにチャンクを積むが、FFmpeg のエンコード開始時点（t=6.6s）で 6 秒分の内部 catch-up が必要になり、その間にキューが一気に埋まる。以後は定常的に飽和状態を維持。
+
+結果:
+- TTS の PCM は generator で mix された後、キュー末尾に積まれ、パイプに到達するまで **約 1 秒遅延**
+- これに「プライム silence 300ms」のオフセットが加わり、**音声 PTS は wallclock より 1.2〜1.5 秒遅い**
+- 目視観測「2 秒遅れ」とほぼ整合（0.5〜1 秒の目視誤差を許容）
+
+また、この遅延の計算中に **`StreamConfig.AudioOffset` が FFmpeg 引数に反映されていない死にコード** であることも発見（`FfmpegProcess.cs:144` でログ出力のみ、args 組立に登場しない）。
+
+### B1: AudioOffset を `-itsoffset` として配線（実施済み、副作用あり）
+
+`FfmpegProcess.cs` で音声入力に `-itsoffset {AudioOffset}` を追加し、デフォルト -0.5 のまま再録画。結果:
+
+| 指標 | B1 前（itsoffset 無し）| B1 後（itsoffset -0.5）|
+|------|------|------|
+| 音声 duration - 映像 duration | +1.62s | +1.01s |
+| 実映像 fps | 28.4 | **24.6** |
+| 映像ドロップ | 125 (2.8%) | **415 (12.4%)** |
+| パイプ遅延 slow 回数 | 2 | **37** |
+
+音声遅延は一部改善したが、**映像 fps と pipe write が明確に悪化**。推測: `-itsoffset -0.5` 指定により muxer が音声到着を待つ分 back-pressure が映像パイプに伝わり、speed=1.04x とギリギリの状態を崩した。
+
+### B2: `MaxAudioQueueChunks` の縮小で根治（次セッション）
+
+- `MaxAudioQueueChunks`: 100（1秒） → 10（100ms） に縮める
+- 音声遅延の上限が 1s → 100ms に制限されるため、音声 PTS のドリフトが実用域に収まる見込み
+- ドロップは増えるが 1 回 10ms 単位なのでリップシンクへの影響は軽微
+- `-itsoffset` は一旦 0 に戻し（B1 を実質無効化）、B2 単独の効果を測定する
+
+### A: AudioOffset 値の微調整（B2 後）
+
+B2 適用後に残った残差オフセットを `-itsoffset` で吸収。実測値に応じて `StreamConfig.AudioOffset` のデフォルトを -0.1 〜 -0.3 程度に設定する見込み（100ms 程度の微調整の想定）。
+
+## 長尺確認（別タスク）
+
+60 秒録画では 30 分長尺のドリフト累積まで検証できていないため、B2/A 完了後に別途実施する。TODO.md 側で分離して管理。
+
+## 参考（診断ログ追加箇所）
+
+`[AVSync]` プレフィックス付きで以下をログ:
+- `FfmpegProcess.StartAsync`: 黒フレーム書き込み時、silence プライム時、エンコード開始検知時
+- `FfmpegProcess.StartAudioGenerator`: 起動時
+- `FfmpegProcess.WriteTtsData`: 初回 TTS enqueue 時
+- `FfmpegProcess.MixTtsInto`: TTS chunk 取得時（毎回、audioQ 深度付き）
+- `FfmpegProcess.WriteVideoFrame`: 初回実 WGC フレーム書き込み時
+- `FfmpegProcess.StopAsync`: summary 行で全マイルストーン
 
 ## リスクと対策
 
