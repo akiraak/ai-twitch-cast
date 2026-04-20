@@ -49,10 +49,12 @@ public sealed class FfmpegProcess : IDisposable
     private readonly ConcurrentQueue<byte[]> _audioQueue = new();
     private Thread? _audioWriter;
     private long _audioDropCount;
-    // キュー上限: 約100ms分（10ms × 10チャンク）。
-    // 100チャンク（1秒）だと generator → AudioWriterLoop 間で恒常飽和し音声PTSが1秒遅れる問題があった
-    // （plans/recording-av-sync-fix.md B2）。100msに絞ることで TTS が到着後 100ms以内にパイプに届く。
-    private const int MaxAudioQueueChunks = 10;
+    // キュー上限: 約300ms分（10ms × 30チャンク）。
+    // B1 の cap=100（約1秒）では恒常飽和で音声PTSが1秒遅れ、
+    // B2 の cap=10（約100ms）ではジッタ吸収余地がなく頻繁な小ドロップで「ぶつぶつ」音切れが発生した。
+    // cap=30 はその中間で、ジッタ吸収余地を確保しつつ最悪遅延を 300ms に抑える。
+    // 堆積の中央値は AudioOffset（-0.3s）でオフセット補正する。plans/recording-av-sync-fix.md C+A
+    private const int MaxAudioQueueChunks = 30;
 
     // TTS直接書き込み用キュー（WASAPI迂回 → リップシンク完全同期）
     private readonly ConcurrentQueue<byte[]> _ttsQueue = new();
@@ -131,11 +133,14 @@ public sealed class FfmpegProcess : IDisposable
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
             outBufferSize: 8 * 1024 * 1024, inBufferSize: 0);
 
-        // 音声用名前付きパイプ（256KBバッファ — タイマージッター吸収）
+        // 音声用名前付きパイプ（1MBバッファ — 約2.67秒分のジッター吸収枠）
+        // 256KB（666ms）では FFmpeg の消費ジッタを吸収しきれず pipe.Write() が頻繁にブロックし、
+        // AudioWriterLoop が ~4% 遅れて _audioQueue が cap=30 で溢れ、4 drops/sec の「ブツブツ」が発生した
+        // （plans/recording-av-sync-fix.md C+A 計測）。1MB に拡大して backpressure の発生頻度を下げる。
         _audioPipe = new NamedPipeServerStream(
             _audioPipeName, PipeDirection.Out, 1,
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
-            outBufferSize: 256 * 1024, inBufferSize: 0);
+            outBufferSize: 1024 * 1024, inBufferSize: 0);
 
         // ダブルバッファ事前確保（BGRA入力コピー用）
         var bgraFrameSize = _config.Width * _config.Height * 4;

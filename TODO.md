@@ -7,5 +7,5 @@
 - [ ] 管理画面から授業を再生した後にクライアントのLessonタブで開始されたことやデータ転送の進捗を確認したい
 
 ## その他
-- [>] 録画モードAV同期: B2 計測完了（cap=10 で B1 副作用は解消したが「ぶつぶつ音切れ」「0.5秒の遅延ばらつき」が出た）。次は **C+A 案**（`MaxAudioQueueChunks` 10→30、`AudioOffset` 0→-0.3）を実装してジッタ吸収＋中央値オフセット補正を入れる。実装後は授業再生 60〜90 秒録画で目視＋ログ確認。→ [plans/recording-av-sync-fix.md](plans/recording-av-sync-fix.md)
+- [>] 録画モードAV同期: 多角検証完了→**α 単独実装**へ。音声入力に `-use_wallclock_as_timestamps 1` を 1 行追加し、FFmpeg read 時刻で音声 PTS を打刻することで映像 wallclock と自動同期させる。cap/offset/pipe 1MB は維持して α 単独効果を切り分け、効果ありなら段階的に対症療法をロールバックして本質を確定。残差あれば α+δ、最終手段 γ（β 単独には進まない）。→ [plans/recording-av-sync-fix.md](plans/recording-av-sync-fix.md)
 - [ ] 録画モードAV同期: 30分長尺でのドリフト累積確認（上記解消後）

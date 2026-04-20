@@ -1,5 +1,38 @@
 # DONE
 
+## 録画AV同期 E 計測完了 → 対症療法の限界を確認、根本方針（α/β/γ/δ）をプランに整理
+
+- [x] E ビルド（音声パイプ 1MB）で授業再生 3分36秒録画。ログ解析:
+  - 最初 90 秒 drops=0 で完全クリーン（ブツブツなし）
+  - 23:44:33 から drops=+37/10s で再発、以降 ~40 drops/10s 継続（C+A と同パターン）
+  - 音声ドロップ ~114/分（C+A の 170/分より改善）、fps=30 / 映像ドロップ 2.0% 維持
+- [x] ユーザー目視: ブツブツは短時間では気づかなかったが、**「声がかなり遅れる」新症状**が顕在化
+- [x] 遅延の原因特定: 1MB パイプに最大 2.67 秒貯まり、音声 PTS がバイトベース計算（`byte_offset/sample_rate`）で wall clock と連動しないため、映像（wallclock 打刻）との乖離が音声遅延として現れる
+- [x] **これまでの全対策（B1/B2/C+A/E）を表に総括**：cap / buffer size のチューニングは「ブツブツ ⇔ 遅延」のどちらに振り分けるかの選択にしかならず、両方同時には解消しない。対症療法の限界を明文化
+- [x] 根本原因を明確化: generator は wall clock、FFmpeg 音声消費は ~2-4% 遅い（AAC 44.1kHz リサンプル / encoder delay / I/O ジッタ）→ クロックずれが必ず蓄積される構造
+- [x] `plans/recording-av-sync-fix.md`: ステータスを「対症療法の限界に到達、根本方針選定中」に更新。E 計測結果表、全対策総括表、根本原因分析、根本解決プラン（α/β/γ/δ）セクションを追記
+- [x] `TODO.md`: 次作業を「根本プラン選定」に切替え。推奨は α 単独テスト
+- [x] 残: ユーザーにプラン選定を依頼（α 推奨）→ 実装→計測
+
+## 録画AV同期 E 実装: 音声パイプバッファ 256KB → 1MB（計測待ち）
+
+- [x] C+A 計測（2026-04-19 22:53〜22:57、3分6秒）でログ分析: fps=30・映像ドロップ率 2.3% は維持したが、音声ドロップ ~170/分 残存。depth が 0⇄30 を振動して cap 到達時に drops=22→39→38/10s と継続 → 4 drops/sec × 10ms = 40ms/sec の欠損がブツブツの正体
+- [x] 発生相関: 起動後 40 秒間 drops=0 → 35.9 秒の長尺 TTS chunk 投入（t=45s）の直後から drops 開始 → 長尺 TTS 再生中は writer が ~4% 遅れて _audioQueue が溢れる
+- [x] 推定原因: 音声パイプバッファが **256KB（≒666ms）のみ** で FFmpeg 側の消費ジッタを吸収しきれず、`pipe.Write()` が頻繁にブロックして AudioWriterLoop が cap を飽和させる
+- [x] `win-native-app/WinNativeApp/Streaming/FfmpegProcess.cs`: 音声パイプ `outBufferSize` を **`256 * 1024` → `1024 * 1024`**（1MB、≒2.67秒）に拡大。根拠コメント追記
+- [x] `plans/recording-av-sync-fix.md`: C+A 計測結果の数値表＋E（音声パイプ拡大）セクションを追加、ステータスを「C+A→E 実装済み、計測待ち」に更新
+- [x] `TODO.md`: 次の作業を E 計測に切替え
+- [x] 残: 再ビルド（`./stream.sh --stop && ./stream.sh`）→ 授業再生 60〜90 秒（**長尺 TTS を含む**）で録画 → depth 振動が収まり drops/分 < 50・ぶつぶつ解消を確認できたら完了。解消しない場合は **F 案**（AAC 出力 `-ar 44100` → `48000` でリサンプリング削除）に進む
+
+## 録画AV同期 C+A 実装: cap=30 + AudioOffset=-0.3（計測待ち）
+
+- [x] 背景: B2（cap=10）で B1 副作用（fps・ドロップ悪化）は解消したが、ジッタ吸収余地が不足して「ぶつぶつ音切れ」「0.5 秒の遅延ばらつき」が発生した。cap=100（B1）と cap=10（B2）の中間 cap=30 に広げつつ、中央値オフセットを `-itsoffset` で補正する
+- [x] `win-native-app/WinNativeApp/Streaming/FfmpegProcess.cs`: `MaxAudioQueueChunks` を **10 → 30**（約100ms → 約300ms）に変更。コメントを C+A の根拠（B1/B2 の両極の中間・最悪遅延 300ms）に更新
+- [x] `win-native-app/WinNativeApp/Streaming/StreamConfig.cs`: `AudioOffset` デフォルトを **0 → -0.3** に変更。XML doc を C+A の根拠（平均堆積 150ms＋プライム silence 300ms＋初期遅延）に更新
+- [x] `plans/recording-av-sync-fix.md`: ステータスを「C+A 実装済み、計測待ち」に更新、C+A セクションを実装済みチェックマーク付きに変更
+- [x] `TODO.md`: 次の作業を「実機計測（VLC 目視＋ログ確認）」に変更
+- [x] 残: 再ビルド（`./stream.sh --stop && ./stream.sh`）→ 授業再生 60〜90 秒録画 → VLC 目視＋`[AVSync]`/`Audio queue: depth=...`/配信終了レポートのログ確認。MP4 duration 差 +0.5s 以下・fps/ドロップ B2 同等維持・ぶつぶつ解消を確認できたら完了
+
 ## 録画AV同期 B2 計測完了 → C+A 案へ移行（プラン更新）
 
 - [x] 2026-04-19 22:11〜22:21（9分45秒・授業再生）で B2 ビルドの実機録画を実施

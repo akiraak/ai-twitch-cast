@@ -41,10 +41,10 @@ public class StreamConfig
     /// <summary>
     /// 音声タイムスタンプのオフセット（秒）。音声パイプライン遅延を補正する。
     /// 負の値=音声を早める。環境のオーディオドライバやエンコーダに依存するため調整可能。
-    /// デフォルト: 0（B2 で _audioQueue 上限を 100ms に絞ったため、-itsoffset は一旦無効化して
-    /// 単独効果を測定する。残差があれば --audio-offset で微調整。plans/recording-av-sync-fix.md）
+    /// デフォルト: -0.3（C+A: cap=30 での平均堆積 ~150ms ＋ プライム silence 300ms ＋
+    /// 初期遅延の合計 ~500ms を中央値でオフセット補正。plans/recording-av-sync-fix.md C+A）
     /// </summary>
-    public double AudioOffset { get; set; } = 0;
+    public double AudioOffset { get; set; } = -0.3;
 
     /// <summary>
     /// CLI args優先、環境変数フォールバック。
