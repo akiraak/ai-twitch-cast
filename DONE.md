@@ -1,5 +1,13 @@
 # DONE
 
+## 録画AV同期 B2: `_audioQueue` 上限を 10 に縮小＋`-itsoffset` を無効化（計測待ち）
+
+- [x] 背景: C（診断）で `_audioQueue` が 100 チャンク（約1秒分）で恒常飽和し、generator → AudioWriterLoop 間で音声 PTS が wallclock より 1〜1.5 秒遅れていた。B1（`-itsoffset -0.5` 配線）は映像 fps 28→25 / ドロップ 2.8%→12.4% / パイプ slow 2→37 という副作用を出したため、B2 で根治を試みる
+- [x] `FfmpegProcess.cs`: `MaxAudioQueueChunks` を **100 → 10**（約1秒 → 約100ms）に縮小。コメントで「B2 で変更」の根拠を記載
+- [x] `StreamConfig.cs`: `AudioOffset` デフォルトを **-0.5 → 0** に戻し、B1 の `-itsoffset` を実質無効化（`_config.AudioOffset != 0` のガードで引数省略済み。B2 単独の効果を計測するため）
+- [x] `plans/recording-av-sync-fix.md` を B2 実施済みに更新。ステータスは「計測待ち」、計測タスク（目視 + `Audio queue: depth=...` ログ確認 + 映像 fps・ドロップ率が B1 前に戻ったか）を明記
+- [x] 残: 実 TTS 発話ありで 60〜90 秒録画して VLC で目視確認。残差があれば A（`--audio-offset` 微調整）に進む
+
 ## 録画停止時の NullReferenceException クラッシュ修正（WriteVideoFrame × StopAsync race）
 
 - [x] 背景: 録画停止直後に C# アプリが NRE で落ち、MP4 アップロードが走らずローカルに残る事象。原因は `FfmpegProcess.WriteVideoFrame` が ThreadPool にキューした書き込みラムダと `StopAsync` の `_videoPipe?.Dispose()` → `_videoPipe = null` のレース。ラムダ側のガード通過〜`_videoPipe!.Write(...)` の間に Stop が割り込むと NRE → AppDomain.UnhandledException → プロセス終了

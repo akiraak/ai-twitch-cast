@@ -1,6 +1,6 @@
 # 録画モードのAV同期ずれ修正
 
-## ステータス: wallclock対応は実装完了／目視確認で音声遅れ（約2秒）が判明、C→B1 まで実施、B2 残
+## ステータス: wallclock対応は実装完了／C→B1→B2 まで実施済み、B2 効果の目視計測待ち
 
 ## 背景
 
@@ -85,14 +85,19 @@ t=25265ms : 最初のTTS到着 → 即 mix 開始（enqueue→mix lag=0ms）
 
 音声遅延は一部改善したが、**映像 fps と pipe write が明確に悪化**。推測: `-itsoffset -0.5` 指定により muxer が音声到着を待つ分 back-pressure が映像パイプに伝わり、speed=1.04x とギリギリの状態を崩した。
 
-### B2: `MaxAudioQueueChunks` の縮小で根治（次セッション）
+### B2: `MaxAudioQueueChunks` の縮小（実施済み、計測待ち）
 
-- `MaxAudioQueueChunks`: 100（1秒） → 10（100ms） に縮める
-- 音声遅延の上限が 1s → 100ms に制限されるため、音声 PTS のドリフトが実用域に収まる見込み
-- ドロップは増えるが 1 回 10ms 単位なのでリップシンクへの影響は軽微
-- `-itsoffset` は一旦 0 に戻し（B1 を実質無効化）、B2 単独の効果を測定する
+- `FfmpegProcess.cs`: `MaxAudioQueueChunks` 100（約1秒） → **10（約100ms）** に縮小
+  - generator → AudioWriterLoop 間の音声遅延の上限が 1s → 100ms になり、音声 PTS の蓄積ドリフトが実用域に収まる見込み
+  - ドロップは増えるが 1 回 10ms 単位なのでリップシンクへの影響は軽微
+- `StreamConfig.cs`: `AudioOffset` デフォルトを **-0.5 → 0** に戻し、B1 の `-itsoffset` を実質無効化（`_config.AudioOffset != 0` のガードにより引数省略）
+  - 残差オフセットはこの後の計測で確認し、必要なら `--audio-offset` で微調整
+- 計測タスク: 実 TTS 発話ありで 60〜90 秒録画を行い、VLC で目視確認 + `[AVSync]` summary ログで以下を確認
+  - 音声と口パクのずれが感覚的にゼロ付近か
+  - `[FFmpeg] Audio queue: depth=...` が恒常的に 10 前後で低水位を維持しているか
+  - 映像 fps / ドロップ率が B1 前（28fps / 2.8%）と同等に戻っているか（B1 副作用の解消確認）
 
-### A: AudioOffset 値の微調整（B2 後）
+### A: AudioOffset 値の微調整（B2 計測後）
 
 B2 適用後に残った残差オフセットを `-itsoffset` で吸収。実測値に応じて `StreamConfig.AudioOffset` のデフォルトを -0.1 〜 -0.3 程度に設定する見込み（100ms 程度の微調整の想定）。
 

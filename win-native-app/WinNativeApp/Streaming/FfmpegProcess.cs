@@ -49,8 +49,10 @@ public sealed class FfmpegProcess : IDisposable
     private readonly ConcurrentQueue<byte[]> _audioQueue = new();
     private Thread? _audioWriter;
     private long _audioDropCount;
-    // キュー上限: 約1秒分（エンコード開始時にフラッシュするため、起動後は低水位を維持）
-    private const int MaxAudioQueueChunks = 100;
+    // キュー上限: 約100ms分（10ms × 10チャンク）。
+    // 100チャンク（1秒）だと generator → AudioWriterLoop 間で恒常飽和し音声PTSが1秒遅れる問題があった
+    // （plans/recording-av-sync-fix.md B2）。100msに絞ることで TTS が到着後 100ms以内にパイプに届く。
+    private const int MaxAudioQueueChunks = 10;
 
     // TTS直接書き込み用キュー（WASAPI迂回 → リップシンク完全同期）
     private readonly ConcurrentQueue<byte[]> _ttsQueue = new();
