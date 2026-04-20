@@ -7,5 +7,5 @@
 - [ ] 管理画面から授業を再生した後にクライアントのLessonタブで開始されたことやデータ転送の進捗を確認したい
 
 ## その他
-- [>] 録画モードAV同期: C→B1→B2 まで実施済み。B2（`MaxAudioQueueChunks` 100→10、`AudioOffset` デフォルト 0 に戻し）で音声 PTS 遅延の上限を 100ms に制限。実 TTS 発話ありで 60〜90 秒録画して目視確認と `[AVSync]` summary ログ計測が残っている。残差があれば A（`AudioOffset` 微調整）に進む。→ [plans/recording-av-sync-fix.md](plans/recording-av-sync-fix.md)
+- [>] 録画モードAV同期: B2 計測完了（cap=10 で B1 副作用は解消したが「ぶつぶつ音切れ」「0.5秒の遅延ばらつき」が出た）。次は **C+A 案**（`MaxAudioQueueChunks` 10→30、`AudioOffset` 0→-0.3）を実装してジッタ吸収＋中央値オフセット補正を入れる。実装後は授業再生 60〜90 秒録画で目視＋ログ確認。→ [plans/recording-av-sync-fix.md](plans/recording-av-sync-fix.md)
 - [ ] 録画モードAV同期: 30分長尺でのドリフト累積確認（上記解消後）
