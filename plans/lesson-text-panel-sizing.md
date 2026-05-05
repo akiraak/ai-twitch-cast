@@ -107,4 +107,10 @@ C#側 (`LessonPlayer.cs`) と `lesson_runner.py` は変更不要。`display_prop
 
 ## ステータス
 
-起案中（2026-05-05）。実装着手前。
+完了（2026-05-05）。
+
+### 実装結果
+- `static/css/broadcast.css`: `#lesson-text-content` フォント `1.4vw → 1.7vw`
+- `static/js/broadcast/panels.js`: `_autoSizeFromText()` を追加し、`displayProperties` の欠けたフィールドをテキスト長から自動補完。明示指定は常に優先
+- `prompts/lesson_generate.md` / `prompts/lesson_improve.md`: `display_properties` を必須化、ガイドラインを `width` 込みでセット化、フォントサイズ下限を底上げ（短: 1.8-2.2 / 中: 1.6-1.8 / 長: 1.4-1.6）
+- テスト: `tests/test_broadcast_patterns.py` + `tests/test_lesson_*.py` 218 passed

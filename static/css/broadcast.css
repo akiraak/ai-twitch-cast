@@ -532,7 +532,7 @@
   }
   #lesson-text-content {
     color: rgba(255, 255, 255, 0.95);
-    font-size: max(0.8vw, 1.4vw);
+    font-size: 1.7vw;
     line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;

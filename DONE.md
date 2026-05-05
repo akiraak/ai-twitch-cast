@@ -1,5 +1,18 @@
 # DONE
 
+## 授業中テキストパネルのサイズ・文字サイズ改善
+
+- [x] **CSSデフォルト底上げ** (`static/css/broadcast.css`): `#lesson-text-content` のフォントサイズを `max(0.8vw, 1.4vw)` から `1.7vw` に引き上げ。1080p 視聴で読みやすい下限へ
+- [x] **自動フォールバック** (`static/js/broadcast/panels.js`): `_autoSizeFromText(text)` を追加し、`displayProperties` の `maxHeight` / `width` / `fontSize` が欠けた場合にテキスト長と行数からサイズを推定して補完。短文 (`<60` 文字 / 2行以下): `25/40/2.0`、中 (`<200` 文字 / 5行以下): `40/50/1.7`、長: `60/60/1.5`。明示指定があれば必ず優先
+- [x] **水平中央寄せ** (`static/js/broadcast/panels.js`): `width` がセクション毎に動的に変わるため `left` も `(100 - width) / 2` で連動計算。CSSの `left: 22.5%` 固定では width 変化時に左寄せになっていた問題を解消。`hideLessonText()` で `left` もリセット
+- [x] **fontSize 下限の底上げ** (`static/js/broadcast/panels.js`): クランプ下限を `0.5 → 1.4vw` に変更。既存DBには旧プロンプトで生成された `fontSize: 1.0-1.3` が残っており、セクション2以降が小さく表示されていた。新プロンプトの最小値（1.4）と揃えて、明示指定があっても 1.4 未満には下げない安全策。新規生成は制約範囲内なので影響なし
+- [x] **`showLessonText()` 整理**: 旧 `displayProperties == null` でCSSデフォルトに戻すロジックを撤去。常に「明示値 ∪ 自動推定値」をクランプして適用するシンプルな形に統一
+- [x] **プロンプト更新** (`prompts/lesson_generate.md`): `display_properties` を全セクション必須化。ガイドラインを `短: maxH 20-28 / w 35-45 / fs 1.8-2.2`、`中: 32-45 / 45-55 / 1.6-1.8`、`長: 50-65 / 55-70 / 1.4-1.6` に更新。`width` をテーブルへ追加し、「1080pでフォントを小さくしすぎない・パネルを過剰に大きくしない」方針コメントを追加
+- [x] **プロンプト更新** (`prompts/lesson_improve.md`): `display_properties` を必須化し、3区分のセット指定（maxHeight + width + fontSize）に書き換え。注釈の「文字が小さい」にも対応する旨を追記
+- [x] **既存セクション**: 一括スクリプトは作らず、未指定セクションは新フォールバックでカバー、不適切な値は管理画面から手動修正 or `lesson_improve.md` 経由で再生成する運用
+- [x] **プラン**: [plans/lesson-text-panel-sizing.md](plans/lesson-text-panel-sizing.md) — ステータス「完了」
+- [x] **テスト**: `python3 -m pytest tests/test_broadcast_patterns.py tests/test_lesson_*.py -q -m "not slow"` 218 passed (19.89s)
+
 ## 授業モード: 「間のスケール」（pace_scale）削除
 
 - [x] **UI削除** (`static/js/admin/teacher.js`): コンテンツ一覧上部の `_renderPaceScaleSlider` 呼び出し・関数本体・`updatePaceScale` を一括削除。コンテンツ一覧のレンダリングフローから完全に消滅
