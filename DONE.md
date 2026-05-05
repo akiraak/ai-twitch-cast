@@ -8,6 +8,7 @@
 - [x] **コントロールパネル UI 拡張** (`win-native-app/WinNativeApp/control-panel.html`): メイン ▶ ボタンのラベルを `loaded` 時「▶ 最初から再生」に変更（`paused` は「▶ 再開」のまま）。タイムラインの各タブに「▶ ここから」ボタンを追加（`state==='loaded'` のときだけ enable、`event.stopPropagation()` でタブ切替と分離）。`_timelineState.state` で再生状態を保持し `renderLessonTimeline` から参照
 - [x] **再発防止テスト追加** (`tests/test_native_app_patterns.py`): `PlayAsync` の startIndex 引数・範囲チェック・ループ開始位置を静的検証 / `HandlePanelLessonPlay(msg)` と `HandleWsLessonPlay(msg)` のディスパッチと `section_index` 読み取りを検証。既存の `PlayAsync\(\)` regex を `PlayAsync\([^)]*\)` に拡張
 - [x] **対象外を明確化**: Python サーバ (`/api/lessons/{id}/start`)・`lesson_runner` は無改修。`lesson_complete.sections_played` の式は据え置き（grep で消費者が `_lesson_complete_payload` のバッファ書き込みのみと確認、絶対 index 表現のままで OK）。restore で「N から再開」する仕組みは別 TODO
+- [x] **実機動作確認 完了**: 全体再生 / セクション N 再生 / 一時停止→再開 / playing・paused 中のタブ ▶ disabled / 範囲外エラー の 5 項目すべて期待通り。プラン (`plans/lesson-play-from-section.md`) はステータス「完了」に確定
 
 ## バイブコーダー向けセキュリティ講座 #1: 概論回（id=100）セクション投入 + TTS事前生成
 
