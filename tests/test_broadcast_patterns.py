@@ -317,6 +317,31 @@ class TestCssVariables:
             )
 
 
+class TestLessonModeDoesNotTouchTodo:
+    """setLessonMode が todo-panel の表示状態を直接操作しないこと（再発防止）
+
+    背景: 授業終了時に setLessonMode(false) が todo.style.display='' を強制していたため、
+    ユーザが設定パネルで非表示（DB visible=0）にしても授業1本で再表示されてしまっていた。
+    TODO の表示状態は applyCommonStyle 経由で DB の visible にだけ従うべき。
+    """
+
+    def test_set_lesson_mode_does_not_assign_todo_display(self):
+        js = read_js()
+        func_match = re.search(
+            r"function setLessonMode\([^)]*\)\s*\{(.*?)\n\}", js, re.DOTALL
+        )
+        assert func_match, "setLessonMode 関数が見つからない"
+        body = func_match.group(1)
+        # todo / todoPanelEl など、todo-panel を取得して style.display を書き換えていないこと
+        assert not re.search(
+            r"(todo|todoPanelEl)\s*\.\s*style\s*\.\s*display\s*=", body
+        ), "setLessonMode が todo パネルの display を直接操作している（DB の visible を上書きするバグ）"
+        # getElementById('todo-panel') の取得自体が残っていないこと（取得不要なので）
+        assert "getElementById('todo-panel')" not in body, (
+            "setLessonMode 内で todo-panel を取得している（操作不要なら取得自体が不要）"
+        )
+
+
 class TestDataEditableAttributes:
     """broadcast.htmlの各パネルにdata-editable属性があること"""
 

@@ -1,5 +1,13 @@
 # DONE
 
+## TODOパネル 非表示制御の修正（授業終了で再表示される問題）
+
+- [x] **`setLessonMode()` から TODO 操作を削除** (`static/js/broadcast/panels.js:343-358`): 授業開始/終了時に `todo.style.display = 'none' / ''` を強制設定していたのを削除。TODO の表示状態は DB の `broadcast_items.visible`（applyCommonStyle 経由）だけが制御する形に統一。`getElementById('todo-panel')` の取得自体も削除し、コメントで方針を明記。`custom-text-container` は据え置き（複数要素・別途扱い）
+- [x] **再発防止テスト追加** (`tests/test_broadcast_patterns.py`): `TestLessonModeDoesNotTouchTodo` クラスを追加。`setLessonMode` 関数本体を正規表現で抽出し、(1) `todo*.style.display = ...` 代入が無いこと、(2) `getElementById('todo-panel')` の取得自体が無いこと、を静的検証。バグの本質（DB visible を上書きする副作用）が再発した時点で落ちる
+- [x] **症状の根本原因確定**: 設定パネルで `visible=0` を保存しても、授業終了時の `setLessonMode(false)` が `display=''` を無条件で書いて DB を無視 → ユーザは「非表示にしたつもりが復活」と感じていた。`applyCommonStyle` (`data-managed-visibility` 不在) と授業ライフサイクルの責務が衝突していたため、授業側を引かせる方針で解決
+- [x] **プラン**: [plans/todo-panel-visibility-fix.md](plans/todo-panel-visibility-fix.md) — ステータス「完了」
+- [x] **テスト**: `python3 -m pytest tests/ -q -m "not slow"` 1282 passed (6:17)
+
 ## 授業モード: 各セクションの先頭から再生可能に（C# 単独）
 
 - [x] **`LessonPlayer.PlayAsync(int startIndex = 0)` 化** (`win-native-app/WinNativeApp/Streaming/LessonPlayer.cs`): 範囲チェック (`ArgumentOutOfRangeException`)、`for` ループ開始 i・`_currentSectionIndex` 初期化を `startIndex` に。デフォルト 0 で完全な互換性を維持

@@ -343,15 +343,11 @@ let _lessonMode = false;
 function setLessonMode(active) {
   if (_lessonMode === active) return;
   _lessonMode = active;
-  const todo = document.getElementById('todo-panel');
+  // TODO パネルの表示/非表示はユーザの永続設定（DB visible）に委ねるため、ここでは触らない
   const customTexts = document.getElementById('custom-text-container');
   if (active) {
-    // 授業に関係ないパネルを非表示（字幕は通常通り表示）
-    if (todo) todo.style.display = 'none';
     if (customTexts) customTexts.style.display = 'none';
   } else {
-    // パネル復帰 + 授業テキスト・進捗・タイトル非表示
-    if (todo) todo.style.display = '';
     if (customTexts) customTexts.style.display = '';
     hideLessonText();
     hideLessonProgress();
