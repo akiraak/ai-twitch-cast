@@ -38,7 +38,6 @@ public class SectionData
     public List<DialogueData> Dialogues { get; set; } = new();
     public QuestionData? Question { get; set; }
     public double WaitSeconds { get; set; } = 2.0;
-    public double PaceScale { get; set; } = 1.0;
 }
 
 // =====================================================
@@ -72,7 +71,6 @@ public class LessonPlayer
     // 状態（全セクション一括）
     private List<SectionData>? _sections;
     private int _lessonId;
-    private double _paceScale = 1.0;
 
     private volatile bool _playing;
     private volatile bool _paused;
@@ -105,7 +103,6 @@ public class LessonPlayer
             Stop();
 
         _lessonId = json.TryGetProperty("lesson_id", out var lid) ? lid.GetInt32() : 0;
-        _paceScale = json.TryGetProperty("pace_scale", out var ps) ? ps.GetDouble() : 1.0;
         var totalSections = json.TryGetProperty("total_sections", out var ts) ? ts.GetInt32() : 0;
 
         _sections = new List<SectionData>();
@@ -117,7 +114,6 @@ public class LessonPlayer
                 var section = ParseSectionData(s);
                 // lesson_load のメタデータで上書き
                 section.LessonId = _lessonId;
-                section.PaceScale = _paceScale;
                 section.TotalSections = totalSections;
                 _sections.Add(section);
             }
@@ -129,8 +125,8 @@ public class LessonPlayer
         _currentKind = "main";
 
         var totalDialogues = _sections.Sum(s => s.Dialogues.Count);
-        Log.Information("[Lesson] Lesson loaded: id={LessonId} sections={Count} totalDialogues={Dialogues} paceScale={Pace}",
-            _lessonId, _sections.Count, totalDialogues, _paceScale);
+        Log.Information("[Lesson] Lesson loaded: id={LessonId} sections={Count} totalDialogues={Dialogues}",
+            _lessonId, _sections.Count, totalDialogues);
 
         SendOutlineToPanel();
         SendPanelUpdate();
@@ -355,12 +351,12 @@ public class LessonPlayer
 
             if (sec.Question != null)
             {
-                remaining += sec.Question.WaitSeconds * sec.PaceScale;
+                remaining += sec.Question.WaitSeconds;
                 foreach (var dlg in sec.Question.AnswerDialogues)
                     remaining += dlg.Duration;
             }
 
-            remaining += sec.WaitSeconds * sec.PaceScale;
+            remaining += sec.WaitSeconds;
         }
 
         return Math.Round(remaining, 1);
@@ -433,7 +429,7 @@ public class LessonPlayer
         // questionセクション: 待機→回答再生
         if (section.SectionType == "question" && section.Question != null)
         {
-            var waitMs = (int)(section.Question.WaitSeconds * section.PaceScale * 1000);
+            var waitMs = (int)(section.Question.WaitSeconds * 1000);
             Log.Information("[Lesson] Question wait: {Ms}ms", waitMs);
             await PauseAwareDelayAsync(waitMs, ct);
 
@@ -446,7 +442,7 @@ public class LessonPlayer
         // セクション間の間
         if (section.WaitSeconds > 0)
         {
-            var gapMs = (int)(section.WaitSeconds * section.PaceScale * 1000);
+            var gapMs = (int)(section.WaitSeconds * 1000);
             await PauseAwareDelayAsync(gapMs, ct);
         }
 
@@ -561,7 +557,6 @@ public class LessonPlayer
             SectionType = json.TryGetProperty("section_type", out var st) ? st.GetString() ?? "dialogue" : "dialogue",
             DisplayText = json.TryGetProperty("display_text", out var dt) ? dt.GetString() : null,
             WaitSeconds = json.TryGetProperty("wait_seconds", out var ws) ? ws.GetDouble() : 2.0,
-            PaceScale = json.TryGetProperty("pace_scale", out var ps) ? ps.GetDouble() : 1.0,
         };
 
         if (json.TryGetProperty("display_properties", out var dp) && dp.ValueKind != JsonValueKind.Null)

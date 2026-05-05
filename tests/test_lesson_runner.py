@@ -1152,8 +1152,6 @@ class TestSendAllAndPlay:
         assert load_call.kwargs["lesson_id"] == 1
         assert load_call.kwargs["total_sections"] == 2
         assert len(load_call.kwargs["sections"]) == 2
-        # pace_scale がトップレベルに含まれる
-        assert "pace_scale" in load_call.kwargs
         # 個別 section の構造確認
         s0 = load_call.kwargs["sections"][0]
         assert s0["section_type"] == "introduction"
@@ -1482,7 +1480,7 @@ class TestBuildSectionBundle:
         assert bundle is None
 
     def test_calc_section_duration(self):
-        """_calc_section_durationは dialogues + question + wait_seconds*pace の合計"""
+        """_calc_section_durationは dialogues + question + wait_seconds の合計"""
         section_bundle = {
             "dialogues": [{"duration": 1.0}, {"duration": 2.0}],
             "question": {
@@ -1491,19 +1489,9 @@ class TestBuildSectionBundle:
             },
             "wait_seconds": 2,
         }
-        total = LessonRunner._calc_section_duration(section_bundle, pace_scale=1.0)
-        # 1.0 + 2.0 + 4*1.0 + 1.5 + 2*1.0 = 10.5
+        total = LessonRunner._calc_section_duration(section_bundle)
+        # 1.0 + 2.0 + 4 + 1.5 + 2 = 10.5
         assert total == pytest.approx(10.5)
-
-    def test_calc_section_duration_with_pace(self):
-        """pace_scale が wait_seconds に適用される"""
-        section_bundle = {
-            "dialogues": [{"duration": 3.0}],
-            "wait_seconds": 2,
-        }
-        # 3.0 + 2*2.0 = 7.0
-        total = LessonRunner._calc_section_duration(section_bundle, pace_scale=2.0)
-        assert total == pytest.approx(7.0)
 
 
 class TestLessonCompletePayload:

@@ -280,28 +280,6 @@ async def lesson_status():
     return {"ok": True, "status": runner.get_status()}
 
 
-# --- 間のスケール（{lesson_id}パスより前に定義） ---
-
-
-class PaceScaleUpdate(BaseModel):
-    pace_scale: float
-
-
-@router.get("/api/lessons/pace-scale")
-async def get_pace_scale():
-    """間のスケール値を取得する"""
-    val = db.get_setting("lesson.pace_scale", "1.0")
-    return {"ok": True, "pace_scale": float(val)}
-
-
-@router.put("/api/lessons/pace-scale")
-async def set_pace_scale(body: PaceScaleUpdate):
-    """間のスケール値を設定する"""
-    scale = max(0.5, min(2.0, body.pace_scale))
-    db.set_setting("lesson.pace_scale", str(scale))
-    return {"ok": True, "pace_scale": scale}
-
-
 # --- 学習ループ（{lesson_id}パスより前に定義する必要あり） ---
 
 

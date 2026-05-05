@@ -95,8 +95,6 @@ async function loadLessons() {
   }
   const list = document.getElementById('lesson-list');
   list.innerHTML = '';
-  // 間のスケールスライダー
-  await _renderPaceScaleSlider(list);
   // カテゴリでフィルタ
   const filtered = _selectedCategory === null
     ? res.lessons
@@ -107,28 +105,6 @@ async function loadLessons() {
   }
   // 学習ダッシュボード（コンテンツ一覧の下に統合）
   _renderLearningSection(list);
-}
-
-async function _renderPaceScaleSlider(container) {
-  const paceRes = await api('GET', '/api/lessons/pace-scale');
-  const currentScale = paceRes && paceRes.ok ? paceRes.pace_scale : 1.0;
-  const div = document.createElement('div');
-  div.style.cssText = 'margin-bottom:12px; padding:10px 14px; background:#f5f0ff; border:1px solid #d0c0e8; border-radius:6px; display:flex; align-items:center; gap:12px;';
-  div.innerHTML = `
-    <span style="font-size:0.8rem; font-weight:600; color:#2a1f40; white-space:nowrap;">間のスケール:</span>
-    <span style="font-size:0.75rem; color:#8a7a9a;">速い</span>
-    <input type="range" min="0.5" max="2.0" step="0.1" value="${currentScale}"
-      style="flex:1; accent-color:#7b1fa2;"
-      oninput="this.nextElementSibling.textContent = parseFloat(this.value).toFixed(1) + 'x'"
-      onchange="updatePaceScale(parseFloat(this.value))">
-    <span style="font-size:0.85rem; font-weight:600; color:#7b1fa2; min-width:32px;">${currentScale.toFixed(1)}x</span>
-    <span style="font-size:0.75rem; color:#8a7a9a;">ゆっくり</span>
-  `;
-  container.appendChild(div);
-}
-
-async function updatePaceScale(value) {
-  await api('PUT', '/api/lessons/pace-scale', { pace_scale: value });
 }
 
 async function buildLessonItem(lessonId) {

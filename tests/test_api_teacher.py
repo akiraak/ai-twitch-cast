@@ -588,34 +588,6 @@ class TestImportSections:
         assert "claude" in data["sections_by_generator"]
 
 
-class TestPaceScale:
-    def test_get_default_pace_scale(self, api_client):
-        """デフォルトのpace_scaleは1.0"""
-        resp = api_client.get("/api/lessons/pace-scale")
-        data = resp.json()
-        assert data["ok"] is True
-        assert data["pace_scale"] == 1.0
-
-    def test_set_pace_scale(self, api_client):
-        """pace_scaleを設定・取得できる"""
-        resp = api_client.put("/api/lessons/pace-scale", json={"pace_scale": 1.5})
-        assert resp.json()["ok"] is True
-        assert resp.json()["pace_scale"] == 1.5
-
-        resp2 = api_client.get("/api/lessons/pace-scale")
-        assert resp2.json()["pace_scale"] == 1.5
-
-    def test_pace_scale_clamped(self, api_client):
-        """pace_scaleは0.5〜2.0にクランプされる"""
-        api_client.put("/api/lessons/pace-scale", json={"pace_scale": 0.1})
-        resp = api_client.get("/api/lessons/pace-scale")
-        assert resp.json()["pace_scale"] == 0.5
-
-        api_client.put("/api/lessons/pace-scale", json={"pace_scale": 5.0})
-        resp = api_client.get("/api/lessons/pace-scale")
-        assert resp.json()["pace_scale"] == 2.0
-
-
 class TestLessonControl:
     def test_get_status_idle(self, api_client):
         """初期状態はidle"""

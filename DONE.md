@@ -1,5 +1,18 @@
 # DONE
 
+## 授業モード: 「間のスケール」（pace_scale）削除
+
+- [x] **UI削除** (`static/js/admin/teacher.js`): コンテンツ一覧上部の `_renderPaceScaleSlider` 呼び出し・関数本体・`updatePaceScale` を一括削除。コンテンツ一覧のレンダリングフローから完全に消滅
+- [x] **API削除** (`scripts/routes/teacher.py`): `PaceScaleUpdate` Pydantic モデル・`GET /api/lessons/pace-scale`・`PUT /api/lessons/pace-scale` を削除
+- [x] **lesson_runner 側削除** (`src/lesson_runner.py`): `_get_pace_scale()` メソッドを撤去、`_send_all_and_play` から呼び出し・`pace_scale` 変数も削除。C# 送信ペイロード `lesson_load.pace_scale` キーを除去。`_calc_section_duration(section_bundle)` シグネチャから `pace_scale` 引数を撤去し、`wait_seconds` の単純合算に
+- [x] **C# 側削除** (`win-native-app/WinNativeApp/Streaming/LessonPlayer.cs`): `SectionData.PaceScale`・`_paceScale` フィールド・`pace_scale` JSON読み込み（`LoadLesson` / `ParseSectionData`）・乗算箇所（`CalcRemainingDuration`・`PlaySectionInternalAsync` の question wait・section gap）・ログの `paceScale={Pace}` を削除
+- [x] **テスト更新** (`tests/test_lesson_runner.py` / `tests/test_api_teacher.py`): `test_calc_section_duration_with_pace` 削除、`test_calc_section_duration` のシグネチャ更新（pace_scale 引数なし）。`assert "pace_scale" in load_call.kwargs` を削除。`TestPaceScale` クラス全体（3テスト）削除
+- [x] **ドキュメント更新** (`docs/speech-generation-flow.md`): 「ペース制御: lesson.pace_scale（DB設定、デフォルト1.0）でセクション間の間隔を調整」記述を削除
+- [x] **方針**: 固定倍率による尺調整より、コンテンツ側の `wait_seconds` を直接調整する運用に寄せる。DB の `lesson.pace_scale` 設定値はマイグレーションせず残置（読み取り側を消したので無視される）
+- [x] **プラン**: [plans/remove-lesson-pace-scale.md](plans/remove-lesson-pace-scale.md) — ステータス「完了」
+- [x] **テスト**: `python3 -m pytest tests/ -q -m "not slow"` 1278 passed (6:22)
+- [x] **C# ビルド**: WSL2 上に dotnet がないため、ユーザー側で `stream.sh` 経由のビルド・実機確認が必要
+
 ## 授業モード: 字幕の消えが遅い問題の修正（待ち時間0化）
 
 - [x] **`fadeSubtitle` のオプション拡張** (`static/js/broadcast/panels.js:111`): 第2引数 `opts` を追加し、`opts.delaySeconds` が指定されたら `dataset.fadeDuration`（既定3秒）より優先するよう変更。`delaySec <= 0` のときは `setTimeout` を経由せず即時に `.fading` クラスを付与（タイマ枠は null 保存）

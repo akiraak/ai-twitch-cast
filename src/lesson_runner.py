@@ -591,7 +591,6 @@ class LessonRunner:
         # 1. 全セクションのバンドルを事前生成（self._current_index から）
         all_sections: list[dict] = []
         total_duration = 0.0
-        pace_scale = self._get_pace_scale()
         start_index = self._current_index
 
         for i in range(start_index, len(self._sections)):
@@ -612,7 +611,7 @@ class LessonRunner:
                 logger.warning("[lesson] セクション %d: バンドル生成失敗、スキップ", i)
                 continue
             all_sections.append(bundle)
-            total_duration += self._calc_section_duration(bundle, pace_scale)
+            total_duration += self._calc_section_duration(bundle)
             logger.info("[lesson] セクション %d/%d TTS生成完了 (duration=%.1fs)",
                          i + 1, len(self._sections), total_duration)
 
@@ -630,7 +629,6 @@ class LessonRunner:
                 "lesson_load", timeout=30.0,
                 lesson_id=self._lesson_id,
                 total_sections=len(all_sections),
-                pace_scale=pace_scale,
                 sections=all_sections,
             )
             logger.info("[lesson]   lesson_load: %s", "ok" if load_result.get("ok") else load_result)
@@ -700,14 +698,14 @@ class LessonRunner:
         }
 
     @staticmethod
-    def _calc_section_duration(section_bundle: dict, pace_scale: float) -> float:
+    def _calc_section_duration(section_bundle: dict) -> float:
         """セクションバンドルの合計再生時間（秒）を算出する"""
         total = sum(d.get("duration", 0) for d in section_bundle.get("dialogues", []))
         q = section_bundle.get("question")
         if q:
-            total += q.get("wait_seconds", 0) * pace_scale
+            total += q.get("wait_seconds", 0)
             total += sum(d.get("duration", 0) for d in q.get("answer_dialogues", []))
-        total += section_bundle.get("wait_seconds", 0) * pace_scale
+        total += section_bundle.get("wait_seconds", 0)
         return total
 
     async def _wait_lesson_complete(self, evt: asyncio.Event, total_duration: float):
@@ -969,16 +967,6 @@ class LessonRunner:
             "wait_seconds": question_wait,
             "answer_dialogues": answer_dialogues,
         }
-
-    def _get_pace_scale(self) -> float:
-        """settings DBから間のスケールを取得する（デフォルト1.0）"""
-        try:
-            val = db.get_setting("lesson.pace_scale")
-            if val is not None:
-                return max(0.1, min(3.0, float(val)))
-        except Exception:
-            pass
-        return 1.0
 
     async def _show_lesson_text(self, text: str, display_properties: dict | None = None):
         """配信画面にテキストを表示する"""
