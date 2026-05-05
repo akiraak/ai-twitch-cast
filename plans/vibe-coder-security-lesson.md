@@ -35,37 +35,61 @@ AIコーディングアシスタント（Claude Code / Cursor / v0 / Bolt 等）
 
 ## カリキュラム（lesson 構成案）
 
-カテゴリ: **「Vibe Coding」**（既存カテゴリでなければ新規作成）
+カテゴリ: **「Vibe Coding」**（slug: `vibe_coding`、既存カテゴリでなければ新規作成）
 
-**lesson_id は決め打ちで予約する**。既存lesson_idは `[1, 3]` で、AUTOINCREMENTに任せると番号が散らばってしまうため、本シリーズは **100〜105** を確保して Claude Code が順次コンテンツを生成していく運用にする。連番で覚えやすく、他カテゴリと衝突しないブロックとして十分離れている。
+**lesson_id は決め打ちで予約する**。既存lesson_idは `[1, 3]` で、AUTOINCREMENTに任せると番号が散らばってしまうため、本シリーズは **100〜109** を確保して Claude Code が順次コンテンツを生成していく運用にする。連番で覚えやすく、他カテゴリと衝突しないブロックとして十分離れている。
+
+全 10 回構成（#1 概論 + #2〜#10 深掘り 9 回）。
 
 | lesson_id | # | タイトル | 学習目標 | 主要キーワード |
 |-----------|---|---------|---------|----------------|
-| `100` | 1 | シークレットの守り方 | APIキー・パスワード・トークンを漏らさない最低限のルールが分かる | `.env` / `.gitignore` / git history scrub / フロント露出 / GitHub secret scanning |
-| `101` | 2 | ユーザー入力は全部疑え | XSS / SQLi の仕組みと、ライブラリで自動的に防ぐ方法が分かる | エスケープ / パラメータ化クエリ / `innerHTML` の罠 / DOMPurify |
-| `102` | 3 | 認証は自作しない | 認証・パスワード保存・セッション管理を「ちゃんとした既製品」に任せるべき理由が分かる | bcrypt/argon2 / Auth0 / Supabase Auth / Clerk / セッション固定攻撃 |
-| `103` | 4 | データベース権限とRLS | Supabase / Firebase で「全公開DB」状態を作らないための初期設定が分かる | Row Level Security / Firestore rules / 公開バケット |
-| `104` | 5 | デプロイ前チェックリスト | 本番に出す前に最低限見るポイントが分かる | HTTPS強制 / CORS / レート制限 / デバッグログ / 環境変数の本番分離 |
-| `105` | 6 | AI生成コードを信用しない | AIのコードを"読む"観点と、危険な提案の見分け方が分かる | ハルシネーションされたパッケージ / 古いAPI推奨 / 過剰な権限要求 / コピペ前の3秒チェック |
+| `100` | 1 | 全体マップ：バイブコーダーのセキュリティ早わかり | これからのシリーズで扱う全テーマの俯瞰と、「自分も該当するかも」の気づき | シリーズ概要 / OWASP Top 10 / 全体地図 |
+| `101` | 2 | シークレットを守る：`.env`とAPIキーが漏れたら何が起こるか | APIキー・パスワード・トークンを漏らさない最低限のルールが分かる | `.env` / `.gitignore` / git history scrub / フロント露出 / GitHub secret scanning |
+| `102` | 3 | ユーザー入力は全部疑え：XSSとSQLインジェクションの止め方 | XSS / SQLi の仕組みと、ライブラリで自動的に防ぐ方法が分かる | エスケープ / パラメータ化クエリ / `innerHTML` の罠 / DOMPurify / Prisma |
+| `103` | 4 | 認証は自作しない：Auth0・Clerk・Supabase Authの選び方 | 認証・パスワード保存・セッション管理を「ちゃんとした既製品」に任せるべき理由と、選び方が分かる | bcrypt/argon2 / Auth0 / Clerk / Supabase Auth / NextAuth.js / セッション固定攻撃 |
+| `104` | 5 | データベースの初期設定の罠：RLSとFirestore Rules | Supabase / Firebase で「全公開DB」状態を作らないための初期設定が分かる | Row Level Security / Firestore rules / Postgres GRANT / 公開バケット |
+| `105` | 6 | 通信を守る：HTTPS強制・CORS・CSRFを正しく扱う | 通信レイヤーで起きる典型的な事故と、防御の最低ラインが分かる | HTTPS / HSTS / CORS / CSRF / SameSite Cookie / CSP |
+| `106` | 7 | レート制限と乱用対策：公開直後に始まるBotの叩き | 公開直後に始まる自動アクセスから API・ログイン・送信フォームを守る基本が分かる | rate limit / Cloudflare / WAF / CAPTCHA / express-rate-limit |
+| `107` | 8 | デプロイ前チェックリスト：本番に出す前の10項目 | 本番に出す前に「今すぐ」見るべきポイントを 10 項目で確認できる | デバッグログ漏れ / 環境変数の本番分離 / HTTPS強制 / CORS / エラーメッセージの粒度 |
+| `108` | 9 | 漏らした時の最初の30分：インシデント対応の型 | 事故が起きた直後にやるべき手順が言語化されている | キーローテーション / git history scrub / 通報 / ステークホルダー連絡 |
+| `109` | 10 | AI生成コードを信用しない：「動いた」を疑う3秒チェック | AIのコードを"読む"観点と、危険な提案の見分け方が分かる | ハルシネーションされたパッケージ / 古いAPI推奨 / 過剰な権限要求 / コピペ前の3秒チェック / Socket.dev / npm audit |
 
-> **MVPとしては #1〜#3 をまず作る**（lesson_id 100〜102）。配信反応を見て #4〜#6 を追加するか判断する。
+> **MVPとしては #1（概論）をまず作って配信に出す**。#2〜#10 は概論への反応を見ながら順次着手する。
+> 配信実績で「触れる順序を変えたい」「あるテーマを統合・分割したい」となったときは lesson_id を動かさず、name 更新と素材mdの差し替えで対応する（DBが正本）。
 
 ### lesson_id 予約のやり方
 
 `POST /api/lessons` は AUTOINCREMENT で id を採番するため、決め打ちIDで作るには SQL を直接叩く（または明示id対応のAPIを足す）。本プランでは前者で済ませる:
 
+> **実DBパス**: `data/app.db`（`src/db/core.py` 参照）。
+> **`lessons.category` の値**: `lesson_categories.slug` の値（小文字スネーク）を入れる規約。既存 lesson は `category='english_class'` で運用されている。本プランでは `'vibe_coding'` を入れる。
+> **NOT NULL カラム**: `lessons` は `created_at` / `updated_at` がデフォルトなしの NOT NULL なので、INSERT で必ず指定する。
+
 ```bash
-sqlite3 data/twitch.db <<'SQL'
-INSERT INTO lessons (id, name, category) VALUES
-  (100, '#1 シークレットの守り方',         'Vibe Coding'),
-  (101, '#2 ユーザー入力は全部疑え',       'Vibe Coding'),
-  (102, '#3 認証は自作しない',             'Vibe Coding'),
-  (103, '#4 データベース権限とRLS',         'Vibe Coding'),
-  (104, '#5 デプロイ前チェックリスト',      'Vibe Coding'),
-  (105, '#6 AI生成コードを信用しない',      'Vibe Coding');
--- AUTOINCREMENT のシーケンスを 105 以降に進めて、後続lessonが106から振られるようにする
-UPDATE sqlite_sequence SET seq = 105 WHERE name = 'lessons';
-SQL
+# WSL 環境に sqlite3 が無い場合は python3 -c の方で叩く
+python3 - <<'PY'
+import sqlite3, datetime
+NOW = datetime.datetime.now(datetime.timezone.utc).isoformat()
+conn = sqlite3.connect('data/app.db')
+conn.executemany(
+    "INSERT INTO lessons (id, name, category, created_at, updated_at) VALUES (?,?,?,?,?)",
+    [
+        (100, '#1 全体マップ：バイブコーダーのセキュリティ早わかり',                  'vibe_coding', NOW, NOW),
+        (101, '#2 シークレットを守る：.envとAPIキーが漏れたら何が起こるか',           'vibe_coding', NOW, NOW),
+        (102, '#3 ユーザー入力は全部疑え：XSSとSQLインジェクションの止め方',         'vibe_coding', NOW, NOW),
+        (103, '#4 認証は自作しない：Auth0・Clerk・Supabase Authの選び方',             'vibe_coding', NOW, NOW),
+        (104, '#5 データベースの初期設定の罠：RLSとFirestore Rules',                  'vibe_coding', NOW, NOW),
+        (105, '#6 通信を守る：HTTPS強制・CORS・CSRFを正しく扱う',                     'vibe_coding', NOW, NOW),
+        (106, '#7 レート制限と乱用対策：公開直後に始まるBotの叩き',                   'vibe_coding', NOW, NOW),
+        (107, '#8 デプロイ前チェックリスト：本番に出す前の10項目',                    'vibe_coding', NOW, NOW),
+        (108, '#9 漏らした時の最初の30分：インシデント対応の型',                      'vibe_coding', NOW, NOW),
+        (109, '#10 AI生成コードを信用しない：「動いた」を疑う3秒チェック',             'vibe_coding', NOW, NOW),
+    ],
+)
+# AUTOINCREMENT シーケンスを 109 に進めて、後続lessonが110から振られるようにする
+conn.execute("UPDATE sqlite_sequence SET seq = 109 WHERE name = 'lessons'")
+conn.commit()
+PY
 ```
 
 予約後は **空のlessonレコードに対して Claude Code が順次セクション生成 → `import-sections` で投入** していく。途中で生成順を入れ替えても lesson_id は変わらないので、シリーズ内のクロスリファレンス（「#3で説明したように…」のような言及）が安全に書ける。
@@ -86,15 +110,15 @@ SQL
 
 授業データは **DB** と **ファイルシステム** の両方に分散保存される。本プランで何がどこに作られるかを先に整理しておく。
 
-### SQLite DB（`data/twitch.db`、`src/db/lessons.py` 経由）
+### SQLite DB（`data/app.db`、`src/db/lessons.py` 経由）
 
 | テーブル | 何が入る | 本プランで作る行 |
 |----------|---------|-----------------|
-| `lesson_categories` | カテゴリ定義 | 1行（「Vibe Coding」、未存在時のみ作成） |
-| `lessons` | 授業本体（id / name / category） | **lesson_id 100〜105 を決め打ち予約**。MVPで3行（100〜102）、最終的に6行（〜105） |
+| `lesson_categories` | カテゴリ定義 | 1行（「Vibe Coding」、slug=`vibe_coding`。既に存在） |
+| `lessons` | 授業本体（id / name / category） | **lesson_id 100〜109 を決め打ち予約**（10行）。MVPでは #1（id=100）から作る |
 | `lesson_sources` | 教材ソースのメタ情報（`file_path` で実体ファイルを参照） | **0行**（スライド画像なし方針のため作らない） |
 | `lesson_versions` | lang × generator × version のバージョンメタ | lesson × 言語 × generator ごとに1行 |
-| `lesson_sections` | セクション本体（content / tts_text / display_text / dialogues / dialogue_directions / emotion 等、**対話の中身はここ**） | lessonあたり4〜6行 × MVP3lesson |
+| `lesson_sections` | セクション本体（content / tts_text / display_text / dialogues / dialogue_directions / emotion 等、**対話の中身はここ**） | lessonあたり4〜6行 × 10lesson |
 | `lesson_plans` | `plan_summary` 等のプランサマリー | lesson × バージョンごとに1行 |
 
 ### ファイルシステム（`resources/` 配下）
@@ -121,13 +145,13 @@ SQL
 
 `db.delete_lesson()` は `lesson_sections / lesson_sources / lesson_plans / lesson_versions / lessons` を全部消してくれる（`src/db/lessons.py:48-56`）。`DELETE /api/lessons/{id}` ルートはこれを呼ぶ前に `clear_tts_cache()` も走らせるので、ファイルとDBが揃ってクリーンアップされる。
 
-### パターン A: コンテンツだけリセット（lesson_id 100〜105 は維持）
+### パターン A: コンテンツだけリセット（lesson_id 100〜109 は維持）
 
 セクション・対話・プラン・全バージョン・TTSキャッシュを消し、**lesson行とID予約は残す**。文章を作り直すだけのケース。
 
 ```bash
 # 各lessonの全バージョンを順に削除（バージョンAPIは行ごとなので一覧→ループ）
-for id in 100 101 102 103 104 105; do
+for id in 100 101 102 103 104 105 106 107 108 109; do
   versions=$(curl -s "http://localhost:${WEB_PORT:-8080}/api/lessons/${id}" \
     | python3 -c "import sys,json; d=json.load(sys.stdin); [print(f\"{v['lang']} {v['generator']} {v['version_number']}\") for v in d.get('versions', [])]")
   while read -r lang gen ver; do
@@ -137,12 +161,15 @@ for id in 100 101 102 103 104 105; do
 done
 
 # 念のためTTSキャッシュとDB残骸を掃除（API漏れがあった場合の保険）
-sqlite3 data/twitch.db <<'SQL'
-DELETE FROM lesson_sections WHERE lesson_id BETWEEN 100 AND 105;
-DELETE FROM lesson_plans    WHERE lesson_id BETWEEN 100 AND 105;
-DELETE FROM lesson_versions WHERE lesson_id BETWEEN 100 AND 105;
-SQL
-rm -rf resources/audio/lessons/{100,101,102,103,104,105}
+python3 - <<'PY'
+import sqlite3
+conn = sqlite3.connect('data/app.db')
+conn.execute("DELETE FROM lesson_sections WHERE lesson_id BETWEEN 100 AND 109")
+conn.execute("DELETE FROM lesson_plans    WHERE lesson_id BETWEEN 100 AND 109")
+conn.execute("DELETE FROM lesson_versions WHERE lesson_id BETWEEN 100 AND 109")
+conn.commit()
+PY
+rm -rf resources/audio/lessons/{100,101,102,103,104,105,106,107,108,109}
 ```
 
 完了後、**Step 3（セクション生成）から再開**。lesson_id・カテゴリは予約済みのまま。
@@ -153,15 +180,15 @@ rm -rf resources/audio/lessons/{100,101,102,103,104,105}
 
 ```bash
 # 各lessonを完全削除（行・ソース・セクション・全バージョン・TTSキャッシュ一括）
-for id in 100 101 102 103 104 105; do
+for id in 100 101 102 103 104 105 106 107 108 109; do
   curl -X DELETE "http://localhost:${WEB_PORT:-8080}/api/lessons/${id}"
 done
 
 # AUTOINCREMENT を 99 に巻き戻し、次の予約INSERTが100から始まるようにする
-sqlite3 data/twitch.db "UPDATE sqlite_sequence SET seq = 99 WHERE name = 'lessons';"
+python3 -c "import sqlite3; conn=sqlite3.connect('data/app.db'); conn.execute(\"UPDATE sqlite_sequence SET seq = 99 WHERE name = 'lessons'\"); conn.commit()"
 
 # キャッシュフォルダの残骸を掃除（DELETE APIが消し漏らした場合の保険）
-rm -rf resources/audio/lessons/{100,101,102,103,104,105}
+rm -rf resources/audio/lessons/{100,101,102,103,104,105,106,107,108,109}
 ```
 
 完了後、**Step 1（カテゴリ作成 + lesson_id 予約）から再開**。
@@ -181,13 +208,12 @@ rm -rf resources/audio/lessons/{100,101,102,103,104,105}
 ### Step 1: カテゴリ作成 + lesson_id 予約
 
 ```bash
-# カテゴリ作成（既存なら不要）
-curl -X POST http://localhost:${WEB_PORT:-8080}/api/lesson-categories \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Vibe Coding","description":"AIで開発する非エンジニア向けの実践講座（セキュリティ等）","prompt_content":""}'
+# カテゴリ作成（slug='vibe_coding', name='Vibe Coding' は既に作成済み。新規プロジェクトでは下記を実行）
+# curl -X POST http://localhost:${WEB_PORT:-8080}/api/lesson-categories \
+#   -H 'Content-Type: application/json' \
+#   -d '{"slug":"vibe_coding","name":"Vibe Coding","description":"AIで開発する非エンジニア向けの実践講座（セキュリティ等）","prompt_content":""}'
 
-# lesson_id 100〜105 を決め打ちで予約（上記「lesson_id 予約のやり方」のSQLを実行）
-sqlite3 data/twitch.db < /tmp/reserve_vibe_coding_lessons.sql
+# lesson_id 100〜109 を決め打ちで予約（上記「lesson_id 予約のやり方」の python3 ヒアドキュメントを実行）
 ```
 
 `POST /api/lessons` は使わない（AUTOINCREMENTでIDが取れないため）。予約後 `curl /api/lessons | jq` で `id: 100〜105` が並んでいることを確認する。

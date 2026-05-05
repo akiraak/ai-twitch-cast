@@ -1,7 +1,12 @@
 # TODO
 
-## バイブコーダーのためのキュリティー口座
-- [ ] 非エンジニアがWebアプリ開発時に気を付けること（授業モードで作成） → [plans/vibe-coder-security-lesson.md](plans/vibe-coder-security-lesson.md)
+## バイブコーダー向けセキュリティ講座（全10回・授業モード） → [plans/vibe-coder-security-lesson.md](plans/vibe-coder-security-lesson.md)
+
+全10回構成確定（lesson_id 100〜109）。素材メモは `plans/vibe-coder-security/lesson-{N}-source.md`。
+- [>] **Step 3 (#1)**: 概論回（id=100）のセクション生成 → `POST /api/lessons/100/import-sections` で投入。素材は [plans/vibe-coder-security/lesson-1-source.md](plans/vibe-coder-security/lesson-1-source.md)
+- [ ] **Step 4 (#1)**: TTS 事前生成 (`pregenerate-tts`) → 管理画面 Lesson タブで試聴 → 微修正
+- [ ] **Step 5 (#1)**: 配信して反応を見る（フィードバック収集）
+- [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
 
 ## 授業モード

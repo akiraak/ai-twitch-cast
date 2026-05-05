@@ -1,5 +1,24 @@
 # DONE
 
+## バイブコーダー向けセキュリティ講座: 全10回構成確定 + #1（概論）素材メモ作成
+
+- [x] **環境整合性チェック**: プラン記載のDBパス `data/twitch.db` が誤りで、実体は `data/app.db` であることを確認（`src/db/core.py:9` 参照）。`lessons.category` は slug 規約（既存は `english_class`）で本シリーズは `vibe_coding`。INSERT 時 `created_at`/`updated_at` は NOT NULL かつ DEFAULT 無し → 必ず指定が必要。`vibe_coding` カテゴリ (id=2) は既登録、`teacher`/`student` キャラ (id=1/2) も存在、`DELETE /api/lessons/{id}/versions/{ver}` も実在 (`teacher.py:1283`) を確認
+- [x] **全10回のカリキュラム確定**（lesson_id 100〜109）:
+  - #1 全体マップ：バイブコーダーのセキュリティ早わかり（id=100、概論）
+  - #2 シークレットを守る：`.env`とAPIキーが漏れたら何が起こるか（id=101）
+  - #3 ユーザー入力は全部疑え：XSSとSQLインジェクションの止め方（id=102）
+  - #4 認証は自作しない：Auth0・Clerk・Supabase Authの選び方（id=103）
+  - #5 データベースの初期設定の罠：RLSとFirestore Rules（id=104）
+  - #6 通信を守る：HTTPS強制・CORS・CSRFを正しく扱う（id=105）
+  - #7 レート制限と乱用対策：公開直後に始まるBotの叩き（id=106）
+  - #8 デプロイ前チェックリスト：本番に出す前の10項目（id=107）
+  - #9 漏らした時の最初の30分：インシデント対応の型（id=108）
+  - #10 AI生成コードを信用しない：「動いた」を疑う3秒チェック（id=109）
+- [x] **DB 予約完了**: `lessons` テーブルに id=100〜109 を INSERT、`sqlite_sequence.lessons.seq=109` に設定。`/api/lessons` で全行が `category=vibe_coding` で返ることを確認
+- [x] **プラン文書整合性修正** (`plans/vibe-coder-security-lesson.md`): カリキュラム表を6→10回に拡張、SQL予約スクリプトをpython3ヒアドキュメント化（`data/app.db`基準・`created_at`/`updated_at`指定・slug規約）、A/B手順のループレンジを `100..109` に拡張、カテゴリ作成curlを「既存なら不要」コメント化
+- [x] **#1 概論回の素材メモ作成** (`plans/vibe-coder-security/lesson-1-source.md`、180行): Section 3 を **「アプリのライフサイクル順」（開発中→公開直前→公開後→メタ）** で全9 deep-dive を整理。各サブトピックを「概要1行→噛み砕いた例え→道具→次回 #N で詳しく」で統一。トーン指示・display_text候補・言語タグ運用メモ・参考リンクを記載
+- [x] **TODO.md 更新**: 旧見出し「バイブコーダーのためのキュリティー口座」を撤廃、作業phase（Step 3〜5 + #2-10）に再構成
+
 ## バイブコーダー向け「Vibe Coding」授業シリーズのプラン作成（授業モード活用）
 
 - [x] `plans/vibe-coder-security-lesson.md` 新規作成: TODO「非エンジニアがWebアプリ開発時に気を付けること」を授業モードで実装するプランを策定
