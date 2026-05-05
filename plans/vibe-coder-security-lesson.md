@@ -3,7 +3,7 @@
 > TODO原文: 「バイブコーダーのためのキュリティー口座 / 非エンジニアがWebアプリ開発時に気を付けること」
 > 表記ゆれ修正: 「セキュリティ講座」（タイトルでは原文の遊びを残すかは要相談）
 
-## ステータス: 未着手
+## ステータス: 進行中（#1 セクション投入＋TTS事前生成 完了 / 試聴待ち）
 
 ## 背景
 
@@ -240,8 +240,9 @@ rm -rf resources/audio/lessons/{100,101,102,103,104,105,106,107,108,109}
 ### Step 4: TTS事前生成と試聴
 
 ```bash
-# TTS事前生成（管理画面 or API）
-curl -X POST "http://localhost:${WEB_PORT:-8080}/api/lessons/{lesson_id}/pregenerate-tts?lang=ja&generator=claude"
+# TTS事前生成（管理画面 or API）。実エンドポイントは `tts-pregen`（teacher.py:1147）
+curl -X POST "http://localhost:${WEB_PORT:-8080}/api/lessons/{lesson_id}/tts-pregen?lang=ja&generator=claude&version=1"
+# 進捗確認: GET .../tts-pregen-status?lang=ja&generator=claude&version=1
 
 # 管理画面の Lesson タブで再生し、以下を確認:
 # - 各セクションの display_text が読みやすいか

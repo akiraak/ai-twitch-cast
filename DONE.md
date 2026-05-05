@@ -1,5 +1,12 @@
 # DONE
 
+## バイブコーダー向けセキュリティ講座 #1: 概論回（id=100）セクション投入 + TTS事前生成
+
+- [x] **Step 3 (#1) セクション生成・投入**: `plans/vibe-coder-security/lesson-1-source.md` を素材に `prompts/lesson_generate.md` のフォーマットで 6 セクション生成 → `POST /api/lessons/100/import-sections?lang=ja&generator=claude` で投入（`/tmp/lesson_100_import.py` 実行）。section数: introduction 1 / explanation 1 / example 2（Phase 1=4テーマ・Phase 2-4=5テーマに分割。素材mdの「Section 3 が長くなるので分割可」のガイドに沿う） / question 1 / summary 1。dialogues計34ターン、各セクション最初のteacherターンで `display_text` 全文読み上げ済み。version=1 が `lesson_versions` に登録（`lesson_sections` 71-76, `lesson_plans` 1行）
+- [x] **Step 4 (#1) TTS事前生成**: `POST /api/lessons/100/tts-pregen?lang=ja&generator=claude&version=1` でキック → 完了（state=completed, 6/6, generated=32, cached=2, failed=0）。`resources/audio/lessons/100/ja/claude/v1/` に 34 wav（22MB）が出力。エンドポイントはプラン記載の `pregenerate-tts` ではなく **`tts-pregen`** が正（`scripts/routes/teacher.py:1147`）— プラン本文も今後この呼び方に揃える方針
+- [x] **キャラ整合性チェック**: 素材mdは student を「Mafuyu」と仮置きしていたが、実DB上の student は **「なるこ」** （`/api/characters` 確認済み）。生成セクションの speaker 分担は teacher=ちょビ / student=なるこ で投入、台詞は student 名に依存しない汎用表現に統一
+- [>] **試聴・微修正は未実施**: TTS音声は WSL2 上から再生不可なため、ユーザー側で管理画面 Lesson タブから lesson_id=100 を試聴し、誤読・テンポ・言語タグ抜けを点検する必要あり。修正が必要なら `import-sections?version=1` で同バージョン上書き → `tts-cache/{order_index}` で当該セクションのみ削除して再生成
+
 ## バイブコーダー向けセキュリティ講座: 全10回構成確定 + #1（概論）素材メモ作成
 
 - [x] **環境整合性チェック**: プラン記載のDBパス `data/twitch.db` が誤りで、実体は `data/app.db` であることを確認（`src/db/core.py:9` 参照）。`lessons.category` は slug 規約（既存は `english_class`）で本シリーズは `vibe_coding`。INSERT 時 `created_at`/`updated_at` は NOT NULL かつ DEFAULT 無し → 必ず指定が必要。`vibe_coding` カテゴリ (id=2) は既登録、`teacher`/`student` キャラ (id=1/2) も存在、`DELETE /api/lessons/{id}/versions/{ver}` も実在 (`teacher.py:1283`) を確認
