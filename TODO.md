@@ -1,5 +1,9 @@
 # TODO
 
+## バイブコーダーのためのキュリティー口座
+- [ ] 非エンジニアがWebアプリ開発時に気を付けること（授業モードで作成） → [plans/vibe-coder-security-lesson.md](plans/vibe-coder-security-lesson.md)
+
+
 ## 授業モード
 - [ ] speech-generation-flow.md を最新実装に更新とフローチャートの追加 → [plans/speech-flow-doc-update.md](plans/speech-flow-doc-update.md)
 - [ ] C#画面のセクション進捗パネルが動いていない

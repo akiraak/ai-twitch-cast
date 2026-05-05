@@ -1,5 +1,14 @@
 # DONE
 
+## バイブコーダー向け「Vibe Coding」授業シリーズのプラン作成（授業モード活用）
+
+- [x] `plans/vibe-coder-security-lesson.md` 新規作成: TODO「非エンジニアがWebアプリ開発時に気を付けること」を授業モードで実装するプランを策定
+- [x] カテゴリ「Vibe Coding」配下に **lesson_id 100〜105 を決め打ち予約**する方針を確定（AUTOINCREMENT回避のため `INSERT INTO lessons (id, ...)` + `UPDATE sqlite_sequence` で実現）。`POST /api/lessons` は明示id指定不可なので使わない
+- [x] カリキュラム6本: シークレット守備 / ユーザー入力XSS・SQLi / 認証自作NG / RLS / デプロイ前チェック / AI生成コード警戒。**MVPは #1〜#3（id=100〜102）**
+- [x] 生成・保存アーティファクト一覧を整理: DB 6テーブル（lesson_categories/lessons/lesson_sources/lesson_versions/lesson_sections/lesson_plans）× ファイルシステム2種（`resources/images/lessons/` は使わない、`resources/audio/lessons/{id}/{lang}/{generator}/v{ver}/*.wav` のみ自動生成）× 中間素材md
+- [x] **全削除・再生成手順を3パターン明記**（A: コンテンツのみリセット / B: 完全リセット → 予約からやり直し / C: 同バージョン上書き）。`db.delete_lesson()` が sections/sources/plans/versions/lessons を全削除すること（`src/db/lessons.py:48-56`）、`DELETE /api/lessons/{id}` ルートが TTS キャッシュも清掃することを確認した上で記述
+- [x] `TODO.md` のTODO項目にプランへのリンクを追加
+
 ## 録画AV同期 E 計測完了 → 対症療法の限界を確認、根本方針（α/β/γ/δ）をプランに整理
 
 - [x] E ビルド（音声パイプ 1MB）で授業再生 3分36秒録画。ログ解析:
