@@ -8,12 +8,12 @@
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
 - [ ] lesson_title の垂直側の中央ぞろえがきかない
-- [ ] 授業モードで読み上げのあとに字幕表示がなかなか消えない
 
 - [ ] 「画面を見てね」とか「画面を読むよ」という前置きは不自然なので無くす。どのようなプロンプトで回避可能か提案して欲しい。
 
 
 ## 授業モード
+- [ ] 「間のスケール」（pace_scale）を削除（UI / API / lesson_runner / C# / テスト一式） → [plans/remove-lesson-pace-scale.md](plans/remove-lesson-pace-scale.md)
 - [ ] speech-generation-flow.md を最新実装に更新とフローチャートの追加 → [plans/speech-flow-doc-update.md](plans/speech-flow-doc-update.md)
 - [ ] C#画面のセクション進捗パネルが動いていない
 - [ ] 授業生成の授業内容とセリフのチェックと再生成を入れる

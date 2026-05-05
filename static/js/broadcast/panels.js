@@ -108,20 +108,30 @@ function showSubtitle(data) {
   }
 }
 
-function fadeSubtitle(avatarId) {
+function fadeSubtitle(avatarId, opts = {}) {
   // avatarId未指定時は両方フェード
   if (!avatarId) {
-    fadeSubtitle('teacher');
-    fadeSubtitle('student');
+    fadeSubtitle('teacher', opts);
+    fadeSubtitle('student', opts);
     return;
   }
   clearChunkTimers(avatarId);
   const el = _getSubtitleEl(avatarId);
-  const duration = parseFloat(el.dataset.fadeDuration || 3) * 1000;
-  const timerId = setTimeout(() => {
+  // opts.delaySeconds が指定されていれば dataset.fadeDuration より優先（授業モード用）
+  const delaySec = (opts.delaySeconds != null)
+    ? opts.delaySeconds
+    : parseFloat(el.dataset.fadeDuration || 3);
+  const duration = delaySec * 1000;
+  const apply = () => {
     el.classList.add('fading');
     el.classList.remove('visible');
-  }, duration);
+  };
+  let timerId = null;
+  if (duration <= 0) {
+    apply();
+  } else {
+    timerId = setTimeout(apply, duration);
+  }
   if (avatarId === 'student') {
     fadeTimerStudent = timerId;
   } else {

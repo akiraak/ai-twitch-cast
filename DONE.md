@@ -1,5 +1,14 @@
 # DONE
 
+## 授業モード: 字幕の消えが遅い問題の修正（待ち時間0化）
+
+- [x] **`fadeSubtitle` のオプション拡張** (`static/js/broadcast/panels.js:111`): 第2引数 `opts` を追加し、`opts.delaySeconds` が指定されたら `dataset.fadeDuration`（既定3秒）より優先するよう変更。`delaySec <= 0` のときは `setTimeout` を経由せず即時に `.fading` クラスを付与（タイマ枠は null 保存）
+- [x] **授業モードで delaySeconds: 0 を渡す** (`static/js/broadcast/lesson.js:90`): `endDialogue()` から `fadeSubtitle(avatarId, { delaySeconds: 0 })` を呼ぶ。これでセリフ末・セクション末（`Stop()` 経由含む）どちらも音声終了後の3秒待機がなくなり、CSS の 1.5秒 `.fading` トランジションだけで滑らかにフェードアウトする
+- [x] **コメント応答は据え置き**: `websocket.js:27-28` の `speaking_end` → `fadeSubtitle()` は引数なしのままなので、従来通り `dataset.fadeDuration`（既定3秒）の余韻を保つ
+- [x] **症状の根本原因確定**: `fadeSubtitle` は **`dataset.fadeDuration`（既定3秒）後に `.fading` クラスを付ける**仕組みで、CSS 1.5秒トランジションと合わせて音声終了から完全消去まで約4.5秒。授業モードはセリフが密に続くため、セクション末の最後のセリフや questionセクションの待機中で残りが目立っていた
+- [x] **プラン**: [plans/lesson-subtitle-fade-fix.md](plans/lesson-subtitle-fade-fix.md) — ステータス「完了」（案C ベース／授業モード側のみ即フェード）
+- [x] **テスト**: `python3 -m pytest tests/ -q -m "not slow"` 1282 passed (6:22)
+
 ## TODOパネル 非表示制御の修正（授業終了で再表示される問題）
 
 - [x] **`setLessonMode()` から TODO 操作を削除** (`static/js/broadcast/panels.js:343-358`): 授業開始/終了時に `todo.style.display = 'none' / ''` を強制設定していたのを削除。TODO の表示状態は DB の `broadcast_items.visible`（applyCommonStyle 経由）だけが制御する形に統一。`getElementById('todo-panel')` の取得自体も削除し、コメントで方針を明記。`custom-text-container` は据え置き（複数要素・別途扱い）

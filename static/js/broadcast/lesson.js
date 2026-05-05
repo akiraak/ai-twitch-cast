@@ -86,8 +86,8 @@ window.lesson = {
       avatar.stopLipsync();
     }
 
-    // 2. 字幕フェード
-    fadeSubtitle(avatarId);
+    // 2. 字幕フェード（授業モードは余韻なしで即フェード）
+    fadeSubtitle(avatarId, { delaySeconds: 0 });
 
     // 3. 感情リセット（全BlendShapeを0に）
     if (avatar) {
