@@ -1,8 +1,16 @@
 # 授業モード: 各セクションの先頭から再生可能に（C# コントロールパネル）
 
-ステータス: 未着手（プラン）
+ステータス: 完了（実装・テスト済 / 実機動作確認は別 TODO で残置）
 担当: Claude / akiraak
-関連 TODO: `TODO.md` の「授業モードで各セクションの先頭から再生可能に」
+関連 TODO: `TODO.md` の「授業モードで各セクションの先頭から再生可能に」（実機確認のみ残）
+
+## 実装結果
+
+- `LessonPlayer.PlayAsync(int startIndex = 0)`: 範囲チェック (`ArgumentOutOfRangeException`)、ループ開始 i・`_currentSectionIndex` 初期化を `startIndex` に
+- `MainForm.HandlePanelLessonPlay(JsonElement msg)`: `section_index` 未指定 + `paused` のみ Resume、それ以外は `PlayAsync(idx)` 直行。範囲外は `BeginInvoke(() => PanelLog(...))` で UI 通知
+- `HttpServer.HandleWsLessonPlay(JsonElement msg)`: 外部 WS も `section_index` を受け付け（Resume 分岐なし、レスポンスに `section_index` を含める）
+- `control-panel.html`: メイン ▶ ボタンのラベルを `loaded` 時「▶ 最初から再生」に / 各タブに「▶ ここから」ボタン追加（`state==='loaded'` のみ enable、`event.stopPropagation()`）。`_timelineState.state` に再生状態を保持
+- `tests/test_native_app_patterns.py`: PlayAsync の startIndex プラミングと両ハンドラのディスパッチを静的検証。既存 `PlayAsync\(\)` regex を `PlayAsync\([^)]*\)` に拡張
 
 ## 背景・目的
 

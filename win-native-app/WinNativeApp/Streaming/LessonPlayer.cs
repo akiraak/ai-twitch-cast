@@ -177,22 +177,26 @@ public class LessonPlayer
     }
 
     /// <summary>ロード済み授業の再生を開始する。完了またはキャンセルまでawaitする。</summary>
-    public async Task PlayAsync()
+    /// <param name="startIndex">再生を開始するセクションのindex（0始まり、デフォルトは先頭）</param>
+    public async Task PlayAsync(int startIndex = 0)
     {
         if (_sections == null || _sections.Count == 0)
             throw new InvalidOperationException("No lesson loaded");
+        if (startIndex < 0 || startIndex >= _sections.Count)
+            throw new ArgumentOutOfRangeException(nameof(startIndex),
+                $"startIndex {startIndex} is out of range [0, {_sections.Count})");
         if (_playing) throw new InvalidOperationException("Already playing");
 
         _playing = true;
         _paused = false;
         _state = "playing";
         _cts = new CancellationTokenSource();
-        _currentSectionIndex = 0;
+        _currentSectionIndex = startIndex;
         string reason = "completed";
 
         try
         {
-            for (int i = 0; i < _sections.Count; i++)
+            for (int i = startIndex; i < _sections.Count; i++)
             {
                 _cts.Token.ThrowIfCancellationRequested();
                 await WaitIfPausedAsync(_cts.Token);

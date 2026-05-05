@@ -383,8 +383,11 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
 #lessonDialoguesTabs::-webkit-scrollbar { display: none; }
 .ld-tab {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
-  padding: 3px 8px;
+  padding: 3px 4px 3px 8px;
   color: rgba(255, 255, 255, 0.55);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(124, 77, 255, 0.25);
@@ -402,8 +405,34 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   font-weight: 600;
 }
 .ld-tab.done { color: rgba(255, 255, 255, 0.45); }
-.ld-tab.current::before { content: '▶ '; color: #7c4dff; }
-.ld-tab.done::before { content: '✓ '; color: rgba(124, 255, 180, 0.7); }
+.ld-tab.current .ld-tab-label::before { content: '▶ '; color: #7c4dff; }
+.ld-tab.done .ld-tab-label::before { content: '✓ '; color: rgba(124, 255, 180, 0.7); }
+.ld-tab-label {
+  pointer-events: none;
+}
+.ld-tab-play {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(124, 77, 255, 0.18);
+  border: 1px solid rgba(124, 77, 255, 0.45);
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ld-tab-play:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(124, 77, 255, 0.45);
+  border-color: rgba(124, 77, 255, 0.85);
+}
+.ld-tab-play:disabled {
+  color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  cursor: not-allowed;
+}
 
 .lesson-timeline-list {
   flex: 1;
@@ -956,6 +985,7 @@ const _timelineState = {
   currentDialogue: -1, // 再生中 dialogue index
   currentKind: 'main', // 'main' | 'answer'
   viewSection: -1,     // 表示中のタブ（手動選択で currentSection とずれることがある）
+  state: 'idle',       // 'idle' | 'loaded' | 'playing' | 'paused'（タブの「▶ ここから」enable 制御に使う）
   autoFollow: true,
   followTimer: null,
 };
@@ -973,6 +1003,7 @@ function setLessonOutline(m) {
   _timelineState.currentKind = 'main';
   _timelineState.autoFollow = true;
   _timelineState.viewSection = _timelineState.sections.length > 0 ? 0 : -1;
+  _timelineState.state = 'loaded';
   if (_timelineState.followTimer) {
     clearTimeout(_timelineState.followTimer);
     _timelineState.followTimer = null;
@@ -1006,13 +1037,13 @@ function _updateLessonButtons(state) {
   switch (state) {
     case 'loaded':
       playBtn.disabled = false;
-      playBtn.textContent = '▶ 再生';
+      playBtn.textContent = '▶ 最初から再生';
       pauseBtn.disabled = true;
       stopBtn.disabled = true;
       break;
     case 'playing':
       playBtn.disabled = true;
-      playBtn.textContent = '▶ 再生';
+      playBtn.textContent = '▶ 最初から再生';
       pauseBtn.disabled = false;
       stopBtn.disabled = false;
       break;
@@ -1024,11 +1055,17 @@ function _updateLessonButtons(state) {
       break;
     default: // idle / unknown
       playBtn.disabled = true;
-      playBtn.textContent = '▶ 再生';
+      playBtn.textContent = '▶ 最初から再生';
       pauseBtn.disabled = true;
       stopBtn.disabled = true;
       break;
   }
+}
+
+function playLessonFromSection(idx, btn) {
+  // 多重クリック防止: 該当ボタンを送信直後に disabled に
+  if (btn) btn.disabled = true;
+  send({action:'lesson_play', section_index: idx});
 }
 
 function _setAutoFollow(enable) {
@@ -1128,6 +1165,7 @@ function renderLessonTimeline() {
 
   // タブ
   tabsEl.innerHTML = '';
+  const canPlayFromSection = (st.state === 'loaded');
   sections.forEach((sec, i) => {
     const tab = document.createElement('div');
     const classes = ['ld-tab'];
@@ -1135,8 +1173,27 @@ function renderLessonTimeline() {
     if (curIdx >= 0 && i < curIdx) classes.push('done');
     else if (i === curIdx) classes.push('current');
     tab.className = classes.join(' ');
-    tab.textContent = `\u00A7${i + 1}`;
     tab.title = sec.section_type || '';
+
+    const label = document.createElement('span');
+    label.className = 'ld-tab-label';
+    label.textContent = `\u00A7${i + 1}`;
+    tab.appendChild(label);
+
+    // \u300C\u25B6 \u3053\u3053\u304B\u3089\u300D: state==='loaded' \u306E\u3068\u304D\u3060\u3051 enable\uFF08playing/paused \u306F disabled\uFF09
+    const playFrom = document.createElement('button');
+    playFrom.type = 'button';
+    playFrom.className = 'ld-tab-play';
+    playFrom.textContent = '\u25B6';
+    playFrom.title = `\u30BB\u30AF\u30B7\u30E7\u30F3 ${i + 1} \u304B\u3089\u518D\u751F`;
+    playFrom.disabled = !canPlayFromSection;
+    playFrom.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (playFrom.disabled) return;
+      playLessonFromSection(i, playFrom);
+    });
+    tab.appendChild(playFrom);
+
     tab.addEventListener('click', () => _selectSection(i));
     tabsEl.appendChild(tab);
   });
@@ -1227,7 +1284,8 @@ function updateLesson(m) {
     _timelineState.viewSection = 0;
   }
 
-  _updateLessonButtons(m.state || 'idle');
+  _timelineState.state = m.state || 'idle';
+  _updateLessonButtons(_timelineState.state);
   renderLessonTimeline();
 }
 

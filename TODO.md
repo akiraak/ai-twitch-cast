@@ -7,15 +7,12 @@
 - [ ] **Step 5 (#1)**: 配信して反応を見る（フィードバック収集）
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
-- [ ] 授業モードで各セクションの先頭から再生可能に → [plans/lesson-play-from-section.md](plans/lesson-play-from-section.md)
-  - [ ] `LessonPlayer.cs`: `PlayAsync(int startIndex = 0)` に変更（範囲チェック・ループ開始 i・`_currentSectionIndex` 初期化）
-  - [ ] `MainForm.cs`: `HandlePanelLessonPlay(JsonElement msg)` 化、`section_index` 指定時は Resume 分岐を経由せず `PlayAsync(idx)`
-  - [ ] `HttpServer.cs`: `HandleWsLessonPlay(msg)` 化、ディスパッチ更新（外部 WS 用、Resume 分岐は持たせない）
-  - [ ] `control-panel.html`: メインボタンを「▶ 最初から再生」に、タブに「▶ ここから」追加（`loaded` のみ enable、`event.stopPropagation`）
-  - [ ] 動作確認（実機）: 全体再生 / セクション N 再生 / 一時停止→再開 / playing・paused 中のタブ ▶ disabled / 範囲外エラー
-  - [ ] C# テスト（必要なら `tests/test_native_app_patterns.py` に軽量パターン検証追加）
-  - [ ] DONE.md 追記、本TODO行削除、プランのステータスを「完了」に更新
+- [ ] 授業モード: 各セクションの先頭から再生可能に — C# 単独実装は完了（[plans/lesson-play-from-section.md](plans/lesson-play-from-section.md)）。**実機動作確認のみ未着手**: 全体再生 / セクション N 再生 / 一時停止→再開 / playing・paused 中のタブ ▶ disabled / 範囲外エラー
+
+- [ ] TODOパネルを非表示にできない
+- [ ] TODOパネルを非表示にしていても授業が終わると必ず表示されてしまう
 - [ ] 「画面を見てね」とか「画面を読むよ」という前置きは不自然なので無くす。どのようなプロンプトで回避可能か提案して欲しい。
+
 
 ## 授業モード
 - [ ] speech-generation-flow.md を最新実装に更新とフローチャートの追加 → [plans/speech-flow-doc-update.md](plans/speech-flow-doc-update.md)

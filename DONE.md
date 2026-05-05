@@ -1,5 +1,14 @@
 # DONE
 
+## 授業モード: 各セクションの先頭から再生可能に（C# 単独）
+
+- [x] **`LessonPlayer.PlayAsync(int startIndex = 0)` 化** (`win-native-app/WinNativeApp/Streaming/LessonPlayer.cs`): 範囲チェック (`ArgumentOutOfRangeException`)、`for` ループ開始 i・`_currentSectionIndex` 初期化を `startIndex` に。デフォルト 0 で完全な互換性を維持
+- [x] **`MainForm.HandlePanelLessonPlay(JsonElement msg)` 化** (`win-native-app/WinNativeApp/MainForm.cs`): `section_index` 未指定 + `paused` のときだけ Resume、それ以外は `PlayAsync(idx)` を直接呼ぶ。`ArgumentOutOfRangeException` を捕捉して `BeginInvoke(() => PanelLog(...))` で UI に通知
+- [x] **`HttpServer.HandleWsLessonPlay(JsonElement msg)` 化** (`win-native-app/WinNativeApp/Server/HttpServer.cs`): 外部 WS クライアントも `section_index` を渡せるように。Resume 分岐は持たせない方針（明示的に `lesson_resume`）。レスポンスに `section_index` を含めて確認しやすく
+- [x] **コントロールパネル UI 拡張** (`win-native-app/WinNativeApp/control-panel.html`): メイン ▶ ボタンのラベルを `loaded` 時「▶ 最初から再生」に変更（`paused` は「▶ 再開」のまま）。タイムラインの各タブに「▶ ここから」ボタンを追加（`state==='loaded'` のときだけ enable、`event.stopPropagation()` でタブ切替と分離）。`_timelineState.state` で再生状態を保持し `renderLessonTimeline` から参照
+- [x] **再発防止テスト追加** (`tests/test_native_app_patterns.py`): `PlayAsync` の startIndex 引数・範囲チェック・ループ開始位置を静的検証 / `HandlePanelLessonPlay(msg)` と `HandleWsLessonPlay(msg)` のディスパッチと `section_index` 読み取りを検証。既存の `PlayAsync\(\)` regex を `PlayAsync\([^)]*\)` に拡張
+- [x] **対象外を明確化**: Python サーバ (`/api/lessons/{id}/start`)・`lesson_runner` は無改修。`lesson_complete.sections_played` の式は据え置き（grep で消費者が `_lesson_complete_payload` のバッファ書き込みのみと確認、絶対 index 表現のままで OK）。restore で「N から再開」する仕組みは別 TODO
+
 ## バイブコーダー向けセキュリティ講座 #1: 概論回（id=100）セクション投入 + TTS事前生成
 
 - [x] **Step 3 (#1) セクション生成・投入**: `plans/vibe-coder-security/lesson-1-source.md` を素材に `prompts/lesson_generate.md` のフォーマットで 6 セクション生成 → `POST /api/lessons/100/import-sections?lang=ja&generator=claude` で投入（`/tmp/lesson_100_import.py` 実行）。section数: introduction 1 / explanation 1 / example 2（Phase 1=4テーマ・Phase 2-4=5テーマに分割。素材mdの「Section 3 が長くなるので分割可」のガイドに沿う） / question 1 / summary 1。dialogues計34ターン、各セクション最初のteacherターンで `display_text` 全文読み上げ済み。version=1 が `lesson_versions` に登録（`lesson_sections` 71-76, `lesson_plans` 1行）

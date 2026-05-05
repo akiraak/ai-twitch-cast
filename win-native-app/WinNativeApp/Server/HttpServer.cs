@@ -561,7 +561,7 @@ public class HttpServer : IDisposable
                 "se_play" => HandleWsSePlay(msg),
                 "tts_status" => HandleWsTtsStatus(),
                 "lesson_load" => HandleWsLessonLoad(msg),
-                "lesson_play" => HandleWsLessonPlay(),
+                "lesson_play" => HandleWsLessonPlay(msg),
                 "lesson_pause" => HandleWsLessonPause(),
                 "lesson_resume" => HandleWsLessonResume(),
                 "lesson_stop" => HandleWsLessonStop(),
@@ -822,8 +822,10 @@ public class HttpServer : IDisposable
         }
     }
 
-    /// <summary>全セクション順次再生（完了はlesson_completeで通知）</summary>
-    private object HandleWsLessonPlay()
+    /// <summary>全セクション順次再生（完了はlesson_completeで通知）。
+    /// section_index を指定するとそのセクションから再生開始する（未指定なら 0）。
+    /// 外部 WS クライアント向けは Resume 分岐を持たない（Resume したい場合は明示的に lesson_resume を使う）。</summary>
+    private object HandleWsLessonPlay(JsonElement msg)
     {
         if (LessonPlayer == null)
             return new { ok = false, error = "LessonPlayer not available" };
@@ -831,13 +833,17 @@ public class HttpServer : IDisposable
         if (!LessonPlayer.CanPlay)
             return new { ok = false, error = LessonPlayer.IsPlaying ? "Already playing" : "No lesson loaded" };
 
+        int startIndex = 0;
+        if (msg.TryGetProperty("section_index", out var si) && si.ValueKind == JsonValueKind.Number)
+            startIndex = si.GetInt32();
+
         _ = Task.Run(async () =>
         {
-            try { await LessonPlayer.PlayAsync(); }
-            catch (Exception ex) { Log.Error(ex, "[Lesson] PlayAsync failed"); }
+            try { await LessonPlayer.PlayAsync(startIndex); }
+            catch (Exception ex) { Log.Error(ex, "[Lesson] PlayAsync failed (section_index={Index})", startIndex); }
         });
 
-        return new { ok = true };
+        return new { ok = true, section_index = startIndex };
     }
 
     private object HandleWsLessonPause()

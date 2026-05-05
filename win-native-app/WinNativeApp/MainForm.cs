@@ -382,7 +382,7 @@ public class MainForm : Form
                     break;
 
                 case "lesson_play":
-                    HandlePanelLessonPlay();
+                    HandlePanelLessonPlay(msg);
                     break;
 
                 case "lesson_pause":
@@ -619,8 +619,10 @@ public class MainForm : Form
         _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
     }
 
-    /// <summary>コントロールパネルの ▶再生 ボタン処理。loaded → 再生開始、paused → 再開。</summary>
-    private void HandlePanelLessonPlay()
+    /// <summary>コントロールパネルの ▶再生 ボタン処理。
+    /// section_index 未指定: loaded → セクション0 から再生、paused → 再開。
+    /// section_index 指定: Resume を経由せず、そのセクションから再生（loaded のときのみ。再生中・一時停止中は UI 側で disabled）。</summary>
+    private void HandlePanelLessonPlay(JsonElement msg)
     {
         var player = _lessonPlayer;
         if (player == null)
@@ -629,7 +631,12 @@ public class MainForm : Form
             return;
         }
 
-        if (player.IsPlaying && player.IsPaused)
+        int? startIndex = null;
+        if (msg.TryGetProperty("section_index", out var si) && si.ValueKind == JsonValueKind.Number)
+            startIndex = si.GetInt32();
+
+        // Resume 分岐: section_index 未指定で paused のときのみ Resume
+        if (startIndex == null && player.IsPlaying && player.IsPaused)
         {
             player.Resume();
             return;
@@ -641,9 +648,15 @@ public class MainForm : Form
             return;
         }
 
+        var idx = startIndex ?? 0;
         _ = Task.Run(async () =>
         {
-            try { await player.PlayAsync(); }
+            try { await player.PlayAsync(idx); }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                Log.Error(ex, "[Lesson] Panel PlayAsync section_index out of range: {Index}", idx);
+                BeginInvoke(() => PanelLog($"セクション {idx + 1} は範囲外です", "error"));
+            }
             catch (Exception ex) { Log.Error(ex, "[Lesson] Panel PlayAsync failed"); }
         });
     }

@@ -197,7 +197,7 @@ def test_play_async_finally_preserves_sections():
     自然完了・エラー時にも授業データを保持する必要がある。
     """
     source = read_cs("Streaming/LessonPlayer.cs")
-    body = _extract_method_body(source, r"public async Task PlayAsync\(\)")
+    body = _extract_method_body(source, r"public async Task PlayAsync\([^)]*\)")
     # finally { ... } ブロックを抽出
     finally_match = re.search(r"finally\s*\{", body)
     assert finally_match, "PlayAsync に finally ブロックがない"
@@ -227,13 +227,71 @@ def test_stop_returns_to_loaded_state():
     source = read_cs("Streaming/LessonPlayer.cs")
     # Stop() と PlayAsync() の両方で _state = "loaded" への代入（条件式含む）が存在すること
     stop_body = _extract_method_body(source, r"public void Stop\(\)")
-    play_body = _extract_method_body(source, r"public async Task PlayAsync\(\)")
+    play_body = _extract_method_body(source, r"public async Task PlayAsync\([^)]*\)")
 
     assert re.search(r'_state\s*=.*"loaded"', stop_body), (
         'Stop() で _state が "loaded" に戻される経路がない'
     )
     assert re.search(r'_state\s*=.*"loaded"', play_body), (
         'PlayAsync() の finally で _state が "loaded" に戻される経路がない'
+    )
+
+
+def test_play_async_supports_section_start_index():
+    """LessonPlayer.PlayAsync が startIndex 引数を受け取り、ループ開始位置に反映すること。
+
+    各セクションの先頭から再生するUI（control-panel の「▶ ここから」）の前提。
+    PlayAsync の引数を消したり、ループの開始 i を 0 固定に戻したりすると壊れる。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    body = _extract_method_body(source, r"public async Task PlayAsync\([^)]*\)")
+
+    # シグネチャに startIndex がある（デフォルト 0 で互換維持）
+    assert re.search(r"PlayAsync\(\s*int\s+startIndex\s*=\s*0\s*\)", source), (
+        "PlayAsync(int startIndex = 0) のシグネチャが見当たらない"
+    )
+    # 範囲チェック
+    assert re.search(r"ArgumentOutOfRangeException\([^)]*startIndex", body), (
+        "PlayAsync で startIndex の範囲チェック（ArgumentOutOfRangeException）がない"
+    )
+    # ループ開始位置が startIndex
+    assert re.search(r"for\s*\(\s*int\s+i\s*=\s*startIndex\s*;", body), (
+        "PlayAsync の for ループが startIndex から開始していない"
+    )
+    # _currentSectionIndex を startIndex で初期化
+    assert re.search(r"_currentSectionIndex\s*=\s*startIndex", body), (
+        "_currentSectionIndex が startIndex で初期化されていない"
+    )
+
+
+def test_panel_lesson_play_dispatches_section_index():
+    """MainForm.HandlePanelLessonPlay が section_index を読み取り PlayAsync(idx) に渡すこと。"""
+    source = read_cs("MainForm.cs")
+    # ディスパッチが msg を渡している
+    assert re.search(r'case "lesson_play":\s*\n\s*HandlePanelLessonPlay\(msg\)', source), (
+        'OnPanelMessage の "lesson_play" 分岐で msg が HandlePanelLessonPlay に渡されていない'
+    )
+    body = _extract_method_body(source, r"private void HandlePanelLessonPlay\(JsonElement msg\)")
+    assert re.search(r'TryGetProperty\("section_index"', body), (
+        "HandlePanelLessonPlay で section_index を読んでいない"
+    )
+    assert re.search(r"PlayAsync\(\s*idx\s*\)", body), (
+        "HandlePanelLessonPlay から PlayAsync(idx) が呼ばれていない"
+    )
+
+
+def test_ws_lesson_play_dispatches_section_index():
+    """HttpServer.HandleWsLessonPlay が msg を受けて section_index を PlayAsync に渡すこと。"""
+    source = read_cs("Server/HttpServer.cs")
+    assert re.search(r'"lesson_play"\s*=>\s*HandleWsLessonPlay\(msg\)', source), (
+        '"lesson_play" 分岐が msg を渡していない'
+    )
+    body = _extract_method_body(source, r"private object HandleWsLessonPlay\(JsonElement msg\)")
+    assert re.search(r'TryGetProperty\("section_index"', body), (
+        "HandleWsLessonPlay で section_index を読んでいない"
+    )
+    assert re.search(r"PlayAsync\(\s*startIndex\s*\)", body), (
+        "HandleWsLessonPlay から PlayAsync(startIndex) が呼ばれていない"
     )
 
 
