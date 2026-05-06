@@ -1,5 +1,25 @@
 # DONE
 
+## 授業の流れパネル: 現在セクションのハイライト追従修復
+
+- [x] **現象**: 配信画面の「授業の流れ」パネル（`#lesson-progress-panel`）は仕様上 `current_index` で `.current` クラスをハイライトするが、実再生時に先頭から動かなかった。原因はセクション進行イベント `lesson_status` が broadcast.html まで届いていなかったこと
+- [x] **原因チェーン**: 実再生は C# 側（`LessonPlayer.PlayAsync`）が担当しているが、Python `lesson_runner._notify_status` は state 遷移時のみ発火。C# は section 進行を `NotifyPanel` / `BroadcastEvent(lesson_complete)` には流していたが、後者は `_controlClients`（`/ws/control`）止まりで broadcast.html（`/ws/broadcast`）には届かない構造だった
+- [x] **方針**: C# を再生位置の権威ソースとし、`PlayAsync` ループ内で `BroadcastEvent` に `lesson_status` を送出 → Python `capture_client._read_capture_ws()` が `/ws/control` で受けて `state.broadcast_overlay()` で broadcast.html にリレー。既存の `lesson_complete` と同じ流路パターンを踏襲
+- [x] **C# 実装** (`win-native-app/WinNativeApp/Streaming/LessonPlayer.cs`):
+  - `PlayAsync` の section ループ内、`SendPanelUpdate()` 直後に `BroadcastEvent` で `{ type: "lesson_status", state: "running", lesson_id, current_index: i, total_sections }` を fire-and-forget 送出
+  - `Pause()` / `Resume()` の末尾で同型イベント（state=`paused`/`running`、`current_index=_currentSectionIndex`）を送出するヘルパ `BroadcastLessonStatus(state)` を追加
+- [x] **Python 実装** (`scripts/services/capture_client.py:_read_capture_ws`): Push 通知分岐に `lesson_status` ケースを追加し、`scripts.state.broadcast_overlay(data)` を `asyncio.create_task` でリレー（受信ループをブロックしない、関数内 import で循環参照回避）
+- [x] **データ契約**: `{ type: "lesson_status", state: "running"|"paused", lesson_id, current_index, total_sections }`。`sections` を含めない軽量更新で、クライアント `static/js/broadcast/websocket.js:181-195` 側は既存の `updateLessonProgress(current_index)` 経路をそのまま使う（JS 改修なし）
+- [x] **state マッピング**: C# 内部状態は `"playing"` だが broadcast 向けには Python 既存契約と揃えて `"running"` を送る
+- [x] **テスト追加**: `tests/test_native_app_patterns.py` に `PlayAsync` ループ／`Pause`／`Resume` の `lesson_status` 送出パターン検証を追加。`tests/test_capture_client.py` に `lesson_status` Push を受けて `state.broadcast_overlay` が呼ばれること＋後続メッセージが処理継続することを確認するテストを追加
+- [x] **テスト結果**: `python3 -m pytest tests/ -q -m "not slow"` 1282 passed
+- [x] **動作確認** (要 Windows 側): `stream.sh` 起動 → lesson_id=100 を再生 → broadcast.html DevTools の `/ws/broadcast` で section 切替ごとに `lesson_status`（`current_index` 増加）が流れ、`.lesson-progress-item.current` の紫ハイライトが追従することを目視確認
+- [x] **追加修正: アプリ側で停止→再生したときの再表示問題**:
+  - 現象: コントロールパネルで停止→再生すると Python lesson_runner は IDLE のままで、C# の `lesson_status` には `lesson_name` も `sections` も含まれないため、broadcast.html のタイトル＆「授業の流れ」パネルが復帰しなかった
+  - クライアント側で復帰させる方針: `static/js/broadcast/panels.js` の `updateLessonProgress` に「items が DOM に残っているのに panel が hidden なら再表示」する判定を追加。タイトル側は `reshowLessonTitleIfHasContent()` ヘルパを新設し（既存テキストを残したまま panel を再表示）、`static/js/broadcast/websocket.js` の `lesson_status` ハンドラで `data.lesson_name` が無いときに呼ぶ
+  - テスト: `tests/test_broadcast_patterns.py` に `TestLessonStatusReshow` クラスを追加（updateLessonProgress の再表示判定 / reshow ヘルパ存在 / websocket ハンドラからの呼び出し）。`pytest -q -m "not slow"` 1285 passed
+- [x] **プラン**: `plans/lesson-flow-current-section-highlight.md` を完了ステータスに更新
+
 ## 授業中テキストパネル: LLM指定値を捨ててクライアント完全自動算出に統一
 
 - [x] **背景**: lesson_id=100 セッション1で `display_properties.maxHeight=28` がLLM指定されていたが、5行 × `fontSize 1.7vw` ではコンテンツが収まらずスクロールバーが発生。LLMが「改行数 × fontSize × line-height」の見積りを誤るのが構造的な原因

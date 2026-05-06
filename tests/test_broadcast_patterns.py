@@ -342,6 +342,64 @@ class TestLessonModeDoesNotTouchTodo:
         )
 
 
+class TestLessonStatusReshow:
+    """アプリ側で停止→再生したときに lesson_status の軽量更新（lesson_name/sections なし）
+    でもタイトル・進捗パネルが復帰するためのガード。
+    """
+
+    def test_update_lesson_progress_reshows_panel(self):
+        """updateLessonProgress が hidden 状態の panel を再表示すること"""
+        js = read_js()
+        func_match = re.search(
+            r"function updateLessonProgress\([^)]*\)\s*\{(.*?)\n\}", js, re.DOTALL
+        )
+        assert func_match, "updateLessonProgress 関数が見つからない"
+        body = func_match.group(1)
+        # display === 'none' または !visible のときに再表示するパスがあること
+        assert re.search(
+            r"display\s*===?\s*['\"]none['\"]|classList\.contains\(['\"]visible['\"]",
+            body,
+        ), "updateLessonProgress に再表示判定が無い — アプリ側停止→再生でパネルが復帰しない"
+        assert re.search(
+            r"classList\.add\(['\"]visible['\"]", body
+        ), "updateLessonProgress 内で visible クラスを再付与していない"
+
+    def test_reshow_lesson_title_helper_exists(self):
+        """既存タイトル文字列を残したまま再表示する関数があること"""
+        js = read_js()
+        assert re.search(
+            r"function\s+reshowLessonTitleIfHasContent\s*\(", js
+        ), "reshowLessonTitleIfHasContent 関数が無い — タイトル再表示ヘルパが欠落"
+        # 関数本体にtextContent参照と visible クラス再付与があること
+        func_match = re.search(
+            r"function\s+reshowLessonTitleIfHasContent\s*\([^)]*\)\s*\{(.*?)\n\}",
+            js,
+            re.DOTALL,
+        )
+        assert func_match, "reshowLessonTitleIfHasContent 関数本体が抽出できない"
+        body = func_match.group(1)
+        assert "textContent" in body, (
+            "reshowLessonTitleIfHasContent が textContent を参照していない"
+        )
+        assert re.search(r"classList\.add\(['\"]visible['\"]", body), (
+            "reshowLessonTitleIfHasContent が visible クラスを再付与していない"
+        )
+
+    def test_websocket_calls_reshow_when_lesson_name_missing(self):
+        """websocket.js の lesson_status ハンドラで lesson_name が無い場合に reshow を呼ぶこと"""
+        js = read_js()
+        # case 'lesson_status': ブロックを抽出
+        m = re.search(
+            r"case\s+['\"]lesson_status['\"]\s*:(.*?)break\s*;", js, re.DOTALL
+        )
+        assert m, "websocket.js に lesson_status case が無い"
+        body = m.group(1)
+        # else 経路で reshowLessonTitleIfHasContent を呼んでいること
+        assert "reshowLessonTitleIfHasContent" in body, (
+            "lesson_status ハンドラで reshowLessonTitleIfHasContent を呼んでいない"
+        )
+
+
 class TestDataEditableAttributes:
     """broadcast.htmlの各パネルにdata-editable属性があること"""
 

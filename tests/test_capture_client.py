@@ -424,6 +424,81 @@ class TestTtsBatchEvents:
         cc._tts_batch_complete_event = None
 
 
+class TestLessonStatusRelay:
+    """C# の lesson_status Push を broadcast.html へリレーするテスト"""
+
+    @pytest.mark.asyncio
+    async def test_lesson_status_relayed_to_broadcast_overlay(self):
+        """C# から lesson_status Push を受け取ると state.broadcast_overlay が同じペイロードで呼ばれる"""
+        import scripts.services.capture_client as cc
+
+        mock_ws = MagicMock()
+        payload = {
+            "type": "lesson_status",
+            "state": "running",
+            "lesson_id": 100,
+            "current_index": 3,
+            "total_sections": 10,
+        }
+
+        async def fake_iter():
+            yield json.dumps(payload)
+
+        mock_ws.__aiter__ = lambda self: fake_iter()
+
+        captured = []
+
+        async def fake_broadcast_overlay(event):
+            captured.append(event)
+
+        original_ws = cc._capture_ws
+        try:
+            cc._capture_ws = mock_ws
+            with patch("scripts.state.broadcast_overlay", side_effect=fake_broadcast_overlay):
+                await cc._read_capture_ws()
+                # asyncio.create_task で投げられているのでスケジューラに譲る
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+        finally:
+            cc._capture_ws = original_ws
+
+        assert len(captured) == 1
+        assert captured[0]["type"] == "lesson_status"
+        assert captured[0]["current_index"] == 3
+        assert captured[0]["state"] == "running"
+
+    @pytest.mark.asyncio
+    async def test_lesson_status_does_not_block_reader_loop(self):
+        """lesson_status を受けても _read_capture_ws が他のメッセージを継続処理できる"""
+        import scripts.services.capture_client as cc
+
+        cc.reset_tts_batch_events(["e0"])
+        mock_ws = MagicMock()
+
+        async def fake_iter():
+            yield json.dumps({"type": "lesson_status", "state": "running", "current_index": 0})
+            yield json.dumps({"type": "tts_entry_started", "id": "e0"})
+
+        mock_ws.__aiter__ = lambda self: fake_iter()
+
+        async def noop(_):
+            pass
+
+        original_ws = cc._capture_ws
+        try:
+            cc._capture_ws = mock_ws
+            with patch("scripts.state.broadcast_overlay", side_effect=noop):
+                await cc._read_capture_ws()
+                await asyncio.sleep(0)
+        finally:
+            cc._capture_ws = original_ws
+
+        # 後続メッセージ（tts_entry_started）も処理されている
+        assert cc._tts_entry_events["e0"].is_set()
+        cc._tts_entry_events.clear()
+        cc._tts_batch_complete_event = None
+
+
 class TestSendTtsBatch:
     """send_tts_batch / cancel_tts_batch のテスト"""
 

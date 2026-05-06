@@ -250,6 +250,11 @@ async def _read_capture_ws():
                 _lesson_complete_payload = data
                 get_lesson_complete_event().set()
                 continue
+            if data.get("type") == "lesson_status":
+                # C#（権威ソース）の再生進行を broadcast.html へリレー
+                from scripts import state
+                asyncio.create_task(state.broadcast_overlay(data))
+                continue
             if data.get("type") == "tts_entry_started":
                 eid = data.get("id", "")
                 if eid:

@@ -264,6 +264,49 @@ def test_play_async_supports_section_start_index():
     )
 
 
+def test_play_async_broadcasts_lesson_status_in_loop():
+    """PlayAsync のセクション進行ループ内で BroadcastEvent に lesson_status を送ること。
+
+    broadcast.html の「授業の流れ」パネルで現在セクションをハイライトする前提。
+    plans/lesson-flow-current-section-highlight.md。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    body = _extract_method_body(source, r"public async Task PlayAsync\([^)]*\)")
+    # for ループ内で type = "lesson_status" / state = "running" / current_index = i を送出
+    assert re.search(r'type\s*=\s*"lesson_status"', body), (
+        "PlayAsync で lesson_status 型イベントの送出が見当たらない"
+    )
+    assert re.search(r'state\s*=\s*"running"', body), (
+        "PlayAsync の lesson_status イベントで state=\"running\" を指定していない"
+    )
+    assert re.search(r"current_index\s*=\s*i\b", body), (
+        "PlayAsync の lesson_status イベントが current_index=i を含んでいない"
+    )
+    assert re.search(r"BroadcastEvent\s*\(", body), (
+        "PlayAsync で BroadcastEvent 呼び出しが見当たらない"
+    )
+
+
+def test_pause_resume_broadcast_lesson_status():
+    """Pause()/Resume() で lesson_status を broadcast.html 向けに送出すること。
+
+    一時停止/再開時にもセクションハイライトの state を更新するため。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    pause_body = _extract_method_body(source, r"public void Pause\(\)")
+    resume_body = _extract_method_body(source, r"public void Resume\(\)")
+
+    # Pause / Resume の本体から BroadcastLessonStatus または BroadcastEvent 呼び出しが届くこと
+    assert re.search(r'BroadcastLessonStatus\("paused"\)', pause_body) or (
+        re.search(r'state\s*=\s*"paused"', pause_body)
+        and re.search(r"BroadcastEvent\s*\(", pause_body)
+    ), "Pause() で lesson_status (state=paused) の送出が見当たらない"
+    assert re.search(r'BroadcastLessonStatus\("running"\)', resume_body) or (
+        re.search(r'state\s*=\s*"running"', resume_body)
+        and re.search(r"BroadcastEvent\s*\(", resume_body)
+    ), "Resume() で lesson_status (state=running) の送出が見当たらない"
+
+
 def test_panel_lesson_play_dispatches_section_index():
     """MainForm.HandlePanelLessonPlay が section_index を読み取り PlayAsync(idx) に渡すこと。"""
     source = read_cs("MainForm.cs")

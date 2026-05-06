@@ -203,6 +203,20 @@ public class LessonPlayer
                     i + 1, _sections.Count);
 
                 SendPanelUpdate();
+
+                // broadcast.html へセクション進行を通知（C#が再生位置の権威ソース）
+                if (BroadcastEvent != null)
+                {
+                    _ = BroadcastEvent(new
+                    {
+                        type = "lesson_status",
+                        state = "running",
+                        lesson_id = _lessonId,
+                        current_index = i,
+                        total_sections = _sections.Count,
+                    });
+                }
+
                 await PlaySectionInternalAsync(_sections[i], _cts.Token);
             }
         }
@@ -262,6 +276,7 @@ public class LessonPlayer
         Log.Information("[Lesson] Paused at dialogue {Index}/{Total}",
             _currentDialogueIndex + 1, _totalDialogues);
         SendPanelUpdate();
+        BroadcastLessonStatus("paused");
     }
 
     /// <summary>一時停止を解除する。</summary>
@@ -275,6 +290,21 @@ public class LessonPlayer
         _resumeTcs?.TrySetResult();
         Log.Information("[Lesson] Resumed");
         SendPanelUpdate();
+        BroadcastLessonStatus("running");
+    }
+
+    /// <summary>broadcast.html に lesson_status を送る共通ヘルパ（state 変化時用、fire-and-forget）。</summary>
+    private void BroadcastLessonStatus(string state)
+    {
+        if (BroadcastEvent == null) return;
+        _ = BroadcastEvent(new
+        {
+            type = "lesson_status",
+            state,
+            lesson_id = _lessonId,
+            current_index = _currentSectionIndex,
+            total_sections = _sections?.Count ?? 0,
+        });
     }
 
     /// <summary>再生を停止する。授業データ(_sections)は保持したまま再生位置だけリセットする。</summary>

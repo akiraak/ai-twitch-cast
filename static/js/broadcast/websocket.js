@@ -183,6 +183,9 @@ function connectWS() {
           setLessonMode(true);
           if (data.lesson_name) {
             showLessonTitle(data.lesson_name);
+          } else {
+            // C#（軽量更新）からのイベント: 既存タイトルが残っていれば再表示
+            reshowLessonTitleIfHasContent();
           }
           if (data.sections) {
             showLessonProgress(data.sections, data.current_index);

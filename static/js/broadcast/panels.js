@@ -329,7 +329,17 @@ function showLessonProgress(sections, currentIndex) {
 }
 
 function updateLessonProgress(currentIndex) {
+  const panel = document.getElementById('lesson-progress-panel');
   const items = document.querySelectorAll('.lesson-progress-item');
+  if (items.length === 0) return;
+  // アプリ側で停止→再生した場合、Pythonからフルなlesson_statusが来ないので
+  // DOMにアイテムが残っていれば再表示する（C#からの軽量更新のみで復帰させる）
+  if (panel && (panel.style.display === 'none' || !panel.classList.contains('visible'))) {
+    panel.style.display = 'block';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { panel.classList.add('visible'); });
+    });
+  }
   _updateProgressTitle(currentIndex, items.length);
   items.forEach((el, i) => {
     el.classList.remove('done', 'current');
@@ -378,6 +388,21 @@ function hideLessonTitle() {
   setTimeout(() => {
     if (!panel.classList.contains('visible')) panel.style.display = 'none';
   }, 600);
+}
+
+// アプリ側で停止→再生した場合に、既存のタイトルテキストをそのまま再表示する
+function reshowLessonTitleIfHasContent() {
+  const panel = document.getElementById('lesson-title-panel');
+  const text = document.getElementById('lesson-title-text');
+  if (!panel || !text) return;
+  const name = (text.textContent || '').trim();
+  if (!name) return;
+  if (panel.style.display === 'none' || !panel.classList.contains('visible')) {
+    panel.style.display = 'block';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { panel.classList.add('visible'); });
+    });
+  }
 }
 
 // --- 授業モード（パネル表示切替） ---
