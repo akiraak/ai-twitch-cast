@@ -1,5 +1,19 @@
 # DONE
 
+## 授業タイトルパネル: 垂直中央揃えと縦幅永続化を修復
+
+- [x] **TODO**: `lesson_title` の垂直側の中央ぞろえがきかない
+- [x] **原因（合わせ技3点）**:
+  - **バグA**: `static/css/broadcast.css:542` の `#lesson-title-panel` に `display: flex` が無く、`applyCommonStyle` の `justifyContent` フォールバック（`style-utils.js:154-158`）が無視されていた
+  - **バグB**: `static/js/broadcast/globals.js:34` の ITEM_REGISTRY で `hasSize: false` だったため、`editSave()` が `width` / `height` を保存しない＋`applySettings` も読み戻さない → リロードで初期サイズに戻り「効かない」と体感される
+  - **バグC**: `panels.js` の `showLessonTitle()` / `reshowLessonTitleIfHasContent()` が `panel.style.display = 'block'` を強制し、CSSの flex を上書きしていた
+- [x] **修正**:
+  - `static/css/broadcast.css`: `#lesson-title-panel` に `display: flex; flex-direction: column;` を追加（`justify-content` を縦方向に効かせる）
+  - `static/js/broadcast/globals.js`: `lesson-title-panel` を `hasSize: true` に変更（width/heightを永続化）
+  - `static/js/broadcast/settings.js`: `lesson_title` ブロックに `width` / `height` 復元行を追加（`lesson_text` と同パターン）
+  - `static/js/broadcast/panels.js`: `display = 'block'` → `'flex'`（show / reshow の2箇所）
+- [x] **検証**: `tests/test_broadcast_patterns.py` 29件 通過。プラン: `plans/lesson-title-vertical-align-fix.md`
+
 ## 授業の流れパネルの縦幅が変更できない問題を修正
 
 - [x] **TODO**: 授業の流れパネル（`#lesson-progress-panel`）の縦幅をドラッグで変更できない

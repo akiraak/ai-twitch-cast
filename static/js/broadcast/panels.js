@@ -375,7 +375,7 @@ function showLessonTitle(name) {
   const text = document.getElementById('lesson-title-text');
   if (!panel || !text) return;
   text.textContent = name;
-  panel.style.display = 'block';
+  panel.style.display = 'flex';
   requestAnimationFrame(() => {
     requestAnimationFrame(() => { panel.classList.add('visible'); });
   });
@@ -398,7 +398,7 @@ function reshowLessonTitleIfHasContent() {
   const name = (text.textContent || '').trim();
   if (!name) return;
   if (panel.style.display === 'none' || !panel.classList.contains('visible')) {
-    panel.style.display = 'block';
+    panel.style.display = 'flex';
     requestAnimationFrame(() => {
       requestAnimationFrame(() => { panel.classList.add('visible'); });
     });

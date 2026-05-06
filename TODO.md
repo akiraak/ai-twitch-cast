@@ -8,7 +8,6 @@
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
 - [ ] セクションの途中の会話から再生できるように。クライアントアプリのlessonタブの会話一覧からクリックすると再生できる
-- [ ] lesson_title の垂直側の中央ぞろえがきかない → [plans/lesson-title-vertical-align-fix.md](plans/lesson-title-vertical-align-fix.md)
 
 ## 授業モード
 - [ ] speech-generation-flow.md を最新実装に更新とフローチャートの追加 → [plans/speech-flow-doc-update.md](plans/speech-flow-doc-update.md)

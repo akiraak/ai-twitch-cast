@@ -150,6 +150,8 @@ function applySettings(s) {
     const ltpanel = document.getElementById('lesson-title-panel');
     if (ltpanel) {
       applyCommonStyle(ltpanel, s.lesson_title);
+      if (s.lesson_title.width != null) ltpanel.style.width = s.lesson_title.width + '%';
+      if (s.lesson_title.height != null) ltpanel.style.height = s.lesson_title.height + '%';
       const lttext = document.getElementById('lesson-title-text');
       if (lttext && s.lesson_title.fontSize != null) {
         lttext.style.fontSize = s.lesson_title.fontSize + 'vw';
