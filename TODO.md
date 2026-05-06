@@ -7,7 +7,7 @@
 - [ ] **Step 5 (#1)**: 配信して反応を見る（フィードバック収集）
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
-- [ ] セクションの途中の会話から再生できるように。クライアントアプリのlessonタブの会話一覧からクリックすると再生できる
+- [ ] セクションの途中の会話から再生できるように。クライアントアプリのlessonタブの会話一覧からクリックすると再生できる → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
 
 ## 授業モード
 - [ ] speech-generation-flow.md を最新実装に更新とフローチャートの追加 → [plans/speech-flow-doc-update.md](plans/speech-flow-doc-update.md)
