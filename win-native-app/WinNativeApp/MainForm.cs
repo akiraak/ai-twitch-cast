@@ -620,8 +620,9 @@ public class MainForm : Form
     }
 
     /// <summary>コントロールパネルの ▶再生 ボタン処理。
-    /// section_index 未指定: loaded → セクション0 から再生、paused → 再開。
-    /// section_index 指定: Resume を経由せず、そのセクションから再生（loaded のときのみ。再生中・一時停止中は UI 側で disabled）。</summary>
+    /// section_index / dialogue_index / kind がすべて未指定: loaded → セクション0 から再生、paused → 再開。
+    /// いずれかが指定された場合: Resume を経由せず、その位置から再生（loaded のときのみ。再生中・一時停止中は UI 側で disabled）。
+    /// dialogue_index / kind は LessonPlayer.PlayAsync に転送され、最初のセクションだけ offset が適用される。</summary>
     private void HandlePanelLessonPlay(JsonElement msg)
     {
         var player = _lessonPlayer;
@@ -635,8 +636,18 @@ public class MainForm : Form
         if (msg.TryGetProperty("section_index", out var si) && si.ValueKind == JsonValueKind.Number)
             startIndex = si.GetInt32();
 
-        // Resume 分岐: section_index 未指定で paused のときのみ Resume
-        if (startIndex == null && player.IsPlaying && player.IsPaused)
+        int? dialogueIndex = null;
+        if (msg.TryGetProperty("dialogue_index", out var di) && di.ValueKind == JsonValueKind.Number)
+            dialogueIndex = di.GetInt32();
+
+        string? kind = null;
+        if (msg.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String)
+            kind = k.GetString();
+
+        // Resume 分岐: section_index / dialogue_index / kind の3つすべて未指定で paused のときのみ Resume
+        // dialogue 単位の途中再生は明示的な開始位置指定なので、絶対に Resume には流さない
+        bool hasOffset = startIndex.HasValue || dialogueIndex.HasValue || kind != null;
+        if (!hasOffset && player.IsPlaying && player.IsPaused)
         {
             player.Resume();
             return;
@@ -649,13 +660,23 @@ public class MainForm : Form
         }
 
         var idx = startIndex ?? 0;
+        var dlgIdx = dialogueIndex ?? 0;
+        var kindStr = kind ?? "main";
         _ = Task.Run(async () =>
         {
-            try { await player.PlayAsync(idx); }
+            try { await player.PlayAsync(idx, dlgIdx, kindStr); }
             catch (ArgumentOutOfRangeException ex)
             {
-                Log.Error(ex, "[Lesson] Panel PlayAsync section_index out of range: {Index}", idx);
-                BeginInvoke(() => PanelLog($"セクション {idx + 1} は範囲外です", "error"));
+                Log.Error(ex, "[Lesson] Panel PlayAsync out of range: section={Section} dialogue={Dialogue} kind={Kind}",
+                    idx, dlgIdx, kindStr);
+                BeginInvoke(() => PanelLog(
+                    $"開始位置が範囲外です（section={idx + 1}, dialogue={dlgIdx + 1}, kind={kindStr}）", "error"));
+            }
+            catch (ArgumentException ex)
+            {
+                Log.Error(ex, "[Lesson] Panel PlayAsync invalid argument: section={Section} dialogue={Dialogue} kind={Kind}",
+                    idx, dlgIdx, kindStr);
+                BeginInvoke(() => PanelLog($"開始位置の指定が不正です: {ex.Message}", "error"));
             }
             catch (Exception ex) { Log.Error(ex, "[Lesson] Panel PlayAsync failed"); }
         });

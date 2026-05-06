@@ -1,5 +1,16 @@
 # DONE
 
+## コントロールパネル: dialogue 途中再生コマンドを受信（Step 2-A）
+
+- [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
+- [x] **対象**: `win-native-app/WinNativeApp/MainForm.cs` の `HandlePanelLessonPlay`
+- [x] **変更**:
+  - WebView2 host messaging 経由の `lesson_play` から `dialogue_index`（int）と `kind`（"main" | "answer"）を `JsonValueKind` で型ガードして抽出
+  - Resume 分岐の発火条件を「`section_index` / `dialogue_index` / `kind` の3つすべて未指定」に拡張。dialogue 単位の途中再生は明示的な開始位置指定なので絶対に Resume に流さない（plan §3.6）
+  - `PlayAsync(idx, dlgIdx, kindStr)` に転送（未指定時は `0` / `"main"`）
+  - エラーハンドリングを `ArgumentOutOfRangeException`（範囲外）と `ArgumentException`（kind 不正・question以外でanswer 指定）に分離し、それぞれ `PanelLog(..., "error")` で UI に表示
+- [x] **影響**: 既存の引数なし `lesson_play`（Resume 用途）とセクション ▶（`section_index` のみ）はリグレッションなし。Step 3 の UI から `dialogue_index` / `kind` を載せて送ると新しい経路で再生開始できる
+
 ## 授業再生エンジン: dialogue 単位の途中再生に対応（Step 1）
 
 - [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
