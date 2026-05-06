@@ -1,5 +1,20 @@
 # DONE
 
+## 授業 dialogue 試聴: single モード追加 + 教材テキストパネル表示
+
+- [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
+- [x] **対象**: `win-native-app/WinNativeApp/Streaming/LessonPlayer.cs` / `MainForm.cs` / `Server/HttpServer.cs` / `control-panel.html`
+- [x] **仕様変更**: dialogue 行の ▶ は「クリックした 1 メッセージだけ再生」の試聴用途に修正。後続 dialogue / 待機 / 後続セクションは再生しない（プラン更新済み）
+- [x] **変更**:
+  - `LessonPlayer.PlayAsync(..., bool single = false)` を追加。`single=true` のときは `for` ループに入らず、対象セクションの該当 dialogue を 1 件だけ再生して終了
+  - `PlayDialoguesAsync(..., int count = -1)` を追加し、`count >= 1` で件数制限ループに変更（既存呼び出しは `count = -1` で全件再生のまま）
+  - **single モードでも教材テキストパネルを表示する**: `PlaySectionInternalAsync` を経由しないため、single 分岐内で `showText(DisplayText, SectionType)` を直接呼び、`PlayDialoguesAsync` を `try/finally` で囲んで終了・キャンセル時に `hideText()` を確実に実行（セクション通常再生と同じ表示挙動）
+  - `MainForm.HandlePanelLessonPlay` / `HttpServer.HandleWsLessonPlay` で `single`（bool）を `JsonValueKind` 型ガードで抽出し `PlayAsync` に転送
+  - Resume 分岐ガード `hasOffset` の判定に `single` を追加。`single=true` 指定時は絶対に Resume に流さない
+  - `control-panel.html` の `playLessonFromDialogue` が `single: true` を載せて送信。ボタン title を「N から再生」→「N を試聴」に更新
+- [x] **テスト追従**: `tests/test_native_app_patterns.py` 3 件を新シグネチャ（`single` 引数 / `singleFlag` 転送 / `TryGetProperty("single")`）に追従。`pytest tests/test_native_app_patterns.py -q` 27 件 green
+- [x] **影響**: dialogue 行 ▶ クリック時にセクションの教材テキストパネルが表示されるリグレッションを修復。試聴後は自動で hideText され、後続 dialogue・セクションには進まない
+
 ## コントロールパネル UI: dialogue 行に ▶ ボタン追加（Step 3）
 
 - [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)

@@ -210,7 +210,8 @@ public class LessonPlayer
     /// <param name="startIndex">再生を開始するセクションのindex（0始まり、デフォルトは先頭）</param>
     /// <param name="startDialogueIndex">最初のセクション内で再生を開始するdialogueのindex（0始まり、デフォルトは先頭）</param>
     /// <param name="startKind">最初のセクションでmain/answerどちらから開始するか（"main" | "answer"）</param>
-    public async Task PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = "main")
+    /// <param name="single">trueの場合、指定 dialogue 1件だけ再生して終了（試聴用途）。showText/hideText は実行するが、セクション間待機・後続セクションはすべてスキップ</param>
+    public async Task PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = "main", bool single = false)
     {
         ValidatePlayArgs(startIndex, startDialogueIndex, startKind);
 
@@ -225,23 +226,18 @@ public class LessonPlayer
 
         try
         {
-            for (int i = startIndex; i < _sections.Count; i++)
+            if (single)
             {
-                _cts.Token.ThrowIfCancellationRequested();
-                await WaitIfPausedAsync(_cts.Token);
-                _currentSectionIndex = i;
+                // 単一 dialogue 試聴: セクション間待機・後続セクションはスキップするが、
+                // 教材テキストパネル（showText/hideText）はセクション通常再生と同じく表示する
+                var section = _sections[startIndex];
                 _currentDialogueIndex = -1;
 
-                // 最初のセクションのみ offset を適用、以降は先頭から
-                int dlgOffset = (i == startIndex) ? startDialogueIndex : 0;
-                string kindOffset = (i == startIndex) ? startKind : "main";
-
-                Log.Information("[Lesson] Playing section {Index}/{Total} (dlgOffset={DlgOffset}, kind={Kind})",
-                    i + 1, _sections.Count, dlgOffset, kindOffset);
+                Log.Information("[Lesson] Single dialogue playback: section={Section}, dialogue={Dialogue}, kind={Kind}",
+                    startIndex + 1, startDialogueIndex + 1, startKind);
 
                 SendPanelUpdate();
 
-                // broadcast.html へセクション進行を通知（C#が再生位置の権威ソース）
                 if (BroadcastEvent != null)
                 {
                     _ = BroadcastEvent(new
@@ -249,12 +245,63 @@ public class LessonPlayer
                         type = "lesson_status",
                         state = "running",
                         lesson_id = _lessonId,
-                        current_index = i,
+                        current_index = startIndex,
                         total_sections = _sections.Count,
                     });
                 }
 
-                await PlaySectionInternalAsync(_sections[i], _cts.Token, dlgOffset, kindOffset);
+                // 教材テキスト表示（DisplayText がある場合）
+                if (!string.IsNullOrEmpty(section.DisplayText))
+                {
+                    var textEscaped = JsonSerializer.Serialize(section.DisplayText);
+                    var typeEscaped = JsonSerializer.Serialize(section.SectionType ?? "");
+                    InjectJs?.Invoke($"if(window.lesson)window.lesson.showText({textEscaped},{typeEscaped})");
+                }
+
+                try
+                {
+                    var list = (startKind == "answer") ? section.Question!.AnswerDialogues : section.Dialogues;
+                    await PlayDialoguesAsync(list, startKind, _cts.Token, startDialogueIndex, count: 1);
+                }
+                finally
+                {
+                    // 試聴終了時に教材テキストを片付ける（キャンセル時も実行）
+                    InjectJs?.Invoke("if(window.lesson)window.lesson.hideText()");
+                }
+            }
+            else
+            {
+                for (int i = startIndex; i < _sections.Count; i++)
+                {
+                    _cts.Token.ThrowIfCancellationRequested();
+                    await WaitIfPausedAsync(_cts.Token);
+                    _currentSectionIndex = i;
+                    _currentDialogueIndex = -1;
+
+                    // 最初のセクションのみ offset を適用、以降は先頭から
+                    int dlgOffset = (i == startIndex) ? startDialogueIndex : 0;
+                    string kindOffset = (i == startIndex) ? startKind : "main";
+
+                    Log.Information("[Lesson] Playing section {Index}/{Total} (dlgOffset={DlgOffset}, kind={Kind})",
+                        i + 1, _sections.Count, dlgOffset, kindOffset);
+
+                    SendPanelUpdate();
+
+                    // broadcast.html へセクション進行を通知（C#が再生位置の権威ソース）
+                    if (BroadcastEvent != null)
+                    {
+                        _ = BroadcastEvent(new
+                        {
+                            type = "lesson_status",
+                            state = "running",
+                            lesson_id = _lessonId,
+                            current_index = i,
+                            total_sections = _sections.Count,
+                        });
+                    }
+
+                    await PlaySectionInternalAsync(_sections[i], _cts.Token, dlgOffset, kindOffset);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -530,13 +577,15 @@ public class LessonPlayer
         Log.Information("[Lesson] Section {Index} complete", section.SectionIndex);
     }
 
-    private async Task PlayDialoguesAsync(List<DialogueData> dialogues, string kind, CancellationToken ct, int startIndex = 0)
+    /// <param name="count">再生する dialogue 件数。-1 なら startIndex 以降を全件、1 以上ならその件数だけ再生する。</param>
+    private async Task PlayDialoguesAsync(List<DialogueData> dialogues, string kind, CancellationToken ct, int startIndex = 0, int count = -1)
     {
         _totalDialogues = dialogues.Count;
         _currentDialogues = dialogues;
         _currentKind = kind;
 
-        for (int i = startIndex; i < dialogues.Count; i++)
+        int end = (count < 0) ? dialogues.Count : Math.Min(startIndex + count, dialogues.Count);
+        for (int i = startIndex; i < end; i++)
         {
             ct.ThrowIfCancellationRequested();
             await WaitIfPausedAsync(ct);

@@ -248,12 +248,12 @@ def test_play_async_supports_section_start_index():
     source = read_cs("Streaming/LessonPlayer.cs")
     body = _extract_method_body(source, r"public async Task PlayAsync\([^)]*\)")
 
-    # シグネチャに startIndex / startDialogueIndex / startKind がある（デフォルト引数で後方互換）
+    # シグネチャに startIndex / startDialogueIndex / startKind / single がある（デフォルト引数で後方互換）
     assert re.search(
-        r"PlayAsync\(\s*int\s+startIndex\s*=\s*0\s*,\s*int\s+startDialogueIndex\s*=\s*0\s*,\s*string\s+startKind\s*=\s*\"main\"\s*\)",
+        r"PlayAsync\(\s*int\s+startIndex\s*=\s*0\s*,\s*int\s+startDialogueIndex\s*=\s*0\s*,\s*string\s+startKind\s*=\s*\"main\"\s*,\s*bool\s+single\s*=\s*false\s*\)",
         source,
     ), (
-        "PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = \"main\") のシグネチャが見当たらない"
+        "PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = \"main\", bool single = false) のシグネチャが見当たらない"
     )
     # 範囲チェック（PlayAsync 内で直接、または ValidatePlayArgs 経由で）
     assert re.search(r"ArgumentOutOfRangeException\([^)]*startIndex", source), (
@@ -337,11 +337,15 @@ def test_panel_lesson_play_dispatches_section_index():
     assert re.search(r'TryGetProperty\("kind"', body), (
         "HandlePanelLessonPlay で kind を読んでいない"
     )
-    # PlayAsync に 3 引数で渡す
-    assert re.search(r"PlayAsync\(\s*idx\s*,\s*dlgIdx\s*,\s*kindStr\s*\)", body), (
-        "HandlePanelLessonPlay から PlayAsync(idx, dlgIdx, kindStr) が呼ばれていない"
+    # PlayAsync に 4 引数で渡す（single 含む）
+    assert re.search(r"PlayAsync\(\s*idx\s*,\s*dlgIdx\s*,\s*kindStr\s*,\s*singleFlag\s*\)", body), (
+        "HandlePanelLessonPlay から PlayAsync(idx, dlgIdx, kindStr, singleFlag) が呼ばれていない"
     )
-    # Resume 分岐は dialogue_index / kind が指定された時点で抜ける
+    # single も読み取っている
+    assert re.search(r'TryGetProperty\("single"', body), (
+        "HandlePanelLessonPlay で single を読んでいない"
+    )
+    # Resume 分岐は dialogue_index / kind / single が指定された時点で抜ける
     assert re.search(r"hasOffset", body), (
         "HandlePanelLessonPlay の Resume 分岐ガード（hasOffset 判定）が見当たらない — "
         "dialogue 単位の途中再生で Resume に流れ込むリグレッション可能性あり"
@@ -365,9 +369,12 @@ def test_ws_lesson_play_dispatches_section_index():
     assert re.search(r'TryGetProperty\("kind"', body), (
         "HandleWsLessonPlay で kind を読んでいない"
     )
-    # PlayAsync に 3 引数で渡す
-    assert re.search(r"PlayAsync\(\s*startIndex\s*,\s*dialogueIndex\s*,\s*kind\s*\)", body), (
-        "HandleWsLessonPlay から PlayAsync(startIndex, dialogueIndex, kind) が呼ばれていない"
+    assert re.search(r'TryGetProperty\("single"', body), (
+        "HandleWsLessonPlay で single を読んでいない"
+    )
+    # PlayAsync に 4 引数で渡す（single 含む）
+    assert re.search(r"PlayAsync\(\s*startIndex\s*,\s*dialogueIndex\s*,\s*kind\s*,\s*single\s*\)", body), (
+        "HandleWsLessonPlay から PlayAsync(startIndex, dialogueIndex, kind, single) が呼ばれていない"
     )
     # 不正入力に対してエラーを返す（ValidatePlayArgs 経由でチェック）
     assert re.search(r"ValidatePlayArgs", body), (

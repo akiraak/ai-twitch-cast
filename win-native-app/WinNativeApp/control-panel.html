@@ -1094,8 +1094,10 @@ function playLessonFromSection(idx, btn) {
 }
 
 function playLessonFromDialogue(sectionIdx, dialogueIdx, kind, btn) {
+  // dialogue 行の ▶ は「クリックした 1 メッセージだけ再生」（試聴用途）。
+  // 後続 dialogue / 待機 / 後続セクションは再生しない。
   if (btn) btn.disabled = true;
-  send({action:'lesson_play', section_index: sectionIdx, dialogue_index: dialogueIdx, kind: kind});
+  send({action:'lesson_play', section_index: sectionIdx, dialogue_index: dialogueIdx, kind: kind, single: true});
 }
 
 function _setAutoFollow(enable) {
@@ -1158,7 +1160,7 @@ function _renderDialogueGroup(listEl, dialogues, kind, isCurrentSection, current
     playFrom.type = 'button';
     playFrom.className = 'ld-row-play';
     playFrom.textContent = '▶';
-    playFrom.title = (kind === 'answer' ? '回答' : 'メイン') + ' ' + (i + 1) + ' から再生';
+    playFrom.title = (kind === 'answer' ? '回答' : 'メイン') + ' ' + (i + 1) + ' を試聴';
     playFrom.disabled = (_timelineState.state !== 'loaded');
     playFrom.addEventListener('click', (ev) => {
       ev.stopPropagation();
