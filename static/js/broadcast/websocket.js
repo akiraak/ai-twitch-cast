@@ -170,7 +170,8 @@ function connectWS() {
 
       // 授業テキスト
       case 'lesson_text_show':
-        showLessonText(data.text, data.display_properties);
+        // display_properties はJS側で無視（自動算出に統一）。section_type のみ参照
+        showLessonText(data.text, data.section_type);
         break;
       case 'lesson_text_hide':
         hideLessonText();

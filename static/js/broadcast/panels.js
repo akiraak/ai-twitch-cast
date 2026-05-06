@@ -188,35 +188,64 @@ async function loadTodo() {
 
 // --- 授業テキストパネル ---
 
-// テキスト長から推定するフォールバック値（display_properties が欠けたとき用）
-function _autoSizeFromText(text) {
-  const s = text || '';
-  const len = s.length;
-  const lines = s.split('\n').length;
-  if (len < 60 && lines <= 2)  return { maxHeight: 25, width: 40, fontSize: 2.0 };
-  if (len < 200 && lines <= 5) return { maxHeight: 40, width: 50, fontSize: 1.7 };
-  return { maxHeight: 60, width: 60, fontSize: 1.5 };
+// CJK 1.0 / 半角 0.55 で行幅を見積もる（フォントサイズ単位の文字数）
+function _lineUnits(line) {
+  let w = 0;
+  for (const c of line) {
+    const code = c.codePointAt(0);
+    // ひらがな・カタカナ・CJK統合漢字・全角記号
+    if ((code >= 0x3040 && code <= 0x9fff) || (code >= 0xff00 && code <= 0xffef)) w += 1.0;
+    else w += 0.55;
+  }
+  return w;
 }
 
-function showLessonText(text, displayProperties) {
+// テキスト＋セクション種別から fontSize/width/maxHeight を完全自動算出
+// （LLM が指定する display_properties は使わない。ビューポート実測値で計算）
+function _autoSize(text, sectionType) {
+  const s = text || '';
+  const lines = s.split('\n');
+  const lineCount = lines.length;
+  const maxUnits = lines.reduce((m, l) => Math.max(m, _lineUnits(l)), 0);
+
+  // セクション種別ごとのベースフォント（強調系を大きめに）
+  const baseFs = ({
+    question: 1.9, summary: 1.8, introduction: 1.8,
+    explanation: 1.6, example: 1.5,
+  })[sectionType] || 1.7;
+
+  // 長い行があれば縮める（はみ出し防止）
+  const fs = maxUnits > 35 ? Math.max(1.4, baseFs - 0.3)
+           : maxUnits > 25 ? Math.max(1.4, baseFs - 0.15)
+           : baseFs;
+
+  // width%: 最長行 × fs + 横padding(4vw) + 安全マージン(2vw)
+  // ※ broadcast.css の #lesson-text-panel padding: 1.5vw 2vw を前提
+  const widthPct = Math.min(85, Math.max(35, Math.ceil(maxUnits * fs + 6)));
+
+  // maxHeight%: 行数 × fs × line-height(1.7) を vh 換算 + 縦padding(3vw)
+  // 1vw=innerWidth/100 px, 1vh=innerHeight/100 px
+  const vwPx = window.innerWidth / 100;
+  const vhPx = window.innerHeight / 100 || 1;
+  const linePx = fs * vwPx * 1.7;
+  const padPx = 3 * vwPx;
+  const totalPx = lineCount * linePx + padPx;
+  const maxHeightPct = Math.min(90, Math.max(15, Math.ceil(totalPx / vhPx) + 2));
+
+  return { fontSize: fs, width: widthPct, maxHeight: maxHeightPct };
+}
+
+function showLessonText(text, sectionType) {
   const panel = document.getElementById('lesson-text-panel');
   const content = document.getElementById('lesson-text-content');
   if (!panel || !content) return;
 
-  // 明示指定があれば優先、欠けたフィールドはテキスト長から自動推定で補う
-  const auto = _autoSizeFromText(text);
-  const dp = displayProperties || {};
-  const maxHeight = (dp.maxHeight != null) ? Number(dp.maxHeight) : auto.maxHeight;
-  const width     = (dp.width     != null) ? Number(dp.width)     : auto.width;
-  const fontSize  = (dp.fontSize  != null) ? Number(dp.fontSize)  : auto.fontSize;
-
-  const w = Math.max(10, Math.min(95, width));
-  panel.style.maxHeight   = Math.max(10, Math.min(90, maxHeight)) + '%';
-  panel.style.width       = w + '%';
+  const sz = _autoSize(text, sectionType);
+  panel.style.maxHeight   = sz.maxHeight + '%';
+  panel.style.width       = sz.width + '%';
   // width が動的に変わるので left も連動させて常に水平中央寄せにする
-  panel.style.left        = ((100 - w) / 2) + '%';
-  // フォントサイズの下限は 1.4vw（旧プロンプトで生成された 1.0-1.3 等の小さすぎる値を救済）
-  content.style.fontSize  = Math.max(1.4, Math.min(3.0, fontSize)) + 'vw';
+  panel.style.left        = ((100 - sz.width) / 2) + '%';
+  content.style.fontSize  = sz.fontSize + 'vw';
 
   content.textContent = stripLangTags(text);
   panel.style.display = 'block';

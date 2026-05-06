@@ -1,7 +1,7 @@
 // 授業表示ハンドラ（C# LessonPlayer → WebView2 JS interop）
 //
 // C#が ExecuteScriptAsync 経由で以下を呼ぶ:
-//   window.lesson.showText(text, displayProperties)
+//   window.lesson.showText(text, sectionType)
 //   window.lesson.hideText()
 //   window.lesson.startDialogue({content, speaker, avatarId, emotion, gesture, lipsyncFrames, duration})
 //   window.lesson.endDialogue()
@@ -33,8 +33,9 @@ function _getAvatar(avatarId) {
 }
 
 window.lesson = {
-  showText(text, displayProperties) {
-    showLessonText(text, displayProperties || null);
+  // sectionType: introduction/explanation/example/question/summary（無指定時はデフォルト値）
+  showText(text, sectionType) {
+    showLessonText(text, sectionType || null);
   },
 
   hideText() {

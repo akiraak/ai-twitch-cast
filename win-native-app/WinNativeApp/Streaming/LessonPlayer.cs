@@ -414,13 +414,13 @@ public class LessonPlayer
             section.SectionIndex + 1, section.TotalSections, section.SectionType, section.Dialogues.Count);
 
         // 教材テキスト表示
+        // ※ display_properties は廃止（JS側がテキスト+section_typeから完全自動算出するため）
+        //    DBには値を残すが、ここでは渡さない。
         if (!string.IsNullOrEmpty(section.DisplayText))
         {
             var textEscaped = JsonSerializer.Serialize(section.DisplayText);
-            var propsJson = section.DisplayProperties.HasValue
-                ? JsonSerializer.Serialize(section.DisplayProperties.Value)
-                : "null";
-            InjectJs?.Invoke($"if(window.lesson)window.lesson.showText({textEscaped},{propsJson})");
+            var typeEscaped = JsonSerializer.Serialize(section.SectionType ?? "");
+            InjectJs?.Invoke($"if(window.lesson)window.lesson.showText({textEscaped},{typeEscaped})");
         }
 
         // メインdialogue再生

@@ -1,5 +1,21 @@
 # DONE
 
+## 授業中テキストパネル: LLM指定値を捨ててクライアント完全自動算出に統一
+
+- [x] **背景**: lesson_id=100 セッション1で `display_properties.maxHeight=28` がLLM指定されていたが、5行 × `fontSize 1.7vw` ではコンテンツが収まらずスクロールバーが発生。LLMが「改行数 × fontSize × line-height」の見積りを誤るのが構造的な原因
+- [x] **方針**: LLM指定の `display_properties` は完全に無視し、JS側でテキスト＋`section_type`＋ビューポート実測値から fontSize / width / maxHeight を算出する形に一本化。LLM値はDB・C# パイプラインを通って届くが、JS側で受け取らない（DB値はそのまま残置）
+- [x] **算出ロジック** (`static/js/broadcast/panels.js`): `_lineUnits()`（CJK=1.0 / 半角=0.55 で行幅見積もり）と `_autoSize(text, sectionType)` を新設。
+  - `fontSize`: section_type ごとのベース値（question/summary/introduction=1.8-1.9 / explanation=1.6 / example=1.5 / 既定=1.7）→ 最長行 > 35 で −0.3、> 25 で −0.15、下限1.4
+  - `width%`: `Math.ceil(maxLineUnits × fs + 6)`（35〜85% でclamp）
+  - `maxHeight%`: `行数 × fs × 1.7` を vh 換算 + 縦padding(3vw)（15〜90% でclamp）。`window.innerWidth/Height` 実測なので解像度非依存
+- [x] **`showLessonText()` 整理** (`static/js/broadcast/panels.js`): 第2引数を `displayProperties` から `sectionType` に変更。クランプ・left連動中央寄せロジックは維持。前バージョンで足した overflow 検出（`scrollHeight > clientHeight` で動的拡張）は不要になったため撤去
+- [x] **JS interop シグネチャ更新** (`static/js/broadcast/lesson.js`): `window.lesson.showText(text, sectionType)` に変更
+- [x] **WebSocketハンドラ更新** (`static/js/broadcast/websocket.js`): `lesson_text_show` イベントで `data.display_properties` を読まず `data.section_type` を渡すよう変更
+- [x] **C#側更新** (`win-native-app/WinNativeApp/Streaming/LessonPlayer.cs:417-424`): `showText` 呼び出しを `section.SectionType` 渡しに変更。`SectionData.DisplayProperties` のJSONパース（`ParseSectionData`）は将来用途のため残置（無害）
+- [x] **DB値**: 既存セクションの `display_properties` カラムは無変更（残置）。LLM側の生成プロンプト（`prompts/lesson_generate.md` / `lesson_improve.md`）も無変更で、生成され続けるが JS側で無視される
+- [x] **テスト**: `python3 -m pytest tests/test_broadcast_patterns.py tests/test_lesson_runner.py tests/test_api_teacher.py -q` 239 passed (5:44)
+- [x] **C# ビルド**: WSL2 上に dotnet がないため、ユーザー側で `stream.sh` 経由のビルド・実機確認が必要
+
 ## バイブコーダー向けセキュリティ講座 #1（id=100）v1 セクション再生成
 
 - [x] **再生成方針**: メタ前置き除去スタイルA確定後の最初の回として、`prompts/lesson_generate.md` の「メタ前置きを入れない・display_text 全文読み上げ」ルールに沿って Lesson #1 を白紙からやり直し。`POST /api/lessons/100/import-sections?lang=ja&generator=claude&version=1` で v1 上書き（`teacher.py:946-956` がセクションと TTS キャッシュを掃除してから書き込む）
