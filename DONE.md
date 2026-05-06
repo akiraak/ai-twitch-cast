@@ -1,5 +1,12 @@
 # DONE
 
+## 授業 dialogue 途中再生: タスク完了（Step 4 / Step 5）
+
+- [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
+- [x] **Windows 実機での動作確認完了**: 既存セクション ▶ のリグレッション無し / main / answer の途中再生 / single モードでの教材テキストパネル表示 / paused 中 ▶ disabled
+- [x] **プラン更新**: `ステータス: 完了` に変更
+- [x] **TODO.md 該当行を削除**
+
 ## 授業 dialogue 試聴: single モード追加 + 教材テキストパネル表示
 
 - [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)

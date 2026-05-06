@@ -7,9 +7,6 @@
 - [ ] **Step 5 (#1)**: 配信して反応を見る（フィードバック収集）
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
-- [ ] セクションの途中の会話から再生できるように。クライアントアプリのlessonタブの会話一覧からクリックすると再生できる → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
-  - [ ] **Step 4**: Windows実機で動作確認（既存セクション ▶ のリグレッション無し / main 中盤 / answer 中盤 / 不正 offset / paused 中の dialogue ▶ disabled / lesson_status 追従）→ 確認後にプランを `ステータス: 完了` 化
-
 ## 授業モード
 - [ ] speech-generation-flow.md を最新実装に更新とフローチャートの追加 → [plans/speech-flow-doc-update.md](plans/speech-flow-doc-update.md)
 - [ ] C#画面のセクション進捗パネルが動いていない
