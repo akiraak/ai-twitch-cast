@@ -1,5 +1,17 @@
 # DONE
 
+## 授業再生エンジン: dialogue 単位の途中再生に対応（Step 1）
+
+- [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
+- [x] **対象**: `win-native-app/WinNativeApp/Streaming/LessonPlayer.cs`
+- [x] **変更**:
+  - `PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = "main")` にオプション引数を追加（既存呼び出し元はそのまま動作）
+  - 入口で入力バリデーション: `startKind` は `"main"` / `"answer"` のみ、`"answer"` は `section_type=="question"` かつ `Question != null` を要求、`startDialogueIndex` は対象 dialogue 配列の範囲内
+  - メインループは「最初のセクションだけ offset を適用、以降は先頭から」: `dlgOffset = (i == startIndex) ? startDialogueIndex : 0`
+  - `PlaySectionInternalAsync(..., int startDialogueIndex = 0, string startKind = "main")` を拡張: `startKind=="answer"` のとき main 再生と質問待機をスキップして answer から offset 付きで開始。`showText(DisplayText)` は両方の kind で実行（教材テキストの背景表示を維持）
+  - `PlayDialoguesAsync(..., int startIndex = 0)` のループ開始位置をオフセット可能に
+- [x] **影響**: 公開API `PlayAsync` は後方互換（既存の `MainForm.HandlePanelLessonPlay` / `HttpServer.HandleWsLessonPlay` の呼び出しは無修正で動作）。Step 2 以降のハンドラ・UI 拡張で活用される
+
 ## 授業タイトルパネル: 垂直中央揃えと縦幅永続化を修復
 
 - [x] **TODO**: `lesson_title` の垂直側の中央ぞろえがきかない

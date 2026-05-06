@@ -174,13 +174,39 @@ public class LessonPlayer
 
     /// <summary>ロード済み授業の再生を開始する。完了またはキャンセルまでawaitする。</summary>
     /// <param name="startIndex">再生を開始するセクションのindex（0始まり、デフォルトは先頭）</param>
-    public async Task PlayAsync(int startIndex = 0)
+    /// <param name="startDialogueIndex">最初のセクション内で再生を開始するdialogueのindex（0始まり、デフォルトは先頭）</param>
+    /// <param name="startKind">最初のセクションでmain/answerどちらから開始するか（"main" | "answer"）</param>
+    public async Task PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = "main")
     {
         if (_sections == null || _sections.Count == 0)
             throw new InvalidOperationException("No lesson loaded");
         if (startIndex < 0 || startIndex >= _sections.Count)
             throw new ArgumentOutOfRangeException(nameof(startIndex),
                 $"startIndex {startIndex} is out of range [0, {_sections.Count})");
+        if (startDialogueIndex < 0)
+            throw new ArgumentOutOfRangeException(nameof(startDialogueIndex),
+                $"startDialogueIndex {startDialogueIndex} must be >= 0");
+        if (startKind != "main" && startKind != "answer")
+            throw new ArgumentException(
+                $"startKind must be \"main\" or \"answer\", got \"{startKind}\"", nameof(startKind));
+
+        var startSection = _sections[startIndex];
+        if (startKind == "main")
+        {
+            if (startDialogueIndex >= startSection.Dialogues.Count)
+                throw new ArgumentOutOfRangeException(nameof(startDialogueIndex),
+                    $"startDialogueIndex {startDialogueIndex} is out of range [0, {startSection.Dialogues.Count}) for main dialogues of section {startIndex}");
+        }
+        else // "answer"
+        {
+            if (startSection.SectionType != "question" || startSection.Question == null)
+                throw new ArgumentException(
+                    $"startKind=\"answer\" requires section_type=\"question\" with question data, but section {startIndex} is type=\"{startSection.SectionType}\"", nameof(startKind));
+            if (startDialogueIndex >= startSection.Question.AnswerDialogues.Count)
+                throw new ArgumentOutOfRangeException(nameof(startDialogueIndex),
+                    $"startDialogueIndex {startDialogueIndex} is out of range [0, {startSection.Question.AnswerDialogues.Count}) for answer dialogues of section {startIndex}");
+        }
+
         if (_playing) throw new InvalidOperationException("Already playing");
 
         _playing = true;
@@ -199,8 +225,12 @@ public class LessonPlayer
                 _currentSectionIndex = i;
                 _currentDialogueIndex = -1;
 
-                Log.Information("[Lesson] Playing section {Index}/{Total}",
-                    i + 1, _sections.Count);
+                // 最初のセクションのみ offset を適用、以降は先頭から
+                int dlgOffset = (i == startIndex) ? startDialogueIndex : 0;
+                string kindOffset = (i == startIndex) ? startKind : "main";
+
+                Log.Information("[Lesson] Playing section {Index}/{Total} (dlgOffset={DlgOffset}, kind={Kind})",
+                    i + 1, _sections.Count, dlgOffset, kindOffset);
 
                 SendPanelUpdate();
 
@@ -217,7 +247,7 @@ public class LessonPlayer
                     });
                 }
 
-                await PlaySectionInternalAsync(_sections[i], _cts.Token);
+                await PlaySectionInternalAsync(_sections[i], _cts.Token, dlgOffset, kindOffset);
             }
         }
         catch (OperationCanceledException)
@@ -438,12 +468,16 @@ public class LessonPlayer
     // =====================================================
 
     /// <summary>単一セクションの再生。PlayAsync から順次呼ばれる。</summary>
-    private async Task PlaySectionInternalAsync(SectionData section, CancellationToken ct)
+    /// <param name="startDialogueIndex">このセクション内で再生を開始するdialogueのindex（0始まり）</param>
+    /// <param name="startKind">main/answerどちらから開始するか。"answer" の場合 main 再生と question 待機をスキップする</param>
+    private async Task PlaySectionInternalAsync(SectionData section, CancellationToken ct,
+        int startDialogueIndex = 0, string startKind = "main")
     {
-        Log.Information("[Lesson] Playing section {Index}/{Total}: type={Type}, dialogues={Count}",
-            section.SectionIndex + 1, section.TotalSections, section.SectionType, section.Dialogues.Count);
+        Log.Information("[Lesson] Playing section {Index}/{Total}: type={Type}, dialogues={Count}, startDlg={StartDlg}, startKind={StartKind}",
+            section.SectionIndex + 1, section.TotalSections, section.SectionType, section.Dialogues.Count,
+            startDialogueIndex, startKind);
 
-        // 教材テキスト表示
+        // 教材テキスト表示（answer から開始する場合も DisplayText は維持する）
         // ※ display_properties は廃止（JS側がテキスト+section_typeから完全自動算出するため）
         //    DBには値を残すが、ここでは渡さない。
         if (!string.IsNullOrEmpty(section.DisplayText))
@@ -453,17 +487,26 @@ public class LessonPlayer
             InjectJs?.Invoke($"if(window.lesson)window.lesson.showText({textEscaped},{typeEscaped})");
         }
 
-        // メインdialogue再生
-        await PlayDialoguesAsync(section.Dialogues, "main", ct);
-
-        // questionセクション: 待機→回答再生
-        if (section.SectionType == "question" && section.Question != null)
+        if (startKind == "main")
         {
-            var waitMs = (int)(section.Question.WaitSeconds * 1000);
-            Log.Information("[Lesson] Question wait: {Ms}ms", waitMs);
-            await PauseAwareDelayAsync(waitMs, ct);
+            // メインdialogue再生（offset 適用）
+            await PlayDialoguesAsync(section.Dialogues, "main", ct, startDialogueIndex);
 
-            await PlayDialoguesAsync(section.Question.AnswerDialogues, "answer", ct);
+            // questionセクション: 待機→回答再生
+            if (section.SectionType == "question" && section.Question != null)
+            {
+                var waitMs = (int)(section.Question.WaitSeconds * 1000);
+                Log.Information("[Lesson] Question wait: {Ms}ms", waitMs);
+                await PauseAwareDelayAsync(waitMs, ct);
+
+                await PlayDialoguesAsync(section.Question.AnswerDialogues, "answer", ct);
+            }
+        }
+        else // startKind == "answer"
+        {
+            // main 再生と question 待機をスキップ、answer から offset 付きで開始
+            // PlayAsync の入口で section.Question != null は検証済み
+            await PlayDialoguesAsync(section.Question!.AnswerDialogues, "answer", ct, startDialogueIndex);
         }
 
         // 教材テキスト非表示
@@ -480,13 +523,13 @@ public class LessonPlayer
         Log.Information("[Lesson] Section {Index} complete", section.SectionIndex);
     }
 
-    private async Task PlayDialoguesAsync(List<DialogueData> dialogues, string kind, CancellationToken ct)
+    private async Task PlayDialoguesAsync(List<DialogueData> dialogues, string kind, CancellationToken ct, int startIndex = 0)
     {
         _totalDialogues = dialogues.Count;
         _currentDialogues = dialogues;
         _currentKind = kind;
 
-        for (int i = 0; i < dialogues.Count; i++)
+        for (int i = startIndex; i < dialogues.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
             await WaitIfPausedAsync(ct);

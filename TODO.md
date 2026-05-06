@@ -8,6 +8,11 @@
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
 - [ ] セクションの途中の会話から再生できるように。クライアントアプリのlessonタブの会話一覧からクリックすると再生できる → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
+  - [ ] **Step 2-A**: `MainForm.HandlePanelLessonPlay` で `dialogue_index` / `kind` を抽出し、Resume 分岐の発火条件を「3つすべて未指定」に拡張（必須）
+  - [ ] **Step 2-B**: `HttpServer.HandleWsLessonPlay` も同 API に揃える（外部クライアント整合用・任意）
+  - [ ] **Step 3**: `control-panel.html` の `_renderDialogueGroup` メイン行に ▶ ボタン追加 + `playLessonFromDialogue` ヘルパ + `.ld-row-play` の CSS
+  - [ ] **Step 4**: 動作確認（既存セクション ▶ のリグレッション無し / main 中盤 / answer 中盤 / 不正 offset / paused 中の dialogue ▶ disabled / lesson_status 追従）
+  - [ ] **Step 5**: ドキュメント更新（DONE.md 追記・TODO.md から削除・プランの `ステータス: 完了` 化）
 
 ## 授業モード
 - [ ] speech-generation-flow.md を最新実装に更新とフローチャートの追加 → [plans/speech-flow-doc-update.md](plans/speech-flow-doc-update.md)
