@@ -433,6 +433,31 @@ input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover
   border-color: rgba(255, 255, 255, 0.08);
   cursor: not-allowed;
 }
+.ld-row-play {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: auto;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 5px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(124, 77, 255, 0.18);
+  border: 1px solid rgba(124, 77, 255, 0.45);
+  border-radius: 2px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ld-row-play:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(124, 77, 255, 0.45);
+  border-color: rgba(124, 77, 255, 0.85);
+}
+.ld-row-play:disabled {
+  color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  cursor: not-allowed;
+}
 
 .lesson-timeline-list {
   flex: 1;
@@ -1068,6 +1093,11 @@ function playLessonFromSection(idx, btn) {
   send({action:'lesson_play', section_index: idx});
 }
 
+function playLessonFromDialogue(sectionIdx, dialogueIdx, kind, btn) {
+  if (btn) btn.disabled = true;
+  send({action:'lesson_play', section_index: sectionIdx, dialogue_index: dialogueIdx, kind: kind});
+}
+
 function _setAutoFollow(enable) {
   _timelineState.autoFollow = enable;
   if (_timelineState.followTimer) {
@@ -1122,6 +1152,20 @@ function _renderDialogueGroup(listEl, dialogues, kind, isCurrentSection, current
     content.className = 'ld-content';
     content.textContent = dlg.content || '';
     row.appendChild(content);
+
+    // ▶ この dialogue から再生（state==='loaded' のときだけ enable）
+    const playFrom = document.createElement('button');
+    playFrom.type = 'button';
+    playFrom.className = 'ld-row-play';
+    playFrom.textContent = '▶';
+    playFrom.title = (kind === 'answer' ? '回答' : 'メイン') + ' ' + (i + 1) + ' から再生';
+    playFrom.disabled = (_timelineState.state !== 'loaded');
+    playFrom.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (playFrom.disabled) return;
+      playLessonFromDialogue(viewSection, i, kind, playFrom);
+    });
+    row.appendChild(playFrom);
 
     listEl.appendChild(row);
 

@@ -1,5 +1,19 @@
 # DONE
 
+## コントロールパネル UI: dialogue 行に ▶ ボタン追加（Step 3）
+
+- [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
+- [x] **対象**: `win-native-app/WinNativeApp/control-panel.html`
+- [x] **変更**:
+  - `_renderDialogueGroup` のメイン行（`.ld-row`）右端に小さな ▶ ボタン (`.ld-row-play`) を追加。TTS サブ行（`.ld-row.ld-tts`）には付けない（同じ dialogue を再生するため冗長）
+  - ボタン enable 条件は既存セクション ▶ と同じ `_timelineState.state === 'loaded'`（playing / paused では disabled）→ paused 中の dialogue ▶ クリックを UI 側でブロック（Resume 分岐への混入を防御）
+  - クリックハンドラは `ev.stopPropagation()` 後に `playLessonFromDialogue(viewSection, i, kind, btn)` を呼ぶ（`viewSection` は `_renderDialogueGroup` 引数の最後）
+  - 新ヘルパ `playLessonFromDialogue(sectionIdx, dialogueIdx, kind, btn)` を `playLessonFromSection` の隣に追加。多重クリック防止のため送信直後に `btn.disabled = true`、`{action:'lesson_play', section_index, dialogue_index, kind}` を WebView2 host messaging で送信
+  - CSS `.ld-row-play` を `.ld-tab-play` と同色系で追加（`margin-left: auto` で右寄せ・`align-self: center` で行内中央揃え）
+  - title 属性で「メイン N から再生」 / 「回答 N から再生」を表示してホバー時にどこから再生されるかを明示
+- [x] **検証**: `pytest tests/test_broadcast_patterns.py tests/test_native_app_patterns.py -q` 56 件 green
+- [x] **影響**: コントロールパネルの Lesson タブから dialogue 単位の途中再生が可能に。Step 1〜Step 2 で整えた C# 側の経路（`PlayAsync(idx, dlgIdx, kind)`）が UI から駆動できるようになった。残るは Step 4（Windows 実機での動作確認）と Step 5（プラン完了マーク）
+
 ## 外部 WS クライアント: dialogue 途中再生コマンドを受信（Step 2-B）
 
 - [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
