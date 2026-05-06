@@ -322,6 +322,9 @@ function setupEditable(el) {
       const isChild = !!el.dataset.parentId;
       const otherRects = isChild ? [] : getOtherEditableRects(el);
 
+      // 縦リサイズ開始時に CSS の max-height を打ち消し、ドラッグ中の伸縮を即座に反映
+      if (resizeV) el.style.maxHeight = 'none';
+
       function onMove(e) {
         const dx = e.clientX - startX, dy = e.clientY - startY;
         const ref = _getRefSize(el);

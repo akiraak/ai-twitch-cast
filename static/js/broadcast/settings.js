@@ -177,7 +177,12 @@ function applySettings(s) {
     if (lpp) {
       applyCommonStyle(lpp, s.lesson_progress);
       if (s.lesson_progress.width != null) lpp.style.width = s.lesson_progress.width + '%';
-      if (s.lesson_progress.maxHeight != null) lpp.style.maxHeight = s.lesson_progress.maxHeight + '%';
+      if (s.lesson_progress.height != null) {
+        lpp.style.height = s.lesson_progress.height + '%';
+        lpp.style.maxHeight = 'none';
+      } else if (s.lesson_progress.maxHeight != null) {
+        lpp.style.maxHeight = s.lesson_progress.maxHeight + '%';
+      }
       // 文字サイズ: fontSize（共通）→ 全子要素に適用、titleFontSize/itemFontSize（固有）→ 個別に上書き
       const fs = s.lesson_progress.fontSize;
       const titleFs = s.lesson_progress.titleFontSize ?? (fs != null ? fs : null);

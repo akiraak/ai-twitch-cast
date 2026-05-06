@@ -1,5 +1,28 @@
 # DONE
 
+## 授業の流れパネルの縦幅が変更できない問題を修正
+
+- [x] **TODO**: 授業の流れパネル（`#lesson-progress-panel`）の縦幅をドラッグで変更できない
+- [x] **原因**:
+  - **バグA**: `static/css/broadcast.css:569` の `#lesson-progress-panel { max-height: 26%; }` が、ドラッグで付与されるインライン `style.height` を視覚的にクリップしていた（CSS仕様上 `max-height` は `height` より優先）
+  - **バグB**: `static/js/broadcast/settings.js` の `lesson_progress` ブロックが `s.lesson_progress.height` を適用していなかった。DBには `height: 53.5` が保存されていたがリロード後に復元されない状態
+- [x] **修正**:
+  - `static/js/broadcast/settings.js`: `lesson_progress` の `applySettings` を TODOパネルと同じパターンに揃え、`height` がある場合は `style.height` に適用しつつ `style.maxHeight = 'none'` で CSS をオーバーライド。`height` が無い場合のみ `maxHeight` を効かせ、CSS既定の 26% を初期値として温存
+  - `static/js/broadcast/edit-mode.js`: リサイズ開始時に `resizeV` が真なら `el.style.maxHeight = 'none'` を付与し、ドラッグ中の縦伸縮を即座に反映（保存→`applySettings` 再走を待たずにプレビュー）
+  - CSS `max-height: 26%` は未編集ユーザー向けの初期値として残置
+- [x] **検証**: `tests/test_broadcast_patterns.py` 29件 通過。プラン: `plans/lesson-progress-height-fix.md`
+
+## 授業の流れパネル「授業の流れ」文字色編集 — 確認のみで完了
+
+- [x] **TODO**: 授業の流れパネルの「授業の流れ」の文字の色を編集できるようにする
+- [x] **結果**: 機能はすでに commit `928b436`（2026-03-27「進捗パネルのタイトル・カウント文字にデザイン編集機能を追加」）で実装済みだったことを確認。新規実装は不要
+- [x] **確認内容**:
+  - スキーマ: `scripts/routes/items.py:124-130` の `_ITEM_SPECIFIC_SCHEMA["lesson_progress"]` に「タイトル文字」グループ（`titleColor` ほか縁取り3種）あり
+  - 適用: `static/js/broadcast/settings.js:197-215`（初期適用）/ `settings-panel.js:193-205`（右クリック即時反映）/ `panels.js:294-300`（innerHTML再生成後の dataset 復元）
+  - ランタイム検証: `curl /api/items/schema?item_id=lesson_progress` で `titleColor` フィールドが返ることを確認
+  - UI: 管理画面 `/` → 配信レイアウト → 進捗パネル → "タイトル文字 → 色"、または `/broadcast` の編集モードで進捗パネル右クリック → "タイトル文字 → 色"
+- [x] **後始末**: TODO.md から行を削除。提案中だった `plans/lesson-progress-title-color-edit.md` は破棄
+
 ## 授業の流れパネル: 現在セクションのハイライト追従修復
 
 - [x] **現象**: 配信画面の「授業の流れ」パネル（`#lesson-progress-panel`）は仕様上 `current_index` で `.current` クラスをハイライトするが、実再生時に先頭から動かなかった。原因はセクション進行イベント `lesson_status` が broadcast.html まで届いていなかったこと
