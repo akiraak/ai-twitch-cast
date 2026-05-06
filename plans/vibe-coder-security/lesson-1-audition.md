@@ -13,8 +13,8 @@
   4. example（公開直前と公開後／Phase 2-4）
   5. question（概論クイズ：.env 漏れの3択）
   6. summary（今日のまとめ＋次回予告）
-- dialogues 計 34 ターン（teacher=ちょビ / student=なるこ）
-- TTS 事前生成: `resources/audio/lessons/100/ja/claude/v1/*.wav` 34 ファイル（gitignored）
+- dialogues 計 40 ターン（teacher=ちょビ / student=なるこ）
+- TTS 事前生成: `resources/audio/lessons/100/ja/claude/v1/*.wav` 40 ファイル（gitignored）
 
 ## 試聴の手順
 

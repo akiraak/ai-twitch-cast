@@ -1,5 +1,16 @@
 # DONE
 
+## バイブコーダー向けセキュリティ講座 #1（id=100）v1 セクション再生成
+
+- [x] **再生成方針**: メタ前置き除去スタイルA確定後の最初の回として、`prompts/lesson_generate.md` の「メタ前置きを入れない・display_text 全文読み上げ」ルールに沿って Lesson #1 を白紙からやり直し。`POST /api/lessons/100/import-sections?lang=ja&generator=claude&version=1` で v1 上書き（`teacher.py:946-956` がセクションと TTS キャッシュを掃除してから書き込む）
+- [x] **構成**: 6 セクション（intro / explanation / example×2 / question / summary）。example は素材mdの「Section 3 が長くなるので分割可」のガイドどおり Phase 1（開発中の4テーマ）と Phase 2-4（公開直前・公開後・メタの5テーマ）に分割。ライフサイクル順（開発中→公開直前→公開後→メタ）で全9テーマを駆け足ツアー
+- [x] **dialogues 計 40 ターン**（前回 34 → +6）。各セクション最初の teacher ターンで `display_text` を全文読み上げ。前置きの「画面を見てね／読み上げるね」等は1件もなし。自虐ネタ（「この授業もAIで作ってる」）は section 4 で 1 回のみ
+- [x] **言語タグ**: AI / bot / .env / API / Git / SNS / XSS / SQL / SQLi / Auth0 / Clerk / Supabase / Firebase / DB / RLS / Firestore Rules / HTTPS / CORS / CSRF / Cursor / Web / Phase / push / OK / A / B / C / #2 を `[lang:en]` で網羅。クイズの選択肢ラベル A/B/C も英語タグ化
+- [x] **TTS 事前生成**: `POST /api/lessons/100/tts-pregen?lang=ja&generator=claude&version=1` でキック → 完了（state=completed, 6/6, generated=39, cached=1, failed=0）。`resources/audio/lessons/100/ja/claude/v1/*.wav` 40 ファイル
+- [x] **試聴チェックリスト更新** (`plans/vibe-coder-security/lesson-1-audition.md`): セクション数の dialogues 計 34→40 と TTS wav 34→40 を反映。チェック観点（誤読・言語タグ漏れ・テンポ・display_text 全文読み・wait_seconds・emotion・トーン・全体時間）はそのまま流用
+- [x] **TODO.md 更新**: Step 4 (#1) の状況を「v1, 40/40 wav, failed=0 → 試聴待ち」に更新
+- [x] **CLAUDE.md 追記**: 「シリーズ別の素材・試聴チェックリスト」セクションを追加し、`vibe_coding` カテゴリの素材メモ・試聴チェックリストの参照先を明記。今後 `prompts/lesson_generate.md` 単体ではなくシリーズ別の素材・チェックリストも併読する運用を周知
+
 ## 授業スクリプト 前置き表現の除去（スタイルA: 最小削除）
 
 - [x] **`prompts/lesson_generate.md` 書き換え**: dialogues 生成ルール内の「導入の一言（『画面を見てね』『読み上げるよ』など）を添えてから〜」を削除し、(A)`display_text` 全文読み上げ要件はそのまま維持しつつ、(B)メタ前置きを禁止する明示ルール＋良い例/悪い例テーブル（13例）を追加。「前置きを削った上で、後ろの教材内容はそのまま読み上げる（別の言い回しで導入を作り直さない）」とスタイルAを明確化

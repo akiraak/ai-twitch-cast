@@ -3,7 +3,7 @@
 ## バイブコーダー向けセキュリティ講座（全10回・授業モード） → [plans/vibe-coder-security-lesson.md](plans/vibe-coder-security-lesson.md)
 
 全10回構成確定（lesson_id 100〜109）。素材メモは `plans/vibe-coder-security/lesson-{N}-source.md`。
-- [>] **Step 4 (#1)**: TTS 事前生成は完了（v1, 34/34 wav, failed=0）→ **管理画面 Lesson タブで試聴 → 必要なら微修正**。再開用チェックリスト＋手順は [plans/vibe-coder-security/lesson-1-audition.md](plans/vibe-coder-security/lesson-1-audition.md)
+- [>] **Step 4 (#1)**: TTS 事前生成は完了（v1, 40/40 wav, failed=0）→ **管理画面 Lesson タブで試聴 → 必要なら微修正**。再開用チェックリスト＋手順は [plans/vibe-coder-security/lesson-1-audition.md](plans/vibe-coder-security/lesson-1-audition.md)
 - [ ] **Step 5 (#1)**: 配信して反応を見る（フィードバック収集）
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 

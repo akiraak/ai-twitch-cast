@@ -237,6 +237,15 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 
 例: `授業生成「#175 English 1-1 (2ソース)」` → 授業ID 175の教材画像を読み取り、スクリプトを生成してAPIでインポート。
 
+### シリーズ別の素材・試聴チェックリスト
+
+特定シリーズ向けに専用の素材メモ・試聴チェックリストが存在する場合は、`prompts/lesson_generate.md` の前にそちらを参照すること。素材メモはdialogues生成の元ネタ、試聴チェックリストは生成後の確認観点を定義している。
+
+- **バイブコーダーセキュリティ講座（`vibe_coding` カテゴリ / lesson_id 100〜109）**
+  - 全体プラン: `plans/vibe-coder-security-lesson.md`（シリーズ構成・対象視聴者・トーン）
+  - 各lesson素材: `plans/vibe-coder-security/lesson-N-source.md`（ゴール・学習者像・dialogues素材）
+  - 試聴チェックリスト: `plans/vibe-coder-security/lesson-N-audition.md`（誤読・言語タグ漏れ等の観点）
+
 ## テスト
 
 ### 実行方法
