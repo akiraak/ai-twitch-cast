@@ -823,8 +823,9 @@ public class HttpServer : IDisposable
     }
 
     /// <summary>全セクション順次再生（完了はlesson_completeで通知）。
-    /// section_index を指定するとそのセクションから再生開始する（未指定なら 0）。
-    /// 外部 WS クライアント向けは Resume 分岐を持たない（Resume したい場合は明示的に lesson_resume を使う）。</summary>
+    /// section_index / dialogue_index / kind を指定するとその位置から再生開始する（未指定なら先頭）。
+    /// 外部 WS クライアント向けは Resume 分岐を持たない（Resume したい場合は明示的に lesson_resume を使う）。
+    /// dialogue_index / kind は LessonPlayer.PlayAsync に転送され、最初のセクションだけ offset が適用される。</summary>
     private object HandleWsLessonPlay(JsonElement msg)
     {
         if (LessonPlayer == null)
@@ -837,13 +838,44 @@ public class HttpServer : IDisposable
         if (msg.TryGetProperty("section_index", out var si) && si.ValueKind == JsonValueKind.Number)
             startIndex = si.GetInt32();
 
+        int dialogueIndex = 0;
+        if (msg.TryGetProperty("dialogue_index", out var di) && di.ValueKind == JsonValueKind.Number)
+            dialogueIndex = di.GetInt32();
+
+        string kind = "main";
+        if (msg.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String)
+            kind = k.GetString() ?? "main";
+
+        // バリデーションは PlayAsync 入口で行うが、開始前に同期チェックして
+        // 不正な入力に対しては Task を起動せず即座にエラーを返す。
+        try
+        {
+            LessonPlayer.ValidatePlayArgs(startIndex, dialogueIndex, kind);
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            Log.Warning("[Lesson] WS PlayAsync out of range: section={Section} dialogue={Dialogue} kind={Kind}",
+                startIndex, dialogueIndex, kind);
+            return new { ok = false, error = ex.Message };
+        }
+        catch (ArgumentException ex)
+        {
+            Log.Warning("[Lesson] WS PlayAsync invalid argument: section={Section} dialogue={Dialogue} kind={Kind}",
+                startIndex, dialogueIndex, kind);
+            return new { ok = false, error = ex.Message };
+        }
+
         _ = Task.Run(async () =>
         {
-            try { await LessonPlayer.PlayAsync(startIndex); }
-            catch (Exception ex) { Log.Error(ex, "[Lesson] PlayAsync failed (section_index={Index})", startIndex); }
+            try { await LessonPlayer.PlayAsync(startIndex, dialogueIndex, kind); }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[Lesson] PlayAsync failed (section_index={Index} dialogue_index={DlgIdx} kind={Kind})",
+                    startIndex, dialogueIndex, kind);
+            }
         });
 
-        return new { ok = true, section_index = startIndex };
+        return new { ok = true, section_index = startIndex, dialogue_index = dialogueIndex, kind };
     }
 
     private object HandleWsLessonPause()

@@ -1,5 +1,21 @@
 # DONE
 
+## 外部 WS クライアント: dialogue 途中再生コマンドを受信（Step 2-B）
+
+- [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)
+- [x] **対象**: `win-native-app/WinNativeApp/Server/HttpServer.cs` の `HandleWsLessonPlay`、`win-native-app/WinNativeApp/Streaming/LessonPlayer.cs`
+- [x] **変更**:
+  - `HandleWsLessonPlay` で WS message から `dialogue_index`（int）と `kind`（"main" | "answer"）を `JsonValueKind` で型ガードして抽出
+  - `LessonPlayer.ValidatePlayArgs(startIndex, startDialogueIndex, startKind)` を `public` メソッドとして切り出し（既存の `PlayAsync` 内検証を共通化）→ 外部 WS クライアント向けに Task を起動する前に同期検証して、不正入力には `{ok:false, error}` を即返す
+  - `PlayAsync(startIndex, dialogueIndex, kind)` に転送、戻り値に `dialogue_index` / `kind` を含めて API 整合
+  - 内部の `PlayAsync` は `ValidatePlayArgs` を呼ぶだけにリファクタ（重複ロジック解消）。MainForm 側（Step 2-A）の挙動は無変更
+- [x] **テスト追従**: Step 1 / Step 2-A 後に取り残されていた C# パターンテスト 3 件を新シグネチャに追従
+  - `test_play_async_supports_section_start_index`: 3 引数シグネチャ・`startDialogueIndex` の範囲チェック・`i == startIndex` 判定の存在を検証
+  - `test_panel_lesson_play_dispatches_section_index`: `dialogue_index` / `kind` 抽出・`PlayAsync(idx, dlgIdx, kindStr)`・Resume 分岐ガード（`hasOffset`）の存在を検証
+  - `test_ws_lesson_play_dispatches_section_index`: `dialogue_index` / `kind` 抽出・`PlayAsync(startIndex, dialogueIndex, kind)`・`ValidatePlayArgs` 同期検証の存在を検証
+- [x] **検証**: `pytest tests/ -q -m "not slow"` 1285 件 green
+- [x] **影響**: 外部 WS クライアント（Python 等）から dialogue 単位で再生開始できる API が整った。残るは Step 3（コントロールパネル UI に dialogue 行 ▶ ボタン追加）
+
 ## コントロールパネル: dialogue 途中再生コマンドを受信（Step 2-A）
 
 - [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)

@@ -172,11 +172,9 @@ public class LessonPlayer
         });
     }
 
-    /// <summary>ロード済み授業の再生を開始する。完了またはキャンセルまでawaitする。</summary>
-    /// <param name="startIndex">再生を開始するセクションのindex（0始まり、デフォルトは先頭）</param>
-    /// <param name="startDialogueIndex">最初のセクション内で再生を開始するdialogueのindex（0始まり、デフォルトは先頭）</param>
-    /// <param name="startKind">最初のセクションでmain/answerどちらから開始するか（"main" | "answer"）</param>
-    public async Task PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = "main")
+    /// <summary>PlayAsync の引数を同期検証する。Task を起動する前に呼び出し側で検証したいとき（外部 WS 等）に使う。
+    /// PlayAsync は内部でも同じ検証を行うので、このメソッドの呼び出しは必須ではない。</summary>
+    public void ValidatePlayArgs(int startIndex, int startDialogueIndex, string startKind)
     {
         if (_sections == null || _sections.Count == 0)
             throw new InvalidOperationException("No lesson loaded");
@@ -206,6 +204,15 @@ public class LessonPlayer
                 throw new ArgumentOutOfRangeException(nameof(startDialogueIndex),
                     $"startDialogueIndex {startDialogueIndex} is out of range [0, {startSection.Question.AnswerDialogues.Count}) for answer dialogues of section {startIndex}");
         }
+    }
+
+    /// <summary>ロード済み授業の再生を開始する。完了またはキャンセルまでawaitする。</summary>
+    /// <param name="startIndex">再生を開始するセクションのindex（0始まり、デフォルトは先頭）</param>
+    /// <param name="startDialogueIndex">最初のセクション内で再生を開始するdialogueのindex（0始まり、デフォルトは先頭）</param>
+    /// <param name="startKind">最初のセクションでmain/answerどちらから開始するか（"main" | "answer"）</param>
+    public async Task PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = "main")
+    {
+        ValidatePlayArgs(startIndex, startDialogueIndex, startKind);
 
         if (_playing) throw new InvalidOperationException("Already playing");
 

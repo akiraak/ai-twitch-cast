@@ -238,21 +238,29 @@ def test_stop_returns_to_loaded_state():
 
 
 def test_play_async_supports_section_start_index():
-    """LessonPlayer.PlayAsync が startIndex 引数を受け取り、ループ開始位置に反映すること。
+    """LessonPlayer.PlayAsync が startIndex / startDialogueIndex / startKind 引数を受け取り、
+    ループ開始位置・最初のセクションの dialogue offset に反映すること。
 
-    各セクションの先頭から再生するUI（control-panel の「▶ ここから」）の前提。
+    セクション単位の途中再生（コントロールパネル「▶ ここから」）と
+    dialogue 単位の途中再生（plans/lesson-play-from-dialogue.md）の前提。
     PlayAsync の引数を消したり、ループの開始 i を 0 固定に戻したりすると壊れる。
     """
     source = read_cs("Streaming/LessonPlayer.cs")
     body = _extract_method_body(source, r"public async Task PlayAsync\([^)]*\)")
 
-    # シグネチャに startIndex がある（デフォルト 0 で互換維持）
-    assert re.search(r"PlayAsync\(\s*int\s+startIndex\s*=\s*0\s*\)", source), (
-        "PlayAsync(int startIndex = 0) のシグネチャが見当たらない"
+    # シグネチャに startIndex / startDialogueIndex / startKind がある（デフォルト引数で後方互換）
+    assert re.search(
+        r"PlayAsync\(\s*int\s+startIndex\s*=\s*0\s*,\s*int\s+startDialogueIndex\s*=\s*0\s*,\s*string\s+startKind\s*=\s*\"main\"\s*\)",
+        source,
+    ), (
+        "PlayAsync(int startIndex = 0, int startDialogueIndex = 0, string startKind = \"main\") のシグネチャが見当たらない"
     )
-    # 範囲チェック
-    assert re.search(r"ArgumentOutOfRangeException\([^)]*startIndex", body), (
-        "PlayAsync で startIndex の範囲チェック（ArgumentOutOfRangeException）がない"
+    # 範囲チェック（PlayAsync 内で直接、または ValidatePlayArgs 経由で）
+    assert re.search(r"ArgumentOutOfRangeException\([^)]*startIndex", source), (
+        "PlayAsync/ValidatePlayArgs で startIndex の範囲チェック（ArgumentOutOfRangeException）がない"
+    )
+    assert re.search(r"ArgumentOutOfRangeException\([^)]*startDialogueIndex", source), (
+        "PlayAsync/ValidatePlayArgs で startDialogueIndex の範囲チェック（ArgumentOutOfRangeException）がない"
     )
     # ループ開始位置が startIndex
     assert re.search(r"for\s*\(\s*int\s+i\s*=\s*startIndex\s*;", body), (
@@ -261,6 +269,10 @@ def test_play_async_supports_section_start_index():
     # _currentSectionIndex を startIndex で初期化
     assert re.search(r"_currentSectionIndex\s*=\s*startIndex", body), (
         "_currentSectionIndex が startIndex で初期化されていない"
+    )
+    # 最初のセクションだけ offset を適用するロジック
+    assert re.search(r"i\s*==\s*startIndex", body), (
+        "PlayAsync で「最初のセクションだけ offset を適用する」ロジック（i == startIndex の判定）が見当たらない"
     )
 
 
@@ -308,7 +320,8 @@ def test_pause_resume_broadcast_lesson_status():
 
 
 def test_panel_lesson_play_dispatches_section_index():
-    """MainForm.HandlePanelLessonPlay が section_index を読み取り PlayAsync(idx) に渡すこと。"""
+    """MainForm.HandlePanelLessonPlay が section_index / dialogue_index / kind を読み取り
+    PlayAsync(idx, dlgIdx, kindStr) に渡すこと（plans/lesson-play-from-dialogue.md Step 2-A）。"""
     source = read_cs("MainForm.cs")
     # ディスパッチが msg を渡している
     assert re.search(r'case "lesson_play":\s*\n\s*HandlePanelLessonPlay\(msg\)', source), (
@@ -318,13 +331,26 @@ def test_panel_lesson_play_dispatches_section_index():
     assert re.search(r'TryGetProperty\("section_index"', body), (
         "HandlePanelLessonPlay で section_index を読んでいない"
     )
-    assert re.search(r"PlayAsync\(\s*idx\s*\)", body), (
-        "HandlePanelLessonPlay から PlayAsync(idx) が呼ばれていない"
+    assert re.search(r'TryGetProperty\("dialogue_index"', body), (
+        "HandlePanelLessonPlay で dialogue_index を読んでいない"
+    )
+    assert re.search(r'TryGetProperty\("kind"', body), (
+        "HandlePanelLessonPlay で kind を読んでいない"
+    )
+    # PlayAsync に 3 引数で渡す
+    assert re.search(r"PlayAsync\(\s*idx\s*,\s*dlgIdx\s*,\s*kindStr\s*\)", body), (
+        "HandlePanelLessonPlay から PlayAsync(idx, dlgIdx, kindStr) が呼ばれていない"
+    )
+    # Resume 分岐は dialogue_index / kind が指定された時点で抜ける
+    assert re.search(r"hasOffset", body), (
+        "HandlePanelLessonPlay の Resume 分岐ガード（hasOffset 判定）が見当たらない — "
+        "dialogue 単位の途中再生で Resume に流れ込むリグレッション可能性あり"
     )
 
 
 def test_ws_lesson_play_dispatches_section_index():
-    """HttpServer.HandleWsLessonPlay が msg を受けて section_index を PlayAsync に渡すこと。"""
+    """HttpServer.HandleWsLessonPlay が msg を受けて section_index / dialogue_index / kind を
+    PlayAsync に渡すこと（plans/lesson-play-from-dialogue.md Step 2-B）。"""
     source = read_cs("Server/HttpServer.cs")
     assert re.search(r'"lesson_play"\s*=>\s*HandleWsLessonPlay\(msg\)', source), (
         '"lesson_play" 分岐が msg を渡していない'
@@ -333,8 +359,20 @@ def test_ws_lesson_play_dispatches_section_index():
     assert re.search(r'TryGetProperty\("section_index"', body), (
         "HandleWsLessonPlay で section_index を読んでいない"
     )
-    assert re.search(r"PlayAsync\(\s*startIndex\s*\)", body), (
-        "HandleWsLessonPlay から PlayAsync(startIndex) が呼ばれていない"
+    assert re.search(r'TryGetProperty\("dialogue_index"', body), (
+        "HandleWsLessonPlay で dialogue_index を読んでいない"
+    )
+    assert re.search(r'TryGetProperty\("kind"', body), (
+        "HandleWsLessonPlay で kind を読んでいない"
+    )
+    # PlayAsync に 3 引数で渡す
+    assert re.search(r"PlayAsync\(\s*startIndex\s*,\s*dialogueIndex\s*,\s*kind\s*\)", body), (
+        "HandleWsLessonPlay から PlayAsync(startIndex, dialogueIndex, kind) が呼ばれていない"
+    )
+    # 不正入力に対してエラーを返す（ValidatePlayArgs 経由でチェック）
+    assert re.search(r"ValidatePlayArgs", body), (
+        "HandleWsLessonPlay で ValidatePlayArgs 同期検証が呼ばれていない — "
+        "不正入力に対して {ok:false, error} が返らないリグレッション可能性あり"
     )
 
 
