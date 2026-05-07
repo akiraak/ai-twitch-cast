@@ -8,6 +8,7 @@ import wave
 
 from google.genai import types
 
+from src.audio_utils import trim_leading_silence_pcm, trim_trailing_silence_pcm
 from src.gemini_client import get_client
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,14 @@ def synthesize_with_prompt(prompt, output_path, voice=None):
                 time.sleep(1)
                 continue
             raise RuntimeError("TTS音声データの取得に3回失敗しました")
+
+        # 先頭・末尾の無音をトリミング（Gemini TTSは前後に150〜300msの無音を残しがち）
+        original_len = len(data)
+        data = trim_leading_silence_pcm(data, sample_rate=24000, sample_width=2)
+        data = trim_trailing_silence_pcm(data, sample_rate=24000, sample_width=2)
+        if len(data) != original_len:
+            trimmed_ms = int((original_len - len(data)) / 2 / 24000 * 1000)
+            logger.info("[tts] 先頭・末尾無音トリミング: %d ms 削減", trimmed_ms)
 
         with wave.open(str(output_path), "wb") as wf:
             wf.setnchannels(1)

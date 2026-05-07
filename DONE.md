@@ -1,5 +1,29 @@
 # DONE
 
+## TTS音声: 先頭無音の自動トリミング（D 完了 / VERSION 0.6.2）
+
+- [x] **背景**: 末尾無音のトリミング後（0.6.1）に先頭無音を測定したところ、117ファイルで中央値210ms / 最大335ms / 平均194ms と末尾とほぼ同レベルの無音が乗っていた。dialogue間の体感ギャップは「前の末尾無音 + `inter_dialogue_gap_ms` + 次の先頭無音」の合算で、先頭無音だけで200ms前後を占めていた
+- [x] **対象**:
+  - `src/audio_utils.py` — `trim_leading_silence_pcm()` を追加。`DEFAULT_LEADING_KEEP_MS=120`（先頭は突然始まる違和感を避けるため末尾より長め）。`trim_wav_file()` に `leading_keep_ms` / `trim_leading` 引数を追加し、既定で先頭・末尾の両方をトリミング
+  - `src/tts.py` — `synthesize_with_prompt()` のwav書き出し直前で `trim_leading_silence_pcm()` → `trim_trailing_silence_pcm()` の順に実行
+  - `scripts/trim_lesson_audio.py` — `--leading-keep-ms` / `--no-leading` オプション追加。dry-run も先頭トリミング対応
+  - `tests/test_audio_utils.py` — 先頭トリミングの7ケース + wavファイル書き換えで両端処理する1ケースを追加（合計18ケース）
+- [x] **D 実装**: 新規TTS生成は先頭・末尾の両方が自動でトリミングされる
+- [x] **既存ファイル一括処理**: `resources/audio/lessons/` 配下 117ファイルに再実行。**96ファイル変更 / 9.45秒削減 / 削減率0.69%**。再測定で先頭無音は中央値210ms → 120ms / 最大335ms → 120ms に均一化（末尾は前回0.6.1で80msに均一化済み）
+- [x] **テスト**: `tests/ -m "not slow"` 1326件 pass（440秒）。新規追加分含め `test_audio_utils.py` 18件 pass
+
+## TTS音声: 末尾無音の自動トリミング（B + C 完了 / VERSION 0.6.1）
+
+- [x] **背景**: Gemini TTSが生成するwavに約150〜300msの末尾無音が乗っており、`inter_dialogue_gap_ms` を短くしてもセリフ間が間延びして聞こえていた（lesson 1/3/100 の117ファイル測定で中央値212ms / 最大396ms）
+- [x] **対象**:
+  - `src/audio_utils.py`（新規）— 16bit signed PCMの末尾無音トリミング `trim_trailing_silence_pcm()` と既存wav書き換え用 `trim_wav_file()` を追加。`array` モジュール（stdlib）のみ使用
+  - `src/tts.py` — `synthesize_with_prompt()` のwav書き出し直前で `trim_trailing_silence_pcm()` を実行。閾値 -40dBFS、末尾余裕 80ms。トリミング量を info ログに記録
+  - `scripts/trim_lesson_audio.py`（新規）— 既存wavの一括トリミングCLI。`--dry-run` で見積もりのみ、`--threshold` / `--keep-ms` で挙動を上書き可能
+  - `tests/test_audio_utils.py`（新規）— 10ケース（PCMトリミング・短い無音は維持・全部無音はパススルー・空入力・非対応サンプル幅・末尾無音なし・keep_ms=0、wavファイル書き換え3ケース）
+- [x] **B 実装**: 新規TTS生成は自動でトリミングされる（生成時に組み込まれるため、既存ファイルは触らない）
+- [x] **C 実行**: `resources/audio/lessons/` 配下 117ファイルに `python3 scripts/trim_lesson_audio.py` を実行。**109ファイル変更 / 14.92秒削減 / 削減率1.08%**。再測定で末尾無音は中央値212ms → 80ms（keep_ms値）に均一化
+- [x] **テスト**: `tests/ -m "not slow"` 1318件 pass（356秒）。新規 `test_audio_utils.py` 10件 pass
+
 ## 授業: dialogue 単位試聴後・停止後にタブが第一セクションへ戻る問題を修正
 
 - [x] **TODO**: C#アプリのセリフ毎再生（dialogue 単位試聴）後、Lesson タブが第一セクションに戻ってしまう → [plans/lesson-dialogue-single-tab-reset-fix.md](plans/lesson-dialogue-single-tab-reset-fix.md)（**ステータス: 完了**）
