@@ -76,6 +76,30 @@ def _dlg_cache_path(lesson_id: int, order_index: int, dlg_index: int, lang: str 
     return new_path
 
 
+def clear_dialogue_tts_cache(lesson_id: int, order_index: int, dlg_index: int,
+                             lang: str = "ja", generator: str = "gemini",
+                             version_number: int = 1) -> int:
+    """dialogue 単位のTTSキャッシュ（section_XX_dlg_YY.wav）を削除する。
+
+    新パス＋旧パス互換すべての該当ファイルを削除する。
+    返り値: 削除したファイル数
+    """
+    filename = f"section_{order_index:02d}_dlg_{dlg_index:02d}.wav"
+    candidates: list[Path] = [
+        LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / f"v{version_number}" / filename,
+    ]
+    if version_number == 1:
+        candidates.append(LESSON_AUDIO_DIR / str(lesson_id) / lang / generator / filename)
+        if generator == "gemini":
+            candidates.append(LESSON_AUDIO_DIR / str(lesson_id) / lang / filename)
+    deleted = 0
+    for p in candidates:
+        if p.exists():
+            p.unlink(missing_ok=True)
+            deleted += 1
+    return deleted
+
+
 def clear_tts_cache(lesson_id: int, order_index: int | None = None, lang: str | None = None,
                     generator: str | None = None, version_number: int | None = None):
     """TTSキャッシュを削除する

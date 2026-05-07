@@ -27,6 +27,11 @@ let _selectedCategory = null;
 // TTS事前生成ポーリングタイマー（key → intervalId）
 let _ttsPregenTimers = {};
 
+// dialogue 編集用キャッシュ（sectionId → { isV4, wrapper, dialogues }）
+// renderSectionsInto で section の dialogues を読んだ際に登録され、
+// updateDialogueField から参照される。
+const _sectionDialoguesCache = new Map();
+
 
 function _getLessonLang(lessonId) {
   return _lessonLangTab[lessonId] || 'ja';
@@ -708,10 +713,14 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
     let _reviewData = null;
     let _reviewGeneration = null;
     let _reviewOverallFeedback = '';
+    let _isV4 = false;
+    let _v4Wrapper = null;
     try {
       let _parsed = typeof s.dialogues === 'string' ? JSON.parse(s.dialogues) : (s.dialogues || []);
       // v4: {dialogues: [...], review: {...}} 形式に対応
       if (_parsed && !Array.isArray(_parsed) && _parsed.dialogues) {
+        _isV4 = true;
+        _v4Wrapper = _parsed;
         _dlgs = _parsed.dialogues || [];
         _originalDlgs = _parsed.original_dialogues || null;
         _reviewData = _parsed.review || null;
@@ -721,6 +730,14 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
         _dlgs = Array.isArray(_parsed) ? _parsed : [];
       }
     } catch(e) {}
+    // 編集UI 保存時に再利用するため、現在の dialogues スナップショットをキャッシュ
+    if (_dlgs.length > 0) {
+      _sectionDialoguesCache.set(s.id, {
+        isV4: _isV4,
+        wrapper: _v4Wrapper,
+        dialogues: JSON.parse(JSON.stringify(_dlgs)),
+      });
+    }
     const _ci = charInfo || {};
 
     // 監督レビュー結果の表示
@@ -831,9 +848,10 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
         // dlgキャッシュ: section_XX_dlg_YY.wav
         const dlgCacheKey = `section_${String(s.order_index).padStart(2,'0')}_dlg_${String(di).padStart(2,'0')}`;
         const dlgCache = (cacheParts || []).find(p => p.path && p.path.includes(dlgCacheKey));
+        const dlgBadgeId = `dlg-badge-${s.id}-${di}`;
         const dlgCacheHtml = dlgCache
-          ? `<button onclick="playAudioInline(this, '/${esc(dlgCache.path)}')" style="padding:0 4px; background:#1565c0; color:#fff; border:none; border-radius:2px; cursor:pointer; font-size:0.58rem; margin-left:4px;">\u25B6</button><span style="color:#558b2f; font-size:0.6rem; margin-left:2px;">${(dlgCache.size/1024).toFixed(0)}KB</span>`
-          : '<span style="color:#c62828; font-size:0.6rem; margin-left:4px;">TTS未生成</span>';
+          ? `<span id="${dlgBadgeId}"><button onclick="playAudioInline(this, '/${esc(dlgCache.path)}')" style="padding:0 4px; background:#1565c0; color:#fff; border:none; border-radius:2px; cursor:pointer; font-size:0.58rem; margin-left:4px;">\u25B6</button><span style="color:#558b2f; font-size:0.6rem; margin-left:2px;">${(dlgCache.size/1024).toFixed(0)}KB</span></span>`
+          : `<span id="${dlgBadgeId}" style="color:#c62828; font-size:0.6rem; margin-left:4px;">TTS未生成</span>`;
         let genHtml = '';
         if (dlg.generation) {
           const gen = dlg.generation;
@@ -860,6 +878,27 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
             </div>
           </details>`;
         }
+        const editHtml = `<details style="margin-top:4px;">
+          <summary style="cursor:pointer; color:#5e35b1; font-size:0.62rem;">✏ 編集</summary>
+          <div style="padding:4px 8px; background:#fff; border:1px solid #d0c0e8; border-radius:4px; margin-top:3px;">
+            <div style="display:flex; gap:6px; margin-top:2px; align-items:flex-start;">
+              <span style="font-size:0.65rem; color:#6a5590; min-width:60px; padding-top:4px;">content:</span>
+              <textarea rows="2" style="flex:1; padding:4px 6px; background:#fff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; font-size:0.7rem; resize:vertical;"
+                onchange="updateDialogueField(${lessonId}, ${s.id}, ${di}, 'content', this.value)">${esc(dlg.content || '')}</textarea>
+            </div>
+            <div style="display:flex; gap:6px; margin-top:4px; align-items:flex-start;">
+              <span style="font-size:0.65rem; color:#6a5590; min-width:60px; padding-top:4px;">tts_text:</span>
+              <textarea rows="2" placeholder="空ならcontent扱い" style="flex:1; padding:4px 6px; background:#fff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; font-size:0.7rem; resize:vertical;"
+                onchange="updateDialogueField(${lessonId}, ${s.id}, ${di}, 'tts_text', this.value)">${esc(dlg.tts_text || '')}</textarea>
+            </div>
+            <div style="display:flex; gap:6px; margin-top:4px; align-items:center;">
+              <span style="font-size:0.65rem; color:#6a5590; min-width:60px;">emotion:</span>
+              <input type="text" value="${esc(dlg.emotion || '')}" style="flex:1; padding:2px 6px; background:#fff; color:#2a1f40; border:1px solid #d0c0e8; border-radius:3px; font-size:0.7rem;"
+                onchange="updateDialogueField(${lessonId}, ${s.id}, ${di}, 'emotion', this.value)">
+            </div>
+            <div style="font-size:0.58rem; color:#888; margin-top:4px;">⚠ content/tts_text を変更すると該当 dialogue の TTS キャッシュが削除され、再生成が必要になります。&lt;en&gt;...&lt;/en&gt; 等の言語タグはそのまま残してください。</div>
+          </div>
+        </details>`;
         html += `<div style="margin-bottom:3px; padding:4px 8px; background:${bg}; border-left:3px solid ${bc}; border-radius:3px; font-size:0.72rem;">
           <span style="font-weight:600; color:#555;">${spk}</span>
           <span style="font-size:0.65rem; color:#7b1fa2; margin-left:4px;">[${esc(dlg.emotion || '')}]</span>
@@ -874,6 +913,7 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
             <span style="font-weight:500;">\u{1F3A4} TTS:</span> <span style="color:#2a1f40;">${esc(dlg.tts_text)}</span>
           </div>` : ''}
           ${genHtml}
+          ${editHtml}
         </div>`;
       }
       html += `</div>`;
@@ -942,6 +982,45 @@ async function updateSectionField(lessonId, sectionId, field, value) {
   const body = {};
   body[field] = value;
   await api('PUT', '/api/lessons/' + lessonId + '/sections/' + sectionId, body);
+}
+
+// dialogue 単位の編集 — 該当 sectionId のキャッシュ済み dialogues を mutate して PUT。
+// v4 形式（{dialogues, review, ...}）の場合は wrapper を保ったまま dialogues だけ差し替える。
+async function updateDialogueField(lessonId, sectionId, dlgIndex, field, value) {
+  const cached = _sectionDialoguesCache.get(sectionId);
+  if (!cached) {
+    showToast('dialogue キャッシュが見つかりません。ページを再読込してください。', 'error');
+    return;
+  }
+  if (!cached.dialogues[dlgIndex]) {
+    showToast('dialogue が見つかりません', 'error');
+    return;
+  }
+  cached.dialogues[dlgIndex] = { ...cached.dialogues[dlgIndex], [field]: value };
+  let payload;
+  if (cached.isV4 && cached.wrapper) {
+    payload = { ...cached.wrapper, dialogues: cached.dialogues };
+  } else {
+    payload = cached.dialogues;
+  }
+  const res = await api('PUT', `/api/lessons/${lessonId}/sections/${sectionId}`, { dialogues: payload });
+  if (!res || !res.ok) {
+    showToast('保存失敗: ' + (res && res.error ? res.error : '不明'), 'error');
+    return;
+  }
+  // wrapper 側も最新 dialogues に同期させておく（次回編集時のため）
+  if (cached.isV4 && cached.wrapper) {
+    cached.wrapper.dialogues = cached.dialogues;
+  }
+  // content/tts_text が変わった dialogue の TTS バッジを「未生成」に戻す
+  const changed = (res.changed_dialogue_indices || []);
+  if (changed.includes(dlgIndex)) {
+    const badge = document.getElementById(`dlg-badge-${sectionId}-${dlgIndex}`);
+    if (badge) {
+      badge.outerHTML = `<span id="dlg-badge-${sectionId}-${dlgIndex}" style="color:#c62828; font-size:0.6rem; margin-left:4px;">TTS未生成</span>`;
+    }
+  }
+  showToast('発話を保存しました', 'success');
 }
 
 function parseDisplayProperties(raw) {

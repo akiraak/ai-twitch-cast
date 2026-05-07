@@ -405,6 +405,157 @@ class TestLessonSections:
         assert lesson["plan_knowledge"] == "更新された知識分析"
         assert lesson["plan_entertainment"] == "更新されたエンタメ構成"
 
+
+class TestDialogueEdit:
+    """dialogue 単位の編集 API テスト"""
+
+    def _make_v3_dialogues(self):
+        return [
+            {"speaker": "teacher", "content": "おはよう", "tts_text": "おはよう", "emotion": "neutral"},
+            {"speaker": "student", "content": "おはようございます", "tts_text": "おはようございます", "emotion": "happy"},
+        ]
+
+    def _make_v4_payload(self):
+        return {
+            "dialogues": [
+                {"speaker": "teacher", "content": "Hello", "tts_text": "Hello", "emotion": "neutral"},
+                {"speaker": "student", "content": "Hi", "tts_text": "Hi", "emotion": "happy"},
+            ],
+            "review": {"approved": True, "feedback": "OK"},
+            "review_overall_feedback": "良好",
+        }
+
+    def _create_section_with_dialogues(self, api_client, test_db, dialogues_payload):
+        r = api_client.post("/api/lessons", json={"name": "DlgTest"})
+        lid = r.json()["lesson"]["id"]
+        sec = test_db.add_lesson_section(
+            lid, 0, "introduction", "対話セクション",
+            dialogues=json.dumps(dialogues_payload, ensure_ascii=False),
+        )
+        return lid, sec
+
+    def test_update_v3_dialogues_full_array(self, api_client, test_db):
+        """v3 形式（list）で dialogues 全体を差し替えられる"""
+        dlgs = self._make_v3_dialogues()
+        lid, sec = self._create_section_with_dialogues(api_client, test_db, dlgs)
+
+        new_dlgs = [
+            {**dlgs[0], "content": "おはよう（修正）", "tts_text": "おはよう（修正）"},
+            dlgs[1],
+        ]
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}",
+            json={"dialogues": new_dlgs},
+        )
+        body = resp.json()
+        assert body["ok"] is True
+        # 0 番だけ変更された
+        assert body["changed_dialogue_indices"] == [0]
+
+        # DB 再読み取り
+        sections = test_db.get_lesson_sections(lid)
+        saved = json.loads(sections[0]["dialogues"])
+        assert isinstance(saved, list)
+        assert saved[0]["content"] == "おはよう（修正）"
+        assert saved[1]["content"] == "おはようございます"
+
+    def test_update_v4_dialogues_preserves_review(self, api_client, test_db):
+        """v4 形式（dict wrapper）で dialogues を差し替えても review/wrapper が残る"""
+        payload = self._make_v4_payload()
+        lid, sec = self._create_section_with_dialogues(api_client, test_db, payload)
+
+        new_payload = {
+            **payload,
+            "dialogues": [
+                {**payload["dialogues"][0], "content": "Hello (edited)", "tts_text": "Hello (edited)"},
+                payload["dialogues"][1],
+            ],
+        }
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}",
+            json={"dialogues": new_payload},
+        )
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["changed_dialogue_indices"] == [0]
+
+        sections = test_db.get_lesson_sections(lid)
+        saved = json.loads(sections[0]["dialogues"])
+        assert isinstance(saved, dict)
+        assert saved["dialogues"][0]["content"] == "Hello (edited)"
+        assert saved["dialogues"][1]["content"] == "Hi"
+        # wrapper が壊れていない
+        assert saved["review"]["approved"] is True
+        assert saved["review_overall_feedback"] == "良好"
+
+    def test_emotion_only_change_does_not_invalidate_tts(self, api_client, test_db):
+        """emotion だけ変更しても changed_dialogue_indices に入らない"""
+        dlgs = self._make_v3_dialogues()
+        lid, sec = self._create_section_with_dialogues(api_client, test_db, dlgs)
+
+        new_dlgs = [
+            {**dlgs[0], "emotion": "excited"},
+            dlgs[1],
+        ]
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}",
+            json={"dialogues": new_dlgs},
+        )
+        body = resp.json()
+        assert body["ok"] is True
+        # emotion 変更は TTS に影響しない
+        assert body["changed_dialogue_indices"] == []
+
+        sections = test_db.get_lesson_sections(lid)
+        saved = json.loads(sections[0]["dialogues"])
+        assert saved[0]["emotion"] == "excited"
+
+    def test_dialogue_tts_cache_deleted_on_content_change(self, api_client, test_db, tmp_path):
+        """content 変更時、該当 dialogue の section_XX_dlg_YY.wav が削除される"""
+        import src.lesson_runner as lr
+
+        dlgs = self._make_v3_dialogues()
+        lid, sec = self._create_section_with_dialogues(api_client, test_db, dlgs)
+
+        # ダミーキャッシュを作る（dlg_00.wav, dlg_01.wav）
+        cache_dir = lr.LESSON_AUDIO_DIR / str(lid) / "ja" / "gemini" / "v1"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        dlg00 = cache_dir / "section_00_dlg_00.wav"
+        dlg01 = cache_dir / "section_00_dlg_01.wav"
+        dlg00.write_bytes(b"dummy0")
+        dlg01.write_bytes(b"dummy1")
+
+        # 0 番だけ content 変更
+        new_dlgs = [
+            {**dlgs[0], "content": "編集後", "tts_text": "編集後"},
+            dlgs[1],
+        ]
+        resp = api_client.put(
+            f"/api/lessons/{lid}/sections/{sec['id']}",
+            json={"dialogues": new_dlgs},
+        )
+        assert resp.json()["changed_dialogue_indices"] == [0]
+        # 0 番の wav は消え、1 番は残る
+        assert not dlg00.exists()
+        assert dlg01.exists()
+
+    def test_normalize_dialogues_v4_helper(self):
+        """_normalize_dialogues_v4 が v1〜v4 / 文字列 / dict / list を正規化できる"""
+        from scripts.routes.teacher import _normalize_dialogues_v4
+
+        assert _normalize_dialogues_v4(None) == []
+        assert _normalize_dialogues_v4([]) == []
+        assert _normalize_dialogues_v4([{"speaker": "teacher"}]) == [{"speaker": "teacher"}]
+        v4 = {"dialogues": [{"speaker": "student"}], "review": {"approved": True}}
+        assert _normalize_dialogues_v4(v4) == [{"speaker": "student"}]
+        # 文字列の v4 JSON
+        assert _normalize_dialogues_v4(json.dumps(v4, ensure_ascii=False)) == [{"speaker": "student"}]
+        # 壊れた JSON
+        assert _normalize_dialogues_v4("not json") == []
+        # dict だけど dialogues キーがない
+        assert _normalize_dialogues_v4({"foo": "bar"}) == []
+
+
 class TestImportSections:
     """セクションインポートAPIのテスト"""
 

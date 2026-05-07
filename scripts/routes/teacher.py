@@ -30,7 +30,7 @@ from src.lesson_generator import (
     _format_character_for_prompt,
     _format_main_content_for_prompt,
 )
-from src.lesson_runner import clear_tts_cache, get_tts_cache_info
+from src.lesson_runner import clear_dialogue_tts_cache, clear_tts_cache, get_tts_cache_info
 from src.prompt_builder import get_stream_language, set_stream_language
 from src.tts_pregenerate import pregenerate_lesson_tts
 
@@ -175,6 +175,31 @@ class SectionUpdate(BaseModel):
     answer: str | None = None
     wait_seconds: int | None = None
     display_properties: dict | None = None
+    # v1〜v3 = list[dict], v4 = dict({dialogues, review, ...})
+    dialogues: list[dict] | dict | None = None
+
+
+def _normalize_dialogues_v4(raw) -> list[dict]:
+    """v1〜v4 の dialogues を共通の list[dict] に正規化する。
+
+    - v4: {dialogues: [...], review, ...} → dialogues 配列だけ取り出す
+    - v1〜v3: [...] そのまま
+    - 文字列: JSON パースを試みる
+    - それ以外: 空配列
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = _json.loads(raw)
+        except Exception:
+            return []
+    if isinstance(raw, dict):
+        inner = raw.get("dialogues")
+        return inner if isinstance(inner, list) else []
+    if isinstance(raw, list):
+        return raw
+    return []
 
 
 class SectionReorder(BaseModel):
@@ -1015,19 +1040,48 @@ async def update_section(lesson_id: int, section_id: int, body: SectionUpdate):
     if "display_properties" in updates:
         updates["display_properties"] = _json.dumps(updates["display_properties"], ensure_ascii=False)
 
-    # tts_text または content が変更された場合、該当セクションのTTSキャッシュを削除
-    if "tts_text" in updates or "content" in updates:
-        # セクションの order_index, version_number を取得
-        sections = db.get_lesson_sections(lesson_id)
-        sec = next((s for s in sections if s["id"] == section_id), None)
-        if sec:
-            clear_tts_cache(lesson_id, order_index=sec["order_index"],
-                            version_number=sec.get("version_number", 1))
-            logger.info("TTSキャッシュ削除: lesson=%d, section order=%d, v%d",
-                        lesson_id, sec["order_index"], sec.get("version_number", 1))
+    # 旧セクション情報（キャッシュ削除や dialogues 差分判定で使う）
+    sections = db.get_lesson_sections(lesson_id)
+    sec = next((s for s in sections if s["id"] == section_id), None)
+
+    # dialogues は dict/list で来るので JSON 文字列に変換しつつ、
+    # 旧 dialogues との差分から TTS キャッシュ削除対象 index を決定する
+    changed_dlg_indices: list[int] = []
+    if "dialogues" in updates and sec is not None:
+        new_dlg_list = _normalize_dialogues_v4(updates["dialogues"])
+        old_dlg_list = _normalize_dialogues_v4(sec.get("dialogues"))
+        for idx, new_dlg in enumerate(new_dlg_list):
+            old_dlg = old_dlg_list[idx] if idx < len(old_dlg_list) else {}
+            new_text = (new_dlg.get("tts_text") or new_dlg.get("content") or "")
+            old_text = (old_dlg.get("tts_text") or old_dlg.get("content") or "")
+            if new_text != old_text:
+                changed_dlg_indices.append(idx)
+        # DB 保存用に JSON 文字列化
+        updates["dialogues"] = _json.dumps(updates["dialogues"], ensure_ascii=False)
+
+    # tts_text または content（セクション全体）が変更された場合は section 全体の TTS キャッシュを削除
+    if ("tts_text" in updates or "content" in updates) and sec is not None:
+        clear_tts_cache(lesson_id, order_index=sec["order_index"],
+                        version_number=sec.get("version_number", 1))
+        logger.info("TTSキャッシュ削除: lesson=%d, section order=%d, v%d",
+                    lesson_id, sec["order_index"], sec.get("version_number", 1))
+
+    # dialogue 個別の content/tts_text 変更分だけ dialogue キャッシュ削除
+    if changed_dlg_indices and sec is not None:
+        for di in changed_dlg_indices:
+            clear_dialogue_tts_cache(
+                lesson_id,
+                order_index=sec["order_index"],
+                dlg_index=di,
+                lang=sec.get("lang", "ja"),
+                generator=sec.get("generator", "gemini"),
+                version_number=sec.get("version_number", 1),
+            )
+        logger.info("dialogue TTSキャッシュ削除: lesson=%d, section order=%d, dlg=%s",
+                    lesson_id, sec["order_index"], changed_dlg_indices)
 
     db.update_lesson_section(section_id, **updates)
-    return {"ok": True}
+    return {"ok": True, "changed_dialogue_indices": changed_dlg_indices}
 
 
 @router.delete("/api/lessons/{lesson_id}/sections/{section_id}")

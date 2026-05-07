@@ -1,5 +1,25 @@
 # DONE
 
+## 授業コンテンツ画面: dialogue テキスト編集 UI を追加（Step 1 完了）
+
+- [x] **TODO**: 管理画面 - 授業モードの授業コンテンツ画面で会話文章や画面テキストを編集保存したい → [plans/lesson-content-editor.md](plans/lesson-content-editor.md)（**ステータス: Step 1 完了**）
+- [x] **対象**: `scripts/routes/teacher.py` / `src/lesson_runner.py` / `static/js/admin/teacher.js` / `tests/test_api_teacher.py` / `plans/lesson-content-editor.md`
+- [x] **背景**: 対話モード（`dialogues` がある授業）の各発話は読み取り専用で表示されているだけで、誤字や読み間違いを直すにはセクション全体を再生成するしかなかった
+- [x] **変更**:
+  - `SectionUpdate` Pydantic モデルに `dialogues: list[dict] | dict | None` を追加。v1〜v3 形式（list）と v4 形式（`{dialogues, review, review_overall_feedback, ...}` の dict wrapper）の両方を受け付ける
+  - `_normalize_dialogues_v4()` ヘルパを追加し、v1〜v4 / 文字列 / dict / list を共通の `list[dict]` に正規化
+  - PUT `/api/lessons/{id}/sections/{sid}` 拡張: 旧 dialogues と新 dialogues を比較して `content` / `tts_text` が変わった index だけ `clear_dialogue_tts_cache()` を呼ぶ。emotion 変更は TTS に影響しないため対象外。レスポンスに `changed_dialogue_indices` を含める
+  - `src/lesson_runner.py` に `clear_dialogue_tts_cache(lesson_id, order_index, dlg_index, lang, generator, version_number)` を追加。新パス＋旧パス互換すべての該当 `section_XX_dlg_YY.wav` を削除する
+  - `static/js/admin/teacher.js` の dialogue 表示行に `<details>✏ 編集</details>` を追加。content / tts_text / emotion を textarea + input で編集可能。保存後は対象 dialogue の TTS バッジを「TTS未生成」に戻す（DOM ID `dlg-badge-{sectionId}-{dlgIndex}` で識別）
+  - 編集時は section の dialogues 全体を PUT で送信。v4 wrapper（review / review_overall_feedback など）はクライアント側でモジュール内 Map (`_sectionDialoguesCache`) にキャッシュして再送するため、wrapper のメタデータが壊れない
+- [x] **テスト追加** (`tests/test_api_teacher.py::TestDialogueEdit`、5 件すべて pass):
+  - `test_update_v3_dialogues_full_array` — list 形式での dialogues 全体差し替え
+  - `test_update_v4_dialogues_preserves_review` — dict wrapper 形式で review/feedback が保持される
+  - `test_emotion_only_change_does_not_invalidate_tts` — emotion 変更だけでは TTS キャッシュは消えない
+  - `test_dialogue_tts_cache_deleted_on_content_change` — content 変更時に該当 dlg wav のみ削除、他 dlg wav は残る
+  - `test_normalize_dialogues_v4_helper` — ヘルパが None / [] / list / dict / 壊れた JSON を正しく正規化する
+- [x] **影響**: 「ちょっと言い回しを直したい」程度の修正でセクション全体を再生成する必要がなくなった。dialogue 単位の content/tts_text を直したら該当 dlg の wav だけが無効化され、TTS 事前生成を再実行すると差分のみが再生成される。dialogue の追加・削除・並び替えは Step 2（任意・別フェーズ）
+
 ## 授業の「間」config 集約: Step 6（ドキュメント整備）— **シリーズ完了**
 
 - [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)（**ステータス: 完了**）

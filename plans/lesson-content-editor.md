@@ -1,6 +1,13 @@
 # プラン: 授業コンテンツ画面で会話文章・画面テキストを編集保存
 
-ステータス: 未着手
+ステータス: Step 1 完了 / Step 2 未着手（需要が出てから着手）
+
+## 実装メモ（2026-05-06 完了）
+
+- API レスポンスは `{ok, changed_dialogue_indices: [int]}` を返すようにした。クライアント側はこれを使って該当 dialogue の TTS バッジだけを「未生成」に戻す
+- v4 wrapper は dict のまま PUT で受け取り、サーバー側で `_normalize_dialogues_v4()` で正規化して差分判定する。DB には JSON 文字列としてそのまま保存（DB 層は dialogues カラムを既にホワイトリストしていた）
+- クライアント側はモジュール内 Map (`_sectionDialoguesCache: sectionId → {isV4, wrapper, dialogues}`) で保持し、編集 → mutate → PUT する。section が再描画されるたびにキャッシュも再構築される
+- テスト 5 件追加（v3 array / v4 dict / emotion-only / TTS キャッシュ削除 / 正規化ヘルパ）でリグレッション防止
 
 ## 背景
 
@@ -28,7 +35,7 @@ dialogue 単位の inline 編集UI と保存APIを足す。セクション単位
 
 ---
 
-## Step 1: dialogue テキスト編集（必須）
+## Step 1: dialogue テキスト編集（必須）— **完了 (2026-05-06)**
 
 ### UI 変更（`static/js/admin/teacher.js`）
 
