@@ -1,5 +1,23 @@
 # DONE
 
+## 授業の「間」config 集約: Step 2（lesson_load payload に timings 同梱）
+
+- [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)
+- [x] **対象**: `src/lesson_runner.py` / `tests/test_lesson_runner.py` / `plans/lesson-pause-investigation.md`
+- [x] **変更**:
+  - `_send_all_and_play`: `ws_request("lesson_load", ...)` に `timings=get_lesson_timings()` を top-level で同梱（プランの「scripts/routes/teacher.py」記述は実装上 `lesson_runner.py` が正しい構築箇所だった）
+  - `_build_section_bundle`: 戻り値から `wait_seconds` を削除（C# は config 値を参照する設計のため送らない）
+  - `_build_question_data`: 戻り値から `wait_seconds` を削除（解答前の間は `lesson_timings.question_answer_wait_sec` を C# 側で参照）
+  - `_calc_section_duration`: 引数 `timings: dict | None` を追加し、`section_type` 別の `section_wait_sec` と `question_answer_wait_sec` を timings から取得して合計時間を算出
+  - `_send_all_and_play` の duration 累積で timings を 1 度だけ取得して使い回す
+- [x] **テスト更新**:
+  - `TestQuestionData.test_build_question_data` / `test_build_question_data_no_answer`: 戻り値に `wait_seconds` が **含まれない** ことを検証
+  - `TestBuildSectionBundle.test_returns_section_dict`: bundle に `wait_seconds` が **含まれない** ことを検証
+  - `test_calc_section_duration`: timings 辞書を渡し、section_type / question_answer_wait_sec ベースで計算されることを検証
+  - `TestSendAllAndPlay.test_sends_lesson_load_with_all_sections`: `lesson_load` payload に `timings` が同梱され section から `wait_seconds` が消えていることを検証
+- [x] **検証**: `pytest tests/test_lesson_runner.py -m "not slow"` 74 件 green / `tests/test_scene_config.py + test_api_teacher.py` 160 件 green
+- [x] **影響**: Python → C# の lesson_load 経路に config が乗った。**この時点ではまだ C# 側が `timings` を読んでいないため再生挙動は変わらない**。次の Step 3 で C# `LessonPlayer` に `LessonTimings` クラスを追加してハードコード値を置換する
+
 ## 授業の「間」config 集約: Step 1（scene_config に lesson_timings を追加）
 
 - [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)

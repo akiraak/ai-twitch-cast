@@ -689,7 +689,7 @@ class TestQuestionData:
 
     @pytest.mark.asyncio
     async def test_build_question_data(self, mock_speech, tmp_path):
-        """questionデータにwait_secondsとanswer_dialoguesが含まれる"""
+        """questionデータにanswer_dialoguesが含まれる（wait_seconds は config 側に集約済み）"""
         # generate_ttsが返すWAVを作成
         wav = tmp_path / "answer.wav"
         _create_test_wav(wav, duration=2.0)
@@ -702,7 +702,6 @@ class TestQuestionData:
         section = {
             "section_type": "question",
             "question": True,
-            "wait_seconds": 10,
             "answer": "答えはAです",
             "emotion": "joy",
         }
@@ -710,7 +709,9 @@ class TestQuestionData:
         with patch("src.lesson_runner.analyze_amplitude", return_value=[0.1]):
             result = await runner._build_question_data(section, order_index=0)
 
-        assert result["wait_seconds"] == 10
+        # wait_seconds は config (lesson_timings.question_answer_wait_sec) に移ったので
+        # ここでは送らない
+        assert "wait_seconds" not in result
         assert len(result["answer_dialogues"]) == 1
         assert result["answer_dialogues"][0]["content"] == "答えはAです"
         assert result["answer_dialogues"][0]["emotion"] == "joy"
@@ -722,9 +723,9 @@ class TestQuestionData:
         runner._state = LessonState.RUNNING
         runner._lesson_id = 1
 
-        section = {"wait_seconds": 5, "answer": "", "emotion": "neutral"}
+        section = {"answer": "", "emotion": "neutral"}
         result = await runner._build_question_data(section, order_index=0)
-        assert result["wait_seconds"] == 5
+        assert "wait_seconds" not in result
         assert result["answer_dialogues"] == []
 
 
@@ -1158,6 +1159,15 @@ class TestSendAllAndPlay:
         assert s0["display_text"] == "S0"
         assert len(s0["dialogues"]) == 1
         assert s0["dialogues"][0]["content"] == "A"
+        # wait_seconds は config に集約済みなので個別 section には含めない
+        assert "wait_seconds" not in s0
+        # timings は payload top-level に同梱される（C# 側が config 値を使うため）
+        timings = load_call.kwargs["timings"]
+        assert "inter_dialogue_gap_ms" in timings
+        assert "playback_stopped_fallback_extra_sec" in timings
+        assert "section_wait_sec" in timings
+        assert "question_answer_wait_sec" in timings
+        assert isinstance(timings["section_wait_sec"], dict)
 
     @pytest.mark.asyncio
     async def test_lesson_complete_event_wait(self, mock_speech, tmp_path, monkeypatch):
@@ -1417,7 +1427,7 @@ class TestBuildSectionBundle:
 
     @pytest.mark.asyncio
     async def test_returns_section_dict(self, mock_speech, tmp_path, monkeypatch):
-        """戻り値にdialogues/display_text/section_type/wait_secondsが含まれる"""
+        """戻り値にdialogues/display_text/section_type が含まれる（wait_seconds は送らない）"""
         monkeypatch.setattr("src.lesson_runner.LESSON_AUDIO_DIR", tmp_path)
 
         wav_path = tmp_path / "1" / "ja" / "gemini" / "v1" / "section_00_dlg_00.wav"
@@ -1451,7 +1461,8 @@ class TestBuildSectionBundle:
         assert bundle["section_type"] == "introduction"
         assert bundle["display_text"] == "表示テキスト"
         assert bundle["display_properties"] == {"maxHeight": 30}
-        assert bundle["wait_seconds"] == 2
+        # wait_seconds は config (lesson_timings) に移ったので bundle には含めない
+        assert "wait_seconds" not in bundle
         assert len(bundle["dialogues"]) == 1
 
     @pytest.mark.asyncio
@@ -1480,17 +1491,20 @@ class TestBuildSectionBundle:
         assert bundle is None
 
     def test_calc_section_duration(self):
-        """_calc_section_durationは dialogues + question + wait_seconds の合計"""
+        """_calc_section_durationは dialogues + question_wait + answer + section_wait の合計（config値ベース）"""
         section_bundle = {
+            "section_type": "question",
             "dialogues": [{"duration": 1.0}, {"duration": 2.0}],
             "question": {
-                "wait_seconds": 4,
                 "answer_dialogues": [{"duration": 1.5}],
             },
-            "wait_seconds": 2,
         }
-        total = LessonRunner._calc_section_duration(section_bundle)
-        # 1.0 + 2.0 + 4 + 1.5 + 2 = 10.5
+        timings = {
+            "section_wait_sec": {"question": 2, "default": 2},
+            "question_answer_wait_sec": 4,
+        }
+        total = LessonRunner._calc_section_duration(section_bundle, timings=timings)
+        # 1.0 + 2.0 + 4 (question_wait) + 1.5 + 2 (section_wait[question]) = 10.5
         assert total == pytest.approx(10.5)
 
 

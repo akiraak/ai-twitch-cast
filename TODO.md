@@ -8,7 +8,6 @@
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
 - [ ] クイズの解答前に長い間がある。この原因の調査。また同様に会話やセクションの間になりそうなところがないか調査 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)
-  - [ ] **Step 2**: `scripts/routes/teacher.py` の lesson_load payload に `timings` 同梱、section から `wait_seconds` を送らない + `tests/test_api_teacher.py` 更新
   - [ ] **Step 3**: C# `LessonPlayer` に `LessonTimings` 追加、`PlayDialoguesAsync` / `PlaySectionInternalAsync` / `CalcRemainingDuration` / `MainForm.PlayLessonAudioAsync` のハードコード値を置換 + `tests/test_native_app_patterns.py` にガード追加
   - [ ] **Step 4**: `prompts/lesson_generate.md` から `wait_seconds` 記述削除、`src/lesson_generator/*.py` の生成箇所削除
   - [ ] **Step 5**: 動作確認（pytest 全 green / Windows 実機で config 値が反映されること / `scenes.json` 編集→再起動不要で次回 lesson_load から反映）

@@ -17,6 +17,7 @@ from pathlib import Path
 from src import db
 from src.lesson_generator import get_lesson_characters
 from src.lipsync import analyze_amplitude
+from src.scene_config import get_lesson_timings
 from src.speech_pipeline import SpeechPipeline
 
 PLAYBACK_SETTING_KEY = "lesson.playback"
@@ -589,6 +590,7 @@ class LessonRunner:
         )
 
         # 1. 全セクションのバンドルを事前生成（self._current_index から）
+        timings = get_lesson_timings()
         all_sections: list[dict] = []
         total_duration = 0.0
         start_index = self._current_index
@@ -611,7 +613,7 @@ class LessonRunner:
                 logger.warning("[lesson] セクション %d: バンドル生成失敗、スキップ", i)
                 continue
             all_sections.append(bundle)
-            total_duration += self._calc_section_duration(bundle)
+            total_duration += self._calc_section_duration(bundle, timings)
             logger.info("[lesson] セクション %d/%d TTS生成完了 (duration=%.1fs)",
                          i + 1, len(self._sections), total_duration)
 
@@ -630,6 +632,7 @@ class LessonRunner:
                 lesson_id=self._lesson_id,
                 total_sections=len(all_sections),
                 sections=all_sections,
+                timings=timings,
             )
             logger.info("[lesson]   lesson_load: %s", "ok" if load_result.get("ok") else load_result)
         except Exception as e:
@@ -694,18 +697,28 @@ class LessonRunner:
             "display_properties": display_props,
             "dialogues": dlg_bundle,
             "question": question_data,
-            "wait_seconds": section.get("wait_seconds", 2),
         }
 
     @staticmethod
-    def _calc_section_duration(section_bundle: dict) -> float:
-        """セクションバンドルの合計再生時間（秒）を算出する"""
+    def _calc_section_duration(section_bundle: dict, timings: dict | None = None) -> float:
+        """セクションバンドルの合計再生時間（秒）を算出する。
+
+        wait_seconds は config (timings) から取得する。timings が渡されなければ
+        get_lesson_timings() を呼ぶ。
+        """
+        if timings is None:
+            timings = get_lesson_timings()
+        sw_map = timings.get("section_wait_sec", {})
+        sec_type = section_bundle.get("section_type", "")
+        section_wait = sw_map.get(sec_type, sw_map.get("default", 2))
+        question_wait = timings.get("question_answer_wait_sec", 8)
+
         total = sum(d.get("duration", 0) for d in section_bundle.get("dialogues", []))
         q = section_bundle.get("question")
         if q:
-            total += q.get("wait_seconds", 0)
+            total += question_wait
             total += sum(d.get("duration", 0) for d in q.get("answer_dialogues", []))
-        total += section_bundle.get("wait_seconds", 0)
+        total += section_wait
         return total
 
     async def _wait_lesson_complete(self, evt: asyncio.Event, total_duration: float):
@@ -937,8 +950,11 @@ class LessonRunner:
         return bundle
 
     async def _build_question_data(self, section: dict, order_index: int) -> dict:
-        """questionセクションのデータを生成する"""
-        question_wait = section.get("wait_seconds", 8)
+        """questionセクションのデータを生成する。
+
+        question 解答前の待ち時間は config (lesson_timings.question_answer_wait_sec)
+        を C# 側で参照するため、ここでは送らない。
+        """
         answer = section.get("answer", "")
 
         answer_dialogues = []
@@ -964,7 +980,6 @@ class LessonRunner:
                     pass
 
         return {
-            "wait_seconds": question_wait,
             "answer_dialogues": answer_dialogues,
         }
 

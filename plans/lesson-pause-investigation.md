@@ -1,7 +1,7 @@
 ---
-ステータス: 提案
+ステータス: 進行中（Step 1, 2 完了 / Step 3 以降）
 作成日: 2026-05-06
-更新日: 2026-05-06（方針決定: 全ての「間」を1ファイル config に集約。授業ごとの上書きは廃止）
+更新日: 2026-05-06（Step 2 完了: lesson_load payload に timings 同梱・section から wait_seconds 削除）
 関連TODO: 「クイズの解答前に長い間がある。この原因の調査。また同様に会話やセクションの間になりそうなところがないか調査」
 ---
 
@@ -170,10 +170,13 @@
 2. `src/scene_config.py` に `get_lesson_timings()` を実装
 3. `tests/test_scene_config.py` に既定値・欠損時フォールバック・不正値クランプのテストを追加
 
-### Step 2: lesson_load payload に timings 同梱
-1. `scripts/routes/teacher.py` で payload 構築時に `timings` を同梱
-2. section から `wait_seconds` を送らないように修正
-3. `tests/test_api_teacher.py` に payload 検証を追加
+### Step 2: lesson_load payload に timings 同梱（完了 / 2026-05-06）
+1. `src/lesson_runner.py` の `_send_all_and_play` で `ws_request("lesson_load", ...)` に `timings=get_lesson_timings()` を同梱（teacher.py ではなく実際のペイロード組立箇所はここ）
+2. `_build_section_bundle` から `wait_seconds` を削除、`_build_question_data` から `wait_seconds` を削除
+3. `_calc_section_duration` を `timings` 引数ベースに変更（section_type 別 section_wait_sec / question_answer_wait_sec を参照）
+4. `tests/test_lesson_runner.py` を更新: TestQuestionData / TestBuildSectionBundle / test_calc_section_duration を新フォーマットに合わせ、`test_sends_lesson_load_with_all_sections` に `timings` 同梱と section から `wait_seconds` が消えていることの検証を追加
+
+**注意**: Step 4 で `prompts/lesson_generate.md` から `wait_seconds` を削除した後も、過去 LLM 出力に残った `wait_seconds` は `import-sections` で DB に書き戻る可能性がある。Python は読まない / C# は受信しないので実害なし（プラン §8.1 の通り）。
 
 ### Step 3: C# 側で timings を受信して使用
 1. `LessonPlayer.cs` に `LessonTimings` クラス追加 + `LoadLesson` でパース
