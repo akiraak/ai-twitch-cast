@@ -1,5 +1,15 @@
 # DONE
 
+## 授業: dialogue 単位試聴後・停止後にタブが第一セクションへ戻る問題を修正
+
+- [x] **TODO**: C#アプリのセリフ毎再生（dialogue 単位試聴）後、Lesson タブが第一セクションに戻ってしまう → [plans/lesson-dialogue-single-tab-reset-fix.md](plans/lesson-dialogue-single-tab-reset-fix.md)（**ステータス: 完了**）
+- [x] **対象**: `win-native-app/WinNativeApp/control-panel.html`
+- [x] **症状**: コントロールパネル Lesson タブで dialogue 行 ▶（single 試聴）を押すと、再生終了直後にタブが強制的にセクション 1 に戻ってしまい、続きの dialogue を試聴し直すフローが分断されていた。通常再生完走後・停止後も同様
+- [x] **原因**: C# `LessonPlayer.PlayAsync` の finally で `_currentSectionIndex = -1` にリセットされ、それを受けた `updateLesson()` の `cur < 0 && total > 0` 分岐がパネル側で **毎回** `viewSection = 0` を上書きしていた
+- [x] **修正**: `control-panel.html` の同分岐を「`viewSection` が未設定（< 0）のときだけ初期プレビューとしてセクション 1 を表示」へ変更。再生終了・試聴後・停止後はユーザーが見ていたタブを維持する。授業ロード直後のプレビューは `setLessonOutline()` 受信時点で `viewSection = 0` がセットされるため従来挙動を担保
+- [x] **副作用検討**: 授業アンロード時は `!m.lesson_id && !total` 分岐で `viewSection = -1` にクリアされた後、新 `setLessonOutline` で 0 にセットされるためタブ初期化は正しく走る。`autoFollow = false`（手動タブ選択）時はそもそも該当分岐に入らないため影響なし
+- [x] **テスト**: `tests/test_native_app_patterns.py` 32 件 pass（パターン解析ガードに抵触なし）。Windows 実機での試聴動作確認はオペレーター側で実施
+
 ## 授業コンテンツ画面: dialogue テキスト編集 UI を追加（Step 1 完了）
 
 - [x] **TODO**: 管理画面 - 授業モードの授業コンテンツ画面で会話文章や画面テキストを編集保存したい → [plans/lesson-content-editor.md](plans/lesson-content-editor.md)（**ステータス: Step 1 完了**）

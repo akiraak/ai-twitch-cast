@@ -1326,8 +1326,12 @@ function updateLesson(m) {
   } else if (_timelineState.autoFollow && cur >= 0) {
     _timelineState.viewSection = cur;
   } else if (_timelineState.autoFollow && cur < 0 && total > 0) {
-    // 停止直後・ロード直後はセクション 1 をプレビュー表示
-    _timelineState.viewSection = 0;
+    // viewSection 未設定時のみセクション 1 をプレビュー。
+    // 再生終了・dialogue 試聴後・停止後はユーザーが見ていたタブを維持する
+    // （第一セクションに勝手に戻らないようにする）
+    if (_timelineState.viewSection < 0) {
+      _timelineState.viewSection = 0;
+    }
   }
 
   _timelineState.state = m.state || 'idle';
