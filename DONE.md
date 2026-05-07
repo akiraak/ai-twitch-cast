@@ -1,5 +1,16 @@
 # DONE
 
+## 授業の「間」config 集約: Step 6（ドキュメント整備）— **シリーズ完了**
+
+- [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)（**ステータス: 完了**）
+- [x] **対象**: `CLAUDE.md` / `plans/lesson-pause-investigation.md` / `TODO.md` / `DONE.md`
+- [x] **変更**:
+  - `CLAUDE.md` に「## 授業再生の「間」」セクションを新設（音声アーキテクチャの直後）。`lesson_timings` の 4 設定値・ホットリロード対応・授業 JSON の `wait_seconds` は読み捨てる旨を 1 段落で明記
+  - `plans/lesson-pause-investigation.md` を `ステータス: 完了` に更新、Step 6 の実施内容を追記
+  - `TODO.md` から該当 TODO 行を削除（シリーズ完了）
+- [x] **`[Lesson][TIMING]` ログの扱い**: ユーザー判断により **INFO レベルで保持**。プラン §6.1 では削除予定だったが、今後のチューニング・トラブルシュート・回帰検証で活用するため、削除や Debug 降格はしない
+- [x] **シリーズ全体の効果**: クイズ解答前の長い間（既定 8 秒）を含む授業再生の全「間」を `scenes.json` の `lesson_timings` 1 箇所で調整可能になった。実運用では `question_answer_wait_sec=1` に短縮済み（コミット `f7c5a22`）。再起動なしで次回 lesson_load から反映される
+
 ## 授業の「間」config 集約: Step 5（実機動作確認完了）
 
 - [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)

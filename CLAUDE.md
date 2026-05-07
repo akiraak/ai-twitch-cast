@@ -231,6 +231,10 @@ Claude Codeの作業状況を、ちょびが配信で自動実況する仕組み
 - **音量制御**: broadcast.html内のJavaScriptで `master × tts` / `master × bgm × 曲音量` を計算
 - **保存先**: マスター・TTS・BGM音量 → SQLite DB（`volume.*`キー）、デフォルト → `scenes.json` の `audio_volumes`、曲別音量 → SQLite DB
 
+## 授業再生の「間」
+
+dialogue 間 / セクション間 / クイズ解答前の wait などの「間」は **`scenes.json` の `lesson_timings`** で一元管理する（`inter_dialogue_gap_ms` / `section_wait_sec`（type別マップ）/ `question_answer_wait_sec` / `playback_stopped_fallback_extra_sec`）。Python → C# は `lesson_load` 経由で値を渡し、scenes.json を編集すれば**サーバー / ネイティブアプリ再起動なしで次回 lesson_load から反映**される。授業 JSON / DB の `wait_seconds` は読み捨てなので、生成プロンプトでも `wait_seconds` は出さない。
+
 ## 授業生成コマンド
 
 管理画面からコピーされる `授業生成「#ID 名前 (Nソース)」` 形式のプロンプトを受け取ったら、`prompts/lesson_generate.md` のワークフローに従って授業スクリプトを生成すること。
