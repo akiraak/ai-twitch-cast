@@ -265,10 +265,13 @@ def get_tts_cache_info(lesson_id: int, lang: str = "ja", generator: str = "gemin
             key = (oi, "part", pi)
             if key not in seen:
                 seen.add(key)
+                st = f.stat()
                 sections_map.setdefault(oi, []).append({
                     "part_index": pi,
                     "path": str(f.relative_to(PROJECT_DIR)),
-                    "size": f.stat().st_size,
+                    "size": st.st_size,
+                    # ブラウザキャッシュバスター用（再生成検知）。整数化して URL に乗せやすくする
+                    "mtime": int(st.st_mtime),
                 })
         # dlg形式: section_00_dlg_00.wav
         for f in sorted(scan_dir.glob("section_*_dlg_*.wav")):
@@ -278,10 +281,12 @@ def get_tts_cache_info(lesson_id: int, lang: str = "ja", generator: str = "gemin
             key = (oi, "dlg", di)
             if key not in seen:
                 seen.add(key)
+                st = f.stat()
                 sections_map.setdefault(oi, []).append({
                     "part_index": di,
                     "path": str(f.relative_to(PROJECT_DIR)),
-                    "size": f.stat().st_size,
+                    "size": st.st_size,
+                    "mtime": int(st.st_mtime),
                 })
 
     # DB上のセクション数に合わせて返す

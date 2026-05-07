@@ -128,10 +128,14 @@ public class MainForm : Form
 
         Text = "AI Twitch Cast - 起動中";
         StartPosition = FormStartPosition.CenterScreen;
+        // Snap UI（Win11 のドラッグ時スナップ配置）を出すため Sizable + MaximizeBox=true にする。
+        // 実際のリサイズは MinimumSize == MaximumSize で禁止する（後段で Size を確定させてから設定）。
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
         // Phase 7: 配信領域 + UIパネル
         ClientSize = new Size(BroadcastWidth + UiPanelWidth, BroadcastHeight);
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
+        MinimumSize = Size;
+        MaximumSize = Size;
         ShowInTaskbar = true;
 
         // タイトルバーをダークモードに設定

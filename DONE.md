@@ -1,5 +1,22 @@
 # DONE
 
+## 管理画面: TTS再生成後も古い音声が再生される問題を修正（VERSION 0.6.3）
+
+- [x] **背景**: dialogue を編集 → TTS を再生成しても、管理画面（Lesson タブ）の試聴ボタンを押すと古い音声が流れていた。サーバー側のキャッシュは `clear_dialogue_tts_cache` で削除→再生成されており、原因はブラウザの HTTP キャッシュ。再生成後もファイル名が同じ（`section_06_dlg_05.wav` 等）で URL が変わらないため、ブラウザがメモリ／ディスクキャッシュから古い wav を返していた
+- [x] **対象**:
+  - `src/lesson_runner.py` — `get_tts_cache_info` のレスポンスに `mtime`（int 化した `st_mtime`）を追加
+  - `static/js/admin/teacher.js` — dialogue 単位の試聴ボタン・セクションパーツのインライン再生・`playSectionAudio` の連続再生、3 箇所の audio URL に `?t=<mtime>` を付与してキャッシュバスター化
+- [x] **影響範囲**: 管理画面の試聴のみ。配信時の授業再生は Python が直接ファイルを読むため HTTP キャッシュの影響なし
+- [x] **テスト**: `tests/test_lesson_runner.py` + `tests/test_api_teacher.py` 214件 pass。既存テストは `parts.path` / `size` のみチェックしており、フィールド追加で壊れない
+
+## C#配信アプリ: Windows 11 のドラッグ時スナップ配置 UI が出ない問題を修正（VERSION 0.6.3）
+
+- [x] **背景**: Windows 11 ではウィンドウをドラッグすると画面上部中央にスナップ配置 UI（Snap bar）が出てくるが、配信アプリのウィンドウだけ表示されなかった
+- [x] **対象**: `win-native-app/WinNativeApp/MainForm.cs`
+- [x] **原因**: `FormBorderStyle = FormBorderStyle.FixedSingle`（→ WS_THICKFRAME なし）と `MaximizeBox = false`（→ WS_MAXIMIZEBOX なし）の組み合わせで、OS が「リサイズ不可・最大化不可のダイアログ的ウィンドウ」と判定し Snap UI を抑止していた。最大化ボタンホバー型のスナップレイアウトも同じ理由で出なかった
+- [x] **修正**: `FormBorderStyle.Sizable` + `MaximizeBox = true` に変更。実際のリサイズは `MinimumSize == MaximumSize == Size` で禁止し、配信レイアウト（BroadcastWidth + UiPanelWidth）のサイズ固定は維持。Snap で配置すると位置は動くがサイズは元に戻る
+- [x] **副作用**: ウィンドウの枠線が FixedSingle の細枠から Sizable の太枠に変わる
+
 ## C#配信アプリ: ウィンドウの角丸を無効化（四角に）
 
 - [x] **背景**: Windows 11 はすべてのアプリウィンドウに自動で角丸を適用するため、配信アプリのウィンドウも角丸になっていた。四角にしたい要望

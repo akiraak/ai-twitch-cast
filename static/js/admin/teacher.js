@@ -849,8 +849,10 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
         const dlgCacheKey = `section_${String(s.order_index).padStart(2,'0')}_dlg_${String(di).padStart(2,'0')}`;
         const dlgCache = (cacheParts || []).find(p => p.path && p.path.includes(dlgCacheKey));
         const dlgBadgeId = `dlg-badge-${s.id}-${di}`;
+        // mtime をキャッシュバスターとして付与（TTS再生成後のブラウザキャッシュ回避）
+        const dlgCacheUrl = dlgCache ? `/${esc(dlgCache.path)}${dlgCache.mtime ? '?t=' + dlgCache.mtime : ''}` : '';
         const dlgCacheHtml = dlgCache
-          ? `<span id="${dlgBadgeId}"><button onclick="playAudioInline(this, '/${esc(dlgCache.path)}')" style="padding:0 4px; background:#1565c0; color:#fff; border:none; border-radius:2px; cursor:pointer; font-size:0.58rem; margin-left:4px;">\u25B6</button><span style="color:#558b2f; font-size:0.6rem; margin-left:2px;">${(dlgCache.size/1024).toFixed(0)}KB</span></span>`
+          ? `<span id="${dlgBadgeId}"><button onclick="playAudioInline(this, '${dlgCacheUrl}')" style="padding:0 4px; background:#1565c0; color:#fff; border:none; border-radius:2px; cursor:pointer; font-size:0.58rem; margin-left:4px;">\u25B6</button><span style="color:#558b2f; font-size:0.6rem; margin-left:2px;">${(dlgCache.size/1024).toFixed(0)}KB</span></span>`
           : `<span id="${dlgBadgeId}" style="color:#c62828; font-size:0.6rem; margin-left:4px;">TTS未生成</span>`;
         let genHtml = '';
         if (dlg.generation) {
@@ -959,7 +961,8 @@ function renderSectionsInto(container, sections, lessonId, ttsCacheMap, charInfo
       html += `<div style="margin-top:6px; padding:4px 8px; background:#e8f5e9; border-radius:4px; font-size:0.65rem; color:#2e7d32; display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center;">`;
       for (const cp of cacheParts) {
         const sizeKB = (cp.size / 1024).toFixed(0);
-        const url = '/' + cp.path;
+        // mtime \u3092\u30AD\u30E3\u30C3\u30B7\u30E5\u30D0\u30B9\u30BF\u30FC\u3068\u3057\u3066\u4ED8\u4E0E\uFF08TTS\u518D\u751F\u6210\u5F8C\u306E\u30D6\u30E9\u30A6\u30B6\u30AD\u30E3\u30C3\u30B7\u30E5\u56DE\u907F\uFF09
+        const url = '/' + cp.path + (cp.mtime ? '?t=' + cp.mtime : '');
         html += `<button onclick="playAudioInline(this, '${esc(url)}')" style="padding:1px 6px; background:#1565c0; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:0.6rem;">\u25B6 part${cp.part_index}</button><span style="color:#558b2f;">(${sizeKB}KB)</span>`;
       }
       html += `</div>`;
@@ -1161,7 +1164,8 @@ async function playSectionAudio(btn, orderIndex, lessonId, version) {
   const section = (cacheRes.sections || []).find(s => s.order_index === orderIndex);
   if (!section || !section.parts || !section.parts.length) { showToast('TTSキャッシュなし', 'error'); return; }
 
-  const urls = section.parts.map(p => '/' + p.path);
+  // mtime をキャッシュバスターとして付与（TTS再生成後のブラウザキャッシュ回避）
+  const urls = section.parts.map(p => '/' + p.path + (p.mtime ? '?t=' + p.mtime : ''));
   if (!urls.length) { showToast('TTSファイルなし', 'error'); return; }
 
   const origText = btn.textContent;
