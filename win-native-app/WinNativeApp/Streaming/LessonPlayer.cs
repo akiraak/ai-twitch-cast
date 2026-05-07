@@ -23,7 +23,6 @@ public class DialogueData
 
 public class QuestionData
 {
-    public double WaitSeconds { get; set; } = 8.0;
     public List<DialogueData> AnswerDialogues { get; set; } = new();
 }
 
@@ -37,7 +36,74 @@ public class SectionData
     public JsonElement? DisplayProperties { get; set; }
     public List<DialogueData> Dialogues { get; set; } = new();
     public QuestionData? Question { get; set; }
-    public double WaitSeconds { get; set; } = 2.0;
+}
+
+/// <summary>
+/// 授業再生の各種「間」設定（Python <c>scene_config.get_lesson_timings()</c> と対応）。
+/// 全フィールドはコード内既定値を持ち、lesson_load の <c>timings</c> 不在時に使われる。
+/// 詳細は <c>plans/lesson-pause-investigation.md</c> §3.2 を参照。
+/// </summary>
+public class LessonTimings
+{
+    public int InterDialogueGapMs { get; set; } = 300;
+    public double PlaybackStoppedFallbackExtraSec { get; set; } = 1.5;
+    public double QuestionAnswerWaitSec { get; set; } = 8.0;
+    public Dictionary<string, double> SectionWaitSec { get; set; } = new()
+    {
+        ["introduction"] = 2.0,
+        ["explanation"] = 2.0,
+        ["example"] = 2.0,
+        ["question"] = 3.0,
+        ["summary"] = 3.0,
+        ["default"] = 2.0,
+    };
+
+    /// <summary>section_type に対応するセクション間ウェイト秒数を返す。未登録 type は default にフォールバック。</summary>
+    public double GetSectionWaitSec(string? sectionType)
+    {
+        if (!string.IsNullOrEmpty(sectionType) && SectionWaitSec.TryGetValue(sectionType, out var v))
+            return v;
+        if (SectionWaitSec.TryGetValue("default", out var d))
+            return d;
+        return 2.0;
+    }
+
+    /// <summary>JSON から LessonTimings をパースする。null/未指定/不正値はコード内既定値にフォールバック。</summary>
+    public static LessonTimings FromJson(JsonElement? json)
+    {
+        var t = new LessonTimings();
+        if (json is not { ValueKind: JsonValueKind.Object } obj) return t;
+
+        if (obj.TryGetProperty("inter_dialogue_gap_ms", out var gap) && TryGetNonNegNumber(gap, out var gapVal))
+            t.InterDialogueGapMs = (int)gapVal;
+        if (obj.TryGetProperty("playback_stopped_fallback_extra_sec", out var fb) && TryGetNonNegNumber(fb, out var fbVal))
+            t.PlaybackStoppedFallbackExtraSec = fbVal;
+        if (obj.TryGetProperty("question_answer_wait_sec", out var qw) && TryGetNonNegNumber(qw, out var qwVal))
+            t.QuestionAnswerWaitSec = qwVal;
+
+        if (obj.TryGetProperty("section_wait_sec", out var sw) && sw.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in sw.EnumerateObject())
+            {
+                if (TryGetNonNegNumber(prop.Value, out var v))
+                    t.SectionWaitSec[prop.Name] = v;
+                else
+                    Log.Warning("[Lesson] timings.section_wait_sec.{Key} invalid, ignored", prop.Name);
+            }
+        }
+
+        return t;
+    }
+
+    private static bool TryGetNonNegNumber(JsonElement el, out double value)
+    {
+        value = 0;
+        if (el.ValueKind != JsonValueKind.Number) return false;
+        if (!el.TryGetDouble(out var v)) return false;
+        if (double.IsNaN(v) || double.IsInfinity(v) || v < 0) return false;
+        value = v;
+        return true;
+    }
 }
 
 // =====================================================
@@ -71,6 +137,10 @@ public class LessonPlayer
     // 状態（全セクション一括）
     private List<SectionData>? _sections;
     private int _lessonId;
+    private LessonTimings _timings = new();
+
+    /// <summary>現在ロード中の授業に紐づく「間」設定。lesson_load 時に固定される。</summary>
+    public LessonTimings Timings => _timings;
 
     private volatile bool _playing;
     private volatile bool _paused;
@@ -104,6 +174,17 @@ public class LessonPlayer
 
         _lessonId = json.TryGetProperty("lesson_id", out var lid) ? lid.GetInt32() : 0;
         var totalSections = json.TryGetProperty("total_sections", out var ts) ? ts.GetInt32() : 0;
+
+        // 「間」設定をパース。timings キーが無ければコード内既定値（warn を出して気付けるようにする）
+        if (json.TryGetProperty("timings", out var timingsEl) && timingsEl.ValueKind == JsonValueKind.Object)
+        {
+            _timings = LessonTimings.FromJson(timingsEl);
+        }
+        else
+        {
+            _timings = new LessonTimings();
+            Log.Warning("[Lesson] timings missing in lesson_load, using defaults");
+        }
 
         _sections = new List<SectionData>();
 
@@ -465,12 +546,12 @@ public class LessonPlayer
 
             if (sec.Question != null)
             {
-                remaining += sec.Question.WaitSeconds;
+                remaining += _timings.QuestionAnswerWaitSec;
                 foreach (var dlg in sec.Question.AnswerDialogues)
                     remaining += dlg.Duration;
             }
 
-            remaining += sec.WaitSeconds;
+            remaining += _timings.GetSectionWaitSec(sec.SectionType);
         }
 
         return Math.Round(remaining, 1);
@@ -549,7 +630,7 @@ public class LessonPlayer
             // questionセクション: 待機→回答再生
             if (section.SectionType == "question" && section.Question != null)
             {
-                var waitMs = (int)(section.Question.WaitSeconds * 1000);
+                var waitMs = (int)(_timings.QuestionAnswerWaitSec * 1000);
                 Log.Information("[Lesson] Question wait: {Ms}ms", waitMs);
                 await PauseAwareDelayAsync(waitMs, ct);
 
@@ -566,11 +647,11 @@ public class LessonPlayer
         // 教材テキスト非表示
         InjectJs?.Invoke("if(window.lesson)window.lesson.hideText()");
 
-        // セクション間の間
-        if (section.WaitSeconds > 0)
+        // セクション間の間（section_type 別、未登録 type は default にフォールバック）
+        var sectionWaitSec = _timings.GetSectionWaitSec(section.SectionType);
+        if (sectionWaitSec > 0)
         {
-            var gapMs = (int)(section.WaitSeconds * 1000);
-            await PauseAwareDelayAsync(gapMs, ct);
+            await PauseAwareDelayAsync((int)(sectionWaitSec * 1000), ct);
         }
 
         _currentDialogueIndex = -1;
@@ -628,10 +709,10 @@ public class LessonPlayer
             // 表示終了
             InjectJs?.Invoke("if(window.lesson)window.lesson.endDialogue()");
 
-            // dialogue間の間（300ms）
-            if (i < dialogues.Count - 1)
+            // dialogue間の間（config: lesson_timings.inter_dialogue_gap_ms）
+            if (i < dialogues.Count - 1 && _timings.InterDialogueGapMs > 0)
             {
-                await PauseAwareDelayAsync(300, ct);
+                await PauseAwareDelayAsync(_timings.InterDialogueGapMs, ct);
             }
         }
     }
@@ -685,7 +766,6 @@ public class LessonPlayer
             TotalSections = json.TryGetProperty("total_sections", out var ts) ? ts.GetInt32() : 0,
             SectionType = json.TryGetProperty("section_type", out var st) ? st.GetString() ?? "dialogue" : "dialogue",
             DisplayText = json.TryGetProperty("display_text", out var dt) ? dt.GetString() : null,
-            WaitSeconds = json.TryGetProperty("wait_seconds", out var ws) ? ws.GetDouble() : 2.0,
         };
 
         if (json.TryGetProperty("display_properties", out var dp) && dp.ValueKind != JsonValueKind.Null)
@@ -699,10 +779,7 @@ public class LessonPlayer
 
         if (json.TryGetProperty("question", out var q) && q.ValueKind != JsonValueKind.Null)
         {
-            section.Question = new QuestionData
-            {
-                WaitSeconds = q.TryGetProperty("wait_seconds", out var qws) ? qws.GetDouble() : 8.0,
-            };
+            section.Question = new QuestionData();
             if (q.TryGetProperty("answer_dialogues", out var ad) && ad.ValueKind == JsonValueKind.Array)
             {
                 foreach (var d in ad.EnumerateArray())

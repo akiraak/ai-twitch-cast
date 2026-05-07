@@ -2064,15 +2064,17 @@ public class MainForm : Form
                 _ffmpeg.WriteTtsData(pcm);
             }
 
-            // フォールバック: duration + 1.5秒 経過しても PlaybackStopped が来なければ強制完了
+            // フォールバック: duration + 余裕秒 経過しても PlaybackStopped が来なければ強制完了
             // 仮説2（PlaybackStopped未発火）への保険。Stop時は ct でキャンセルされる
+            // 余裕秒は config (lesson_timings.playback_stopped_fallback_extra_sec) から取得
             if (duration > 0)
             {
+                var fallbackExtraSec = _lessonPlayer?.Timings.PlaybackStoppedFallbackExtraSec ?? 1.5;
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await Task.Delay(TimeSpan.FromSeconds(duration + 1.5), ct);
+                        await Task.Delay(TimeSpan.FromSeconds(duration + fallbackExtraSec), ct);
                     }
                     catch (OperationCanceledException) { return; }
                     if (Interlocked.CompareExchange(ref completed, 1, 0) != 0) return;

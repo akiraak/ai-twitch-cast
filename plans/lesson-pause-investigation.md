@@ -1,7 +1,7 @@
 ---
-ステータス: 進行中（Step 1, 2 完了 / Step 3 以降）
+ステータス: 進行中（Step 1, 2, 3 完了 / Step 4 以降）
 作成日: 2026-05-06
-更新日: 2026-05-06（Step 2 完了: lesson_load payload に timings 同梱・section から wait_seconds 削除）
+更新日: 2026-05-06（Step 3 完了: C# 側 LessonTimings 受信・ハードコード値を _timings 参照に置換）
 関連TODO: 「クイズの解答前に長い間がある。この原因の調査。また同様に会話やセクションの間になりそうなところがないか調査」
 ---
 
@@ -178,12 +178,16 @@
 
 **注意**: Step 4 で `prompts/lesson_generate.md` から `wait_seconds` を削除した後も、過去 LLM 出力に残った `wait_seconds` は `import-sections` で DB に書き戻る可能性がある。Python は読まない / C# は受信しないので実害なし（プラン §8.1 の通り）。
 
-### Step 3: C# 側で timings を受信して使用
-1. `LessonPlayer.cs` に `LessonTimings` クラス追加 + `LoadLesson` でパース
-2. `PlayDialoguesAsync` / `PlaySectionInternalAsync` のハードコード値を `_timings` 参照に置換
-3. `CalcRemainingDuration` も置換
-4. `MainForm.cs` の fallback 余裕を `_timings` 参照に置換
-5. `tests/test_native_app_patterns.py` に「ハードコード 300/1.5/8/2 が残っていないこと」のガードを追加
+### Step 3: C# 側で timings を受信して使用（完了 / 2026-05-06）
+1. `LessonPlayer.cs` に `LessonTimings` クラス追加（4 設定値 + `GetSectionWaitSec()` + `FromJson()`）+ `LoadLesson` で `json.timings` をパースして `_timings` に保持。`Timings` プロパティで MainForm から参照可能。`timings` キー不在時はコード内既定値（A=300, B=8, C=type別 default=2, D=1.5）にフォールバック + `Log.Warning`
+2. `PlayDialoguesAsync`: `PauseAwareDelayAsync(300, ct)` → `PauseAwareDelayAsync(_timings.InterDialogueGapMs, ct)`
+3. `PlaySectionInternalAsync`: question wait → `_timings.QuestionAnswerWaitSec * 1000`、セクション間 → `_timings.GetSectionWaitSec(section.SectionType) * 1000`
+4. `CalcRemainingDuration`: `sec.Question.WaitSeconds` / `sec.WaitSeconds` を `_timings` 参照に置換
+5. `MainForm.PlayLessonAudioAsync`: `duration + 1.5` → `duration + _lessonPlayer.Timings.PlaybackStoppedFallbackExtraSec`
+6. `SectionData.WaitSeconds` / `QuestionData.WaitSeconds` を削除、`ParseSectionData` から `wait_seconds` パースも削除
+7. `tests/test_native_app_patterns.py` にガード追加（5 ケース、全 32 テスト green）
+
+**注意**: `PlayTtsLocally` の `duration + 1.5` は授業ではなく単発 TTS チェーン再生用なので対象外（plans/tts-batch-playback-hang-fix.md Fix B）。
 
 ### Step 4: LLM プロンプト・既存データの整理
 1. `prompts/lesson_generate.md` から `wait_seconds` 関連の記述を削除

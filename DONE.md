@@ -1,5 +1,29 @@
 # DONE
 
+## 授業の「間」config 集約: Step 3（C# 側で timings を受信して使用）
+
+- [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)
+- [x] **対象**: `win-native-app/WinNativeApp/Streaming/LessonPlayer.cs` / `win-native-app/WinNativeApp/MainForm.cs` / `tests/test_native_app_patterns.py` / `plans/lesson-pause-investigation.md`
+- [x] **変更（C# `LessonPlayer.cs`）**:
+  - `LessonTimings` クラスを新設（`InterDialogueGapMs=300` / `PlaybackStoppedFallbackExtraSec=1.5` / `QuestionAnswerWaitSec=8` / `SectionWaitSec` 既定マップ）+ `GetSectionWaitSec(sectionType)` ヘルパ + `FromJson(JsonElement?)` ファクトリ（不正値は警告ログ + 既定値）
+  - `LessonPlayer._timings` フィールド + `Timings` 公開プロパティを追加（MainForm から参照可能）
+  - `LoadLesson(json)`: `json.timings` をパースして `_timings` に保持。`timings` 不在時はコード内既定値 + `Log.Warning("timings missing in lesson_load")`
+  - `PlayDialoguesAsync`: dialogue 間 `PauseAwareDelayAsync(300, ct)` → `PauseAwareDelayAsync(_timings.InterDialogueGapMs, ct)`（`>0` ガード付き）
+  - `PlaySectionInternalAsync`: question wait → `_timings.QuestionAnswerWaitSec * 1000`、セクション間 → `_timings.GetSectionWaitSec(section.SectionType) * 1000`
+  - `CalcRemainingDuration`: `sec.Question.WaitSeconds` / `sec.WaitSeconds` への参照を `_timings.QuestionAnswerWaitSec` / `_timings.GetSectionWaitSec(sec.SectionType)` に置換
+  - `SectionData.WaitSeconds` / `QuestionData.WaitSeconds` フィールドを削除、`ParseSectionData` から `wait_seconds` パースも削除（Python が送らない & C# は config 値を使うため）
+- [x] **変更（C# `MainForm.cs`）**:
+  - `PlayLessonAudioAsync` の fallback 余裕秒を `duration + 1.5` → `duration + (_lessonPlayer?.Timings.PlaybackStoppedFallbackExtraSec ?? 1.5)` に置換
+- [x] **テスト追加（`tests/test_native_app_patterns.py`、5 ケース）**:
+  - `test_lesson_player_has_lesson_timings_class`: `LessonTimings` クラスと 4 設定値 + `FromJson` の存在
+  - `test_lesson_player_load_parses_timings`: `LoadLesson` が `json.timings` を読んで `_timings` に代入する
+  - `test_lesson_player_no_hardcoded_inter_dialogue_gap`: `PauseAwareDelayAsync(300, ...)` ハードコードが残っていない & `_timings.InterDialogueGapMs` 参照がある
+  - `test_lesson_player_no_section_wait_seconds_field`: `SectionData/QuestionData.WaitSeconds` フィールド & 旧参照が消えていて `_timings.GetSectionWaitSec` / `QuestionAnswerWaitSec` 参照がある
+  - `test_main_form_fallback_uses_timings`: `PlayLessonAudioAsync` 内の `duration + 1.5` ハードコードが消え `PlaybackStoppedFallbackExtraSec` 参照に置換されている
+- [x] **検証**: `pytest tests/test_native_app_patterns.py -q` 32 件 green / `pytest -m "not slow"` 全 1303 件 green
+- [x] **スコープ外**: `MainForm.PlayTtsLocally` の `duration + 1.5` は単発 TTS チェーン再生用（`plans/tts-batch-playback-hang-fix.md` Fix B）であり授業再生ではないため変更しない
+- [x] **影響**: `scenes.json` の `lesson_timings` を編集すると次回の `lesson_load` から再生時の dialogue 間 / セクション間 / クイズ解答前の間 / fallback 余裕秒に反映される（Windows ネイティブアプリ再起動不要）。残るは Step 4（`prompts/lesson_generate.md` から `wait_seconds` 記述削除 + `lesson_generator/*.py` の生成箇所削除）と Step 5（実機確認）と Step 6（ドキュメント整備）
+
 ## 授業の「間」config 集約: Step 2（lesson_load payload に timings 同梱）
 
 - [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)

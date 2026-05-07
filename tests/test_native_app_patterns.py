@@ -584,6 +584,110 @@ def test_stop_async_waits_for_writing_video_before_pipe_dispose():
     )
 
 
+# === LessonPlayer / MainForm: 「間」の config 集約（plans/lesson-pause-investigation.md Step 3）===
+
+
+def test_lesson_player_has_lesson_timings_class():
+    """LessonPlayer.cs に LessonTimings クラスがあり 4 設定値を持つこと。
+
+    plans/lesson-pause-investigation.md §3.2 のスキーマと対応。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    assert re.search(r"\bclass\s+LessonTimings\b", source), (
+        "LessonTimings クラスが定義されていない"
+    )
+    for prop in (
+        "InterDialogueGapMs",
+        "PlaybackStoppedFallbackExtraSec",
+        "QuestionAnswerWaitSec",
+        "SectionWaitSec",
+    ):
+        assert re.search(rf"\b{prop}\b", source), (
+            f"LessonTimings.{prop} プロパティが見当たらない"
+        )
+    # JSON パース＋デフォルト fallback
+    assert re.search(r"LessonTimings\.FromJson\(", source) or re.search(
+        r"static\s+LessonTimings\s+FromJson", source
+    ), "LessonTimings.FromJson(...) ファクトリが見当たらない"
+
+
+def test_lesson_player_load_parses_timings():
+    """LoadLesson() が json.timings をパースして _timings に保持すること。"""
+    source = read_cs("Streaming/LessonPlayer.cs")
+    body = _extract_method_body(source, r"public void LoadLesson\(JsonElement json\)")
+    assert re.search(r'TryGetProperty\("timings"', body), (
+        "LoadLesson で json の \"timings\" プロパティを読み取っていない"
+    )
+    assert re.search(r"_timings\s*=", body), (
+        "LoadLesson で _timings の代入が見当たらない"
+    )
+
+
+def test_lesson_player_no_hardcoded_inter_dialogue_gap():
+    """PlayDialoguesAsync の dialogue 間ギャップが 300ms ハードコードでなくなっていること。
+
+    plans/lesson-pause-investigation.md Step 3.2: _timings.InterDialogueGapMs に置換済み。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    # 古い PauseAwareDelayAsync(300, ct) パターンが残っていないこと
+    assert not re.search(r"PauseAwareDelayAsync\(\s*300\s*,", source), (
+        "PauseAwareDelayAsync(300, ...) のハードコード dialogue 間ギャップが残っている。"
+        "_timings.InterDialogueGapMs に置換すること"
+    )
+    # 新しい _timings.InterDialogueGapMs 参照があること
+    assert re.search(r"_timings\.InterDialogueGapMs", source), (
+        "_timings.InterDialogueGapMs を参照していない"
+    )
+
+
+def test_lesson_player_no_section_wait_seconds_field():
+    """SectionData.WaitSeconds / QuestionData.WaitSeconds が config 化により削除済みであること。
+
+    plans/lesson-pause-investigation.md Step 3.2: section / question の wait は _timings 参照に置換済み。
+    """
+    source = read_cs("Streaming/LessonPlayer.cs")
+    # クラス定義から WaitSeconds プロパティが消えていること（LessonTimings 内ではなく旧位置）
+    assert not re.search(r"public\s+double\s+WaitSeconds", source), (
+        "SectionData/QuestionData.WaitSeconds プロパティが残っている。"
+        "config 化したので削除すること（参照は _timings.GetSectionWaitSec / QuestionAnswerWaitSec へ）"
+    )
+    # 旧参照がコード上に残っていないこと
+    assert not re.search(r"section\.WaitSeconds", source), (
+        "section.WaitSeconds の参照が残っている"
+    )
+    assert not re.search(r"\.Question\.WaitSeconds", source), (
+        ".Question.WaitSeconds の参照が残っている"
+    )
+    # 新しい参照があること
+    assert re.search(r"_timings\.QuestionAnswerWaitSec", source), (
+        "_timings.QuestionAnswerWaitSec を参照していない"
+    )
+    assert re.search(r"_timings\.GetSectionWaitSec\(", source), (
+        "_timings.GetSectionWaitSec(...) を参照していない"
+    )
+
+
+def test_main_form_fallback_uses_timings():
+    """MainForm.PlayLessonAudioAsync の fallback 余裕秒が _timings 参照になっていること。
+
+    plans/lesson-pause-investigation.md Step 3.4: duration + 1.5 を
+    _timings.PlaybackStoppedFallbackExtraSec に置換。
+    """
+    source = read_cs("MainForm.cs")
+    body = _extract_method_body(
+        source, r"private Task PlayLessonAudioAsync\([^)]*\)"
+    )
+    # ハードコード 1.5 が消えていること
+    assert not re.search(r"duration\s*\+\s*1\.5\b", body), (
+        "PlayLessonAudioAsync に duration + 1.5 のハードコードが残っている。"
+        "_timings.PlaybackStoppedFallbackExtraSec に置換すること"
+    )
+    # _timings 経由で取得していること
+    assert re.search(r"PlaybackStoppedFallbackExtraSec", body), (
+        "PlayLessonAudioAsync で PlaybackStoppedFallbackExtraSec を参照していない"
+    )
+
+
 # === Program.cs ===
 
 
