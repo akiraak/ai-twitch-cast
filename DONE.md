@@ -1,5 +1,19 @@
 # DONE
 
+## 授業の「間」config 集約: Step 1（scene_config に lesson_timings を追加）
+
+- [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)
+- [x] **対象**: `scenes.json` / `src/scene_config.py` / `tests/test_scene_config.py`
+- [x] **変更**:
+  - `scenes.json` に `lesson_timings` ブロックを追加（`inter_dialogue_gap_ms=300` / `playback_stopped_fallback_extra_sec=1.5` / `section_wait_sec` 既定マップ / `question_answer_wait_sec=8`）
+  - `src/scene_config.py` に `LESSON_TIMINGS_DEFAULTS` 定数 + `_is_valid_nonneg_number()` + `get_lesson_timings()` を追加
+    - DB → scenes.json → 既定値の優先順（既存 `load_config_json` の経路に乗せる）
+    - 不正値（非数値 / NaN / Inf / 負数 / bool）は既定値にフォールバックし `logger.warning`
+    - 部分指定可（欠損キーは既定で埋まる）／カスタム `section_type` も非負数値なら受け入れる
+  - `tests/test_scene_config.py` に `TestGetLessonTimings` を 12 ケース追加（既定値・部分指定・不正値クランプ・bool 拒否・0 許容・カスタム section_type・DB 優先）
+- [x] **検証**: `pytest tests/test_scene_config.py -q` 25 件 green（既存 13 + 新規 12）
+- [x] **影響**: Python 側で「間」設定の取得経路が整った。次の Step 2 で lesson_load payload に同梱して C# に渡す。**この時点では C# 側はまだ参照していないため再生挙動は変わらない**
+
 ## 授業 dialogue 途中再生: タスク完了（Step 4 / Step 5）
 
 - [x] **TODO**: セクション途中の会話から再生できるように → [plans/lesson-play-from-dialogue.md](plans/lesson-play-from-dialogue.md)

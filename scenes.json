@@ -27,5 +27,18 @@
   },
   "bgm": {
     "track": "Morning Cafe Jazz - Piano & Guitar Bossa Nova Music for Study, Work.mp3"
+  },
+  "lesson_timings": {
+    "inter_dialogue_gap_ms": 300,
+    "playback_stopped_fallback_extra_sec": 1.5,
+    "section_wait_sec": {
+      "introduction": 2,
+      "explanation": 2,
+      "example": 2,
+      "question": 3,
+      "summary": 3,
+      "default": 2
+    },
+    "question_answer_wait_sec": 8
   }
 }
