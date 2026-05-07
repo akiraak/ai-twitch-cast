@@ -8,8 +8,7 @@
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
 - [ ] クイズの解答前に長い間がある。この原因の調査。また同様に会話やセクションの間になりそうなところがないか調査 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)
-  - [ ] **Step 5**: 動作確認（Windows 実機で config 値が反映されること / `scenes.json` 編集→再起動不要で次回 lesson_load から反映）
-  - [ ] **Step 6**: ドキュメント更新（プラン完了化 / `docs/` または `CLAUDE.md` に「間は scenes.json で調整」を1行）
+  - [ ] **Step 6**: ドキュメント更新（プラン完了化 / `docs/` または `CLAUDE.md` に「間は scenes.json で調整」を1行 / 暫定 [TIMING] ログを削除または Debug レベルに降格）
 - [ ] 管理画面 - 授業モードの授業コンテンツ画面で会話文章や画面テキストを編集保存したい
 
 ## 授業モード

@@ -1,5 +1,18 @@
 # DONE
 
+## 授業の「間」config 集約: Step 5（実機動作確認完了）
+
+- [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)
+- [x] **対象**: `win-native-app/WinNativeApp/Streaming/LessonPlayer.cs` / `plans/lesson-pause-investigation.md`
+- [x] **計測用ログ追加（暫定）**:
+  - `PlayDialoguesAsync`: 発話 START/END、Inter-dialogue gap START/END に `[Lesson][TIMING]` タグ付きで Stopwatch で expected/actual ms を記録
+  - `PlaySectionInternalAsync`: Question wait START/END、Section wait START/END に同様に追加
+  - 既存ログには `[TIMING]` タグが付いていなかったため、`grep "\[TIMING\]"` で抽出可能
+- [x] **実機確認**:
+  - 既定値（A=300ms / B=8s / C=type別 / D=1.5s）でログが期待通りに出ることを確認
+  - `scenes.json` の `lesson_timings.question_answer_wait_sec` を 8 → 5 に変更 → サーバー / Windows ネイティブアプリ再起動なしで次回 lesson_load から `Question wait START expectedMs=5000` に切り替わることを確認（ホットリロード成立）
+- [x] **影響**: Step 1〜4 で構築した config 集約パイプラインが実機で動作することを確認した。残るは Step 6 のみ（プラン完了化 / `docs/` または `CLAUDE.md` 1 行追加 / `[TIMING]` 暫定ログを削除または Debug レベルに降格）
+
 ## 授業の「間」config 集約: Step 4（LLM プロンプトから wait_seconds 削除）
 
 - [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)

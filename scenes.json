@@ -39,6 +39,6 @@
       "summary": 3,
       "default": 2
     },
-    "question_answer_wait_sec": 8
+    "question_answer_wait_sec": 1
   }
 }

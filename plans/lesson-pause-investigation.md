@@ -1,7 +1,7 @@
 ---
-ステータス: 進行中（Step 1, 2, 3, 4 完了 / Step 5 以降）
+ステータス: 進行中（Step 1〜5 完了 / Step 6 のみ残）
 作成日: 2026-05-06
-更新日: 2026-05-06（Step 4 完了: prompts から wait_seconds 削除・「scenes.json で一元管理」を明記）
+更新日: 2026-05-06（Step 5 完了: [TIMING] ログ追加 + 実機確認 / scenes.json ホットリロード成立）
 関連TODO: 「クイズの解答前に長い間がある。この原因の調査。また同様に会話やセクションの間になりそうなところがないか調査」
 ---
 
@@ -197,10 +197,14 @@
 5. DB 内の既存値は保持（マイグレーションなし、参照経路は Step 2/3 で切れている）
 6. `pytest -m "not slow"`: 1303 passed
 
-### Step 5: 動作確認
-1. `pytest tests/ -q -m "not slow"` 全 green
-2. Windows 実機で授業再生 → クイズ前の間 / dialogue 間 / セクション間 が config 通りであることを実測
-3. `scenes.json` の `lesson_timings.question_answer_wait_sec` を 8 → 5 に変更 → サーバー再起動なしでも次回 lesson_load から反映されること
+### Step 5: 動作確認（完了 / 2026-05-06）
+1. `pytest tests/ -q -m "not slow"`: 1303 passed
+2. **計測用ログ追加（暫定、Step 6 で削除/降格予定）**:
+   - `LessonPlayer.PlayDialoguesAsync` に発話 START/END、Inter-dialogue gap START/END
+   - `LessonPlayer.PlaySectionInternalAsync` に Question wait START/END、Section wait START/END
+   - すべて `[Lesson][TIMING]` タグ付き、Stopwatch で expected/actual ms を記録
+3. Windows 実機で授業再生 → ログから `[TIMING]` を抽出 → 既定値（A=300ms / B=8000ms / C=type別 / D=1.5s）で再生されることを確認
+4. `scenes.json` の `lesson_timings.question_answer_wait_sec` を 8 → 5 に変更 → サーバー / Windows ネイティブアプリ再起動なしで次回 lesson_load から `Question wait START expectedMs=5000` に切り替わることを確認（ホットリロード成立）
 
 ### Step 6: ドキュメント更新
 1. `DONE.md` に変更内容を追記
