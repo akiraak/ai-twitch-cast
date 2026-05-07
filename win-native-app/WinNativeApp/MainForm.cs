@@ -18,6 +18,8 @@ public class MainForm : Form
     [DllImport("dwmapi.dll", PreserveSig = true)]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_DONOTROUND = 1;
 
     // Win32: クライアント領域オフセット計算用
     [DllImport("user32.dll")]
@@ -135,6 +137,10 @@ public class MainForm : Form
         // タイトルバーをダークモードに設定
         var darkMode = 1;
         DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+
+        // 角丸を無効化（Windows 11のみ有効、Win10では無視される）
+        var cornerPref = DWMWCP_DONOTROUND;
+        DwmSetWindowAttribute(Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPref, sizeof(int));
 
         // Phase 7: WebView2は左側に固定配置（Dock.Fillではなく明示的サイズ）
         _webView = new WebView2

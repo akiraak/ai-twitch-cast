@@ -1,5 +1,13 @@
 # DONE
 
+## C#配信アプリ: ウィンドウの角丸を無効化（四角に）
+
+- [x] **背景**: Windows 11 はすべてのアプリウィンドウに自動で角丸を適用するため、配信アプリのウィンドウも角丸になっていた。四角にしたい要望
+- [x] **対象**: `win-native-app/WinNativeApp/MainForm.cs`
+  - DWM API 用定数 `DWMWA_WINDOW_CORNER_PREFERENCE = 33` / `DWMWCP_DONOTROUND = 1` を追加（既存の `DwmSetWindowAttribute` P/Invoke を流用）
+  - コンストラクタでダークモード設定の直後に `DwmSetWindowAttribute` で角丸を無効化
+- [x] **副作用**: Windows 10 では `DWMWA_WINDOW_CORNER_PREFERENCE` 属性は未対応のため自動的に無視される（API 呼び出しは失敗するが PreserveSig=true なので例外は出ない）
+
 ## TTS音声: 先頭無音の自動トリミング（D 完了 / VERSION 0.6.2）
 
 - [x] **背景**: 末尾無音のトリミング後（0.6.1）に先頭無音を測定したところ、117ファイルで中央値210ms / 最大335ms / 平均194ms と末尾とほぼ同レベルの無音が乗っていた。dialogue間の体感ギャップは「前の末尾無音 + `inter_dialogue_gap_ms` + 次の先頭無音」の合算で、先頭無音だけで200ms前後を占めていた
