@@ -39,7 +39,6 @@
     "emotion": "neutral",
     "question": "",
     "answer": "",
-    "wait_seconds": 3,
     "dialogues": [
       {
         "speaker": "teacher",

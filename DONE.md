@@ -1,5 +1,19 @@
 # DONE
 
+## 授業の「間」config 集約: Step 4（LLM プロンプトから wait_seconds 削除）
+
+- [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)
+- [x] **対象**: `prompts/lesson_generate.md` / `prompts/lesson_improve.md` / `prompts/lesson_evaluate_quality.md` / `plans/lesson-pause-investigation.md`
+- [x] **変更**:
+  - `prompts/lesson_generate.md`: スキーマ例 / フィールド説明表 / `section_type` 推奨表（「推奨 wait_seconds」列削除）/ 完全出力例（4箇所: 2/3/10/3 秒）から `wait_seconds` を削除
+  - `prompts/lesson_generate.md`: §8.1 リスク対策として「間の長さは `scenes.json` の `lesson_timings` で一元管理されるので授業 JSON に `wait_seconds` を入れても無視される」旨の注記を追加
+  - `prompts/lesson_improve.md`: スキーマ例から `"wait_seconds": 3,` を削除
+  - `prompts/lesson_evaluate_quality.md`: minor severity の例から `wait_secondsが短め` を削除
+- [x] **`src/lesson_generator/*.py`**: 既に `wait_seconds` 生成ロジックは存在せず（Step 2 で `_build_section_bundle` / `_build_question_data` から削除済み）
+- [x] **DB**: 既存値は保持（マイグレーションなし、参照経路は Step 2/3 で切れている）
+- [x] **検証**: `pytest -m "not slow"` 全 1303 件 green
+- [x] **影響**: 今後 Claude Code が授業生成するとき `wait_seconds` を含めない出力になる。万が一過去 LLM 出力や手動編集で `wait_seconds` が DB に残っても Python は読まず C# は受信しないので実害なし。残るは Step 5（実機確認）と Step 6（ドキュメント整備）
+
 ## 授業の「間」config 集約: Step 3（C# 側で timings を受信して使用）
 
 - [x] **TODO**: クイズの解答前の長い間 / dialogue 間 / セクション間を `scenes.json` の単一 config に集約 → [plans/lesson-pause-investigation.md](plans/lesson-pause-investigation.md)

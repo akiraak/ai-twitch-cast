@@ -1,7 +1,7 @@
 ---
-ステータス: 進行中（Step 1, 2, 3 完了 / Step 4 以降）
+ステータス: 進行中（Step 1, 2, 3, 4 完了 / Step 5 以降）
 作成日: 2026-05-06
-更新日: 2026-05-06（Step 3 完了: C# 側 LessonTimings 受信・ハードコード値を _timings 参照に置換）
+更新日: 2026-05-06（Step 4 完了: prompts から wait_seconds 削除・「scenes.json で一元管理」を明記）
 関連TODO: 「クイズの解答前に長い間がある。この原因の調査。また同様に会話やセクションの間になりそうなところがないか調査」
 ---
 
@@ -189,10 +189,13 @@
 
 **注意**: `PlayTtsLocally` の `duration + 1.5` は授業ではなく単発 TTS チェーン再生用なので対象外（plans/tts-batch-playback-hang-fix.md Fix B）。
 
-### Step 4: LLM プロンプト・既存データの整理
-1. `prompts/lesson_generate.md` から `wait_seconds` 関連の記述を削除
-2. `src/lesson_generator/*.py` で `wait_seconds` 生成箇所を削除
-3. DB 内の既存値は保持（マイグレーションなし、参照経路を切るだけ）
+### Step 4: LLM プロンプト・既存データの整理（完了 / 2026-05-06）
+1. `prompts/lesson_generate.md`: スキーマ例 / フィールド説明表 / section_type 推奨表 / 4つの完全出力例から `wait_seconds` を削除。代わりに「間の長さは scenes.json の `lesson_timings` で一元管理されるので授業 JSON に `wait_seconds` を入れても無視される」旨の注記を追加（§8.1 リスク対策）
+2. `prompts/lesson_improve.md`: スキーマ例から `"wait_seconds": 3,` を削除
+3. `prompts/lesson_evaluate_quality.md`: minor severity の例から `wait_secondsが短め` を削除
+4. `src/lesson_generator/*.py`: 既に `wait_seconds` 生成ロジックは存在せず（Step 2 で `_build_section_bundle` / `_build_question_data` から削除済み）
+5. DB 内の既存値は保持（マイグレーションなし、参照経路は Step 2/3 で切れている）
+6. `pytest -m "not slow"`: 1303 passed
 
 ### Step 5: 動作確認
 1. `pytest tests/ -q -m "not slow"` 全 green
