@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Serilog;
 
@@ -631,8 +632,11 @@ public class LessonPlayer
             if (section.SectionType == "question" && section.Question != null)
             {
                 var waitMs = (int)(_timings.QuestionAnswerWaitSec * 1000);
-                Log.Information("[Lesson] Question wait: {Ms}ms", waitMs);
+                Log.Information("[Lesson][TIMING] Question wait START expectedMs={Ms}", waitMs);
+                var qWaitSw = Stopwatch.StartNew();
                 await PauseAwareDelayAsync(waitMs, ct);
+                qWaitSw.Stop();
+                Log.Information("[Lesson][TIMING] Question wait END   actualMs={Ms}", qWaitSw.ElapsedMilliseconds);
 
                 await PlayDialoguesAsync(section.Question.AnswerDialogues, "answer", ct);
             }
@@ -651,7 +655,14 @@ public class LessonPlayer
         var sectionWaitSec = _timings.GetSectionWaitSec(section.SectionType);
         if (sectionWaitSec > 0)
         {
-            await PauseAwareDelayAsync((int)(sectionWaitSec * 1000), ct);
+            var secWaitMs = (int)(sectionWaitSec * 1000);
+            Log.Information("[Lesson][TIMING] Section wait START type={Type} expectedMs={Ms}",
+                section.SectionType, secWaitMs);
+            var sWaitSw = Stopwatch.StartNew();
+            await PauseAwareDelayAsync(secWaitMs, ct);
+            sWaitSw.Stop();
+            Log.Information("[Lesson][TIMING] Section wait END   type={Type} actualMs={Ms}",
+                section.SectionType, sWaitSw.ElapsedMilliseconds);
         }
 
         _currentDialogueIndex = -1;
@@ -693,6 +704,11 @@ public class LessonPlayer
             });
             InjectJs?.Invoke($"if(window.lesson)window.lesson.startDialogue({dlgJson})");
 
+            // [TIMING] 発話開始（実機での「間」検証用、§Step 5）
+            var utterSw = Stopwatch.StartNew();
+            Log.Information("[Lesson][TIMING] Utterance START kind={Kind} dlg={Dlg}/{Total} speaker={Speaker} expectedDur={Dur:F3}s",
+                kind, i + 1, dialogues.Count, dlg.Speaker, dlg.Duration);
+
             // 音声再生 → PlaybackStopped待ち（または duration ベースのフォールバック）
             if (PlayAudio != null && dlg.WavData is { Length: > 0 })
             {
@@ -706,13 +722,22 @@ public class LessonPlayer
 
             ct.ThrowIfCancellationRequested();
 
+            // [TIMING] 発話終了（実機での「間」検証用）
+            utterSw.Stop();
+            Log.Information("[Lesson][TIMING] Utterance END   kind={Kind} dlg={Dlg}/{Total} actualMs={Ms}",
+                kind, i + 1, dialogues.Count, utterSw.ElapsedMilliseconds);
+
             // 表示終了
             InjectJs?.Invoke("if(window.lesson)window.lesson.endDialogue()");
 
             // dialogue間の間（config: lesson_timings.inter_dialogue_gap_ms）
             if (i < dialogues.Count - 1 && _timings.InterDialogueGapMs > 0)
             {
+                Log.Information("[Lesson][TIMING] Inter-dialogue gap START expectedMs={Ms}", _timings.InterDialogueGapMs);
+                var gapSw = Stopwatch.StartNew();
                 await PauseAwareDelayAsync(_timings.InterDialogueGapMs, ct);
+                gapSw.Stop();
+                Log.Information("[Lesson][TIMING] Inter-dialogue gap END   actualMs={Ms}", gapSw.ElapsedMilliseconds);
             }
         }
     }
