@@ -361,6 +361,37 @@ curl -s http://localhost:$WEB_PORT/api/todo    # TODOが返るか
 | WebSocket接続 | broadcast.htmlがWebSocketで接続している |
 | Go Live | Go Liveボタンで配信開始、トースト通知が出る |
 
+## 配信動画のクロップ＆音量ノーマライズ（debug-ss/）
+
+C#ネイティブ配信アプリのウィンドウ録画（`debug-ss/*.mp4`）から配信領域 1280×720 だけを切り出し、音量を整える手順。
+
+- **クロップ座標**: `x=1, y=38, w=1280, h=720`（C#アプリのウィンドウから broadcast canvas を切り出す位置。タイトルバー・右サイドバー・下部ステータスバーを除外）
+- **音量目標**: -16 LUFS / TP=-1.5 dBTP / LRA=11（YouTube/Twitch 配信標準）
+- **必ず 2 パスで処理する**: シングルパス `loudnorm` は冒頭の音量が徐々に上がる挙動になるので NG。1 パス目で測定値を取り、2 パス目で適用する
+
+### 1パス目（ラウドネス測定）
+
+```bash
+ffmpeg -hide_banner -i debug-ss/<入力>.mp4 \
+  -af "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json" \
+  -f null - 2>&1 | awk '/^\{/,/^\}/'
+```
+
+出力 JSON の `input_i` / `input_tp` / `input_lra` / `input_thresh` / `target_offset` を 2 パス目に渡す。
+
+### 2パス目（クロップ＋ノーマライズ＋エンコード）
+
+```bash
+ffmpeg -y -i debug-ss/<入力>.mp4 \
+  -filter:v "crop=1280:720:1:38" \
+  -af "loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=<input_i>:measured_TP=<input_tp>:measured_LRA=<input_lra>:measured_thresh=<input_thresh>:offset=<target_offset>:linear=true:print_format=summary" \
+  -c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k -movflags +faststart \
+  debug-ss/<入力>_cropped.mp4
+```
+
+- 出力ファイル名は `<入力>_cropped.mp4` を基本とする
+- `linear=true` を付けると 2 パス目で線形ゲイン適用になり、ダイナミクスを潰さない（True Peak が超える場合は自動で dynamic にフォールバック）
+
 ## メモリ（実装記録）
 
 - 実装した機能は `.claude/projects/-home-ubuntu-ai-twitch-cast/memory/` に記録する
