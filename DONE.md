@@ -1,5 +1,25 @@
 # DONE
 
+## 紹介動画モード Step 4: セクション生成 → DB投入 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
+
+- [x] **背景**: Step 3 で作った素材md（`plans/vibe-coder-security/topic-1-webapp-source.md`）と `prompts/topic_video_generate.md` のワークフローに沿って、第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」のセクションスクリプトを生成し、`lesson_id=200` に投入。これで Step 5（TTS事前生成→試聴）に進める状態になった
+- [x] **対象**: `lesson_id=200` / `lang=ja` / `generator=claude` / `version_number=1`（自動採番）
+  - 13セクション構成（prologue 1 + incident 5 + stats 1 + pair 3 + addition 1 + checklist 1 + outro 1）
+  - dialogues 計 114 ターン（prologue 5 / incident 各 6〜7 / stats 15 / pair 15+12+10 / addition 10 / checklist 8 / outro 5）
+  - すべてのセクションに `dialogues` と `dialogue_directions` をペアで投入（dirs 件数=ターン数）
+  - `display_properties` の `maxHeight`/`fontSize` を内容量に応じて 30〜65 / 1.4〜1.6vw で指定
+  - `question` / `answer` / `wait_seconds` は使用せず（topic_video モードはクイズなし、間は `scenes.json` の `lesson_timings` で一元管理）
+  - 言語タグ `[lang:en]...[/lang]` を主要英語用語・サービス名・コード片すべてに付与（BOLA / RLS / OWASP API Security Top 10 / NEXT_PUBLIC_ / service_role / auth.uid() / DOMPurify ほか）
+  - AI自虐は section 8（pair ①②③）に1回、なるこの突拍子なボケ（`.env`＝縁？）は section 9（pair ④⑤）に1回のみ
+  - 7つの例え話（鍵のスペア／共有フォルダ／改札と指定席／戦場／新人アルバイト／銀行員フリ電話／メータータクシー）を section 10 で再掲
+  - section 13 outro で Trend Micro 引用＋「動いた」と「安全」は別の星＋元記事リンク誘導（出典は素材md記載の19件URLから配信ページ概要欄に貼る運用）
+- [x] **投入手順**:
+  - 生成スクリプト `/tmp/build_topic_video_sections.py` で `/tmp/topic_video_sections.json` を生成
+  - `POST /api/lessons/200/import-sections?lang=ja&generator=claude`（version 省略 → 新バージョン v1 自動採番）
+  - `version=1` 明示は version 行が未作成のため `バージョン 1 が見つかりません` で弾かれる仕様 → 初回は version 省略でインポートする
+- [x] **動作確認**: `GET /api/lessons/200` で 13 セクションすべてが `version_number=1` で並び、`section_type` 順序（prologue → incident×5 → stats → pair×3 → addition → checklist → outro）と `dialogues`/`dialogue_directions` 件数の一致を確認。`GET /api/lessons?kind=topic_video` で lesson 200 が `topic_video` フィルタに乗っていることも確認
+- [x] **次ステップ**: Step 5 で TTS 事前生成 → `plans/vibe-coder-security/topic-1-webapp-audition.md`（要新規作成、`lesson-1-audition.md` をテンプレに）の試聴チェックリストを `[x] N/N` で全項目埋める
+
 ## 紹介動画モード Step 3: 素材md作成 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
 
 - [x] **背景**: Step 4（セクション生成→DB投入）の前段として、元記事を Claude Code が dialogues / display_text を組める形に整理した素材メモを `plans/vibe-coder-security/topic-1-webapp-source.md` に保存。元記事は時間と共に更新されうるため、**2026-05-07 時点のスナップショット**として固定しておく
