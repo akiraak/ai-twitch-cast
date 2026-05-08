@@ -7,6 +7,11 @@
 - [ ] **Step 5 (#1)**: 配信して反応を見る（フィードバック収集）
 - [ ] **#2〜#10**: 各回の素材md → セクション生成 → 投入（概論への反応を見ながら順次着手）
 
+## 紹介動画モード（新規） → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
+
+- [ ] 第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」（lesson_id 200 予約 / 13セクション想定）
+      元記事: https://akiraak.github.io/deep-pulse/articles/2026-05-06_%E9%9D%9E%E3%82%A8%E3%83%B3%E3%82%B8%E3%83%8B%E3%82%A2%E3%81%AE%E3%83%90%E3%82%A4%E3%83%96%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0_%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3Web%E3%82%A2%E3%83%97%E3%83%AA%E7%B7%A8.html
+
 ## 授業モード
 - [ ] speech-generation-flow.md を最新実装に更新とフローチャートの追加 → [plans/speech-flow-doc-update.md](plans/speech-flow-doc-update.md)
 - [ ] C#画面のセクション進捗パネルが動いていない
