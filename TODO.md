@@ -12,9 +12,8 @@
 第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」（lesson_id 200 予約 / 13セクション想定）。
 元記事: https://akiraak.github.io/deep-pulse/articles/2026-05-06_%E9%9D%9E%E3%82%A8%E3%83%B3%E3%82%B8%E3%83%8B%E3%82%A2%E3%81%AE%E3%83%90%E3%82%A4%E3%83%96%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0_%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3Web%E3%82%A2%E3%83%97%E3%83%AA%E7%B7%A8.html
 
-Step 1（紹介動画モードの最小実装）は完了 → DONE.md 参照。残作業は以下:
+Step 1（紹介動画モードの最小実装）と Step 2（lesson_id 200 予約）は完了 → DONE.md 参照。残作業は以下:
 
-- [ ] **Step 2**: lesson_id 200 を予約 INSERT（プラン Step 2 の SQL）
 - [ ] **Step 3**: `plans/vibe-coder-security/topic-1-webapp-source.md` 作成（元記事スナップショット + アウトライン、`published: 2026-05-06 / accessed: 2026-05-07` を先頭に明記、出典 1 次ソース確認）
 - [ ] **Step 4**: セクション生成 → `POST /api/lessons/200/import-sections` で投入 → 管理画面で目視確認
 - [ ] **Step 5**: TTS 事前生成 → `plans/vibe-coder-security/topic-1-webapp-audition.md` の試聴チェックリストを `[x] N/N` で全項目埋める

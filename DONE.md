@@ -1,5 +1,15 @@
 # DONE
 
+## 紹介動画モード Step 2: lesson_id 200 予約 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
+
+- [x] **背景**: 紹介動画モード第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」の lesson 行を 200番台帯（紹介動画用）の先頭で確保。AUTOINCREMENT は触らず決め打ち INSERT で予約することで、後続の Step 3〜6（素材md / セクション生成 / TTS / 配信）が同じ lesson_id を前提に進められるようにする
+- [x] **対象**: `data/app.db`
+  - `lessons` に `id=200, name='#1 Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴', category='topic_video'` を INSERT
+  - `sqlite_sequence.lessons` を `MAX(seq, 200)` に更新（次回 AUTOINCREMENT が 201 以降になるよう前倒し）
+- [x] **事前確認**: lesson 200 が未登録であること、`lesson_categories` に `kind='topic_video'` の `topic_video` カテゴリ（id=3）が登録済みであることを確認した上で実行
+- [x] **影響範囲**: 既存 lesson 行（1〜109）は無変更。`sqlite_sequence` を 109 → 200 に進めたため、次の AUTOINCREMENT 発行は 201 になる（lesson モードの新規追加は影響を受けないが、200 番帯を紹介動画用に確保する目的なので問題なし）
+- [x] **次ステップ**: Step 3 で `plans/vibe-coder-security/topic-1-webapp-source.md` を作成し、元記事のスナップショット＋アウトラインを起こす
+
 ## 紹介動画モード Step 1: 最小実装 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
 
 - [x] **背景**: 既存 lesson モードは「教師×生徒で体系的に学ぶ」前提で、ニュース特集トーンの紹介動画には窮屈。新カテゴリ `topic_video` を立て、lesson 基盤を最大限流用しつつ、授業ではない再生モードとして独立させる。第1作は「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」（lesson_id 200 予約予定）
