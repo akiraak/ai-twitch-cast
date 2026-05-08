@@ -326,6 +326,7 @@ class LessonRunner:
         self._episode_id: int | None = None
         self._teacher_cfg: dict | None = None
         self._student_cfg: dict | None = None
+        self._kind: str = "lesson"  # 'lesson' | 'topic_video'
 
     @property
     def state(self) -> LessonState:
@@ -444,6 +445,10 @@ class LessonRunner:
         self._current_index = resume_index
         self._state = LessonState.RUNNING
         self._pause_event.set()
+        try:
+            self._kind = db.get_lesson_kind(lesson_id) or "lesson"
+        except Exception:
+            self._kind = "lesson"
         if episode_id:
             self._episode_id = episode_id
 
@@ -491,6 +496,10 @@ class LessonRunner:
         self._current_index = 0
         self._state = LessonState.RUNNING
         self._pause_event.set()
+        try:
+            self._kind = db.get_lesson_kind(lesson_id) or "lesson"
+        except Exception:
+            self._kind = "lesson"
 
         # キャラクター設定を取得
         try:
@@ -712,9 +721,13 @@ class LessonRunner:
             logger.warning("[lesson] セクション %d: dialogueバンドルが空", section_index)
             return None
 
-        # questionセクション
+        # questionセクション（topic_video モードでは quiz は使わないので skip）
         question_data = None
-        if section_type == "question" and section.get("question"):
+        if (
+            self._kind == "lesson"
+            and section_type == "question"
+            and section.get("question")
+        ):
             question_data = await self._build_question_data(section, order_index)
 
         return {
@@ -726,6 +739,7 @@ class LessonRunner:
             "display_properties": display_props,
             "dialogues": dlg_bundle,
             "question": question_data,
+            "kind": self._kind,
         }
 
     @staticmethod
@@ -808,6 +822,7 @@ class LessonRunner:
                 "total_sections": total,
                 "phase": "tts_generating",
                 "tts_progress": {"current": current + 1, "total": total},
+                "kind": self._kind,
             })
 
     @staticmethod
@@ -1040,6 +1055,7 @@ class LessonRunner:
                 "lesson_name": self._lesson_name,
                 "current_index": self._current_index,
                 "total_sections": len(self._sections),
+                "kind": self._kind,
             }
             # running/paused時はセクション概要を含める
             if self._state != LessonState.IDLE and self._sections:
@@ -1096,4 +1112,5 @@ class LessonRunner:
             "version_number": self._version_number,
             "current_index": self._current_index,
             "total_sections": len(self._sections),
+            "kind": self._kind,
         }

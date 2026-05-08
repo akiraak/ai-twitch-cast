@@ -209,9 +209,16 @@ function _autoSize(text, sectionType) {
   const maxUnits = lines.reduce((m, l) => Math.max(m, _lineUnits(l)), 0);
 
   // セクション種別ごとのベースフォント（強調系を大きめに）
+  // lesson 系: introduction / explanation / example / question / summary
+  // topic_video 系: prologue / incident / stats / pair / addition / checklist / outro
   const baseFs = ({
     question: 1.9, summary: 1.8, introduction: 1.8,
     explanation: 1.6, example: 1.5,
+    // 紹介動画モード
+    prologue: 1.8, outro: 1.8,
+    incident: 1.7, stats: 1.7,
+    pair: 1.6, addition: 1.6,
+    checklist: 1.6,
   })[sectionType] || 1.7;
 
   // 長い行があれば縮める（はみ出し防止）
@@ -277,19 +284,35 @@ function hideLessonText() {
 // --- 授業進捗パネル ---
 
 const PROGRESS_ICONS = {
-  introduction: '\u{1F3AC}',
-  explanation: '\u{1F4D6}',
-  example: '\u{1F4DD}',
-  question: '\u{2753}',
-  summary: '\u{1F3C1}',
+  // lesson モード
+  introduction: '\u{1F3AC}',  // 🎬
+  explanation: '\u{1F4D6}',   // 📖
+  example: '\u{1F4DD}',       // 📝
+  question: '\u{2753}',       // ❓
+  summary: '\u{1F3C1}',       // 🏁
+  // 紹介動画モード（topic_video）
+  prologue: '\u{1F3AC}',      // 🎬 イントロ
+  incident: '\u{1F6A8}',      // 🚨 事件
+  stats: '\u{1F4CA}',         // 📊 統計
+  pair: '\u{2696}\u{FE0F}',   // ⚖️ 対比（ダメ／OK）
+  addition: '\u{2795}',       // ➕ 追加対策
+  checklist: '\u{2705}',      // ✅ チェックリスト
+  outro: '\u{1F3C1}',         // 🏁 締め
 };
+
+function _kindLabel(kind) {
+  // 進捗パネル / タイトルパネルで使うラベルを kind から決める
+  return kind === 'topic_video' ? '紹介動画' : '授業';
+}
 
 function _updateProgressTitle(currentIndex, total) {
   const titleEl = document.getElementById('lesson-progress-title');
   if (!titleEl) return;
-  titleEl.innerHTML = `<span class="lp-title-text">授業の流れ</span><span class="lp-title-count">${currentIndex + 1}/${total}</span>`;
-  // datasetから保存済みスタイルを復元（innerHTMLで再生成されるため）
   const panel = document.getElementById('lesson-progress-panel');
+  const kind = (panel && panel.dataset.kind) || 'lesson';
+  const label = _kindLabel(kind) + 'の流れ';
+  titleEl.innerHTML = `<span class="lp-title-text">${label}</span><span class="lp-title-count">${currentIndex + 1}/${total}</span>`;
+  // datasetから保存済みスタイルを復元（innerHTMLで再生成されるため）
   if (!panel) return;
   const d = panel.dataset;
   const textEl = titleEl.querySelector('.lp-title-text');
@@ -305,10 +328,12 @@ function _updateProgressTitle(currentIndex, total) {
   }
 }
 
-function showLessonProgress(sections, currentIndex) {
+function showLessonProgress(sections, currentIndex, kind) {
   const panel = document.getElementById('lesson-progress-panel');
   const list = document.getElementById('lesson-progress-list');
   if (!panel || !list) return;
+  // kind を dataset に保存（タイトル更新やアイコン選択で参照）
+  panel.dataset.kind = kind || 'lesson';
   _updateProgressTitle(currentIndex, sections.length);
   const itemFs = panel.dataset.itemFontSize;
   list.innerHTML = '';
@@ -359,7 +384,10 @@ function hideLessonProgress() {
     if (!panel.classList.contains('visible')) {
       panel.style.display = 'none';
       const titleEl = document.getElementById('lesson-progress-title');
-      if (titleEl) titleEl.textContent = '授業の流れ';
+      if (titleEl) {
+        const kind = panel.dataset.kind || 'lesson';
+        titleEl.textContent = _kindLabel(kind) + 'の流れ';
+      }
     }
   }, 600);
 }
@@ -370,10 +398,12 @@ function _escHtml(s) {
 
 // --- 授業タイトルパネル ---
 
-function showLessonTitle(name) {
+function showLessonTitle(name, kind) {
   const panel = document.getElementById('lesson-title-panel');
   const text = document.getElementById('lesson-title-text');
   if (!panel || !text) return;
+  // kind を dataset に保存（タイトル枠の見た目を分岐したい時に使える）
+  panel.dataset.kind = kind || 'lesson';
   text.textContent = name;
   panel.style.display = 'flex';
   requestAnimationFrame(() => {

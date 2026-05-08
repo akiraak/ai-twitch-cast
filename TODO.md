@@ -12,16 +12,8 @@
 第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」（lesson_id 200 予約 / 13セクション想定）。
 元記事: https://akiraak.github.io/deep-pulse/articles/2026-05-06_%E9%9D%9E%E3%82%A8%E3%83%B3%E3%82%B8%E3%83%8B%E3%82%A2%E3%81%AE%E3%83%90%E3%82%A4%E3%83%96%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0_%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3Web%E3%82%A2%E3%83%97%E3%83%AA%E7%B7%A8.html
 
-- [ ] **Step 1-1**: `lesson_categories` に `kind TEXT NOT NULL DEFAULT 'lesson'` カラム追加マイグレーション（`src/db/core.py`）
-- [ ] **Step 1-2**: `src/db/lessons.py` (L261+) の `create_category` / `update_category` に `kind` 引数追加 + `__init__.py` re-export + `scripts/routes/teacher.py` カテゴリAPI揃え + `topic_video` カテゴリ作成
-- [ ] **Step 1-3**: `VALID_SECTION_TYPES` (`scripts/routes/teacher.py:907`) を kind 別ホワイトリストに拡張（lesson 用は現状維持、topic_video 用 = `prologue/incident/stats/pair/addition/checklist/outro`）
-- [ ] **Step 1-4**: `prompts/topic_video_generate.md` 新設（`lesson_generate.md` ベース、クイズ無し・ニュース特集トーン）
-- [ ] **Step 1-5**: `src/db/lessons.py` に `get_lesson_kind(lesson_id) -> str` ヘルパ追加（JOIN 経由で解決）
-- [ ] **Step 1-6**: `lesson_runner.py` で kind を見て quiz 待ちロジックを skip 分岐
-- [ ] **Step 1-7**: `static/js/broadcast/panels.js` の `baseFs` (L213) と `PROGRESS_ICONS` (L280) に新 7 種を追加
-- [ ] **Step 1-8**: 管理画面に「紹介動画」タブ追加（kind フィルタを引数化した共通モジュールとして実装）
-- [ ] **Step 1-9**: `broadcast.html` の「再生中」ラベルを kind で「授業: …」/「紹介動画: …」に分岐
-- [ ] **Step 1-10**: テスト追加（`test_api_teacher.py` の VALID_SECTION_TYPES 拡張 + `test_db.py` で `get_lesson_kind` JOIN 検証）
+Step 1（紹介動画モードの最小実装）は完了 → DONE.md 参照。残作業は以下:
+
 - [ ] **Step 2**: lesson_id 200 を予約 INSERT（プラン Step 2 の SQL）
 - [ ] **Step 3**: `plans/vibe-coder-security/topic-1-webapp-source.md` 作成（元記事スナップショット + アウトライン、`published: 2026-05-06 / accessed: 2026-05-07` を先頭に明記、出典 1 次ソース確認）
 - [ ] **Step 4**: セクション生成 → `POST /api/lessons/200/import-sections` で投入 → 管理画面で目視確認

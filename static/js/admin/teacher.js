@@ -18,11 +18,24 @@ let _lessonLangTab = {};
 // バージョン選択状態（`${lessonId}_${lang}` → version_number）
 let _lessonVersionTab = {};
 
-// カテゴリ一覧キャッシュ
+// カテゴリ一覧キャッシュ（_currentKind の切替で再読込される）
 let _lessonCategories = null;
 
-// 選択中のカテゴリslug（null = 全て表示）
+// 選択中のカテゴリslug（null = 全て表示）。kind 切替時にリセットされる
 let _selectedCategory = null;
+
+// 現在表示中の kind（'lesson' = 教師モード / 'topic_video' = 紹介動画モード）
+let _currentKind = 'lesson';
+
+// kind ごとの DOM コンテナ ID
+const _KIND_DOM = {
+  lesson:      { list: 'lesson-list',       cats: 'category-tabs-container' },
+  topic_video: { list: 'lesson-list-topic', cats: 'category-tabs-container-topic' },
+};
+
+function _domForKind(kind) {
+  return _KIND_DOM[kind] || _KIND_DOM.lesson;
+}
 
 // TTS事前生成ポーリングタイマー（key → intervalId）
 let _ttsPregenTimers = {};
@@ -70,7 +83,8 @@ async function _switchLessonVersion(lessonId, lang, vn) {
 }
 
 async function _loadCategories() {
-  const res = await api('GET', '/api/lesson-categories');
+  // _currentKind に対応するカテゴリのみ取得
+  const res = await api('GET', '/api/lesson-categories?kind=' + encodeURIComponent(_currentKind));
   _lessonCategories = (res && res.ok) ? res.categories : [];
 }
 
@@ -79,6 +93,18 @@ function switchConvSubtab(name, el) {
   document.querySelectorAll('#tab-convmode .char-subcontent').forEach(t => t.classList.remove('active'));
   document.getElementById('conv-sub-' + name).classList.add('active');
   if (el) el.classList.add('active');
+  // kind 連動: 'teacher' → 'lesson' / 'topic-video' → 'topic_video'
+  const kindMap = { 'teacher': 'lesson', 'topic-video': 'topic_video' };
+  const newKind = kindMap[name];
+  if (newKind && newKind !== _currentKind) {
+    _currentKind = newKind;
+    _selectedCategory = null;       // kind 切替で全カテゴリ表示にリセット
+    _lessonCategories = null;       // 次の loadLessons で再取得
+    loadLessons();
+  } else if (newKind) {
+    // 同じ kind の再選択でも、初回は描画されていないので一度ロード
+    loadLessons();
+  }
 }
 
 // --- コンテンツ一覧（各コンテンツを縦に並べる） ---
@@ -86,19 +112,22 @@ function switchConvSubtab(name, el) {
 let _cachedLessonStatus = null;
 
 async function loadLessons() {
-  const res = await api('GET', '/api/lessons');
+  // _currentKind で絞り込んだコンテンツ一覧を取得
+  const res = await api('GET', '/api/lessons?kind=' + encodeURIComponent(_currentKind));
   if (!res || !res.ok) return;
   // カテゴリとステータスを取得
   if (!_lessonCategories) await _loadCategories();
   const statusRes = await api('GET', '/api/lessons/status');
   _cachedLessonStatus = statusRes;
-  // カテゴリタブバー（専用カードに描画）
-  const catContainer = document.getElementById('category-tabs-container');
+  // カテゴリタブバー（kind ごとの専用カードに描画）
+  const dom = _domForKind(_currentKind);
+  const catContainer = document.getElementById(dom.cats);
   if (catContainer) {
     catContainer.innerHTML = '';
     _renderCategoryTabs(catContainer);
   }
-  const list = document.getElementById('lesson-list');
+  const list = document.getElementById(dom.list);
+  if (!list) return;
   list.innerHTML = '';
   // カテゴリでフィルタ
   const filtered = _selectedCategory === null
@@ -108,8 +137,10 @@ async function loadLessons() {
     const item = await buildLessonItem(l.id);
     if (item) list.appendChild(item);
   }
-  // 学習ダッシュボード（コンテンツ一覧の下に統合）
-  _renderLearningSection(list);
+  // 学習ダッシュボードは授業モードのみ（紹介動画モードは未対応）
+  if (_currentKind === 'lesson') {
+    _renderLearningSection(list);
+  }
 }
 
 async function buildLessonItem(lessonId) {
@@ -446,10 +477,14 @@ async function buildLessonItem(lessonId) {
   return details;
 }
 
-async function createLesson() {
-  // カテゴリがないと授業を作成できない
+async function createLesson(kind) {
+  // 引数なしの呼び出しは現在表示中の kind を使う
+  kind = kind || _currentKind || 'lesson';
+  // カテゴリは kind 限定（_lessonCategories は kind フィルタ済み）
   if (!_lessonCategories || _lessonCategories.length === 0) {
-    const ok = await showConfirm('授業を作成するには、まずカテゴリを作成してください。\n今すぐカテゴリを作成しますか？', {
+    const labelMap = { lesson: '授業', topic_video: '紹介動画' };
+    const label = labelMap[kind] || 'コンテンツ';
+    const ok = await showConfirm(`${label}を作成するには、まずカテゴリを作成してください。\n今すぐカテゴリを作成しますか？`, {
       title: 'カテゴリが必要です',
       okLabel: 'カテゴリを作成',
     });
@@ -1572,7 +1607,10 @@ async function createCategory() {
         if (!name) { nameEl.style.borderColor = '#c62828'; nameEl.focus(); return; }
         overlay.remove();
         try {
-          const res = await api('POST', '/api/lesson-categories', { slug, name, description: '' });
+          // 現在表示中の kind に紐づくカテゴリとして作成
+          const res = await api('POST', '/api/lesson-categories', {
+            slug, name, description: '', kind: _currentKind || 'lesson',
+          });
           if (res && res.ok) {
             _lessonCategories = null;
             showToast('カテゴリ作成: ' + name, 'success');

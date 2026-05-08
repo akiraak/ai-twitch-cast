@@ -24,10 +24,21 @@ def get_lesson(lesson_id):
     return dict(row) if row else None
 
 
-def get_all_lessons():
-    """全授業コンテンツを取得する"""
+def get_all_lessons(kind=None):
+    """全授業コンテンツを取得する。kind 指定時は lesson_categories.kind で絞り込み（未分類は kind='lesson' 扱い）"""
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM lessons ORDER BY created_at DESC").fetchall()
+    if kind is None:
+        rows = conn.execute("SELECT * FROM lessons ORDER BY created_at DESC").fetchall()
+    else:
+        # lessons.category → lesson_categories.slug → kind の LEFT JOIN。
+        # category が未設定 or カテゴリ未登録 のレッスンは kind='lesson' とみなす。
+        rows = conn.execute(
+            """SELECT l.* FROM lessons l
+               LEFT JOIN lesson_categories c ON l.category = c.slug
+               WHERE COALESCE(c.kind, 'lesson') = ?
+               ORDER BY l.created_at DESC""",
+            (kind,),
+        ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -267,13 +278,13 @@ def get_categories():
     return [dict(r) for r in rows]
 
 
-def create_category(slug, name, description="", prompt_file="", prompt_content=""):
+def create_category(slug, name, description="", prompt_file="", prompt_content="", kind="lesson"):
     """カテゴリを作成する"""
     conn = get_connection()
     cur = conn.execute(
-        "INSERT INTO lesson_categories (slug, name, description, prompt_file, prompt_content, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (slug, name, description, prompt_file, prompt_content, _now()),
+        "INSERT INTO lesson_categories (slug, name, description, prompt_file, prompt_content, kind, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (slug, name, description, prompt_file, prompt_content, kind, _now()),
     )
     conn.commit()
     return dict(conn.execute("SELECT * FROM lesson_categories WHERE id = ?", (cur.lastrowid,)).fetchone())
@@ -282,7 +293,7 @@ def create_category(slug, name, description="", prompt_file="", prompt_content="
 def update_category(category_id, **fields):
     """カテゴリを更新する"""
     conn = get_connection()
-    allowed = {"name", "description", "prompt_file", "prompt_content"}
+    allowed = {"name", "description", "prompt_file", "prompt_content", "kind"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
@@ -297,6 +308,23 @@ def get_category_by_slug(slug):
     conn = get_connection()
     row = conn.execute("SELECT * FROM lesson_categories WHERE slug = ?", (slug,)).fetchone()
     return dict(row) if row else None
+
+
+def get_lesson_kind(lesson_id):
+    """lesson の再生モード kind を返す。
+    lessons.category → lesson_categories.slug → lesson_categories.kind の JOIN。
+    レッスン未登録 / category 未設定 / カテゴリ未登録 / kind カラム未マイグレーションのいずれも 'lesson' を返す。"""
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT COALESCE(c.kind, 'lesson') AS kind
+           FROM lessons l
+           LEFT JOIN lesson_categories c ON l.category = c.slug
+           WHERE l.id = ?""",
+        (lesson_id,),
+    ).fetchone()
+    if not row:
+        return "lesson"
+    return row["kind"] or "lesson"
 
 
 def delete_category(category_id):

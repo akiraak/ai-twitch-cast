@@ -1,5 +1,27 @@
 # DONE
 
+## 紹介動画モード Step 1: 最小実装 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
+
+- [x] **背景**: 既存 lesson モードは「教師×生徒で体系的に学ぶ」前提で、ニュース特集トーンの紹介動画には窮屈。新カテゴリ `topic_video` を立て、lesson 基盤を最大限流用しつつ、授業ではない再生モードとして独立させる。第1作は「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」（lesson_id 200 予約予定）
+- [x] **対象**:
+  - `src/db/core.py` — `lesson_categories` に `kind TEXT NOT NULL DEFAULT 'lesson'` カラム追加マイグレーション（冪等）
+  - `src/db/lessons.py` — `create_category` / `update_category` に `kind` 引数追加。`get_lesson_kind(lesson_id)` ヘルパ追加（`lessons.category` → `lesson_categories.slug` → `kind` の LEFT JOIN）。`get_all_lessons(kind=...)` で kind フィルタ追加
+  - `src/db/__init__.py` — `get_lesson_kind` を re-export
+  - `scripts/routes/teacher.py` — `CategoryCreate.kind` / `/api/lesson-categories?kind=` フィルタ / `/api/lessons?kind=` フィルタ追加。`SECTION_TYPES_BY_KIND` を新設し、`import_sections` でレッスンの kind を引いて section_type を kind 別に検証
+  - `src/lesson_runner.py` — `_kind` 状態を追加し、start/restore で `db.get_lesson_kind` を呼んで保存。`_build_section_bundle` で `kind=='lesson'` のときだけ question データを構築（topic_video は quiz スキップ）。`_notify_status` / `_notify_tts_progress` / `get_status` / バンドル に `kind` を含めて C# / broadcast 側へ伝搬
+  - `prompts/topic_video_generate.md` — 新設。`lesson_generate.md` ベースで、クイズ無し・ニュース特集トーン・新 section_type（`prologue / incident / stats / pair / addition / checklist / outro`）・トーンルール（煽らない／攻撃手口は出さない／AI自虐は1回まで）・出典記述ルールを定義
+  - `static/js/broadcast/panels.js` — `baseFs` / `PROGRESS_ICONS` に新 7 種を追加（事件 🚨 / 統計 📊 / pair ⚖️ / addition ➕ / checklist ✅ / prologue 🎬 / outro 🏁）。`_kindLabel(kind)` 関数を追加し、進捗パネルのタイトルを kind で「授業の流れ」/「紹介動画の流れ」に分岐。`showLessonProgress` / `showLessonTitle` が kind を受け取り `panel.dataset.kind` に保存
+  - `static/js/broadcast/websocket.js` — `lesson_status` イベントから `data.kind` を読み、`showLessonTitle(name, kind)` / `showLessonProgress(sections, idx, kind)` に伝搬
+  - `static/index.html` — 会話モードタブに「紹介動画」サブタブを追加（`conv-sub-topic-video` / `lesson-list-topic` / `category-tabs-container-topic`）
+  - `static/js/admin/teacher.js` — `_currentKind` 状態と `_KIND_DOM` マップを追加。`switchConvSubtab` で kind を切り替え、`loadLessons()` / `_loadCategories()` / `createLesson(kind)` / `createCategory()` が kind 連動。`/api/lessons?kind=` と `/api/lesson-categories?kind=` で API 側もフィルタ
+  - `tests/test_db.py` — `TestLessonCategories` に kind 系 4 テスト追加（kind 引数で作成、`get_lesson_kind` JOIN 検証、未知カテゴリの 'lesson' フォールバック、`get_all_lessons(kind=)` フィルタ）
+  - `tests/test_api_teacher.py` — `TestTopicVideoKind` クラス新設、kind 系 8 テスト追加（カテゴリ kind 作成・デフォルト・未知 kind 拒否・カテゴリ/レッスン一覧の kind フィルタ・section_type の kind 別ホワイトリスト 3 系統）
+  - `data/app.db` — マイグレーション適用 + `topic_video` カテゴリ行（id=3, kind=topic_video）作成
+- [x] **テスト**: `python3 -m pytest tests/ -q -m "not slow"` → 300 件 pass（追加 12 件含む）
+- [x] **設計**: `lesson_categories.kind` 1 カラム追加で大半の差分を吸収。テーブルを別に切ると TTS 事前生成・runner・admin UI を二重実装することになるため、現時点ではオーバーキル → 将来 lesson と紹介動画の差が大きくなったら検討
+- [x] **影響範囲**: 既存 lesson モードは無変更（`kind='lesson'` がデフォルト）。VALID_SECTION_TYPES の lesson 用ホワイトリストは現状維持し、import-sections の検証に kind 別ホワイトリストを追加するだけ
+- [x] **完了条件 (プラン側)**: `lesson_categories.kind` 追加 / `topic_video` カテゴリ DB 登録 / `prompts/topic_video_generate.md` 作成 / 管理画面の「紹介動画」タブ表示 / `lesson_runner` の kind 別 quiz スキップ → 全部達成
+
 ## CLAUDE.md: 配信動画クロップ＆音量ノーマライズ手順を追記
 
 - [x] **背景**: C#ネイティブ配信アプリのウィンドウ録画（`debug-ss/*.mp4`）から配信領域だけを切り出して音量を整える作業を繰り返し行うので、設定値とコマンドを CLAUDE.md に正本化

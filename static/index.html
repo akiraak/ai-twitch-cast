@@ -618,24 +618,40 @@ users       1──N  comments      (user_id)</div>
     <!-- サブタブ -->
     <div class="char-subtabs">
       <div class="char-subtab active" onclick="switchConvSubtab('teacher', this)">教師モード</div>
+      <div class="char-subtab" onclick="switchConvSubtab('topic-video', this)">紹介動画</div>
       <div class="char-subtab" onclick="switchConvSubtab('casual', this)">雑談モード</div>
     </div>
 
-    <!-- カテゴリ（教師モードの上） -->
+    <!-- 教師モード -->
     <div class="char-subcontent active" id="conv-sub-teacher">
       <div class="card" id="category-card">
         <h2 style="margin:0 0 8px 0;">カテゴリ</h2>
         <div id="category-tabs-container"></div>
       </div>
 
-      <!-- 教師モード -->
       <div class="card">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
           <h2 style="margin:0;">授業コンテンツ</h2>
-          <button onclick="createLesson()" style="padding:4px 12px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">+ 新規</button>
+          <button onclick="createLesson('lesson')" style="padding:4px 12px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">+ 新規</button>
         </div>
         <!-- コンテンツ一覧（JS で各コンテンツを折りたたみブロックとして生成） -->
         <div id="lesson-list"></div>
+      </div>
+    </div>
+
+    <!-- 紹介動画モード -->
+    <div class="char-subcontent" id="conv-sub-topic-video">
+      <div class="card">
+        <h2 style="margin:0 0 8px 0;">カテゴリ</h2>
+        <div id="category-tabs-container-topic"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+          <h2 style="margin:0;">紹介動画コンテンツ</h2>
+          <button onclick="createLesson('topic_video')" style="padding:4px 12px; background:#7b1fa2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">+ 新規</button>
+        </div>
+        <div id="lesson-list-topic"></div>
       </div>
     </div>
 

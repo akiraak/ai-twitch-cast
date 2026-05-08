@@ -180,15 +180,16 @@ function connectWS() {
       // 授業ステータス（パネル表示切替 + タイトル + 進捗パネル更新）
       case 'lesson_status':
         if (data.state === 'running' || data.state === 'paused') {
+          const kind = data.kind || 'lesson';
           setLessonMode(true);
           if (data.lesson_name) {
-            showLessonTitle(data.lesson_name);
+            showLessonTitle(data.lesson_name, kind);
           } else {
             // C#（軽量更新）からのイベント: 既存タイトルが残っていれば再表示
             reshowLessonTitleIfHasContent();
           }
           if (data.sections) {
-            showLessonProgress(data.sections, data.current_index);
+            showLessonProgress(data.sections, data.current_index, kind);
           } else {
             updateLessonProgress(data.current_index);
           }

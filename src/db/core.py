@@ -507,6 +507,13 @@ def _create_tables(conn):
     except sqlite3.OperationalError:
         pass
 
+    # Migration: lesson_categories に kind カラム追加（'lesson' / 'topic_video' で再生モードを識別）
+    try:
+        conn.execute("ALTER TABLE lesson_categories ADD COLUMN kind TEXT NOT NULL DEFAULT 'lesson'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # Migration: lessons に category カラム追加
     try:
         conn.execute("ALTER TABLE lessons ADD COLUMN category TEXT NOT NULL DEFAULT ''")

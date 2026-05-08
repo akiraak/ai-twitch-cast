@@ -87,6 +87,7 @@ from .lessons import (
     update_category,
     get_category_by_slug,
     delete_category,
+    get_lesson_kind,
     # バージョン
     get_lesson_versions,
     get_lesson_version,

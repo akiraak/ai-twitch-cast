@@ -63,6 +63,50 @@ class TestLessonState:
         assert status["generator"] == "gemini"
         assert status["current_index"] == 0
         assert status["total_sections"] == 0
+        # kind の既定は 'lesson'（紹介動画モード追加で導入）
+        assert status["kind"] == "lesson"
+
+
+class TestLessonKind:
+    """紹介動画モード（kind=topic_video）の LessonRunner 統合テスト"""
+
+    @pytest.mark.asyncio
+    async def test_kind_lesson_when_no_category(self, runner, test_db):
+        """category 未設定なら kind は 'lesson' にフォールバック"""
+        lesson = test_db.create_lesson("NoCat")
+        test_db.add_lesson_section(lesson["id"], 0, "introduction", "本文")
+        await runner.start(lesson["id"])
+        try:
+            assert runner.get_status()["kind"] == "lesson"
+        finally:
+            await runner.stop()
+
+    @pytest.mark.asyncio
+    async def test_kind_topic_video_when_category_kind_is_topic_video(self, runner, test_db):
+        """category が kind='topic_video' のカテゴリなら runner._kind = 'topic_video'"""
+        test_db.create_category("tv_runner", "紹介動画ランナーテスト", kind="topic_video")
+        lesson = test_db.create_lesson("TVLesson", category="tv_runner")
+        # topic_video モードでは prologue/incident/outro 等を使う
+        test_db.add_lesson_section(lesson["id"], 0, "prologue", "イントロ")
+        await runner.start(lesson["id"])
+        try:
+            status = runner.get_status()
+            assert status["kind"] == "topic_video"
+            assert status["lesson_id"] == lesson["id"]
+        finally:
+            await runner.stop()
+
+    @pytest.mark.asyncio
+    async def test_kind_lesson_when_category_kind_is_lesson(self, runner, test_db):
+        """category が kind='lesson' なら runner._kind = 'lesson'"""
+        test_db.create_category("regular_runner", "通常授業ランナーテスト", kind="lesson")
+        lesson = test_db.create_lesson("RegLesson", category="regular_runner")
+        test_db.add_lesson_section(lesson["id"], 0, "introduction", "本文")
+        await runner.start(lesson["id"])
+        try:
+            assert runner.get_status()["kind"] == "lesson"
+        finally:
+            await runner.stop()
 
 
 class TestLessonLifecycle:

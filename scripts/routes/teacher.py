@@ -216,9 +216,9 @@ class SectionImport(BaseModel):
 
 
 @router.get("/api/lessons")
-async def list_lessons():
-    """全コンテンツ一覧"""
-    lessons = db.get_all_lessons()
+async def list_lessons(kind: str = ""):
+    """全コンテンツ一覧（kind 指定で絞り込み: 'lesson' / 'topic_video'）"""
+    lessons = db.get_all_lessons(kind=kind or None)
     return {"ok": True, "lessons": lessons}
 
 
@@ -238,12 +238,15 @@ class CategoryCreate(BaseModel):
     name: str
     description: str = ""
     prompt_content: str = ""
+    kind: str = "lesson"  # 'lesson' | 'topic_video'
 
 
 @router.get("/api/lesson-categories")
-async def list_categories():
-    """カテゴリ一覧"""
+async def list_categories(kind: str = ""):
+    """カテゴリ一覧（kindで絞り込み可能。空ならすべて返す）"""
     categories = db.get_categories()
+    if kind:
+        categories = [c for c in categories if (c.get("kind") or "lesson") == kind]
     return {"ok": True, "categories": categories}
 
 
@@ -253,9 +256,12 @@ async def create_category(body: CategoryCreate):
     existing = db.get_category_by_slug(body.slug)
     if existing:
         return {"ok": False, "error": f"slug '{body.slug}' は既に存在します"}
+    if body.kind not in ("lesson", "topic_video"):
+        return {"ok": False, "error": f"未知の kind: {body.kind}"}
     cat = db.create_category(body.slug, body.name,
-                             description=body.description, prompt_content=body.prompt_content)
-    logger.info("カテゴリ作成: %s (%s)", body.name, body.slug)
+                             description=body.description, prompt_content=body.prompt_content,
+                             kind=body.kind)
+    logger.info("カテゴリ作成: %s (%s, kind=%s)", body.name, body.slug, body.kind)
     return {"ok": True, "category": cat}
 
 
@@ -904,8 +910,24 @@ async def update_plan(lesson_id: int, body: PlanUpdate):
 # --- セクション インポート ---
 
 
+# 旧定数（lesson モードのデフォルト）。後方互換のため残す。新規参照は SECTION_TYPES_BY_KIND を使う
 VALID_SECTION_TYPES = {"introduction", "explanation", "example", "question", "summary"}
+
+# kind別 section_type ホワイトリスト
+# - 'lesson': 既存の授業モード（学習フロー）
+# - 'topic_video': 紹介動画モード（ニュース特集）
+SECTION_TYPES_BY_KIND = {
+    "lesson": {"introduction", "explanation", "example", "question", "summary"},
+    "topic_video": {"prologue", "incident", "stats", "pair", "addition", "checklist", "outro"},
+}
 VALID_EMOTIONS = {"joy", "excited", "surprise", "thinking", "sad", "embarrassed", "neutral"}
+
+
+def _section_types_for_lesson(lesson_id: int) -> set:
+    """lesson の kind を引いて、許容される section_type のセットを返す。
+    kind 不明・未分類なら 'lesson' 用を返す（後方互換）。"""
+    kind = db.get_lesson_kind(lesson_id) if hasattr(db, "get_lesson_kind") else "lesson"
+    return SECTION_TYPES_BY_KIND.get(kind, SECTION_TYPES_BY_KIND["lesson"])
 
 
 @router.post("/api/lessons/{lesson_id}/import-sections")
@@ -927,12 +949,15 @@ async def import_sections(
     if not body.sections:
         return {"ok": False, "error": "セクションが空です"}
 
+    # kind 別 section_type ホワイトリスト
+    valid_types = _section_types_for_lesson(lesson_id)
+
     # フォーマット検証
     errors = []
     for i, s in enumerate(body.sections):
         if not s.get("section_type"):
             errors.append(f"セクション{i}: section_type が必須です")
-        elif s["section_type"] not in VALID_SECTION_TYPES:
+        elif s["section_type"] not in valid_types:
             errors.append(f"セクション{i}: 不明な section_type: {s['section_type']}")
         if not s.get("content"):
             errors.append(f"セクション{i}: content が必須です")

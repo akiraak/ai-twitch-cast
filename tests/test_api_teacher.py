@@ -2772,3 +2772,144 @@ class TestTtsPregenAPI:
             assert cancel_event.is_set()
         finally:
             teacher_mod._tts_pregen_tasks.pop(key, None)
+
+
+class TestTopicVideoKind:
+    """紹介動画モード（kind=topic_video）のテスト
+
+    - lesson_categories.kind カラムが追加されている
+    - /api/lesson-categories?kind=topic_video で絞り込みできる
+    - /api/lessons?kind=topic_video で絞り込みできる
+    - VALID_SECTION_TYPES が kind 別に分岐し、import-sections が kind 違いの section_type を弾く
+    """
+
+    def _topic_section(self, section_type="prologue", **overrides):
+        sec = {
+            "section_type": section_type,
+            "title": "T",
+            "content": "本文",
+            "tts_text": "本文",
+            "display_text": "画面表示",
+            "emotion": "excited",
+            "dialogues": [
+                {"speaker": "teacher", "content": "ちょビ", "tts_text": "ちょビ", "emotion": "excited"},
+                {"speaker": "student", "content": "なるこ", "tts_text": "なるこ", "emotion": "surprise"},
+            ],
+        }
+        sec.update(overrides)
+        return sec
+
+    def test_create_category_with_kind(self, api_client):
+        """kind=topic_video でカテゴリを作成できる"""
+        resp = api_client.post("/api/lesson-categories", json={
+            "slug": "tv1", "name": "紹介動画1", "kind": "topic_video",
+        })
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["category"]["kind"] == "topic_video"
+
+    def test_create_category_default_kind_is_lesson(self, api_client):
+        """kind を省略すると lesson になる"""
+        resp = api_client.post("/api/lesson-categories", json={
+            "slug": "lessondefault", "name": "デフォ授業",
+        })
+        assert resp.json()["category"]["kind"] == "lesson"
+
+    def test_create_category_unknown_kind_rejected(self, api_client):
+        """未知の kind は弾かれる"""
+        resp = api_client.post("/api/lesson-categories", json={
+            "slug": "x", "name": "x", "kind": "unknown_kind",
+        })
+        assert resp.json()["ok"] is False
+
+    def test_list_categories_filtered_by_kind(self, api_client):
+        """?kind=topic_video でカテゴリ一覧を絞り込み"""
+        api_client.post("/api/lesson-categories", json={
+            "slug": "lcat", "name": "授業カテゴリ", "kind": "lesson",
+        })
+        api_client.post("/api/lesson-categories", json={
+            "slug": "tcat", "name": "紹介動画カテゴリ", "kind": "topic_video",
+        })
+        # lesson 絞り込み
+        r = api_client.get("/api/lesson-categories?kind=lesson")
+        slugs = {c["slug"] for c in r.json()["categories"]}
+        assert "lcat" in slugs
+        assert "tcat" not in slugs
+        # topic_video 絞り込み
+        r = api_client.get("/api/lesson-categories?kind=topic_video")
+        slugs = {c["slug"] for c in r.json()["categories"]}
+        assert "tcat" in slugs
+        assert "lcat" not in slugs
+
+    def test_list_lessons_filtered_by_kind(self, api_client):
+        """?kind=topic_video でコンテンツ一覧を絞り込み"""
+        api_client.post("/api/lesson-categories", json={
+            "slug": "lk", "name": "授業", "kind": "lesson",
+        })
+        api_client.post("/api/lesson-categories", json={
+            "slug": "tk", "name": "紹介", "kind": "topic_video",
+        })
+        r = api_client.post("/api/lessons", json={"name": "Lレッスン", "category": "lk"})
+        l_id = r.json()["lesson"]["id"]
+        r = api_client.post("/api/lessons", json={"name": "T紹介動画", "category": "tk"})
+        t_id = r.json()["lesson"]["id"]
+
+        ids_t = {l["id"] for l in api_client.get("/api/lessons?kind=topic_video").json()["lessons"]}
+        assert t_id in ids_t
+        assert l_id not in ids_t
+
+        ids_l = {l["id"] for l in api_client.get("/api/lessons?kind=lesson").json()["lessons"]}
+        assert l_id in ids_l
+        assert t_id not in ids_l
+
+    def test_import_sections_topic_video_accepts_new_types(self, api_client):
+        """topic_video の lesson は prologue/incident/outro 等を受け入れる"""
+        api_client.post("/api/lesson-categories", json={
+            "slug": "tk2", "name": "紹介", "kind": "topic_video",
+        })
+        r = api_client.post("/api/lessons", json={"name": "TV1", "category": "tk2"})
+        lid = r.json()["lesson"]["id"]
+
+        sections = [
+            self._topic_section("prologue"),
+            self._topic_section("incident"),
+            self._topic_section("outro"),
+        ]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": sections},
+        )
+        data = resp.json()
+        assert data["ok"] is True, data
+        types = [s["section_type"] for s in data["sections"]]
+        assert types == ["prologue", "incident", "outro"]
+
+    def test_import_sections_topic_video_rejects_lesson_types(self, api_client):
+        """topic_video の lesson に introduction/question 等は弾かれる"""
+        api_client.post("/api/lesson-categories", json={
+            "slug": "tk3", "name": "紹介", "kind": "topic_video",
+        })
+        r = api_client.post("/api/lessons", json={"name": "TV2", "category": "tk3"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": [self._topic_section("introduction")]},
+        )
+        data = resp.json()
+        assert data["ok"] is False
+        assert "details" in data
+
+    def test_import_sections_lesson_kind_rejects_topic_types(self, api_client):
+        """lesson kind の lesson に prologue 等は弾かれる（後方互換）"""
+        api_client.post("/api/lesson-categories", json={
+            "slug": "lk2", "name": "授業", "kind": "lesson",
+        })
+        r = api_client.post("/api/lessons", json={"name": "L1", "category": "lk2"})
+        lid = r.json()["lesson"]["id"]
+        resp = api_client.post(
+            f"/api/lessons/{lid}/import-sections?lang=ja&generator=claude",
+            json={"sections": [self._topic_section("prologue")]},
+        )
+        data = resp.json()
+        assert data["ok"] is False
+        assert "details" in data

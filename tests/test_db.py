@@ -991,6 +991,53 @@ class TestLessonCategories:
         updated = test_db.get_lesson(lesson["id"])
         assert updated["category"] == ""
 
+    def test_create_category_with_kind(self, test_db):
+        """kind を指定してカテゴリを作成できる"""
+        cat = test_db.create_category("topic1", "紹介動画1", kind="topic_video")
+        assert cat["kind"] == "topic_video"
+        cat2 = test_db.create_category("lesson1", "授業1")
+        assert cat2["kind"] == "lesson"  # 省略時のデフォルト
+
+    def test_get_lesson_kind_via_join(self, test_db):
+        """get_lesson_kind は lessons.category → lesson_categories.kind を JOIN で解決する"""
+        test_db.create_category("topic_a", "紹介動画A", kind="topic_video")
+        test_db.create_category("lesson_b", "授業B", kind="lesson")
+        topic_lesson = test_db.create_lesson("TopicVideoLesson", category="topic_a")
+        regular_lesson = test_db.create_lesson("RegularLesson", category="lesson_b")
+        unclassified = test_db.create_lesson("Unclassified")  # category=""
+
+        assert test_db.get_lesson_kind(topic_lesson["id"]) == "topic_video"
+        assert test_db.get_lesson_kind(regular_lesson["id"]) == "lesson"
+        # category 未設定 → デフォルト 'lesson' にフォールバック
+        assert test_db.get_lesson_kind(unclassified["id"]) == "lesson"
+        # 存在しない lesson_id → 'lesson' にフォールバック
+        assert test_db.get_lesson_kind(99999) == "lesson"
+
+    def test_get_lesson_kind_with_unknown_category(self, test_db):
+        """category がカテゴリ表に存在しないとき 'lesson' にフォールバック"""
+        lesson = test_db.create_lesson("Orphan", category="nonexistent_slug")
+        assert test_db.get_lesson_kind(lesson["id"]) == "lesson"
+
+    def test_get_all_lessons_filtered_by_kind(self, test_db):
+        """get_all_lessons(kind=) で絞り込みできる"""
+        test_db.create_category("ck_topic", "紹介動画C", kind="topic_video")
+        test_db.create_category("ck_lesson", "授業C", kind="lesson")
+        a = test_db.create_lesson("topic-A", category="ck_topic")
+        b = test_db.create_lesson("topic-B", category="ck_topic")
+        c = test_db.create_lesson("lesson-C", category="ck_lesson")
+        d = test_db.create_lesson("Unclass")  # category=""
+
+        topic_ids = {l["id"] for l in test_db.get_all_lessons(kind="topic_video")}
+        assert topic_ids == {a["id"], b["id"]}
+
+        lesson_ids = {l["id"] for l in test_db.get_all_lessons(kind="lesson")}
+        # category 未設定（"」）の Unclass も 'lesson' 扱いで含まれる
+        assert lesson_ids == {c["id"], d["id"]}
+
+        # kind 未指定なら全件
+        all_ids = {l["id"] for l in test_db.get_all_lessons()}
+        assert all_ids == {a["id"], b["id"], c["id"], d["id"]}
+
 
 class TestLessonVersions:
     def test_create_and_get(self, test_db):
