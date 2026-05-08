@@ -1,5 +1,20 @@
 # DONE
 
+## 紹介動画モード Step 3: 素材md作成 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
+
+- [x] **背景**: Step 4（セクション生成→DB投入）の前段として、元記事を Claude Code が dialogues / display_text を組める形に整理した素材メモを `plans/vibe-coder-security/topic-1-webapp-source.md` に保存。元記事は時間と共に更新されうるため、**2026-05-07 時点のスナップショット**として固定しておく
+- [x] **対象**: `plans/vibe-coder-security/topic-1-webapp-source.md`（新規）
+  - 先頭に `published: 2026-05-06 / accessed: 2026-05-07` を明記、元記事URL・対応 lesson_id (200) / kind (topic_video) を記載
+  - 5事件の事実データ（年月・被害規模・原因クラス・一次/主出典）をテーブル化（Lovable BOLA / Lovable RLS / tea dating / Replit DB削除 / Moltbook）
+  - 統計データ（45% / 2.74倍 / 91.5% / 20% / 2,000件 / v0 17,000件）を出典リンク付きで整理
+  - 7組のペア（攻撃シーン／仕組み／例え話／対策の核／display_text 候補）を箇条書きで列挙
+  - 4つの追加対策（A〜D）と公開前チェックリスト（🟢14項目／🟡5項目／🔴7項目）をテーブル化
+  - 13セクション分の構成案（dialogues ターン数・主トーン・ちょび／なるこの役回り・display_text 候補・emotion 提案）
+  - 言語タグ運用リスト（用語・サービス・コード片）と数字読みTTS確認リスト
+  - 法的・倫理的留意点（誹謗中傷回避／攻撃手口非公開／AI関与係争中の tea dating 表現／煽りトーン回避）
+  - 元記事の引用URL一覧（一次/主出典18件）を視聴者向け概要欄候補として列挙
+- [x] **次ステップ**: Step 4 で `prompts/topic_video_generate.md` のワークフローに従って sections JSON を生成し、`POST /api/lessons/200/import-sections?lang=ja&generator=claude&version=1` で投入 → 管理画面で目視確認
+
 ## 紹介動画モード Step 2: lesson_id 200 予約 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
 
 - [x] **背景**: 紹介動画モード第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」の lesson 行を 200番台帯（紹介動画用）の先頭で確保。AUTOINCREMENT は触らず決め打ち INSERT で予約することで、後続の Step 3〜6（素材md / セクション生成 / TTS / 配信）が同じ lesson_id を前提に進められるようにする
