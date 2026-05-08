@@ -14,7 +14,7 @@
 
 Step 1（最小実装）、Step 2（lesson_id 200 予約）、Step 3（素材md作成）、Step 4（13セクション生成 → lesson_id 200 v1 投入、dialogues 計 114 ターン）は完了 → DONE.md 参照。残作業は以下:
 
-- [ ] **Step 5**: TTS 事前生成（`POST /api/lessons/200/tts-pregen?lang=ja&generator=claude&version=1`） → `plans/vibe-coder-security/topic-1-webapp-audition.md`（未作成、`lesson-1-audition.md` をテンプレに）の試聴チェックリストを `[x] N/N` で全項目埋める
+- [>] **Step 5**: TTS 事前生成は実行中（13セクション/114 dialogues）→ **管理画面で試聴 → 必要なら微修正**。再開用チェックリスト＋手順は [plans/vibe-coder-security/topic-1-webapp-audition.md](plans/vibe-coder-security/topic-1-webapp-audition.md)
 - [ ] **Step 6**: 配信実施 → 反応を記録 → DONE.md に記録、プランを「完了」に更新
 
 ## 授業モード

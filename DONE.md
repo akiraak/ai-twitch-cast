@@ -1,5 +1,23 @@
 # DONE
 
+## 紹介動画モード Step 5（前半）: TTS事前生成＋試聴チェックリスト作成 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
+
+- [x] **背景**: Step 4 で投入した lesson_id=200 / v1 / 13セクション / 114 dialogues に対して TTS を事前生成し、試聴フローに入れる状態にする。手動試聴の再開用に、紹介動画モード固有の観点（ちょビ×なるこの掛け合い／ニュース特集トーン／kind=topic_video の動作確認）を網羅したチェックリストを新規作成（`lesson-1-audition.md` をテンプレに）
+- [x] **対象**: `lesson_id=200` / `lang=ja` / `generator=claude` / `version=1`
+  - `POST /api/lessons/200/tts-pregen` を発火 → 13/13 セクション / **114/114 wav** / failed=0（generated=77 + cached=37）で完了
+  - 出力先: `resources/audio/lessons/200/ja/claude/v1/section_{NN}_dlg_{NN}.wav`（gitignored）
+  - 試聴チェックリスト `plans/vibe-coder-security/topic-1-webapp-audition.md` を新規作成
+    - 9カテゴリ（誤読 / 言語タグ漏れ / 数字読み / ちょビ×なるこの掛け合い / トーン / display_text整合 / emotion / セクション尺 / 紹介動画モード固有）
+    - 各事件・サービス名（Lovable / Bolt.new / Replit / tea dating / Moltbook / v0 / Vercel / Cloudflare / Supabase / Firebase / Auth0 / Clerk / NextAuth / Stripe / OpenAI / Anthropic / Cursor / Claude Code / Aikido / Symbiotic / Veracode / Wiz / Trend Micro / Upstash 等）
+    - セキュリティ用語（RLS / BOLA / IDOR / XSS / SQL injection / CSRF / CORS / HSTS / CSP / JWT / HMAC-SHA256 / OWASP Top 10 / MCP / MFA / OAuth / PII / GDPR）
+    - 数字読み（1,645 / 170件 / 72,000枚 / 150万件 / 3.5万件 / 17,000件 / 2.74倍 / 91.5% / 45% / 20% ほか）
+    - 紹介動画モード特有（自虐は1回／なるこのボケは1〜2回／攻撃手口の具体ステップ非公開／tea dating の AI関与決めつけ回避）
+    - 微修正フロー（A. テキスト修正 / B. v1上書き再投入 / C. 完全再生成）とエンドポイント早見表を併記
+  - TODO.md の Step 5 を「未作成」表記から新ファイルへのリンクに更新（`[>]` 進行中扱い）
+- [x] **動作確認**: `GET /api/lessons/200/tts-pregen-status` で `state=completed, total=13, completed=13, failed=0`、`ls resources/audio/lessons/200/ja/claude/v1/ | wc -l` で 114 wav を確認
+- [x] **残作業（Step 5 後半・手動）**: 管理画面 → 紹介動画タブで lesson_id=200 を再生し、上記チェックリスト全項目を `[x]` で埋める。軽微な修正は audition ファイル「微修正のフロー A.」、大幅修正は B./C.
+- [x] **次ステップ**: 試聴 OK 確定 → Step 6（配信）→ 反応収集 → DONE.md 更新 → プランを「完了」に
+
 ## 紹介動画モード Step 4: セクション生成 → DB投入 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
 
 - [x] **背景**: Step 3 で作った素材md（`plans/vibe-coder-security/topic-1-webapp-source.md`）と `prompts/topic_video_generate.md` のワークフローに沿って、第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」のセクションスクリプトを生成し、`lesson_id=200` に投入。これで Step 5（TTS事前生成→試聴）に進める状態になった
