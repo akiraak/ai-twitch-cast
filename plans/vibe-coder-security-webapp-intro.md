@@ -3,7 +3,7 @@
 > 元記事: [非エンジニアがバイブコーディングで気を付けるセキュリティ ― Webアプリ編](https://akiraak.github.io/deep-pulse/articles/2026-05-06_%E9%9D%9E%E3%82%A8%E3%83%B3%E3%82%B8%E3%83%8B%E3%82%A2%E3%81%AE%E3%83%90%E3%82%A4%E3%83%96%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0_%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3Web%E3%82%A2%E3%83%97%E3%83%AA%E7%B7%A8.html)
 > 関連: [vibe-coder-security-lesson.md](vibe-coder-security-lesson.md)（10話授業シリーズ・別物）
 
-## ステータス: 設計（未着手）
+## ステータス: 設計（未着手 / 2026-05-07 再検証済み）
 
 ## 背景
 
@@ -55,8 +55,9 @@
 ### 推奨案: lesson_* 流用 + `kind` 識別子
 
 - `lesson_categories` に `kind TEXT NOT NULL DEFAULT 'lesson'` カラムを追加。`'lesson'` / `'topic_video'` の2値
+- **kind の解決経路**: `lessons.category` は slug 文字列（例: `vibe_coding`）。kind は `lesson_categories` 側に持つので、レッスン単体から kind を引くには `lessons.category → lesson_categories.slug → lesson_categories.kind` の JOIN ルックアップが必要。`src/db/lessons.py` に `get_lesson_kind(lesson_id) -> str` のようなヘルパを足し、各所はそれを使う
 - `topic_video` カテゴリのレッスンには quiz セクション生成プロンプトを使わない（`prompts/topic_video_generate.md` を新設）
-- `lesson_runner.py` は **kind を見てクイズ待ち時間ロジックを分岐**（quiz が来ない前提なら `question_answer_wait_sec` 不要）
+- `lesson_runner.py` は **kind ヘルパを呼んでクイズ待ち時間ロジックを分岐**（quiz が来ない前提なら `question_answer_wait_sec` 不要）
 - 管理画面 Lesson タブ：`kind='lesson'` のみ表示
 - 管理画面 紹介動画タブ：`kind='topic_video'` のみ表示
 - API: `/api/lessons/*` をそのまま使うが、一覧APIに `?kind=` フィルタを足す
@@ -145,13 +146,16 @@
 
 ### Step 1: 紹介動画モードの最小実装（コード）
 
-1. `lesson_categories` に `kind TEXT NOT NULL DEFAULT 'lesson'` を追加するマイグレーション
-2. `topic_video` カテゴリを作成（`POST /api/lesson-categories` で `kind='topic_video'`）。`src/db/lesson_categories.py` の create に `kind` パラメータを追加
-3. `prompts/topic_video_generate.md` を新設（`prompts/lesson_generate.md` をベースに、クイズ無し・ニュース特集トーン・section_type 拡張）
-4. `lesson_runner.py`：kind を読み、`topic_video` の場合は quiz 待ち時間ロジックを skip。それ以外は既存ロジックのまま
-5. 管理画面に「紹介動画」タブを追加（実装は Lesson タブのコピー＋ kind フィルタ）
-6. broadcast.html の「再生中」ラベルを kind で分岐
-7. テスト追加（`tests/test_api_teacher.py` 拡張、または `test_api_topic_video.py` 新設）
+1. `lesson_categories` に `kind TEXT NOT NULL DEFAULT 'lesson'` を追加するマイグレーション（`src/db/core.py` の既存マイグレーションブロックに `ALTER TABLE` を追記）
+2. `topic_video` カテゴリを作成（`POST /api/lesson-categories` で `kind='topic_video'`）。**カテゴリ関数は `src/db/lesson_categories.py` ではなく `src/db/lessons.py` (L261+) にある**ので、そこの `create_category()` (L270) と `update_category()` に `kind` 引数を追加し、`__init__.py` の re-export と `scripts/routes/teacher.py` のカテゴリ系APIも揃える
+3. **`VALID_SECTION_TYPES` の kind別拡張** — `scripts/routes/teacher.py:907` の現状は `{introduction, explanation, example, question, summary}` のみで、新 section_type を `import-sections` するとバリデーションエラーになる。kind別ホワイトリスト（lesson用 / topic_video用 = `{prologue, incident, stats, pair, addition, checklist, outro}`）を導入し、`import_sections` でそのレッスンの kind を引いて分岐する
+4. `prompts/topic_video_generate.md` を新設（`prompts/lesson_generate.md` をベースに、クイズ無し・ニュース特集トーン・section_type 拡張）
+5. `src/db/lessons.py` に `get_lesson_kind(lesson_id) -> str` ヘルパを追加（lessons.category → lesson_categories.kind を JOIN で解決、不明時は `'lesson'`）
+6. `lesson_runner.py`：上記ヘルパで kind を読み、`topic_video` の場合は quiz 待ち時間ロジックを skip。それ以外は既存ロジックのまま
+7. **broadcast 側の section_type 表示**: `static/js/broadcast/panels.js` の `baseFs` (L213) と `PROGRESS_ICONS` (L280) は現5種のみ対応。新7種のアイコンとフォントサイズを追記（最低限デフォルト値で落ちないが、見栄えと意味性のため明示推奨）
+8. 管理画面に「紹介動画」タブを追加（実装は Lesson タブ = `static/js/admin/teacher.js` のコピーではなく、kind フィルタを引数化した**共通モジュール**に切り出す方向で）
+9. broadcast.html の「再生中」ラベルを kind で分岐（「授業: …」/「紹介動画: …」）
+10. テスト追加（`tests/test_api_teacher.py` の VALID_SECTION_TYPES 周りの拡張＋ `test_db.py` で `get_lesson_kind` のJOIN検証）
 
 ### Step 2: lesson_id 200 を予約
 
@@ -179,6 +183,7 @@ PY
   - 公開前チェックリストの3色分類
 - 各セクションのアウトライン（dialogues 何ターン、display_text 候補、emotion）
 - 元記事は時間と共に更新される可能性があるので、**素材md化した時点でのスナップショット**として保存しておく（出典URLとアクセス日付を必ず併記）
+- **記事公開日とアクセス日**: 元記事は 2026-05-06 公開・本プラン策定 2026-05-07 → 素材mdの先頭に `published: 2026-05-06 / accessed: 2026-05-07` を明記する
 
 ### Step 4: セクション生成 → DB投入
 
@@ -235,7 +240,7 @@ curl -s      "http://localhost:${WEB_PORT:-8080}/api/lessons/200/tts-pregen-stat
 - [ ] `lesson_runner` が kind=`topic_video` でクイズ待ちロジックをスキップする
 - [ ] lesson_id=200 が予約され、第1作のセクション（13本想定）が `import-sections` 経由で投入されている
 - [ ] TTS事前生成が完了し、管理画面から通しで再生できる
-- [ ] 試聴チェックリスト（topic-1-webapp-audition.md）の観点をクリアしている
+- [ ] 試聴チェックリスト（topic-1-webapp-audition.md）が**全項目チェック済み**形式（`[x] N/N`）で埋まっている
 - [ ] 配信1回実施し、視聴者反応を記録した
 - [ ] 素材md（topic-1-webapp-source.md）に出典URL・アクセス日付付きで保存されている
 - [ ] DONE.md に記録、本プランを「完了」に更新
