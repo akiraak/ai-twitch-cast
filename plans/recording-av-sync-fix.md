@@ -276,9 +276,9 @@ t=25265ms : 最初のTTS到着 → 即 mix 開始（enqueue→mix lag=0ms）
    - 本来目的（encoder preroll）なら必要、back-pressure 回避なら不要
    - α 後に外せるかは別検証
 
-3. **`scripts/verify_av_sync.py` に音声側計測がない**
-   - 現状は映像 PTS ドリフトのみ。α の検証には**音声 PTS の wall clock 追従**も計測すべき
-   - `ffprobe -show_packets -select_streams a` で音声 PTS を取得し、映像 PTS との差を時系列で出す拡張が必要
+3. **`scripts/verify_av_sync.py` に音声側計測がない** → **解決済み（2026-05-10）**
+   - `recording-screen-capture-alternative.md` Step 3 で実装。`get_audio_packet_pts()` + `report_av_alignment()` で音声 PTS / start・end offset / duration drift / 時系列バケット diff / 音声ギャップを出力
+   - α 検証時は `--no-flash` 不要（旧フラッシュ検出経路は温存）。一般録画は `--no-flash` でフラッシュ走査を省略可
 
 4. **一度に複数変数を触らない（C+A の反省）**
    - C+A は cap と offset を同時に変えたため、どちらが効いたか分析が曖昧になった

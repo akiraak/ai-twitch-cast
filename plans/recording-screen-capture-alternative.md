@@ -4,7 +4,7 @@
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 > 関連: [capture-window-audio.md](capture-window-audio.md)（キャプチャ対象ウィンドウの音取り込み・別観点）
 
-## ステータス: Step 2 実装完了（未実機検証）→ Step 3 / 実機計測へ（2026-05-10）
+## ステータス: Step 3 完了（計測スクリプト拡張）→ Step 4 実機計測へ（2026-05-10）
 
 ## 起点となる観察
 
@@ -200,11 +200,22 @@ ffmpeg \
 - ✅ `dotnet.exe build` 成功（既存警告のみ、新規エラー / 警告ゼロ）
 - **未配線**: 実機での録画動作確認は未実施。次の Step 4（計測）で実機テスト
 
-### Step 3: 計測スクリプト拡張
+### Step 3: 計測スクリプト拡張 → **完了（2026-05-10）**
 
-- `scripts/verify_av_sync.py` を音声 PTS まで読めるよう拡張（`recording-av-sync-fix.md` 既知の TODO）
-- `ffprobe -show_packets -select_streams a` で音声 PTS を取得し、映像 PTS との差を時系列で出す
-- これは α 検証（recording-av-sync-fix.md 側）でも必要なので、A0 PoC 着手と同時または先行で進めると両プランで再利用できる
+- ✅ `scripts/verify_av_sync.py` に `get_audio_packet_pts()` を追加（`ffprobe -show_packets -select_streams a:0`）
+- ✅ `report_av_alignment(video_pts, audio_pts, bucket_sec, gap_ms)` を追加。出力内容:
+  - ストリーム長サマリ（先頭/末尾 PTS、duration、frame/packet 数、平均 fps/pps）
+  - start offset / end offset / duration drift（音声 - 映像、ms 単位）
+  - **時系列バケット**（既定 5s 刻み）: 各時刻までに到達した最後の video/audio PTS と diff
+  - **音声ギャップ列挙**（既定 50ms 超）: pkt# / 前後 PTS / gap、10 件超は省略
+- ✅ CLI フラグ追加: `--no-flash`（フラッシュ検出スキップ・一般録画用）/ `--bucket-sec`（バケット粒度）/ `--gap-ms`（ギャップ閾値）
+- ✅ 既存フラッシュ検出経路は温存（`av_sync_test.html` 録画時はそのまま使える）
+- ✅ 動作検証:
+  - A0 PoC 録画 (`debug-ss/poc_loopback_20260510_124209.mp4`, 60s) → 8.5s startup 黒フレーム前置き + 4.3s 音声ギャップ（Step 0 既知症状）が即検出。バケット内 diff は -4 〜 -20ms に収束
+  - 旧 FFmpeg 共有方式 (`videos/broadcast_20260419_160320.mp4`, 47s) → duration drift +802ms / end offset +769ms を検出。最後の bucket だけ diff +769ms に飛ぶ症状を可視化
+  - `--bucket-sec 2 --gap-ms 30` で粒度を上げると Step 0 初期 PoC の 829ms 級ギャップが 9 箇所列挙される
+- ✅ 後方互換: 旧コマンドライン `python3 scripts/verify_av_sync.py xxx.mp4` はそのまま動作（AV アラインメント出力が先頭に追加されるだけ）
+- α 検証（[recording-av-sync-fix.md](recording-av-sync-fix.md) 既知 TODO §残課題 3）と本プラン Step 3 を一本化して解決済み
 
 ### Step 4: 計測
 
@@ -249,7 +260,7 @@ ffmpeg \
 - [x] Step 0 の PoC で AV 同期が体感ズレなし、ブツブツなしを確認（合格基準: §Step 0 の定量基準）→ 2026-05-10 達成
 - [x] Step 1: `LoopbackAudioSource` 新設・ビルド通過 → 2026-05-10 達成（未配線。Step 2 で結線）
 - [x] Step 2: 録画モード時の FFmpeg を 2 入力化、`OutputMode.File` で `FfmpegProcess` / `MainForm` ともに loopback 経路へ切替 → 2026-05-10 達成（ビルド通過、実機検証は Step 4 で実施）
-- [ ] Step 3 計測スクリプト拡張完了
+- [x] Step 3 計測スクリプト拡張完了 → 2026-05-10 達成（音声 PTS 取得・時系列バケット・ギャップ検出を追加）
 - [ ] Step 4 計測で 30 分長尺の AV ドリフトが ±100ms 以内
 - [ ] Step 5 で配信モードに劣化がないことを確認
 - [ ] DONE.md に結果を記録、本プランを「完了」に更新

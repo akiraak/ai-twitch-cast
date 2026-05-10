@@ -1,5 +1,25 @@
 # DONE
 
+## 録画AV同期 別アプローチ Step 3: verify_av_sync.py を音声 PTS 計測まで拡張 → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
+
+- [x] **背景**: 旧スクリプトは赤フラッシュ→映像 PTS ドリフトのみ計測。α 検証 / A0 loopback 検証どちらにも音声 PTS 軸の計測が要る。`recording-av-sync-fix.md` 既知の TODO（§ 残課題 3）と本プラン Step 3 を一本化して解決
+- [x] **`get_audio_packet_pts(ffprobe, mp4)` 追加** (`scripts/verify_av_sync.py`): `ffprobe -show_packets -select_streams a:0` で AAC パケット PTS を収集。decoder delay の影響を受ける `frame=pts_time` ではなく container packet PTS を見る（generator 出力 / loopback パイプ入力時刻に近い）
+- [x] **`report_av_alignment(video_pts, audio_pts, bucket_sec, gap_ms)` 追加**:
+  - ストリーム長サマリ（先頭/末尾 PTS、duration、frame/packet 数、平均 fps/pps）
+  - **start offset / end offset / duration drift**（音声 - 映像）を ms 単位で表示。OS wallclock 同期なら ±10ms 程度に収まるべき旨をその場に注記
+  - **時系列バケット**: `--bucket-sec`（既定 5s）刻みで各時刻までに到達した最後の video/audio PTS と diff を表形式で出力。バケット内に到達フレーム/パケットが無い場合は `-` 表示で nan を回避
+  - **音声ギャップ検出**: 連続パケット間隔が `--gap-ms`（既定 50ms）超の箇所を pkt# / 前後 PTS / gap で列挙。10 件超は省略表示
+- [x] **CLI フラグ追加**:
+  - `--no-flash`: 赤フラッシュ検出（全フレーム RGB 走査）をスキップ。一般録画 / loopback PoC 録画用。スキップ時は ffmpeg バイナリ要求もスキップ
+  - `--bucket-sec FLOAT`: アラインメント時系列バケット粒度（既定 5s）
+  - `--gap-ms FLOAT`: 音声ギャップ閾値（既定 50ms）
+- [x] **既存フラッシュ検出経路は温存**: フラッシュ未検出時は警告メッセージで `--no-flash` 利用を案内（exit code 2 は維持）
+- [x] **動作検証**:
+  - `debug-ss/poc_loopback_20260510_124209.mp4`（A0 loopback 60s）→ 8.5s の startup 黒フレーム前置き + 4.3s の音声ギャップ（Step 0 既知症状）が即座に検出された。バケット内 diff は -4 〜 -20ms で収束
+  - `videos/broadcast_20260419_160320.mp4`（α 前の旧 FFmpeg 共有方式 47s）→ duration drift +802ms / end offset +769ms を検出。バケット時系列でも diff が -5 〜 -20ms で振動しながら最後の bucket だけ +769ms に飛ぶ症状を可視化（既存方式の根本症状）
+  - `--bucket-sec 2 --gap-ms 30` で粒度を上げると Step 0 初期 PoC の 829ms 級ギャップが 9 箇所列挙されるなど、閾値調整も期待通りに機能
+- [x] **後方互換**: 旧コマンドラインフォーマット（`python3 scripts/verify_av_sync.py xxx.mp4`）はそのまま動作。AV アラインメント出力が先頭に追加されただけで既存運用は壊れない
+
 ## 録画AV同期 別アプローチ Step 2: 録画モード時の FFmpeg を loopback パイプ入力に切替 → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
 
 - [x] **背景**: Step 0 PoC で原理実証、Step 1 で `LoopbackAudioSource` 新設。Step 2 はそれを本体パイプライン（`FfmpegProcess` / `MainForm`）に結線する仕上げ
