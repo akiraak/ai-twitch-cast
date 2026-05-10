@@ -1,5 +1,14 @@
 # DONE
 
+## 紹介動画モード タスク完了（クローズ） → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
+
+- [x] **背景**: 第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」（lesson_id=200）の Step 1〜6 が完了。試聴・配信まで通して走らせ、紹介動画モード（kind=topic_video）の最小実装が想定どおり動くことを確認した
+- [x] **クローズ作業**:
+  - TODO.md から「紹介動画モード（新規）」セクション（Step 5 / Step 6）を削除
+  - `plans/vibe-coder-security-webapp-intro.md` のステータスを `設計（未着手 / 2026-05-07 再検証済み）` → `完了（2026-05-10）` に更新
+  - 完了条件チェックリスト 11 項目をすべて `[x]` に更新
+- [x] **次の展望**: モバイル編／LLMアプリ編／ノーコード編などシリーズ続編のネタは `plans/vibe-coder-security-webapp-intro.md` の「今後の候補」に残す。着手するときは新プランを切る
+
 ## 紹介動画モード Step 5（前半）: TTS事前生成＋試聴チェックリスト作成 → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
 
 - [x] **背景**: Step 4 で投入した lesson_id=200 / v1 / 13セクション / 114 dialogues に対して TTS を事前生成し、試聴フローに入れる状態にする。手動試聴の再開用に、紹介動画モード固有の観点（ちょビ×なるこの掛け合い／ニュース特集トーン／kind=topic_video の動作確認）を網羅したチェックリストを新規作成（`lesson-1-audition.md` をテンプレに）

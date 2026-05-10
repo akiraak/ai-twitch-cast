@@ -3,7 +3,7 @@
 > 元記事: [非エンジニアがバイブコーディングで気を付けるセキュリティ ― Webアプリ編](https://akiraak.github.io/deep-pulse/articles/2026-05-06_%E9%9D%9E%E3%82%A8%E3%83%B3%E3%82%B8%E3%83%8B%E3%82%A2%E3%81%AE%E3%83%90%E3%82%A4%E3%83%96%E3%82%B3%E3%83%BC%E3%83%87%E3%82%A3%E3%83%B3%E3%82%B0_%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3Web%E3%82%A2%E3%83%97%E3%83%AA%E7%B7%A8.html)
 > 関連: [vibe-coder-security-lesson.md](vibe-coder-security-lesson.md)（10話授業シリーズ・別物）
 
-## ステータス: 設計（未着手 / 2026-05-07 再検証済み）
+## ステータス: 完了（2026-05-10）
 
 ## 背景
 
@@ -233,17 +233,17 @@ curl -s      "http://localhost:${WEB_PORT:-8080}/api/lessons/200/tts-pregen-stat
 
 ## 完了条件
 
-- [ ] `lesson_categories.kind` カラム追加マイグレーションが実装・テストされている
-- [ ] `topic_video` カテゴリが DB に登録されている
-- [ ] `prompts/topic_video_generate.md` が作成され、ワークフローが書かれている
-- [ ] 管理画面に「紹介動画」タブが表示され、kind=`topic_video` の lesson のみ並ぶ
-- [ ] `lesson_runner` が kind=`topic_video` でクイズ待ちロジックをスキップする
-- [ ] lesson_id=200 が予約され、第1作のセクション（13本想定）が `import-sections` 経由で投入されている
-- [ ] TTS事前生成が完了し、管理画面から通しで再生できる
-- [ ] 試聴チェックリスト（topic-1-webapp-audition.md）が**全項目チェック済み**形式（`[x] N/N`）で埋まっている
-- [ ] 配信1回実施し、視聴者反応を記録した
-- [ ] 素材md（topic-1-webapp-source.md）に出典URL・アクセス日付付きで保存されている
-- [ ] DONE.md に記録、本プランを「完了」に更新
+- [x] `lesson_categories.kind` カラム追加マイグレーションが実装・テストされている
+- [x] `topic_video` カテゴリが DB に登録されている
+- [x] `prompts/topic_video_generate.md` が作成され、ワークフローが書かれている
+- [x] 管理画面に「紹介動画」タブが表示され、kind=`topic_video` の lesson のみ並ぶ
+- [x] `lesson_runner` が kind=`topic_video` でクイズ待ちロジックをスキップする
+- [x] lesson_id=200 が予約され、第1作のセクション（13本想定）が `import-sections` 経由で投入されている
+- [x] TTS事前生成が完了し、管理画面から通しで再生できる
+- [x] 試聴チェックリスト（topic-1-webapp-audition.md）が**全項目チェック済み**形式（`[x] N/N`）で埋まっている
+- [x] 配信1回実施し、視聴者反応を記録した
+- [x] 素材md（topic-1-webapp-source.md）に出典URL・アクセス日付付きで保存されている
+- [x] DONE.md に記録、本プランを「完了」に更新
 
 ## 参考
 
