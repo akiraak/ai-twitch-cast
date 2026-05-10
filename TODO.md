@@ -16,4 +16,11 @@
 ## その他
 - [>] 録画モードAV同期: 多角検証完了→**α 単独実装**へ。音声入力に `-use_wallclock_as_timestamps 1` を 1 行追加し、FFmpeg read 時刻で音声 PTS を打刻することで映像 wallclock と自動同期させる。cap/offset/pipe 1MB は維持して α 単独効果を切り分け、効果ありなら段階的に対症療法をロールバックして本質を確定。残差あれば α+δ、最終手段 γ（β 単独には進まない）。→ [plans/recording-av-sync-fix.md](plans/recording-av-sync-fix.md)
 - [ ] 録画モードAV同期: 30分長尺でのドリフト累積確認（上記解消後）
-- [ ] 録画の別アプローチ。映像と音声をffmpegに流して録画するのではなく、アプリの動画画面の領域をキャプチャし音声はスピーカーの音を録音できないか
+- [ ] 録画の別アプローチ：画面キャプチャ＋WASAPI Loopback で AV 同期を OS 任せにする（A0 方針確定） → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
+  - [ ] **Step 0**: 独立 Console アプリで PoC（NAudio WasapiLoopbackCapture + WGC + ffmpeg、30〜60秒録画）。合格基準: VLC 目視 ±33ms / ブツブツ 0 回 / 音声映像 PTS 差 ±100ms
+  - [ ] **Step 1**: WinNativeApp に `LoopbackAudioSource.cs` 新設（NAudio WasapiLoopbackCapture → Named Pipe、デバイス変更時 reinit）
+  - [ ] **Step 2**: 録画モード時の FFmpeg を 2 入力化（音声を loopback pipe に切替、generator は配信モードのみで使用）
+  - [ ] **Step 3**: `scripts/verify_av_sync.py` を音声 PTS 計測まで拡張（α 検証とも共有）
+  - [ ] **Step 4**: 60秒〜30分長尺で AV 同期と CPU 負荷を計測
+  - [ ] **Step 5**: 配信モード（RTMP）に劣化がないか確認
+  - [ ] **Step 6**: ドキュメント整備（recording-av-sync-fix.md と役割分担明記、CLAUDE.md にラウドネス基準追記、DONE.md 記録）
