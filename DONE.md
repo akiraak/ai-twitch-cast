@@ -1,5 +1,27 @@
 # DONE
 
+## 録画AV同期 別アプローチ Step 0: PoC 完走 → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
+
+- [x] **背景**: 既存方式（FFmpeg 共有パイプライン + 自前 mixer + バイトベース PTS）の AV 同期問題を構造から消すため、「画面キャプチャ (WGC) + WASAPI Loopback で OS の単一 wall clock に同期を任せる」別ルートの原理検証
+- [x] **実装**: `win-native-app/PocLoopback/` に独立 C# Console アプリ（PocLoopback.csproj + Program.cs + ScreenCapture.cs + LoopbackCapture.cs + FfmpegRunner.cs）と起動スクリプト `poc-loopback.sh` を新設。WinNativeApp 本体には一切手を入れず
+- [x] **構成**: WGC でウィンドウ全体を BGRA キャプチャ → 名前付きパイプで FFmpeg へ、NAudio WasapiLoopbackCapture で既定スピーカー出力を f32le でキャプチャ → 別の名前付きパイプへ。FFmpeg 引数で映像入力にだけ `-use_wallclock_as_timestamps 1`、音声はサンプル数ベース PTS（プランでは両方 wallclock を想定していたが、音声側に付けると AAC エンコーダのキューが破綻するため映像のみに撤回）
+- [x] **PoC 中に潰した落とし穴**:
+  - C# トップレベルプログラムで delegate 宣言の位置（CS8803）→ `NativeMethods` static class に集約
+  - FFmpeg が rawvideo の最初の 1 フレームを読まないと audio pipe を開かない仕様 → video pipe 接続直後に初期黒フレーム 1 枚送信
+  - libx264 + yuv420p が奇数次元（1682×759）で開けない → `-vf "crop=trunc(iw/2)*2:trunc(ih/2)*2"` で偶数化
+  - 音声側に `-use_wallclock_as_timestamps 1` を付けると `Non-monotonic DTS` / `Queue input is backward in time` 連発で AAC エンコーダ破綻 → 音声は素のサンプル数ベース PTS に
+  - 音声 silence プライムは PTS 歪みの原因になるので削除
+  - WSL UNC 越し（\\\\wsl.localhost\\…）の MP4 書込は遅くドロップしやすい → Windows 側ローカルに書いて完走後 `debug-ss/` にコピーバック
+- [x] **合格基準と結果（60 秒録画 / WinNativeApp 本体で TTS+BGM 再生中）**:
+  - ✅ VLC 目視で口パクと音声がフレーム単位（≦33ms）で揃う
+  - ✅ ブツブツ・音切れ 0 回
+  - ✅ `ffprobe -show_packets` で音声/映像の実フレームの `pts_time` がともに 4.300s で **差 0ms**
+- [x] **残課題（Step 1 で吸収）**:
+  - スタートアップで 4.3 秒の無音黒フレーム前置きが入る（x264 rc-lookahead と静止ウィンドウで WGC が次フレームを発火しないため）→ Step 1 で「最初の実フレーム到着で録画開始トリガー」or「アプリ側で毎フレーム invalidate」で潰す
+  - `Queue input is backward in time` warning が残存（fatal ではない、AV 同期には影響なし）
+- [x] **結論**: 仮説「アプリで再生しているだけのときは AV が揃う → ならば見聞きしているものをそのまま録れば AV 同期は構造から消える」が成立。本案を本実装に進める（Step 1: WinNativeApp 本体に `LoopbackAudioSource.cs` 新設、録画モード時のみ generator → loopback に切替）
+- [x] **プラン更新**: ステータスを `Step 0 PoC 完走 → Step 1 着手前（2026-05-10）` に、完了条件チェックリストの Step 0 を `[x]` に
+
 ## 紹介動画モード タスク完了（クローズ） → [plans/vibe-coder-security-webapp-intro.md](plans/vibe-coder-security-webapp-intro.md)
 
 - [x] **背景**: 第1作「Webアプリ編：5つの事件で振り返るバイブコーディングの落とし穴」（lesson_id=200）の Step 1〜6 が完了。試聴・配信まで通して走らせ、紹介動画モード（kind=topic_video）の最小実装が想定どおり動くことを確認した

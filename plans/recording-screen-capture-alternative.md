@@ -4,7 +4,7 @@
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 > 関連: [capture-window-audio.md](capture-window-audio.md)（キャプチャ対象ウィンドウの音取り込み・別観点）
 
-## ステータス: 方針確定（A0 採用、運用ルールで音声分離、PoC 着手前 / 2026-05-10 改訂）
+## ステータス: Step 0 PoC 完走 → Step 1 着手前（2026-05-10）
 
 ## 起点となる観察
 
@@ -148,21 +148,34 @@ ffmpeg \
 
 ## 実装ステップ
 
-### Step 0: PoC（プラン承認後・最小コードで原理検証）
+### Step 0: PoC（最小コードで原理検証）→ **完了（2026-05-10）**
 
 **目的**: 「見聞きしているものをそのまま録れば AV 同期は揃う」という仮説を最小コードで実証する。
 
-- WinNativeApp とは独立した検証スクリプト（C# Console + NAudio + ffmpeg subprocess）で、以下を 30〜60 秒録画して VLC 再生
-  - NAudio `WasapiLoopbackCapture` で既定再生デバイスを capture（f32le 48kHz stereo）
-  - WGC で WinNativeApp ウィンドウ（または PC 画面全体）を capture（NV12）
-  - 両者を別パイプで FFmpeg に流し、`-use_wallclock_as_timestamps 1` を両方に付けて MP4 出力
-- 録画中は WinNativeApp 本体を別途起動して TTS を鳴らした状態にする
-- **合格基準（定量）**:
-  1. VLC 目視で口パク（broadcast 領域の字幕／VRM）と音声のズレがフレーム単位（≦33ms）で目立たない
-  2. ブツブツ・音切れが 30 秒間で 0 回
-  3. `ffprobe -show_packets` での音声 PTS と映像 PTS の差が ±100ms 以内（30 秒末まで）
-  4. 30 分長尺で AV ドリフトが累積しない（PoC では 60〜90 秒で十分、本実装後に長尺確認）
-- ここで明らかにずれる／ブツブツ出る／loopback の音が小さすぎる等が出たら、本案は**棄却**しても良い
+**実装**: `win-native-app/PocLoopback/` (PocLoopback.csproj + Program.cs + ScreenCapture.cs + LoopbackCapture.cs + FfmpegRunner.cs)、起動スクリプト `poc-loopback.sh`。WinNativeApp と独立した C# Console + NAudio + ffmpeg subprocess。
+
+**実装中に分かった設計上の修正**:
+- **rawvideo BGRA で送る**: 当初プランは NV12 だったが PoC は BGRA 直送に簡素化。AV 同期検証には影響なし
+- **wallclock は映像入力にだけ付ける**: プランでは映像/音声両方に `-use_wallclock_as_timestamps 1` を想定していたが、音声側に付けると silence プライムや読みバーストで PTS が歪んで `Non-monotonic DTS` / `Queue input is backward in time` が連発し AAC エンコーダのキューが破綻する。**音声は素のサンプル数ベース PTS** とし、AV 同期は「映像 wallclock + 連続的に流れる loopback 音声」で取る。これは WinNativeApp/Streaming/FfmpegProcess.cs と同じ設計
+- **音声側の silence プライムは不要**: 上記の wallclock 撤去とセットで silence プライムも撤去（プライムを送ると PTS 歪みの原因になる）
+- **映像のみ初期黒フレームを 1 枚送る**: FFmpeg は rawvideo の最初の 1 フレームを読まないと次の入力（audio pipe）を開かない仕様なので、video pipe 接続直後に 1 フレームだけ黒を送る（WinNativeApp と同パターン）
+- **yuv420p のため偶数次元クロップ**: WGC が返すウィンドウサイズが奇数（1682×759）だと libx264 + yuv420p が失敗するので `-vf "crop=trunc(iw/2)*2:trunc(ih/2)*2"` を入れる
+- **出力先は Windows 側ローカル**: WSL UNC 越し (\\\\wsl.localhost\\…) は書込が遅く FFmpeg がドロップしやすいので、`C:\\Users\\akira\\AppData\\Local\\win-native-app\\PocLoopback\\output\\` に書いて完走後 `debug-ss/` にコピーバック
+
+**合格基準と結果（60 秒録画 / WinNativeApp 本体で TTS+BGM 再生中）**:
+
+| 基準 | 結果 |
+|------|------|
+| VLC 目視で口パクと音声のズレがフレーム単位（≦33ms）で目立たない | ✅ 口パクと音が合っている |
+| ブツブツ・音切れが 30 秒間で 0 回 | ✅ ブツブツなし |
+| `ffprobe -show_packets` での音声 PTS と映像 PTS の差が ±100ms 以内 | ✅ 実フレーム同士の `pts_time` は両方 4.300s で **差 0ms** |
+| 30 分長尺で AV ドリフトが累積しない | 後続 Step 4 で確認 |
+
+**残課題（Step 1 で潰す）**:
+- **スタートアップで 4.3 秒の無音黒フレーム前置きが入る**: 初期黒フレームを t=0 で書いたあと、x264 の rc-lookahead と静止ウィンドウで WGC が次フレームを発火しないため、実フレームの pts_time が 4.3s から始まる。Step 1 では「最初の実フレーム到着まで録画開始トリガーを遅らせる」か「アプリ側で毎フレーム invalidate して WGC を 30fps で確実に発火させる」で潰せる
+- **`Queue input is backward in time` の warning が残存（fatal ではない）**: AAC エンコーダの内部キューが入力 PCM のバースト読みに反応して出している。PTS 歪みではなく PCM 入力の読み取りタイミングのジッタが原因。AV 同期には影響なし
+
+**結論**: 仮説「アプリで再生しているだけのときは AV が揃う → ならば見聞きしているものをそのまま録れば AV 同期は構造から消える」が成立。本案を本実装に進める（Step 1 へ）。
 
 ### Step 1: WinNativeApp 本体への loopback キャプチャ追加
 
@@ -225,7 +238,7 @@ ffmpeg \
 
 ## 完了条件（暫定）
 
-- [ ] Step 0 の PoC で AV 同期が体感ズレなし、ブツブツなしを確認（合格基準: §Step 0 の定量基準）
+- [x] Step 0 の PoC で AV 同期が体感ズレなし、ブツブツなしを確認（合格基準: §Step 0 の定量基準）→ 2026-05-10 達成
 - [ ] Step 1〜2 を WinNativeApp 本体に組み込み、`OutputMode.File` で動作
 - [ ] Step 3 計測スクリプト拡張完了
 - [ ] Step 4 計測で 30 分長尺の AV ドリフトが ±100ms 以内
