@@ -1,5 +1,30 @@
 # DONE
 
+## 録画AV同期 別アプローチ Step 2: 録画モード時の FFmpeg を loopback パイプ入力に切替 → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
+
+- [x] **背景**: Step 0 PoC で原理実証、Step 1 で `LoopbackAudioSource` 新設。Step 2 はそれを本体パイプライン（`FfmpegProcess` / `MainForm`）に結線する仕上げ
+- [x] **LoopbackAudioSource を 2 フェーズに分割** (`Streaming/LoopbackAudioSource.cs`)
+  - `Initialize()`（同期）: パイプ生成 + WASAPI キャプチャ起動 → `WaveFormat` を即返す。FFmpeg 起動コマンドに format を埋め込むため、接続待ちでブロックしない API が必要だった
+  - `ConnectAsync()`（非同期）: FFmpeg からのパイプ接続を待ち、writer スレッドを起動
+  - 後方互換 `StartAsync()` は両者を順に呼ぶラッパーとして残す
+  - `IsConnected` プロパティを追加
+- [x] **FfmpegProcess の File モードを loopback 経路へ** (`Streaming/FfmpegProcess.cs`)
+  - コンストラクタに `LoopbackAudioSource? loopback` パラメータを追加。`OutputMode.File` のとき必須、`OutputMode.Rtmp` のとき非対応（誤渡しは `ArgumentException`）
+  - `UseLoopback` プロパティで分岐:
+    - 内蔵 `_audioPipe` は作らず loopback のパイプ名を直接 ffmpeg の `-i` に渡す
+    - silence プライム / `AudioWriterLoop` / `-itsoffset` 全てスキップ
+    - 音声側 `-use_wallclock_as_timestamps` は付けない（Step 0 PoC で破綻確認済み）
+  - `WriteTtsData` / `WriteAudioData` / `WriteSeData` / `SetBgm` / `StartAudioGenerator` は loopback モード時に no-op 早期 return（既存 WaveOutEvent → スピーカー → loopback 経路で ffmpeg まで届くため）
+  - `StopAsync` で loopback を停止
+  - 配信モード（`OutputMode.Rtmp`）は完全温存（generator / silence プライム / AudioWriterLoop / itsoffset 全て従来通り）
+- [x] **MainForm の録画起動経路を結線** (`MainForm.cs`)
+  - `StartPipelineAsync(StreamConfig)` で `config.Mode == OutputMode.File` のとき `LoopbackAudioSource` を生成して `FfmpegProcess` に注入
+  - 録画モードでは BGM PCM デコード→`SetBgm` をスキップ（loopback が自動で拾うので無駄な CPU 回避）
+  - `StartAudioGenerator` は呼ぶが録画モードでは内部で no-op
+- [x] **ビルド検証**: WSL から `dotnet.exe build` 成功（exit 0、7 警告は全て既存コード由来、本変更起因の警告ゼロ）
+- [x] **未配線**: 実機での録画動作確認は未実施。Step 4 の長尺計測時に実機で検証する
+- [x] **設計メモ**: プラン原文の「音声入力にも `-use_wallclock_as_timestamps 1`」は採用しなかった。Step 0 PoC で `Non-monotonic DTS` / `Queue input is backward in time` が連発することが判明済みのため、loopback 経由でも音声はサンプル数ベース PTS、映像のみ wallclock。AV 同期は「映像 wallclock + 連続的に流れる loopback 音声」で取れる（PoC で実証）
+
 ## 録画AV同期 別アプローチ Step 1: WinNativeApp に LoopbackAudioSource を新設 → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
 
 - [x] **背景**: Step 0 PoC で「画面キャプチャ + WASAPI Loopback で AV 同期は構造から消える」が成立。本実装に進めるため、PoC の `LoopbackCapture.cs` を本体側コンポーネントへ移植

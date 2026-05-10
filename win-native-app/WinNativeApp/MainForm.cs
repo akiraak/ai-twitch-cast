@@ -1482,13 +1482,22 @@ public class MainForm : Form
             throw new InvalidOperationException("No capture running");
         }
 
-        // WASAPI不要 — 全音声はC#が直接パイプに書き込む
-        _ffmpeg = new FfmpegProcess(config);
+        // 録画モードでは WASAPI Loopback でスピーカー出力をそのまま取る（AV同期を OS 任せにする）。
+        // 配信モード（Rtmp）は従来通り C# 自前ミキサー → 直接パイプ。
+        // plans/recording-screen-capture-alternative.md Step 2
+        LoopbackAudioSource? loopback = null;
+        if (config.Mode == OutputMode.File)
+        {
+            loopback = new LoopbackAudioSource();
+            Log.Information("[MainForm] Recording mode: created LoopbackAudioSource (pipe={Pipe})", loopback.PipeName);
+        }
+
+        _ffmpeg = new FfmpegProcess(config, audioFormat: null, loopback: loopback);
 
         await _ffmpeg.StartAsync();
         await Task.Delay(500);
 
-        // タイマーベース音声ジェネレータ開始（サイレンス + TTS + BGMミキシング）
+        // タイマーベース音声ジェネレータ（録画モードでは内部で no-op）
         _ffmpeg.StartAudioGenerator();
         _ffmpeg.SetTtsVolume(EffectiveTtsVolume());
 
@@ -1496,8 +1505,10 @@ public class MainForm : Form
         _capture.TargetFps = config.Framerate;
         _capture.OnFrameReady = (data, w, h) => _ffmpeg.WriteVideoFrame(data);
 
-        // BGMが再生中なら、PCMにデコードしてFFmpegミキサーに渡す
-        if (_currentBgmCachePath != null)
+        // BGMが再生中なら、PCMにデコードしてFFmpegミキサーに渡す。
+        // 録画モード（loopback）では既存 _bgmWaveOut → スピーカー → loopback 経路で
+        // ffmpeg まで届くため、ここでのデコード + SetBgm は不要。
+        if (_currentBgmCachePath != null && config.Mode != OutputMode.File)
         {
             var bgmPath = _currentBgmCachePath;
             var ffmpeg = _ffmpeg;

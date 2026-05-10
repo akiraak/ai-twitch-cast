@@ -4,7 +4,7 @@
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 > 関連: [capture-window-audio.md](capture-window-audio.md)（キャプチャ対象ウィンドウの音取り込み・別観点）
 
-## ステータス: Step 1 完了 → Step 2 着手前（2026-05-10）
+## ステータス: Step 2 実装完了（未実機検証）→ Step 3 / 実機計測へ（2026-05-10）
 
 ## 起点となる観察
 
@@ -187,13 +187,18 @@ ffmpeg \
 - **検証**: `dotnet.exe build` でコンパイル成功（`obj/.../WinNativeApp.dll` に `LoopbackAudioSource` 型が出力済み）。新規ファイル起因の警告・エラーゼロ
 - **未配線**: 本コンポーネントは作っただけで `FfmpegProcess` / `MainForm` には未接続。Step 2 で結線する
 
-### Step 2: 録画モード時の FFmpeg パイプを 2 入力に変更
+### Step 2: 録画モード時の FFmpeg パイプを 2 入力に変更 → **完了（2026-05-10 / 未実機検証）**
 
-- `OutputMode.File` のとき、`FfmpegProcess` の音声入力を「既存 audio pipe（generator）」ではなく「loopback pipe」に切り替え
-- `StartAudioGenerator` / `WriteTtsData` / `WriteAudioData` は録画モード時は呼ばない（または no-op に分岐）
-- 配信モード（`OutputMode.Rtmp`）は従来どおり generator → FFmpeg 直結
-- FFmpeg 引数: 映像入力に加えて音声入力 `-f f32le -ar 48000 -ac 2 -use_wallclock_as_timestamps 1 -i \\.\pipe\loopback_xxx` を追加
-- 音声入力にも `-use_wallclock_as_timestamps 1` を付ける（α 案と同じ仕組みを音声側にも適用）
+- ✅ `LoopbackAudioSource` を `Initialize()` / `ConnectAsync()` / 後方互換 `StartAsync()` に分割（`Initialize` は同期で WaveFormat を返す → ffmpeg コマンド組み立てに使える）
+- ✅ `FfmpegProcess(StreamConfig, WaveFormat?, LoopbackAudioSource?)` を追加。`OutputMode.File` のとき loopback を必須化、配信モードでは loopback 非対応（`ArgumentException`）
+- ✅ 録画モードでは `_audioPipe` を作らず loopback のパイプ名を直接 ffmpeg の `-i` に渡す。silence プライム / AudioWriterLoop / `-itsoffset` は録画モードでは全てスキップ
+- ✅ `WriteTtsData` / `WriteAudioData` / `WriteSeData` / `SetBgm` / `StartAudioGenerator` は loopback モード時に no-op で早期 return（既存 WaveOutEvent → スピーカー → loopback 経路で ffmpeg まで届くため）
+- ✅ `StopAsync` で loopback を停止
+- ✅ 配信モード（`OutputMode.Rtmp`）は完全温存（既存 generator → FFmpeg 直結 / silence プライム / AudioWriterLoop / itsoffset 全て従来通り）
+- ✅ `MainForm.StartPipelineAsync` で `config.Mode == OutputMode.File` のとき `LoopbackAudioSource` を生成して `FfmpegProcess` に注入。BGM PCM デコード→`SetBgm` は録画モードではスキップ（無駄な CPU 回避）
+- **wallclock の扱い（プラン原文からの差分）**: 原文「音声入力にも `-use_wallclock_as_timestamps 1`」は採用しなかった。**Step 0 PoC で `Non-monotonic DTS` / `Queue input is backward in time` が連発する**ことが判明済みのため、loopback 経由でも音声はサンプル数ベース PTS、映像のみ wallclock とする。AV 同期は「映像 wallclock + 連続的に流れる loopback 音声」で取る（PoC で実証済み）
+- ✅ `dotnet.exe build` 成功（既存警告のみ、新規エラー / 警告ゼロ）
+- **未配線**: 実機での録画動作確認は未実施。次の Step 4（計測）で実機テスト
 
 ### Step 3: 計測スクリプト拡張
 
@@ -243,7 +248,7 @@ ffmpeg \
 
 - [x] Step 0 の PoC で AV 同期が体感ズレなし、ブツブツなしを確認（合格基準: §Step 0 の定量基準）→ 2026-05-10 達成
 - [x] Step 1: `LoopbackAudioSource` 新設・ビルド通過 → 2026-05-10 達成（未配線。Step 2 で結線）
-- [ ] Step 2: 録画モード時の FFmpeg を 2 入力化、`OutputMode.File` で動作
+- [x] Step 2: 録画モード時の FFmpeg を 2 入力化、`OutputMode.File` で `FfmpegProcess` / `MainForm` ともに loopback 経路へ切替 → 2026-05-10 達成（ビルド通過、実機検証は Step 4 で実施）
 - [ ] Step 3 計測スクリプト拡張完了
 - [ ] Step 4 計測で 30 分長尺の AV ドリフトが ±100ms 以内
 - [ ] Step 5 で配信モードに劣化がないことを確認

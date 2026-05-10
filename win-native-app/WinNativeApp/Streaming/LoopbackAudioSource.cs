@@ -51,7 +51,7 @@ public sealed class LoopbackAudioSource : IDisposable
 
     public string PipeName => _pipeName;
 
-    /// <summary>WasapiLoopbackCapture が確定したミックス形式。Start 後に参照可能。</summary>
+    /// <summary>WasapiLoopbackCapture が確定したミックス形式。Initialize 後に参照可能。</summary>
     public WaveFormat? Format
     {
         get
@@ -59,6 +59,9 @@ public sealed class LoopbackAudioSource : IDisposable
             lock (_captureLock) return _capture?.WaveFormat;
         }
     }
+
+    /// <summary>FFmpeg からのパイプ接続済みか。WriterLoop が走っているかどうかも兼ねる。</summary>
+    public bool IsConnected => _pipe is { IsConnected: true };
 
     public long BytesCaptured => Interlocked.Read(ref _bytesCaptured);
     public long BytesWritten => Interlocked.Read(ref _bytesWritten);
@@ -74,13 +77,21 @@ public sealed class LoopbackAudioSource : IDisposable
     }
 
     /// <summary>
-    /// Loopback キャプチャとパイプを起動し、FFmpeg からの接続を待ち受ける。
-    /// 接続後にバックグラウンド書き込みスレッドを開始する。
+    /// パイプ生成と WASAPI Loopback キャプチャ起動を同期的に行う。
+    /// 戻り値は確定したミックス形式（FFmpeg 引数の組み立てに使用）。
+    /// この時点で capture は既に内部 queue にチャンクを溜め始めているため、
+    /// 続けて速やかに ConnectAsync を呼ぶこと。
+    ///
+    /// StartAsync を分割している理由: FfmpegProcess は Format を ffmpeg 起動コマンドに
+    /// 埋め込む必要があるが、WaitForConnectionAsync で長時間ブロックされると FFmpeg が
+    /// 起動できず、デッドロックする。Format 確定（同期）と pipe 接続待ち（非同期）を
+    /// 分離することで、呼び出し側は「Initialize → ffmpeg 起動 → ConnectAsync」の順に
+    /// 並行起動できる。
     /// </summary>
-    public async Task StartAsync(CancellationToken ct = default)
+    public WaveFormat Initialize()
     {
         if (_disposed) throw new ObjectDisposedException(nameof(LoopbackAudioSource));
-        if (_capture != null) throw new InvalidOperationException("LoopbackAudioSource already started");
+        if (_capture != null) throw new InvalidOperationException("LoopbackAudioSource already initialized");
 
         // 1MB バッファは FfmpegProcess._audioPipe と同基準（plans/recording-av-sync-fix.md C+A 計測）
         _pipe = new NamedPipeServerStream(
@@ -89,6 +100,21 @@ public sealed class LoopbackAudioSource : IDisposable
             outBufferSize: 1024 * 1024, inBufferSize: 0);
 
         InitCapture();
+
+        var f = _capture?.WaveFormat
+            ?? throw new InvalidOperationException("WasapiLoopbackCapture WaveFormat is null after Initialize");
+        return f;
+    }
+
+    /// <summary>
+    /// FFmpeg からのパイプ接続を待ち、接続後に書き込みスレッドを起動する。
+    /// Initialize() で起動済みの capture は接続前から queue にデータを溜めているので、
+    /// 接続後すぐに WriterLoop が消化を開始する。
+    /// </summary>
+    public async Task ConnectAsync(CancellationToken ct = default)
+    {
+        if (_pipe == null) throw new InvalidOperationException("Call Initialize() before ConnectAsync()");
+        if (_writer != null) throw new InvalidOperationException("ConnectAsync already called");
 
         Log.Information("[Loopback] Waiting for ffmpeg pipe connection (pipe={Pipe})...", _pipeName);
         await _pipe.WaitForConnectionAsync(ct);
@@ -100,6 +126,17 @@ public sealed class LoopbackAudioSource : IDisposable
             Name = "LoopbackPipeWriter",
         };
         _writer.Start();
+    }
+
+    /// <summary>
+    /// Initialize + ConnectAsync をまとめて行う後方互換 API。
+    /// 接続待ちで長時間ブロックするため、FFmpeg を別途並行起動するケースでは
+    /// Initialize / ConnectAsync を分けて呼ぶこと。
+    /// </summary>
+    public async Task StartAsync(CancellationToken ct = default)
+    {
+        Initialize();
+        await ConnectAsync(ct);
     }
 
     private void InitCapture()

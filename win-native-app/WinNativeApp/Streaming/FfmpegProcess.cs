@@ -18,10 +18,19 @@ public sealed class FfmpegProcess : IDisposable
     private Process? _process;
     private readonly StreamConfig _config;
     private readonly string _videoPipeName;
-    private readonly string _audioPipeName;
-    private readonly string _ffmpegAudioFormat;
+    private string _audioPipeName;
+    private string _ffmpegAudioFormat;
     private NamedPipeServerStream? _videoPipe;
     private NamedPipeServerStream? _audioPipe;
+
+    /// <summary>
+    /// 録画モード（OutputMode.File）で使う WASAPI Loopback ソース。
+    /// セットされていれば、ffmpeg の audio 入力は loopback が所有するパイプを使い、
+    /// 自前のミキサー / generator / silence プライム / itsoffset は全て無効化される。
+    /// plans/recording-screen-capture-alternative.md Step 2。
+    /// </summary>
+    private readonly LoopbackAudioSource? _loopback;
+    private bool UseLoopback => _loopback != null;
     private long _frameCount;
     private long _dropCount;
     private DateTime _startTime;
@@ -107,14 +116,29 @@ public sealed class FfmpegProcess : IDisposable
     public long SlowWriteCount => Interlocked.Read(ref _slowWriteCount);
     public long MaxWriteMs => Interlocked.Read(ref _maxWriteMs);
 
-    public FfmpegProcess(StreamConfig config, WaveFormat? audioFormat = null)
+    public FfmpegProcess(StreamConfig config, WaveFormat? audioFormat = null, LoopbackAudioSource? loopback = null)
     {
         _config = config;
         _videoPipeName = $"winnative_video_{Environment.ProcessId}";
-        _audioPipeName = $"winnative_audio_{Environment.ProcessId}";
-        _ffmpegAudioFormat = audioFormat != null
-            ? BuildAudioFormatArgs(audioFormat)
-            : "-f f32le -ar 48000 -ac 2";
+        _loopback = loopback;
+        if (loopback != null)
+        {
+            if (config.Mode != OutputMode.File)
+                throw new ArgumentException(
+                    "LoopbackAudioSource is only supported for OutputMode.File (recording).",
+                    nameof(loopback));
+            // 録画モード: loopback が所有するパイプを ffmpeg の audio 入力として使う。
+            // Format は loopback.Initialize() 後に StartAsync 内で確定する。
+            _audioPipeName = loopback.PipeName;
+            _ffmpegAudioFormat = "";
+        }
+        else
+        {
+            _audioPipeName = $"winnative_audio_{Environment.ProcessId}";
+            _ffmpegAudioFormat = audioFormat != null
+                ? BuildAudioFormatArgs(audioFormat)
+                : "-f f32le -ar 48000 -ac 2";
+        }
     }
 
     public async Task StartAsync(CancellationToken ct = default)
@@ -133,14 +157,29 @@ public sealed class FfmpegProcess : IDisposable
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
             outBufferSize: 8 * 1024 * 1024, inBufferSize: 0);
 
-        // 音声用名前付きパイプ（1MBバッファ — 約2.67秒分のジッター吸収枠）
-        // 256KB（666ms）では FFmpeg の消費ジッタを吸収しきれず pipe.Write() が頻繁にブロックし、
-        // AudioWriterLoop が ~4% 遅れて _audioQueue が cap=30 で溢れ、4 drops/sec の「ブツブツ」が発生した
-        // （plans/recording-av-sync-fix.md C+A 計測）。1MB に拡大して backpressure の発生頻度を下げる。
-        _audioPipe = new NamedPipeServerStream(
-            _audioPipeName, PipeDirection.Out, 1,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
-            outBufferSize: 1024 * 1024, inBufferSize: 0);
+        if (UseLoopback)
+        {
+            // 録画モード: WASAPI Loopback でスピーカー出力をそのまま録る。
+            // loopback.Initialize() でパイプ生成 + capture 起動 → Format 確定 → 同期 return。
+            // この時点で loopback はキャプチャを開始し queue にバイトを溜め始めるが、
+            // FFmpeg がパイプに接続するまで writer は走らない（queue cap 1秒で安全）。
+            // plans/recording-screen-capture-alternative.md Step 2 + Step 0 PoC 知見
+            var fmt = _loopback!.Initialize();
+            _ffmpegAudioFormat = BuildAudioFormatArgs(fmt);
+            Log.Information("[FFmpeg] Recording mode: using WASAPI Loopback pipe={Pipe} format={Fmt}",
+                _audioPipeName, _ffmpegAudioFormat);
+        }
+        else
+        {
+            // 音声用名前付きパイプ（1MBバッファ — 約2.67秒分のジッター吸収枠）
+            // 256KB（666ms）では FFmpeg の消費ジッタを吸収しきれず pipe.Write() が頻繁にブロックし、
+            // AudioWriterLoop が ~4% 遅れて _audioQueue が cap=30 で溢れ、4 drops/sec の「ブツブツ」が発生した
+            // （plans/recording-av-sync-fix.md C+A 計測）。1MB に拡大して backpressure の発生頻度を下げる。
+            _audioPipe = new NamedPipeServerStream(
+                _audioPipeName, PipeDirection.Out, 1,
+                PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
+                outBufferSize: 1024 * 1024, inBufferSize: 0);
+        }
 
         // ダブルバッファ事前確保（BGRA入力コピー用）
         var bgraFrameSize = _config.Width * _config.Height * 4;
@@ -190,6 +229,14 @@ public sealed class FfmpegProcess : IDisposable
             ? "-use_wallclock_as_timestamps 1"
             : "";
 
+        // 録画モード（loopback）では音声PTSのオフセット補正は不要:
+        // - スピーカー出力をそのまま録るので、generatorの平均堆積 ~150ms は存在しない
+        // - WASAPI Loopback 固有遅延（10〜30ms）は wall clock に正しく反映される
+        // - 配信モードでは従来通り -itsoffset を適用
+        var audioItsoffset = (!UseLoopback && _config.AudioOffset != 0)
+            ? $"-itsoffset {_config.AudioOffset.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}"
+            : "";
+
         var args = string.Join(" ",
             "-y -nostdin",
             // Video input (named pipe — 8MBバッファ + NV12でデータ量63%削減)
@@ -200,13 +247,13 @@ public sealed class FfmpegProcess : IDisposable
             $"-framerate {_config.Framerate}",
             $@"-i \\.\pipe\{_videoPipeName}",
             // Audio input (named pipe)
+            // 注: loopback モードでも audio 側に -use_wallclock_as_timestamps は付けない。
+            // Step 0 PoC で確認済み: 生 PCM はサンプル数ベース PTS の方が AAC エンコーダと
+            // 相性が良く、wallclock を付けると Non-monotonic DTS / Queue input is backward in time が
+            // 連発する。AV 同期は「映像側 wallclock + 連続的に流れる loopback 音声」で取れる。
             "-thread_queue_size 1024",
             _ffmpegAudioFormat,
-            // AudioOffset: 音声入力PTSをオフセット（負=早める、正=遅らせる）
-            // wallclock映像との乖離を吸収。0 なら無効化（引数省略）
-            _config.AudioOffset != 0
-                ? $"-itsoffset {_config.AudioOffset.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}"
-                : "",
+            audioItsoffset,
             $@"-i \\.\pipe\{_audioPipeName}",
             // Video encode (encoder-specific)
             encoderArgs,
@@ -278,43 +325,56 @@ public sealed class FfmpegProcess : IDisposable
             Log.Warning("[FFmpeg] Initial frame error: {Msg}", ex.Message);
         }
 
-        // 音声パイプ接続待ち
-        Log.Information("[FFmpeg] Waiting for audio pipe connection...");
-        await _audioPipe.WaitForConnectionAsync(ct);
-        Log.Information("[FFmpeg] Audio pipe connected");
-
-        // 初期サイレンスを送信（FFmpegのAAC encoder + resamplerのプライミング用）
-        // 300ms分を100msチャンクで送信（最小限のプライミング、パイプバッファを満杯にしない）
-        // f32le, 48kHz, stereo: 100ms = 48000 * 2 * 4 / 10 = 38400 bytes
-        var silenceChunk = new byte[38400];
-        var totalSilenceBytes = 0;
-        try
+        if (UseLoopback)
         {
-            for (var i = 0; i < 3; i++) // 3 × 100ms = 300ms
+            // 録画モード: loopback が自身のパイプ接続待ちと writer スレッド起動を担当する。
+            // Initialize で既に capture は走っており queue にデータが溜まっているので、
+            // 接続後すぐに WriterLoop が消化を始める。silence プライムは不要
+            // （PoC で「audio 側プライムは PTS 歪みの原因」と確認済み）。
+            Log.Information("[FFmpeg] Waiting for loopback pipe connection...");
+            await _loopback!.ConnectAsync(ct);
+            Log.Information("[FFmpeg] Loopback pipe connected (no silence prime, no AudioWriterLoop)");
+        }
+        else
+        {
+            // 音声パイプ接続待ち
+            Log.Information("[FFmpeg] Waiting for audio pipe connection...");
+            await _audioPipe!.WaitForConnectionAsync(ct);
+            Log.Information("[FFmpeg] Audio pipe connected");
+
+            // 初期サイレンスを送信（FFmpegのAAC encoder + resamplerのプライミング用）
+            // 300ms分を100msチャンクで送信（最小限のプライミング、パイプバッファを満杯にしない）
+            // f32le, 48kHz, stereo: 100ms = 48000 * 2 * 4 / 10 = 38400 bytes
+            var silenceChunk = new byte[38400];
+            var totalSilenceBytes = 0;
+            try
             {
-                _audioPipe.Write(silenceChunk, 0, silenceChunk.Length);
-                totalSilenceBytes += silenceChunk.Length;
+                for (var i = 0; i < 3; i++) // 3 × 100ms = 300ms
+                {
+                    _audioPipe.Write(silenceChunk, 0, silenceChunk.Length);
+                    totalSilenceBytes += silenceChunk.Length;
+                }
+                _audioPipe.Flush();
+                Log.Information("[FFmpeg] Initial silence sent ({Bytes} bytes, {Sec:F1}s)",
+                    totalSilenceBytes, totalSilenceBytes / 384000.0);
+                Log.Information("[AVSync] t={T}ms: audio primed silence written ({Bytes}B)",
+                    Environment.TickCount64 - _diagStartTick, totalSilenceBytes);
             }
-            _audioPipe.Flush();
-            Log.Information("[FFmpeg] Initial silence sent ({Bytes} bytes, {Sec:F1}s)",
-                totalSilenceBytes, totalSilenceBytes / 384000.0);
-            Log.Information("[AVSync] t={T}ms: audio primed silence written ({Bytes}B)",
-                Environment.TickCount64 - _diagStartTick, totalSilenceBytes);
-        }
-        catch (IOException ex)
-        {
-            Log.Warning("[FFmpeg] Initial silence error (sent {Bytes} bytes): {Msg}",
-                totalSilenceBytes, ex.Message);
-        }
+            catch (IOException ex)
+            {
+                Log.Warning("[FFmpeg] Initial silence error (sent {Bytes} bytes): {Msg}",
+                    totalSilenceBytes, ex.Message);
+            }
 
-        // 音声バッファキュー書き込みスレッド開始
-        _audioWriter = new Thread(AudioWriterLoop)
-        {
-            IsBackground = true,
-            Name = "AudioPipeWriter",
-        };
-        _audioWriter.Start();
-        Log.Information("[FFmpeg] Audio writer thread started");
+            // 音声バッファキュー書き込みスレッド開始
+            _audioWriter = new Thread(AudioWriterLoop)
+            {
+                IsBackground = true,
+                Name = "AudioPipeWriter",
+            };
+            _audioWriter.Start();
+            Log.Information("[FFmpeg] Audio writer thread started");
+        }
 
         // ヘルスチェック: 5秒後にFFmpegの状態を確認
         _ = Task.Run(async () =>
@@ -428,6 +488,9 @@ public sealed class FfmpegProcess : IDisposable
     /// </summary>
     public void WriteAudioData(byte[] data, int offset, int count)
     {
+        // 録画モード（loopback）では自前 audio パイプを使わない（loopback が直接 ffmpeg に流す）。
+        // ここで enqueue するとキューが溜まり続けるだけなので早期 return する。
+        if (UseLoopback) return;
         if (_audioPipe is not { IsConnected: true } || _stopping) return;
 
         // WASAPIバッファは再利用されるのでコピーが必要
@@ -450,6 +513,9 @@ public sealed class FfmpegProcess : IDisposable
     /// </summary>
     public void WriteTtsData(byte[] f32lePcm)
     {
+        // 録画モード（loopback）では既存 WaveOutEvent → スピーカー → loopback 経路で
+        // ffmpeg まで届くため、ここで enqueue しても誰も消費しない。早期 return。
+        if (UseLoopback) return;
         if (_audioPipe is not { IsConnected: true } || _stopping) return;
         _ttsQueue.Enqueue(f32lePcm);
         Log.Information("[FFmpeg] TTS PCM enqueued: {Size} bytes ({Dur:F1}s)",
@@ -472,6 +538,8 @@ public sealed class FfmpegProcess : IDisposable
     /// </summary>
     public void WriteSeData(byte[] f32lePcm, float volume)
     {
+        // 録画モード（loopback）では SE も WaveOutEvent → スピーカー → loopback 経路で届く
+        if (UseLoopback) return;
         if (_audioPipe is not { IsConnected: true } || _stopping) return;
         _seVolume = volume;
         _seQueue.Enqueue(f32lePcm);
@@ -493,6 +561,13 @@ public sealed class FfmpegProcess : IDisposable
     /// </summary>
     public void StartAudioGenerator()
     {
+        // 録画モード（loopback）では generator は走らせない（loopback が直接 ffmpeg に流す）
+        if (UseLoopback)
+        {
+            Log.Information("[FFmpeg] StartAudioGenerator skipped (loopback recording mode)");
+            return;
+        }
+
         // 48kHz stereo f32le = 384 bytes per ms
         const int bytesPerMs = 48000 * 2 * 4 / 1000;
         _audioGenLastTick = Environment.TickCount64;
@@ -542,6 +617,9 @@ public sealed class FfmpegProcess : IDisposable
     /// </summary>
     public void SetBgm(byte[]? pcmData, float volume)
     {
+        // 録画モード（loopback）では BGM も WaveOutEvent → スピーカー → loopback で届く。
+        // ここで PCM をセットしても generator が動かないので意味がないため早期 return。
+        if (UseLoopback) return;
         _bgmPcm = pcmData;
         _bgmOffset = 0;
         _bgmVolume = volume;
@@ -801,13 +879,23 @@ public sealed class FfmpegProcess : IDisposable
             catch { /* already closed */ }
             _videoPipe = null;
 
-            try { _audioPipe?.Dispose(); }
-            catch { /* already closed */ }
-            _audioPipe = null;
+            if (UseLoopback)
+            {
+                // 録画モード: loopback が所有するパイプは loopback.Stop() が閉じる。
+                // FfmpegProcess は loopback の寿命を握っているので、ここで先に止める。
+                try { _loopback?.Stop(); }
+                catch (Exception ex) { Log.Warning(ex, "[FFmpeg] Loopback stop failed"); }
+            }
+            else
+            {
+                try { _audioPipe?.Dispose(); }
+                catch { /* already closed */ }
+                _audioPipe = null;
 
-            // パイプ閉鎖後に音声書き込みスレッドの終了を待つ
-            _audioWriter?.Join(2000);
-            _audioWriter = null;
+                // パイプ閉鎖後に音声書き込みスレッドの終了を待つ
+                _audioWriter?.Join(2000);
+                _audioWriter = null;
+            }
 
             // Wait up to 5 seconds for graceful exit
             using var cts = new CancellationTokenSource(5000);
