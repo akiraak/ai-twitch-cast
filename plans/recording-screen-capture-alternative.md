@@ -4,7 +4,7 @@
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 > 関連: [capture-window-audio.md](capture-window-audio.md)（キャプチャ対象ウィンドウの音取り込み・別観点）
 
-## ステータス: Step 0 PoC 完走 → Step 1 着手前（2026-05-10）
+## ステータス: Step 1 完了 → Step 2 着手前（2026-05-10）
 
 ## 起点となる観察
 
@@ -177,12 +177,15 @@ ffmpeg \
 
 **結論**: 仮説「アプリで再生しているだけのときは AV が揃う → ならば見聞きしているものをそのまま録れば AV 同期は構造から消える」が成立。本案を本実装に進める（Step 1 へ）。
 
-### Step 1: WinNativeApp 本体への loopback キャプチャ追加
+### Step 1: WinNativeApp 本体への loopback キャプチャ追加 → **完了（2026-05-10）**
 
-- `win-native-app/WinNativeApp/Streaming/` に `LoopbackAudioSource.cs`（仮）を新設
-- NAudio `WasapiLoopbackCapture` で f32le 48kHz stereo PCM を取得、wall clock 付きで Named Pipe にバイト列を書く
-- 既定デバイス変更時の reinit ロジック（`RecordingStopped` ハンドラ）を実装
-- 既存の `MeteringWaveProvider` / `TtsDecoder` / `_audioQueue` / `StartAudioGenerator` には触らない
+- ✅ `win-native-app/WinNativeApp/Streaming/LoopbackAudioSource.cs` を新設
+- ✅ NAudio `WasapiLoopbackCapture` でミックス形式（既定 48kHz f32 stereo）の PCM を取得し、`winnative_loopback_<pid>` 名前付きパイプ（1MB バッファ）へ書き出す。`WaveFormat` を公開して呼び出し側が FFmpeg 引数を組み立てられるようにする
+- ✅ 既定デバイス変更時の reinit ロジック（`RecordingStopped` ハンドラ → 500ms 待機 → 新規 `WasapiLoopbackCapture` 再構築、`_reinitInFlight` で多重発火ガード、`_captureLock` で停止と競合しない）
+- ✅ 既存の `MeteringWaveProvider` / `TtsDecoder` / `_audioQueue` / `StartAudioGenerator` には一切手を入れていない（配信モード = OutputMode.Rtmp は完全温存）
+- **設計上のメモ**: プラン原文の「wall clock 付きで Named Pipe にバイト列を書く」は Step 0 §「実装中に分かった設計上の修正」で「音声側に `-use_wallclock_as_timestamps 1` を付けると AAC エンコーダが破綻する」と判明済み。本コンポーネントは「素のバイト列をパイプに流すだけ」に責務を閉じ、wallclock 制御は Step 2 の FFmpeg 引数側で扱う
+- **検証**: `dotnet.exe build` でコンパイル成功（`obj/.../WinNativeApp.dll` に `LoopbackAudioSource` 型が出力済み）。新規ファイル起因の警告・エラーゼロ
+- **未配線**: 本コンポーネントは作っただけで `FfmpegProcess` / `MainForm` には未接続。Step 2 で結線する
 
 ### Step 2: 録画モード時の FFmpeg パイプを 2 入力に変更
 
@@ -239,7 +242,8 @@ ffmpeg \
 ## 完了条件（暫定）
 
 - [x] Step 0 の PoC で AV 同期が体感ズレなし、ブツブツなしを確認（合格基準: §Step 0 の定量基準）→ 2026-05-10 達成
-- [ ] Step 1〜2 を WinNativeApp 本体に組み込み、`OutputMode.File` で動作
+- [x] Step 1: `LoopbackAudioSource` 新設・ビルド通過 → 2026-05-10 達成（未配線。Step 2 で結線）
+- [ ] Step 2: 録画モード時の FFmpeg を 2 入力化、`OutputMode.File` で動作
 - [ ] Step 3 計測スクリプト拡張完了
 - [ ] Step 4 計測で 30 分長尺の AV ドリフトが ±100ms 以内
 - [ ] Step 5 で配信モードに劣化がないことを確認

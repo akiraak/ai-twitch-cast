@@ -1,5 +1,20 @@
 # DONE
 
+## 録画AV同期 別アプローチ Step 1: WinNativeApp に LoopbackAudioSource を新設 → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
+
+- [x] **背景**: Step 0 PoC で「画面キャプチャ + WASAPI Loopback で AV 同期は構造から消える」が成立。本実装に進めるため、PoC の `LoopbackCapture.cs` を本体側コンポーネントへ移植
+- [x] **新設**: `win-native-app/WinNativeApp/Streaming/LoopbackAudioSource.cs`
+  - NAudio `WasapiLoopbackCapture` → 名前付きパイプ（`winnative_loopback_<pid>` / 1MB バッファ、`FfmpegProcess._audioPipe` と同基準）
+  - `WaveFormat` を公開（FFmpeg 引数組み立ては Step 2 の呼び出し側責務）
+  - `DataAvailable` は queue にコピーを積むだけ（WASAPI コールバックを絶対にブロックしない）
+  - 専用バックグラウンドスレッド `LoopbackPipeWriter` が queue → pipe を消化、10 秒ごとにキュー状況をログ
+  - 既定デバイス変更時の `RecordingStopped` → 500ms 待機 → reinit（`_reinitInFlight` で多重発火ガード、`_captureLock` で停止と競合しない）
+  - キュー上限 100 チャンク（≒ 1 秒分）でパイプ詰まり時のメモリリーク防止。`DroppedChunks` で観測可能
+- [x] **PoC 知見の反映**: プラン Step 1 原文の「wall clock 付きで Named Pipe にバイト列を書く」は Step 0 PoC §「実装中に分かった設計上の修正」で**音声側に `-use_wallclock_as_timestamps 1` を付けると AAC エンコーダが破綻する**と判明済み。本コンポーネントは責務を「素のバイト列をパイプに流すだけ」に閉じ、wallclock 制御は Step 2 の FFmpeg 引数側で扱う旨をクラス先頭コメントに明記
+- [x] **既存コード無改変**: `FfmpegProcess` / `MainForm` / `MeteringWaveProvider` / `TtsDecoder` / `_audioQueue` / `StartAudioGenerator` には一切手を入れていない。配信モード（`OutputMode.Rtmp`）への影響なし
+- [x] **ビルド検証**: WSL から `dotnet.exe build` でコンパイル成功（`obj/.../WinNativeApp.dll` に `LoopbackAudioSource` と async 状態機械が出力済みを `strings` で確認）。新規ファイル起因の警告・エラーゼロ。MSB3027/MSB3021 は WinNativeApp.exe 起動中で .exe 上書き不可なだけで、C# コンパイル本体は完了
+- [x] **次**: Step 2 で `FfmpegProcess` を録画モード時のみ 2 入力化（音声を generator → loopback pipe に切替）。実機 AV 同期確認はそこで実施
+
 ## 録画AV同期 別アプローチ Step 0: PoC 完走 → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
 
 - [x] **背景**: 既存方式（FFmpeg 共有パイプライン + 自前 mixer + バイトベース PTS）の AV 同期問題を構造から消すため、「画面キャプチャ (WGC) + WASAPI Loopback で OS の単一 wall clock に同期を任せる」別ルートの原理検証
