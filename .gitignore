@@ -18,6 +18,8 @@ tmp/
 win-native-app/WinNativeApp/bin/
 win-native-app/WinNativeApp/obj/
 win-native-app/WinNativeApp/resources/ffmpeg/
+win-native-app/PocLoopback/bin/
+win-native-app/PocLoopback/obj/
 *.log
 jslog.txt
 videos/
