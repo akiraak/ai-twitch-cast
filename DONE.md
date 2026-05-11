@@ -1,5 +1,26 @@
 # DONE
 
+## 録画AV同期 別アプローチ Step 4 (前半): 実機検証で見つけた症状を順次潰して subprocess 経路へ → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
+
+実機 60s 録画で 4 つの症状を一つずつ切り分け・修正し、最終的に「PocLoopback サブプロセスから WGC キャプチャする」設計へ着地した。背景・経緯は本プラン Step 4 に詳細あり。
+
+- [x] **症状 (a) 音声が映像より 2.94 秒先行**: `LoopbackAudioSource.Initialize()` が即 WASAPI `StartRecording()` を呼ぶため、ffmpeg 起動・パイプ接続までの 3 秒間に capture されたオーディオが PTS=0..3 に前置きされていた → `Initialize`（capture 生成のみ）と `ConnectAsync` 内の `StartCapture`（pipe 接続後に StartRecording）に分離。end offset が +2876ms → -28ms に改善
+- [x] **症状 (b) 「最初の 1 秒がループ」見え方**: `+frag_keyframe` で fragmented MP4 になり moov 内 `nb_frames=60` しか書かれず、一部プレイヤーが 60 frames を録画全長に引き延ばして再生していた → `FfmpegProcess.cs:210` で `+frag_keyframe` 除去、`+faststart` のみに。ffprobe `nb_frames` が実数（1700+）に。クラッシュ耐性は失うが正常停止での録画は問題なし
+- [x] **症状 (c) WGC が webview2 hardware overlay を取れない疑い → ハズレ**: `--disable-features=DirectComposition` を試したが効果なし。`webview2.html` の Three.js + WebGL は GPU compositor 経由でも DWM 合成は通り WGC で見えていた（フラグはコミット時に外す）
+- [x] **症状 (d) 同プロセス WGC self-capture で broadcast.html の更新が掴めない**: PoC（別プロセス）は subtitle が時系列で進むが、本体（同プロセス WGC）は録画開始時点の subtitle で固定 → **PoC と同じ「別プロセスから WGC キャプチャ」の設計に切替** が決定打
+  - `PocLoopback/Program.cs`: `--hwnd <hex|dec>` で HWND 直指定を追加（タイトル検索ではなく確実な指定）
+  - `PocLoopback/Program.cs`: stdin 1 行 `stop` または EOF で graceful 終了するハンドラを追加。WinNativeApp から子プロセス制御
+  - `MainForm.cs`: `StartRecordingAsync` を `PocLoopback.exe` 起動に置換（`_recorderProcess`）。`Handle` を `--hwnd` で渡す
+  - `MainForm.cs`: `StopRecordingAsync` を stdin `stop` → `WaitForExitAsync(30s タイムアウト)` → アップロード経路に流す形に置換
+  - `MainForm.cs`: 子プロセスの stdout/stderr を `logs/recorder.log` に専用書き出し（録画ごとに上書き、`ffmpeg.log` と並ぶので WSL の `/mnt/c/...` 経由で外部解析できる）
+  - `stream.sh`: WinNativeApp ビルドの直後に PocLoopback も自動ビルド（`BUILD_BASE/PocLoopback/`）
+- [x] **最終確認** (`videos/broadcast_20260511_143725.mp4`):
+  - 字幕が時系列で正しく進行（6s "Vibe Coding..."、30s "tea dating..."、55s "..." とすべて別 md5 / 別 dialogue）
+  - AV sync: body bucket diff ±20ms、end offset -28ms（excellent）
+  - 起動 black frame: 9.3s（libx264 warmup。h264_qsv 時は 4.7s。残課題として TODO に残す）
+  - 録画 mp4 と recorder.log が同時に得られ、外部解析できる構造に
+- [ ] **未完**: Step 4-2 (90s) / 4-3 (5 分) / 4-4 (30 分長尺) の AV ドリフト計測、Step 5 (配信モード劣化確認)、Step 6 (ドキュメント整備) は別セッションで継続
+
 ## 録画AV同期 別アプローチ Step 3: verify_av_sync.py を音声 PTS 計測まで拡張 → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
 
 - [x] **背景**: 旧スクリプトは赤フラッシュ→映像 PTS ドリフトのみ計測。α 検証 / A0 loopback 検証どちらにも音声 PTS 軸の計測が要る。`recording-av-sync-fix.md` 既知の TODO（§ 残課題 3）と本プラン Step 3 を一本化して解決

@@ -106,6 +106,25 @@ if [ $BUILD_EXIT -ne 0 ]; then
 fi
 echo "ビルド完了"
 
+# 録画用サブプロセス (PocLoopback) も一緒にビルドしておく
+# （MainForm が録画開始時に子プロセスとして起動する。同プロセス WGC self-capture では
+# broadcast.html の更新が掴めない症状の回避策。plans/recording-screen-capture-alternative.md Step 4）
+POC_SRC_DIR="$(pwd)/win-native-app/PocLoopback"
+POC_BUILD_DIR="$BUILD_BASE/PocLoopback"
+if [ -d "$POC_SRC_DIR" ]; then
+    echo "PocLoopback (録画サブプロセス) をビルド中..."
+    mkdir -p "$POC_BUILD_DIR"
+    cp "$POC_SRC_DIR"/*.cs "$POC_SRC_DIR"/*.csproj "$POC_BUILD_DIR/" 2>/dev/null
+    POC_PROJECT=$(wslpath -w "$POC_BUILD_DIR")
+    POC_BUILD_OUT=$(dotnet.exe build "$POC_PROJECT" -c Release --nologo -v q 2>&1)
+    if [ $? -ne 0 ]; then
+        echo "PocLoopback ビルドエラー:"
+        echo "$POC_BUILD_OUT"
+        exit 1
+    fi
+    echo "PocLoopback ビルド完了"
+fi
+
 # EXEパス
 EXE_PATH="$BUILD_DIR/bin/Release/net8.0-windows10.0.22621.0/${APP_NAME}.exe"
 

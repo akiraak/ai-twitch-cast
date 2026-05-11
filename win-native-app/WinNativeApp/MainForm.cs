@@ -58,6 +58,14 @@ public class MainForm : Form
     private Uploader? _activeUploader;
     private string? _pendingUploadPath; // アップロード未完/失敗で残っているパス（再送用）
     private string? _lastUploadError;
+    // 録画は同プロセス内 WGC self-capture で broadcast.html の更新が掴めない症状が出るため、
+    // PocLoopback.exe を子プロセスとして起動して録画する経路を取る
+    // （plans/recording-screen-capture-alternative.md Step 4 計測で確定）。
+    private System.Diagnostics.Process? _recorderProcess;
+    // 録画サブプロセスの stdout/stderr を吐き出すログファイル（録画ごとに上書き）。
+    // ffmpeg.log と同じディレクトリに置くので WSL 側から /mnt/c/.../logs/recorder.log で読める。
+    private StreamWriter? _recorderLogWriter;
+    private readonly object _recorderLogLock = new();
     private static readonly string RecordingsDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "AITwitchCast", "recordings");
@@ -826,12 +834,20 @@ public class MainForm : Form
         try
         {
             // broadcast.html用WebView2（autoplay音声許可 + バックグラウンドスロットリング無効化）
+            // --disable-features=DirectComposition:
+            //   WebGL canvas（Three.js + three-vrm のアバター）の DComp/hardware overlay バイパスを
+            //   無効化する。これがないと Chromium が GPU compositor の出力を DComp 経由で
+            //   直接画面に描画し、DWM ベースの WGC が最新内容をキャプチャできず、録画 MP4 に
+            //   古いフレーム（特にアバター・字幕領域）が固定表示される症状が出る
+            //   （Step 4-1 計測で確認: 60 連続フレームのうち 30 が pixel-identical、29 がほぼ同一）。
+            //   配信モードでも同じ WGC 経路を使うので恩恵を受ける。
             var env = await CoreWebView2Environment.CreateAsync(null, null,
                 new CoreWebView2EnvironmentOptions(
                     "--autoplay-policy=no-user-gesture-required " +
                     "--disable-background-timer-throttling " +
                     "--disable-renderer-backgrounding " +
-                    "--disable-backgrounding-occluded-windows"));
+                    "--disable-backgrounding-occluded-windows " +
+                    "--disable-features=DirectComposition"));
             await _webView.EnsureCoreWebView2Async(env);
             Log.Information("[MainForm] WebView2 ready, version={Version}",
                 _webView.CoreWebView2.Environment.BrowserVersionString);
@@ -1528,7 +1544,9 @@ public class MainForm : Form
         }
     }
 
-    /// <summary>録画を開始する。Standby状態でのみ遷移可能。</summary>
+    /// <summary>録画を開始する。Standby状態でのみ遷移可能。
+    /// 録画は同プロセス WGC self-capture で broadcast.html の更新が掴めない症状を
+    /// 回避するため、PocLoopback.exe を子プロセスとして起動する経路を取る。</summary>
     public async Task StartRecordingAsync()
     {
         EnsureStandbyOrThrow("record start");
@@ -1537,25 +1555,138 @@ public class MainForm : Form
         var filename = $"broadcast_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
         var path = Path.Combine(RecordingsDir, filename);
 
-        var config = StreamConfig.FromArgs(_args);
-        config.Mode = OutputMode.File;
-        config.OutputPath = path;
-        config.StreamKey = null; // 録画時は不要
+        var pocExe = FindPocLoopbackExe()
+            ?? throw new FileNotFoundException(
+                "PocLoopback.exe が見つかりません。./poc-loopback.sh --build-only でビルドしてください。");
+        var ffmpegExe = FindFfmpegForRecorder()
+            ?? throw new FileNotFoundException(
+                "ffmpeg.exe が見つかりません。WinNativeApp の resources/ffmpeg/ffmpeg.exe を確認してください。");
 
-        Log.Information("[MainForm] Starting recording pipeline → {Path}", path);
-        Log.Information("[MainForm] Resolution={W}x{H} FPS={F} Bitrate={B}",
-            config.Width, config.Height, config.Framerate, config.VideoBitrate);
+        var args = new List<string>
+        {
+            "--hwnd", $"0x{Handle.ToInt64():X}",
+            "--output", path,
+            "--fps", "30",
+            "--ffmpeg", ffmpegExe,
+            "--duration", "86400", // 24h: stdin "stop" で打ち切る前提の上限
+        };
+        var argString = string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a));
 
-        await StartPipelineAsync(config);
+        Log.Information("[MainForm] Spawning recorder subprocess: {Exe} {Args}", pocExe, argString);
 
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = pocExe,
+            Arguments = argString,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        var proc = new System.Diagnostics.Process { StartInfo = psi, EnableRaisingEvents = true };
+
+        // 専用ログ: WinNativeApp と同じ logs/ 配下に recorder.log として出す。
+        // ffmpeg.log と並ぶので /mnt/c/.../logs/recorder.log で WSL 側から読める。
+        var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+        Directory.CreateDirectory(logDir);
+        var logPath = Path.Combine(logDir, "recorder.log");
+        try
+        {
+            _recorderLogWriter = new StreamWriter(logPath, append: false) { AutoFlush = true };
+            _recorderLogWriter.WriteLine($"=== Recorder log: {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
+            _recorderLogWriter.WriteLine($"=== Output MP4: {path} ===");
+            _recorderLogWriter.WriteLine($"=== Command: {pocExe} {argString} ===");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[MainForm] Recorder log file open failed: {Path}", logPath);
+            _recorderLogWriter = null;
+        }
+
+        proc.OutputDataReceived += (_, e) =>
+        {
+            if (string.IsNullOrEmpty(e.Data)) return;
+            Log.Information("[Recorder:stdout] {Line}", e.Data);
+            WriteRecorderLog("OUT", e.Data);
+        };
+        proc.ErrorDataReceived += (_, e) =>
+        {
+            if (string.IsNullOrEmpty(e.Data)) return;
+            Log.Warning("[Recorder:stderr] {Line}", e.Data);
+            WriteRecorderLog("ERR", e.Data);
+        };
+
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        _recorderProcess = proc;
         _recordingStartTime = DateTime.UtcNow;
         _currentRecordingPath = path;
         SetPipelineState(PipelineState.Recording);
         Text = "AI Twitch Cast - 録画中";
-        Log.Information("[MainForm] Recording pipeline active");
+        Log.Information("[MainForm] Recorder subprocess started PID={Pid} → {Path}", proc.Id, path);
+
+        // 起動直後にプロセスが落ちないかを最低限ガード（exe 引数ミスなど）
+        await Task.Delay(500);
+        if (proc.HasExited)
+        {
+            var exitCode = proc.ExitCode;
+            _recorderProcess = null;
+            _currentRecordingPath = null;
+            SetPipelineState(PipelineState.Standby);
+            Text = "AI Twitch Cast - 待機中";
+            throw new InvalidOperationException(
+                $"Recorder subprocess exited immediately (code={exitCode})");
+        }
     }
 
-    /// <summary>録画を停止する。停止後にバックグラウンドでアップロードを開始する。</summary>
+    /// <summary>Recorder 子プロセスの stdout/stderr を専用ログファイルに 1 行書き出す。</summary>
+    private void WriteRecorderLog(string tag, string line)
+    {
+        var w = _recorderLogWriter;
+        if (w == null) return;
+        try
+        {
+            lock (_recorderLogLock)
+            {
+                w.WriteLine($"{DateTime.Now:HH:mm:ss.fff} [{tag}] {line}");
+            }
+        }
+        catch { /* ファイル close 中などの race を無視 */ }
+    }
+
+    /// <summary>PocLoopback.exe のパスを解決する。WinNativeApp.exe の隣のディレクトリツリーから探す。</summary>
+    private static string? FindPocLoopbackExe()
+    {
+        var baseDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            // 通常: %LOCALAPPDATA%/win-native-app/PocLoopback/bin/Release/net8.0-windows10.0.22621.0/PocLoopback.exe
+            //  vs   %LOCALAPPDATA%/win-native-app/WinNativeApp/bin/Release/net8.0-windows10.0.22621.0/WinNativeApp.exe
+            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
+                "PocLoopback", "bin", "Release", "net8.0-windows10.0.22621.0", "PocLoopback.exe")),
+            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..",
+                "PocLoopback", "bin", "Debug", "net8.0-windows10.0.22621.0", "PocLoopback.exe")),
+        };
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>PocLoopback に渡す ffmpeg.exe のパス。WinNativeApp が同梱している ffmpeg を使う。</summary>
+    private static string? FindFfmpegForRecorder()
+    {
+        var baseDir = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            Path.Combine(baseDir, "resources", "ffmpeg", "ffmpeg.exe"),
+            Path.Combine(baseDir, "ffmpeg.exe"),
+        };
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>録画を停止する。停止後にバックグラウンドでアップロードを開始する。
+    /// サブプロセス録画は stdin に "stop" を流し → process exit を待つ → 出力 MP4 を確認、で終わる。</summary>
     public async Task StopRecordingAsync()
     {
         if (_pipelineState != PipelineState.Recording)
@@ -1564,25 +1695,55 @@ public class MainForm : Form
             return;
         }
 
-        // キャプチャコールバックを先に切断（_ffmpeg=null後のコールバック→NRE防止）
-        if (_capture != null)
-        {
-            _capture.OnFrameReady = null;
-            _capture.TargetFps = 0;
-        }
-
-        var ffmpeg = _ffmpeg;
-        _ffmpeg = null;
         var recordingPath = _currentRecordingPath;
         Text = "AI Twitch Cast - 待機中";
 
-        if (ffmpeg != null)
+        var proc = _recorderProcess;
+        _recorderProcess = null;
+        if (proc != null)
         {
-            Log.Information("[Rec] ffmpeg.StopAsync()...");
-            try { await ffmpeg.StopAsync(); }
-            catch (Exception ex) { Log.Error(ex, "[Rec] ffmpeg.StopAsync() failed"); }
-            try { ffmpeg.Dispose(); } catch { /* already disposed */ }
-            Log.Information("[Rec] ffmpeg stopped");
+            Log.Information("[Rec] Sending 'stop' to recorder stdin (PID={Pid})...", proc.Id);
+            try
+            {
+                if (!proc.HasExited)
+                {
+                    await proc.StandardInput.WriteLineAsync("stop");
+                    await proc.StandardInput.FlushAsync();
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Rec] stdin write failed"); }
+
+            // graceful exit を 30 秒まで待つ（mp4 trailer + faststart relocation を含む）
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await proc.WaitForExitAsync(cts.Token);
+                Log.Information("[Rec] Recorder exited cleanly (code={Code})", proc.ExitCode);
+            }
+            catch (OperationCanceledException)
+            {
+                Log.Warning("[Rec] Recorder did not exit in 30s, killing");
+                try { proc.Kill(); } catch { /* already gone */ }
+                try { proc.WaitForExit(3000); } catch { }
+            }
+            try { proc.Dispose(); } catch { }
+        }
+
+        // 録画専用ログをクローズ（次の録画で上書きされる）
+        var logWriter = _recorderLogWriter;
+        _recorderLogWriter = null;
+        if (logWriter != null)
+        {
+            try
+            {
+                lock (_recorderLogLock)
+                {
+                    logWriter.WriteLine($"=== Recorder log closed: {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
+                    logWriter.Flush();
+                    logWriter.Dispose();
+                }
+            }
+            catch { /* ignore */ }
         }
 
         if (string.IsNullOrEmpty(recordingPath) || !File.Exists(recordingPath))

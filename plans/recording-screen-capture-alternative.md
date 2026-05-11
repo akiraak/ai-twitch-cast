@@ -4,7 +4,7 @@
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 > 関連: [capture-window-audio.md](capture-window-audio.md)（キャプチャ対象ウィンドウの音取り込み・別観点）
 
-## ステータス: Step 3 完了（計測スクリプト拡張）→ Step 4 実機計測へ（2026-05-10）
+## ステータス: Step 4 前半完了（subprocess 録画経路に着地）→ Step 4-2/3/4 (90s/5分/30分) は別セッションで継続（2026-05-11）
 
 ## 起点となる観察
 
@@ -217,9 +217,24 @@ ffmpeg \
 - ✅ 後方互換: 旧コマンドライン `python3 scripts/verify_av_sync.py xxx.mp4` はそのまま動作（AV アラインメント出力が先頭に追加されるだけ）
 - α 検証（[recording-av-sync-fix.md](recording-av-sync-fix.md) 既知 TODO §残課題 3）と本プラン Step 3 を一本化して解決済み
 
-### Step 4: 計測
+### Step 4: 計測（前半完了 / 2026-05-11）
 
-- 60 秒・90 秒・5 分・30 分長尺で AV 同期と CPU 負荷を測る
+実機 60s 計測の途中で 4 つの症状を順番に切り分け、最終的に **「PocLoopback サブプロセスから WGC キャプチャする」設計** に着地した。詳細は DONE.md「録画AV同期 別アプローチ Step 4 (前半)」を参照。
+
+**結果**（`videos/broadcast_20260511_143725.mp4`）:
+- 字幕が時系列で正しく進行（6s/30s/55s 全て別 dialogue・別 md5）
+- AV sync: body bucket diff ±20ms、end offset -28ms
+- 起動 black frame: 9.3s（libx264 warmup の残課題）
+
+**修正概要**:
+- `LoopbackAudioSource` の `Initialize` / `StartCapture` 分離で audio 先行 +2.87s を解消
+- `FfmpegProcess` の `+frag_keyframe` 除去で nb_frames=60 → 正しい frame 数に
+- 同プロセス WGC self-capture が broadcast.html の更新を掴めない症状を **PocLoopback サブプロセス起動** で回避
+- `MainForm` で子プロセス制御（`--hwnd` 直指定、stdin "stop" で graceful 終了、`logs/recorder.log` に専用ログ出力）
+- `stream.sh` で WinNativeApp と PocLoopback を一緒にビルド
+
+**未完（別セッション）**:
+- Step 4-2 (90s) / 4-3 (5 分) / 4-4 (30 分長尺) の AV ドリフト計測
 - VLC 目視チェックリストは `recording-av-sync-fix.md` Step 1 の手順を流用
 - ブツブツ／遅延／中央値ズレ／最大ズレ幅を記録
 
@@ -261,7 +276,8 @@ ffmpeg \
 - [x] Step 1: `LoopbackAudioSource` 新設・ビルド通過 → 2026-05-10 達成（未配線。Step 2 で結線）
 - [x] Step 2: 録画モード時の FFmpeg を 2 入力化、`OutputMode.File` で `FfmpegProcess` / `MainForm` ともに loopback 経路へ切替 → 2026-05-10 達成（ビルド通過、実機検証は Step 4 で実施）
 - [x] Step 3 計測スクリプト拡張完了 → 2026-05-10 達成（音声 PTS 取得・時系列バケット・ギャップ検出を追加）
-- [ ] Step 4 計測で 30 分長尺の AV ドリフトが ±100ms 以内
+- [x] Step 4 前半: subprocess 録画経路で AV 同期 ±20ms / subtitle 進行を確認 → 2026-05-11 達成
+- [ ] Step 4 後半: 90s / 5分 / 30 分長尺の AV ドリフトが ±100ms 以内
 - [ ] Step 5 で配信モードに劣化がないことを確認
 - [ ] DONE.md に結果を記録、本プランを「完了」に更新
 

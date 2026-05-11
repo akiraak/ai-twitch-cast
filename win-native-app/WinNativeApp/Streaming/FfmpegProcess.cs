@@ -206,8 +206,14 @@ public sealed class FfmpegProcess : IDisposable
                 ?? throw new InvalidOperationException("OutputPath is required for File mode");
             var dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            // +frag_keyframe はクラッシュ耐性、+faststart はmoov先頭配置（アップロード後のseek最適化）
-            outputArgs = $"-f mp4 -movflags +faststart+frag_keyframe \"{outputPath}\"";
+            // +faststart は moov 先頭配置（アップロード後のseek最適化）。
+            // 以前は +frag_keyframe も付けていたが fragmented MP4 になり、
+            // moov の nb_frames がフラグメント 1 個分の値（60）しか書かれず、
+            // VLC など一部のプレイヤーが 60 フレームを録画全長に引き延ばして
+            // 「最初の 1 秒がループ再生される」症状を起こしていたため除去。
+            // クラッシュ耐性は失うが、StopRecording による正常停止フローでは
+            // ffmpeg trailer 書き込み → faststart relocation が走り moov が正しく配置される。
+            outputArgs = $"-f mp4 -movflags +faststart \"{outputPath}\"";
             // 録画は画質優先のため低遅延フラグを使わない
             lowLatencyArgs = "";
             Log.Information("[FFmpeg] Recording to file: {Path}", outputPath);

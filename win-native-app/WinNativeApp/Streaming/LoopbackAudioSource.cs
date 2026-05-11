@@ -77,16 +77,19 @@ public sealed class LoopbackAudioSource : IDisposable
     }
 
     /// <summary>
-    /// パイプ生成と WASAPI Loopback キャプチャ起動を同期的に行う。
+    /// パイプを生成し、WASAPI Loopback の WaveFormat を確定する（StartRecording はまだ呼ばない）。
     /// 戻り値は確定したミックス形式（FFmpeg 引数の組み立てに使用）。
-    /// この時点で capture は既に内部 queue にチャンクを溜め始めているため、
-    /// 続けて速やかに ConnectAsync を呼ぶこと。
     ///
-    /// StartAsync を分割している理由: FfmpegProcess は Format を ffmpeg 起動コマンドに
-    /// 埋め込む必要があるが、WaitForConnectionAsync で長時間ブロックされると FFmpeg が
-    /// 起動できず、デッドロックする。Format 確定（同期）と pipe 接続待ち（非同期）を
-    /// 分離することで、呼び出し側は「Initialize → ffmpeg 起動 → ConnectAsync」の順に
-    /// 並行起動できる。
+    /// StartRecording を ConnectAsync まで遅らせている理由: ffmpeg プロセス起動 +
+    /// 名前付きパイプ接続待ちには 2〜3 秒かかるため、ここで StartRecording してしまうと
+    /// その間 WASAPI が捕捉したオーディオが queue に溜まり、接続直後にバーストで
+    /// pipe に流れ込む。ffmpeg はこれを audio PTS=0..N秒 として記録するので、
+    /// 結果として「音声が映像より 3 秒先行する」状態になる
+    /// （Step 4-1 60s 計測で end offset +2876ms / lip-sync 大幅ズレを確認）。
+    ///
+    /// 対策: Initialize は capture オブジェクト生成と Format 取得まで、
+    /// StartRecording は ConnectAsync で pipe 接続後に呼ぶことで、
+    /// audio 1 サンプル目 ≈ video 最初の実フレームの wallclock となり、AV 同期が成立する。
     /// </summary>
     public WaveFormat Initialize()
     {
@@ -107,9 +110,9 @@ public sealed class LoopbackAudioSource : IDisposable
     }
 
     /// <summary>
-    /// FFmpeg からのパイプ接続を待ち、接続後に書き込みスレッドを起動する。
-    /// Initialize() で起動済みの capture は接続前から queue にデータを溜めているので、
-    /// 接続後すぐに WriterLoop が消化を開始する。
+    /// FFmpeg からのパイプ接続を待ち、接続後に WASAPI StartRecording と書き込みスレッドを起動する。
+    /// pipe 接続前に StartRecording しないことで、3 秒近いプリバッファ
+    /// （= 音声先行 lip-sync ズレ）を発生させない。
     /// </summary>
     public async Task ConnectAsync(CancellationToken ct = default)
     {
@@ -119,6 +122,9 @@ public sealed class LoopbackAudioSource : IDisposable
         Log.Information("[Loopback] Waiting for ffmpeg pipe connection (pipe={Pipe})...", _pipeName);
         await _pipe.WaitForConnectionAsync(ct);
         Log.Information("[Loopback] Pipe connected");
+
+        // pipe 接続後に StartRecording を呼ぶ → audio サンプル 0 が ffmpeg 受信タイミングと揃う
+        StartCapture();
 
         _writer = new Thread(WriterLoop)
         {
@@ -139,6 +145,10 @@ public sealed class LoopbackAudioSource : IDisposable
         await ConnectAsync(ct);
     }
 
+    /// <summary>
+    /// WasapiLoopbackCapture を生成しハンドラを取り付ける。StartRecording はまだ呼ばない。
+    /// 実際の録音開始は <see cref="StartCapture"/> で行う（pipe 接続後）。
+    /// </summary>
     private void InitCapture()
     {
         lock (_captureLock)
@@ -152,8 +162,22 @@ public sealed class LoopbackAudioSource : IDisposable
 
             cap.DataAvailable += OnDataAvailable;
             cap.RecordingStopped += OnRecordingStopped;
-            cap.StartRecording();
             _capture = cap;
+        }
+    }
+
+    /// <summary>
+    /// WASAPI Loopback の StartRecording を呼ぶ。InitCapture 済みであることが前提。
+    /// pipe 接続後に呼ぶことで、capture と pipe の起動タイミングを揃える。
+    /// </summary>
+    private void StartCapture()
+    {
+        lock (_captureLock)
+        {
+            if (_stopping) return;
+            if (_capture == null)
+                throw new InvalidOperationException("Call InitCapture() before StartCapture()");
+            _capture.StartRecording();
             Log.Information("[Loopback] StartRecording");
         }
     }
@@ -204,7 +228,9 @@ public sealed class LoopbackAudioSource : IDisposable
                         _capture = null;
                     }
 
+                    // reinit は ConnectAsync 後にしか発火しないので、StartCapture まで実行する
                     InitCapture();
+                    StartCapture();
                 }
                 catch (Exception ex)
                 {
