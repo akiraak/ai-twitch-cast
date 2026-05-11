@@ -68,6 +68,14 @@ public sealed class FfmpegRunner : IDisposable
 
         var audioArgs = BuildAudioFormatArgs(_audioFormat);
 
+        // yuv420p は偶数次元必須。入力が奇数なら 1px 切り落とす。
+        // PocLoopback はクライアント側で crop 済みの偶数次元（1280×720 等）が来ることがあるので
+        // その場合は filter を省いてパイプラインを軽くする
+        bool dimsAreEven = (_videoWidth & 1) == 0 && (_videoHeight & 1) == 0;
+        string videoFilterArg = dimsAreEven
+            ? ""
+            : "-vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\"";
+
         var args = string.Join(" ",
             "-y -nostdin -hide_banner",
             // Video input
@@ -85,8 +93,8 @@ public sealed class FfmpegRunner : IDisposable
             "-thread_queue_size 1024",
             audioArgs,
             $@"-i \\.\pipe\{_audioPipeName}",
-            // Encode（yuv420p は偶数次元必須なので奇数なら 1px 切り落とす）
-            "-vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\"",
+            // Encode
+            videoFilterArg,
             "-c:v libx264 -preset veryfast -pix_fmt yuv420p",
             $"-g {_videoFps * 2}",
             "-c:a aac -b:a 192k -ar 48000",

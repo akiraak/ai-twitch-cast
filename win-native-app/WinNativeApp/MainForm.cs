@@ -1569,6 +1569,7 @@ public class MainForm : Form
             "--fps", "30",
             "--ffmpeg", ffmpegExe,
             "--duration", "86400", // 24h: stdin "stop" で打ち切る前提の上限
+            "--crop-broadcast",    // タイトルバー/サイドバー/ステータスバーを除いた 1280×720 だけ録画
         };
         var argString = string.Join(" ", args.Select(a => a.Contains(' ') ? $"\"{a}\"" : a));
 

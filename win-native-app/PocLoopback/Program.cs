@@ -42,6 +42,11 @@ string outputPath = "poc_loopback.mp4";
 int durationSec = DefaultDurationSec;
 int fps = DefaultFps;
 string? ffmpegPath = null;
+CropRect? cropRect = null;
+
+// WinNativeApp の broadcast canvas を抜き出すデフォルト矩形（CLAUDE.md の crop=1280:720:1:38 と同じ）。
+// chrome 寸法はウィンドウ実装依存の物理値なのでコード内定数で持つ
+CropRect broadcastCrop = new(X: 1, Y: 38, Width: 1280, Height: 720);
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -60,6 +65,32 @@ for (int i = 0; i < args.Length; i++)
         case "--duration" when i + 1 < args.Length: durationSec = int.Parse(args[++i]); break;
         case "--fps" when i + 1 < args.Length: fps = int.Parse(args[++i]); break;
         case "--ffmpeg" when i + 1 < args.Length: ffmpegPath = args[++i]; break;
+        case "--crop" when i + 1 < args.Length:
+            // x:y:w:h、または "none"
+            var cv = args[++i];
+            if (cv.Equals("none", StringComparison.OrdinalIgnoreCase))
+            {
+                cropRect = null;
+            }
+            else
+            {
+                var parts = cv.Split(':');
+                if (parts.Length != 4
+                    || !int.TryParse(parts[0], out var cx)
+                    || !int.TryParse(parts[1], out var cy)
+                    || !int.TryParse(parts[2], out var cw)
+                    || !int.TryParse(parts[3], out var ch)
+                    || cw <= 0 || ch <= 0 || cx < 0 || cy < 0)
+                {
+                    Console.Error.WriteLine($"Invalid --crop value: '{cv}' (expected x:y:w:h or 'none')");
+                    return 2;
+                }
+                cropRect = new CropRect(cx, cy, cw, ch);
+            }
+            break;
+        case "--crop-broadcast":
+            cropRect = broadcastCrop;
+            break;
         case "-h" or "--help":
             PrintUsage();
             return 0;
@@ -147,10 +178,16 @@ _ = Task.Run(() =>
 });
 
 // 1) 画面キャプチャ開始（最初のフレームでサイズ確定 → FFmpeg 起動）
+//    crop 指定時は OnFrame に渡る (w, h) は crop 後サイズになる
+if (cropRect != null)
+    Console.WriteLine($"[Main] Crop enabled: ({cropRect.X},{cropRect.Y}) {cropRect.Width}x{cropRect.Height}");
+else
+    Console.WriteLine("[Main] Crop disabled (capturing full window)");
+
 var firstFrame = new TaskCompletionSource<(int w, int h)>(
     TaskCreationOptions.RunContinuationsAsynchronously);
 screen.OnFrame = (_, w, h) => firstFrame.TrySetResult((w, h));
-screen.Start(hwnd);
+screen.Start(hwnd, cropRect);
 Console.WriteLine("[Main] Screen capture started, waiting for first frame...");
 
 (int w, int h) size;
@@ -220,11 +257,17 @@ static void PrintUsage()
         Usage:
           PocLoopback --window <title-substring> [--output <path.mp4>]
                       [--duration <sec>] [--fps <n>] [--ffmpeg <path>]
+                      [--crop x:y:w:h | --crop none | --crop-broadcast]
         Defaults:
           --output  poc_loopback.mp4
           --duration 60
           --fps 30
           --ffmpeg auto (PATH or ../WinNativeApp/...resources/ffmpeg/ffmpeg.exe)
+          --crop    none（ウィンドウ全体を録画）
+        Crop:
+          --crop x:y:w:h         明示指定（左上 (x,y) から w×h を抜き出す）
+          --crop none            crop 無し（後方互換のデフォルト）
+          --crop-broadcast       WinNativeApp の broadcast canvas（1,38,1280×720）
         """);
 }
 

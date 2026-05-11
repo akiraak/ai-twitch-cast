@@ -9,8 +9,11 @@ using WinRT;
 
 namespace PocLoopback;
 
+// crop 矩形（WGC で得たフレームから抜き出す領域）。null = 抜き出し無しで丸ごと。
+public sealed record CropRect(int X, int Y, int Width, int Height);
+
 // PoC 用の最小 WGC キャプチャ。WinNativeApp/Capture/FrameCapture.cs を簡素化。
-// 本実装と違いシングルバッファ・クロップ無し。BGRA をそのまま Action に渡す。
+// 本実装と違いシングルバッファ。crop 指定時はフレームから矩形だけ抜き出して BGRA を Action に渡す。
 public sealed class ScreenCapture : IDisposable
 {
     public Action<byte[], int, int>? OnFrame { get; set; }
@@ -25,11 +28,14 @@ public sealed class ScreenCapture : IDisposable
     private int _stagingW, _stagingH;
     private readonly object _lock = new();
     private long _frameCount;
+    private CropRect? _crop;
+    private bool _cropOutOfRangeWarned;
 
     public long FrameCount => Interlocked.Read(ref _frameCount);
 
-    public void Start(IntPtr hwnd)
+    public void Start(IntPtr hwnd, CropRect? crop = null)
     {
+        _crop = crop;
         D3D11.D3D11CreateDevice(
             null, DriverType.Hardware, DeviceCreationFlags.BgraSupport,
             [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0],
@@ -83,37 +89,58 @@ public sealed class ScreenCapture : IDisposable
                 var nativePtr = GetNativePointer(frame.Surface, iid);
                 using var srcTex = new ID3D11Texture2D(nativePtr);
                 var desc = srcTex.Description;
-                int w = (int)desc.Width;
-                int h = (int)desc.Height;
+                int sw = (int)desc.Width;
+                int sh = (int)desc.Height;
 
-                EnsureStaging(w, h, desc.Format);
+                // crop が指定されていてフレーム範囲を超えていたら、このフレームを捨てる。
+                // ウィンドウ DPI / リサイズで一時的に小さくなった等が原因。1 回だけ警告
+                int cx = 0, cy = 0, cw = sw, ch = sh;
+                if (_crop is { } c)
+                {
+                    if (c.X + c.Width > sw || c.Y + c.Height > sh || c.X < 0 || c.Y < 0)
+                    {
+                        if (!_cropOutOfRangeWarned)
+                        {
+                            Console.Error.WriteLine(
+                                $"[Capture] crop rect ({c.X},{c.Y},{c.Width}x{c.Height}) exceeds frame {sw}x{sh}; skipping frames until window matches");
+                            _cropOutOfRangeWarned = true;
+                        }
+                        return;
+                    }
+                    cx = c.X; cy = c.Y; cw = c.Width; ch = c.Height;
+                }
+
+                EnsureStaging(sw, sh, desc.Format);
                 _context!.CopyResource(_staging!, srcTex);
 
                 var mapped = _context.Map(_staging!, 0, MapMode.Read);
                 try
                 {
-                    if (_frameBuffer == null || _frameBuffer.Length != w * h * 4)
-                        _frameBuffer = new byte[w * h * 4];
+                    int needed = cw * ch * 4;
+                    if (_frameBuffer == null || _frameBuffer.Length != needed)
+                        _frameBuffer = new byte[needed];
 
-                    if (mapped.RowPitch == w * 4)
+                    // crop 無し かつ RowPitch == sw*4 のときだけ単一ブロック copy の fast path
+                    if (_crop == null && mapped.RowPitch == sw * 4)
                     {
                         fixed (byte* dst = _frameBuffer)
                         {
-                            Buffer.MemoryCopy((void*)mapped.DataPointer, dst, w * h * 4, w * h * 4);
+                            Buffer.MemoryCopy((void*)mapped.DataPointer, dst, needed, needed);
                         }
                     }
                     else
                     {
-                        for (int y = 0; y < h; y++)
+                        // 行ごとコピー（crop offset 適用 / RowPitch ≠ cw*4 にも対応）
+                        for (int y = 0; y < ch; y++)
                         {
-                            var src = (byte*)(mapped.DataPointer + y * mapped.RowPitch);
-                            fixed (byte* dst = &_frameBuffer![y * w * 4])
+                            var src = (byte*)(mapped.DataPointer + (cy + y) * mapped.RowPitch + cx * 4);
+                            fixed (byte* dst = &_frameBuffer![y * cw * 4])
                             {
-                                Buffer.MemoryCopy(src, dst, w * 4, w * 4);
+                                Buffer.MemoryCopy(src, dst, cw * 4, cw * 4);
                             }
                         }
                     }
-                    width = w; height = h;
+                    width = cw; height = ch;
                 }
                 finally
                 {

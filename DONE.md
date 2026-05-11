@@ -1,5 +1,15 @@
 # DONE
 
+## 録画品質改善 Step 3.5: 配信領域だけクロップして録画 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
+
+WinNativeApp ウィンドウ全体ではなく、broadcast canvas の 1280×720 だけを録画するように PocLoopback サブプロセスを拡張。タイトルバー / 右サイドバー / 下部ステータスバーが録画 mp4 に映らなくなり、`debug-ss/` の後処理（`ffmpeg crop=1280:720:1:38` 2 パス）が不要になる。
+
+- [x] **`PocLoopback/ScreenCapture.cs`**: `CropRect(X,Y,W,H)` レコードを追加し、`Start(IntPtr hwnd, CropRect? crop = null)` で受け取る。`ExtractBgra` の行ごとコピーループで `(cy+y)*RowPitch + cx*4` オフセットを当てて矩形だけ `_frameBuffer` に詰める。crop 無し時は単一ブロック copy の fast path を温存。crop 矩形がフレーム範囲を超えた場合は 1 回だけ警告してフレーム破棄（DPI / リサイズ耐性）
+- [x] **`PocLoopback/FfmpegRunner.cs`**: 入力次元が偶数なら `-vf "crop=trunc(iw/2)*2:trunc(ih/2)*2"` を省く（1280×720 では不要）。yuv420p 偶数要件は維持
+- [x] **`PocLoopback/Program.cs`**: CLI に `--crop x:y:w:h` / `--crop none` / `--crop-broadcast` を追加。デフォルトは crop 無し（PoC 単体実行時の後方互換）。`broadcastCrop = (1, 38, 1280, 720)` は Program 内のコード定数として保持
+- [x] **`WinNativeApp/MainForm.cs:1572`**: 録画サブプロセス起動引数に `--crop-broadcast` を追加。本体録画フローは常にクロップ後の 1280×720 を出力する
+- [x] **副次効果**: パイプ転送量が WGC 入力次元（1682×759 想定）→ crop 後（1280×720）で約 -45%。FFmpeg vf filter も省けたので CPU も軽くなる方向
+
 ## 録画AV同期 別アプローチ Step 4 (前半): 実機検証で見つけた症状を順次潰して subprocess 経路へ → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
 
 実機 60s 録画で 4 つの症状を一つずつ切り分け・修正し、最終的に「PocLoopback サブプロセスから WGC キャプチャする」設計へ着地した。背景・経緯は本プラン Step 4 に詳細あり。

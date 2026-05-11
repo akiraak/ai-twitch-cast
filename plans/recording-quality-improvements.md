@@ -4,7 +4,7 @@
 > 関連: [recording-av-sync-fix.md](recording-av-sync-fix.md)（旧方式の AV 同期 — 役割分担対象）
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 
-## ステータス: 起案中（未承認）
+## ステータス: 進行中（Step 3.5 完了 / Step 1・2・3・4・5・6 未着手）
 
 ## 背景
 
@@ -164,6 +164,10 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
 - `ScreenCapture` 内に `System.Threading.Timer`（33ms / 30fps）を追加
 - 「直近 N ms（例 50ms）に WGC frame_arrived が来ていなければ最後のフレームを再送」する pump メソッド
 - Stop 時にタイマーを止める
+- **ロック設計**: 現状 `ScreenCapture.cs:71` の `cb(_frameBuffer!, w, h)` は `lock (_lock)` の **外** で呼ばれている。pump 側からも同じ `_frameBuffer` 参照を渡すと、サイズ変化時に `_frameBuffer = new byte[...]` で再確保された瞬間に古い参照が消える競合が起きうる。次のいずれかで保護する:
+  - (a) `OnFrameArrived` / pump 両方で `cb` 呼び出しまで `lock (_lock)` の内側に含める
+  - (b) `_frameBuffer` 参照を呼び出し直前にローカル変数にスナップショット (`var buf = _frameBuffer; cb(buf, w, h);`) して、再確保があっても呼び出し中の参照が GC されないようにする
+  - 採用は (b) を基本とする（A 案で primer に保持する参照と同じ寿命管理になり一貫する）。pump 側は `_lock` 内で `(buf, w, h) = (_frameBuffer, _lastW, _lastH);` を取り、ロック外で `cb(buf, w, h)` を呼ぶ
 - 検証: broadcast.html を静止させた状態で 60s 録画 → 黒/フリーズが入らないこと、`ffprobe -count_frames` で frame_count が `60*30 = 1800` 付近になること
 
 ### Step 3: エンコーダ設定改善
@@ -190,11 +194,13 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
   - WGC 由来の入力次元が **既に偶数（1280×720）** なら `-vf "crop=trunc(iw/2)*2:trunc(ih/2)*2"` は不要。CropRect 指定時は外す
 - `win-native-app/WinNativeApp/MainForm.cs:1550` 周辺（`StartRecordingAsync`）
   - 子プロセス起動引数に `--crop-broadcast` を追加（変更は 1 行）
+- **依存連鎖の確認**: `ScreenCapture` 側でクロップすると `OnFrame` callback が返す `(w, h)` は crop 後サイズになる → `Program.cs:159` の `size = await firstFrame.Task` も crop 後サイズ → `FfmpegRunner` 作成時に渡す `videoWidth/Height` も自動的に crop 後になる。Step 1（A 案 primer）で保持する最初のフレームバイト列も crop 後の長さ（1280×720×4 = 3.7MB）になる。**現状の Program.cs の制御フローは変えずに済む**
 - 検証:
   - 60s 録画 → VLC 目視でタイトルバー・サイドバー・ステータスバーが映っていないこと
   - `ffprobe -show_entries stream=width,height` で 1280×720 になっていること
   - AV 同期回帰がないこと（バケット内 diff ±20ms）
   - パイプ転送量が減っていること（`[Main] t=... bytes=...` ログで video bytes が 45% ほど減ることを確認）
+  - **DPI awareness 実機確認**: WinNativeApp ウィンドウを 100% モニタと高 DPI（150% / 200%）モニタの両方に置いた状態で 60s 録画し、`ffprobe -show_entries stream=width,height` がいずれも 1280×720 を返すこと。ウィンドウサイズの物理ピクセル差で crop 矩形がずれていないことを確認（プロジェクト内に DPI manifest / `SetHighDpiMode` 設定が明示的に見当たらないため要実測）
 
 ### Step 4（任意）: HW エンコーダ対応
 
@@ -233,10 +239,10 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
 - [ ] Step 1: A 案実装。60s 録画で先頭黒フレームが 1 秒以下に短縮
 - [ ] Step 2: B 案実装。静止コンテンツ 60s 録画でフリーズ/黒なし、frame_count ≒ 1800
 - [ ] Step 3: エンコーダ設定改善。`+frag_keyframe` 除去 → preset/crf 調整 → 音声 128k。ファイルサイズと画質を記録
-- [ ] Step 3.5: 配信領域クロップ。VLC 目視で chrome が映っていないこと、`ffprobe` で 1280×720、AV 同期回帰なし
+- [x] Step 3.5: 配信領域クロップ。`ScreenCapture` に `CropRect` 追加 / `Program.cs` に `--crop` 系 CLI 追加 / `MainForm` に `--crop-broadcast` 追加。実機 60s 録画で chrome が映らず 1280×720 で出力されること・AV 同期回帰なしを確認済み
 - [ ] Step 4: （任意）HW エンコーダ対応
 - [ ] Step 5: AV 同期回帰なし（バケット内 diff ±20ms、end offset ±30ms 維持）
-- [ ] Step 6: DONE.md / TODO.md / 親プラン更新
+- [ ] Step 6: DONE.md / TODO.md / 親プラン更新（Step 3.5 分は反映済み）
 
 ## 参考
 
