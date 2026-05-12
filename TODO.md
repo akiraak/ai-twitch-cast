@@ -7,8 +7,7 @@
 - [ ] 管理画面から授業を再生した後にクライアントのLessonタブで開始されたことやデータ転送の進捗を確認したい
 
 ## その他
-- [>] クライアント画面の文字をもっと綺麗に表示できないか（Step 0 完了 / 対象は broadcast.html のみに確定） → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
-  - [ ] **Step 1**: 現状のスクリーンショット取得（`debug-ss/` に配信画面のスクショを保存、字幕/TODO/lesson の各状態）
+- [>] クライアント画面の文字をもっと綺麗に表示できないか（Step 1 完了 / 滲み主因は font-smoothing 未指定 + text-shadow 過剰 + 中サイズ太字と特定） → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
   - [ ] **Step 2**: broadcast.css にフォントレンダリングのベース追加（`-webkit-font-smoothing: antialiased` / `text-rendering: optimizeLegibility` / `font-feature-settings: "palt" 1`）
   - [ ] **Step 3**: 強すぎる text-shadow / 紫グローを軽減（subtitle の `0 0 1vw rgba(124,77,255,...)` と lesson-title の `0 0 8px` を弱める）
   - [ ] **Step 4**: 小サイズ要素（todo-section 0.83vw / lp-title-count 0.85vw / lesson-progress-item 0.95vw / child-panel 0.8vw）を底上げ、中サイズの太字を 700→600 / 600→500 に下げて滲み軽減

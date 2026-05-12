@@ -1,5 +1,14 @@
 # DONE
 
+## クライアント文字表示改善 Step 1: 現状スクショ取得と滲み原因の特定 → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
+
+C# ネイティブ配信アプリの左側 (broadcast.html) のテキストが「綺麗じゃない」というユーザー指摘について、`debug-ss/font.png` のスクショ（lesson 中 + 字幕表示 + TODO 同時表示）を元に滲みポイントを特定した。
+
+- [x] **スクショ確認**: lesson-title / lesson-text-content / subtitle / TODO パネルが同時に映る状況を 1 枚で押さえる
+- [x] **滲み主因を特定**: A (font-smoothing 未指定) + C (text-shadow 過剰、特に紫グロー) + D (中サイズ太字多用) の組合せ
+- [x] **Step 2〜4 の方針裏付け**: plan の CSS-only ベース指定 → text-shadow 軽減 → サイズ・太字調整 の順で進める根拠が揃った
+- [x] **plan / TODO 更新**: 「Step 1 完了 / Step 2 待ち」に進めた
+
 ## 録画品質改善 Step 1+2: 起動黒フレーム除去と冒頭静止画解消 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
 
 PocLoopback サブプロセス録画の冒頭約 9 秒の黒フレーム ([recording-screen-capture-alternative.md Step 4 残課題](plans/recording-screen-capture-alternative.md)) を解消。実機ログ 3 回分の検証を経て、真の原因は「ffmpeg の audio stream init 5 秒待機 × 同期 pipe.Write のフロー制御」と判明した。

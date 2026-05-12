@@ -1,7 +1,7 @@
 # クライアント画面の文字表示改善
 
 ## ステータス
-Step 0 完了 / Step 1 待ち
+Step 1 完了 / Step 2 待ち
 
 ## 背景
 
@@ -63,11 +63,20 @@ G. **レンダリング解像度が 1280×720 と低い**: WebView2 のレンダ
 
 ## 実装ステップ
 
-### Step 1: 現状のスクリーンショット取得（ユーザー作業）
+### Step 1: 現状のスクリーンショット取得（ユーザー作業）✅完了
 
-- ユーザーに `debug-ss/` 等へ配信画面のスクショ（C# ネイティブアプリの左側、100% 表示）を保存してもらう
-- できれば「字幕表示中」「TODO だけ」「lesson 中」など複数状況のスクショがほしい
-- スクショから、特に滲んでいる要素を Claude 側で特定する
+- ユーザーが `debug-ss/font.png` に配信画面（lesson 中 + 字幕表示中）のスクショを保存
+- 1 枚で lesson-title / lesson-text-content / subtitle / TODO パネルが同時に映る状況を押さえた
+- 滲み主因の対応関係を plan 内表で確定:
+
+| 画面要素 | CSS 該当 | 滲みの主因 |
+|------|------|------|
+| `#lesson-title-text` | 1.6vw / bold / `text-shadow: 0 0 8px rgba(124,77,255,0.5)` | C (text-shadow 過剰) |
+| `#lesson-text-content` | 1.7vw | A (font-smoothing 未指定) |
+| `.subtitle-panel .speech` | 1.875vw / bold / 紫グロー | A + C + D (太字) |
+| `#todo-panel .todo-title/item` | 中サイズ太字 | D |
+
+→ 主因は **A（font-smoothing 未指定）+ C（text-shadow 過剰）+ D（中サイズ太字多用）** の組合せで確定。Step 2〜4 でこの3点を順に潰す方針が裏付けられた。
 
 ### Step 2: broadcast.css にフォントレンダリングのベース指定を追加
 
