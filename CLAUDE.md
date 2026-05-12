@@ -365,6 +365,8 @@ curl -s http://localhost:$WEB_PORT/api/todo    # TODOが返るか
 
 C#ネイティブ配信アプリのウィンドウ録画（`debug-ss/*.mp4`）から配信領域 1280×720 だけを切り出し、音量を整える手順。
 
+> **NOTE: PocLoopback 経由の録画 (`videos/broadcast_*.mp4`) は録画時点で既にクロップ済み・libx264 `-preset fast -crf 20` 出力**（[plans/recording-quality-improvements.md](plans/recording-quality-improvements.md) Step 3.5 / Step 3-2 完了）。クロップは不要なので、`videos/` 配下の MP4 を後処理する場合は下記の 2 パス目から `-filter:v "crop=1280:720:1:38"` を外す（あるいは付けたままでも no-op で害はない）。本セクションはあくまで外部ツールで `debug-ss/*.mp4` を取った旧パイプラインの手順。
+
 - **クロップ座標**: `x=1, y=38, w=1280, h=720`（C#アプリのウィンドウから broadcast canvas を切り出す位置。タイトルバー・右サイドバー・下部ステータスバーを除外）
 - **音量目標**: -16 LUFS / TP=-1.5 dBTP / LRA=11（YouTube/Twitch 配信標準）
 - **必ず 2 パスで処理する**: シングルパス `loudnorm` は冒頭の音量が徐々に上がる挙動になるので NG。1 パス目で測定値を取り、2 パス目で適用する

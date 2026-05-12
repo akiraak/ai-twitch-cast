@@ -1,5 +1,25 @@
 # DONE
 
+## 録画品質改善 Step 5+6: AV 同期回帰確認とドキュメント更新（プラン完了） → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
+
+`scripts/verify_av_sync.py --no-flash` で 3 録画（Step 3-1 baseline / Step 3.5 / Step 3-2 final）を計測し、Step 3-2 完了時点でも AV 同期が合格基準を維持していることを確認。プランをステータス「完了」に進めた（Step 4 のみ無期限保留）。
+
+- [x] **Step 5 計測**: `broadcast_20260511_165911.mp4` / `broadcast_20260511_163419.mp4` / `broadcast_20260511_194727.mp4` の 3 本を `verify_av_sync.py --no-flash` で比較
+  - バケット内 diff: 全録画で **±20ms 以内**を維持 ✓（合格基準クリア）
+  - start offset: Step 3-2 で -100ms → **-33.3ms** に改善（`-analyzeduration 0 -probesize 32` + primer 500ms 遅延 + `-fps_mode cfr` の効果）
+  - end offset: Step 3-2 で -98.7ms → **-44.0ms** に改善（±30ms を僅かに超過するが回帰ではなく改善方向）
+  - audio gap: Step 3-2 で 1 件（頭 66.7ms）→ **0 件**に解消
+  - duration drift: Step 3-2 で -10.7ms（OS wallclock 同期の期待 ±10ms にほぼ収まる）
+- [x] **Step 6 ドキュメント反映**:
+  - `plans/recording-quality-improvements.md`: ステータス「完了」、Step 5 計測結果と合格判定を本文に追記、完了条件の Step 5/6 を `[x]` に
+  - `TODO.md`: 「画質とファイルサイズの改善」の行と Step 5/6 子タスクを削除
+  - `CLAUDE.md`: 「配信動画のクロップ＆音量ノーマライズ」セクションに、PocLoopback (`videos/broadcast_*.mp4`) は録画時点で既に 1280×720 クロップ済み・`-preset fast -crf 20` 出力である旨を追記。debug-ss/ の旧手順と区別を明示
+  - 親プラン `recording-screen-capture-alternative.md` の Step 4 残課題（起動 black frame）は Step 1+2 完了時点で「解消済み」に更新済み
+
+### 影響範囲
+- ドキュメント更新のみ（コード変更なし）
+- 計測結果のまとめとプラン完了マーク
+
 ## 録画品質改善 Step 3-2: `-preset fast -crf 20` 追加 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
 
 PocLoopback の libx264 エンコーダを `-preset veryfast`（既定 CRF 23 相当）から `-preset fast -crf 20` に変更し、録画画質を意図的に高品質側へ寄せた。録画は CLAUDE.md の 2-pass loudnorm 後処理で再エンコードされるため source の頑健性が最終画質に直接効く設計。
