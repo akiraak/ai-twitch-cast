@@ -1,5 +1,19 @@
 # DONE
 
+## クライアント文字表示改善 Step 3: 強すぎる text-shadow / 紫グローを軽減 → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
+
+Step 1 で滲み主因として特定した C (text-shadow 過剰) に対する手当てとして、`static/css/broadcast.css` の text-shadow を 3 箇所修正した。
+
+- [x] **`.subtitle-panel .speech` の紫グロー削除**: `0 0 1vw rgba(124,77,255,0.2)` を取り除き、可読性確保用の黒シャドウ `0 0.1vw 0.4vw rgba(0,0,0,0.7)` だけを残した
+- [x] **`#subtitle-2 .speech` のピンクグロー削除**: 親と同じ text-shadow になったためブロックごと削除（border-color のピンク指定は `#subtitle-2` 側に残す）
+- [x] **`#lesson-title-text` の紫グロー縮小**: `0 0 8px rgba(124,77,255,0.5)` → `0 0 4px rgba(124,77,255,0.3)`（ぼかし半径半分・不透明度を下げる）
+- [x] **plan / TODO 更新**: 「Step 3 完了 / 次は Step 4」に進めた
+
+### 影響範囲
+- `static/css/broadcast.css` の subtitle 系 2 ヶ所と lesson-title 1 ヶ所のみ
+- 字幕の輪郭が紫/ピンクのグローで広がっていた現象を抑える狙い
+- 配信に乗る変更なので、ユーザーがスクショ（`debug-ss/`）で before/after を比較して Step 4 へ進むかを判断
+
 ## クライアント文字表示改善 Step 2: broadcast.css にフォントレンダリングのベース指定を追加 → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
 
 Step 1 で特定した滲み主因 A（font-smoothing 未指定）に対する最初の手当てとして、`static/css/broadcast.css` の `body` セレクタに 3 行のフォントレンダリング指定を追加した。

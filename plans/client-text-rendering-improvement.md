@@ -1,7 +1,7 @@
 # クライアント画面の文字表示改善
 
 ## ステータス
-Step 2 完了 / Step 3 待ち（スクショで効果確認後に判断）
+Step 3 完了 / スクショで効果確認後に Step 4 判断
 
 ## 背景
 
@@ -95,12 +95,12 @@ body {
 - `palt` で日本語の詰め
 - 最も低リスク・最も効果が期待できるので最初に試す
 
-### Step 3: 強すぎる text-shadow / glow を軽減
+### Step 3: 強すぎる text-shadow / glow を軽減 ✅完了
 
-- `.subtitle-panel .speech` の紫グロー (`0 0 1vw rgba(124,77,255,0.2)`) を弱める or 削る
-  - 黒シャドウ (`0 0.1vw 0.4vw rgba(0,0,0,0.7)`) は読みやすさのため残す（背景透過時の保険）
-- `#lesson-title-text` の `text-shadow: 0 0 8px rgba(124,77,255,0.5)` のぼかし半径を `4px`程度に絞る or 透明度を下げる
-- 字幕がパネル背景に乗っているならグロー不要
+実施内容 (`static/css/broadcast.css`):
+- `.subtitle-panel .speech`: 紫グロー `0 0 1vw rgba(124,77,255,0.2)` を削除、黒シャドウのみ残す
+- `#subtitle-2 .speech`: ピンクグローを削除し、親の `.subtitle-panel .speech` と同一になったためブロック自体を削除（border-color のピンク指定は維持）
+- `#lesson-title-text`: `text-shadow: 0 0 8px rgba(124,77,255,0.5)` → `0 0 4px rgba(124,77,255,0.3)` に縮小（ぼかし半径半分・不透明度を下げる）
 
 ### Step 4: 小さすぎる要素のサイズ底上げと太字の見直し
 

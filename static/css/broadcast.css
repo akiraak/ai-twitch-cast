@@ -72,7 +72,7 @@
     font-weight: bold;
     margin-bottom: 0.5vw;
     line-height: 1.5;
-    text-shadow: 0 0.1vw 0.4vw rgba(0, 0, 0, 0.7), 0 0 1vw rgba(124, 77, 255, 0.2);
+    text-shadow: 0 0.1vw 0.4vw rgba(0, 0, 0, 0.7);
     letter-spacing: 0.03vw;
   }
   .subtitle-panel .translation {
@@ -84,9 +84,6 @@
   /* 生徒字幕: ピンク系 */
   #subtitle-2 {
     border-color: rgba(255, 136, 170, 0.3);
-  }
-  #subtitle-2 .speech {
-    text-shadow: 0 0.1vw 0.4vw rgba(0, 0, 0, 0.7), 0 0 1vw rgba(255, 136, 170, 0.2);
   }
   /* 編集モード: 字幕パネルはホバー/選択時のみ薄く表示（通常は非表示を維持） */
   .subtitle-panel[data-editable]:not(.visible):hover,
@@ -566,7 +563,7 @@
     font-weight: 700;
     color: rgba(255, 255, 255, 0.95);
     text-align: center;
-    text-shadow: 0 0 8px rgba(124, 77, 255, 0.5);
+    text-shadow: 0 0 4px rgba(124, 77, 255, 0.3);
     white-space: nowrap;
   }
 
