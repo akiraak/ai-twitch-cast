@@ -49,7 +49,10 @@ public sealed class FfmpegRunner : IDisposable
         _audioPipeName = $"poc_loopback_audio_{Environment.ProcessId}";
     }
 
-    public async Task StartAsync(CancellationToken ct = default)
+    // primer: PTS 0 として書き出す 1 フレーム分の BGRA バイト列。null/サイズ不一致なら黒フレームを使う。
+    // FFmpeg は rawvideo の最初の 1 フレームを読まないと音声パイプを open しない。primer に「最初の実フレーム」
+    // を渡せば、WGC frame_arrived が静止コンテンツで遅れても先頭の黒区間が出ない（plans/recording-quality-improvements.md Step 1）
+    public async Task StartAsync(CancellationToken ct = default, byte[]? primer = null)
     {
         if (IsRunning) throw new InvalidOperationException("FFmpeg already running");
 
@@ -89,12 +92,24 @@ public sealed class FfmpegRunner : IDisposable
             //  wallclock を付けると silence プライムや読みバーストで PTS が歪んで
             //  Non-monotonic DTS / Queue input is backward in time が連発する。
             //  AV 同期は映像側 wallclock + 連続的に流れる loopback 音声で揃う想定。
-            //  WinNativeApp/Streaming/FfmpegProcess.cs も同じ設計で映像にだけ付けている）
-            "-thread_queue_size 1024",
+            //  WinNativeApp/Streaming/FfmpegProcess.cs も同じ設計で映像にだけ付けている）。
+            //
+            // -analyzeduration 0 -probesize 32: format / sample rate / channels は audioArgs で
+            // 明示しているので ffmpeg の自動推定は不要。デフォルトの 5 秒 / 5MB 待機を 0 にしないと、
+            // ffmpeg が audio stream init を完了するまで encoder pipeline が起動せず、その間
+            // video pipe buffer 8MB（≒ 2 frames）が満杯になって PocLoopback の同期 _videoPipe.Write が
+            // ブロック → WGC frame_arrived の callback も連鎖ブロック → 録画冒頭が drop だらけに
+            // (recorder.log 16:34:19 で video frames=20 at t=5s = 4 fps しか書けない事象として実証済み)
+            "-thread_queue_size 1024 -analyzeduration 0 -probesize 32",
             audioArgs,
             $@"-i \\.\pipe\{_audioPipeName}",
             // Encode
             videoFilterArg,
+            // -fps_mode cfr: 入力 frame の PTS 間隔が広い（broadcast.html 静止で WGC frame_arrived が
+            // 数 fps しか来ない）場合に ffmpeg 側で duplicate frame を生成して 30 fps 一定に保つ。
+            // これがないと MP4 が「frame=2 まま停滞 → 28 秒後にやっと audio stream init」のような
+            // デッドロックを起こす（recorder.log 16:24:11 で実証済み）
+            $"-fps_mode cfr -r {_videoFps}",
             "-c:v libx264 -preset veryfast -pix_fmt yuv420p",
             $"-g {_videoFps * 2}",
             "-c:a aac -b:a 192k -ar 48000",
@@ -128,18 +143,33 @@ public sealed class FfmpegRunner : IDisposable
         await _videoPipe.WaitForConnectionAsync(ct);
         Console.WriteLine("[FFmpeg] Video pipe connected");
 
-        // 初期黒フレームを送る（FFmpeg は最低 1 フレーム読まないと次の入力を開かない）。
-        // BGRA: 全バイト 0 = 黒、α=0 だが rawvideo のためデコーダは無視。
-        var blackFrame = new byte[_videoWidth * _videoHeight * 4];
+        // 初期フレームを送る（FFmpeg は最低 1 フレーム読まないと次の入力を開かない）。
+        // primer が渡されていればそれを使う（最初の実フレーム → PTS 0 から実画面が映る）。
+        // 渡されていない or サイズ不一致なら黒フレームに fallback（後方互換）
+        int expected = _videoWidth * _videoHeight * 4;
+        byte[] primerFrame;
+        string primerSource;
+        if (primer != null && primer.Length == expected)
+        {
+            primerFrame = primer;
+            primerSource = "real-frame";
+        }
+        else
+        {
+            if (primer != null)
+                Console.Error.WriteLine($"[FFmpeg] Primer size mismatch: {primer.Length} != {expected}, falling back to black frame");
+            primerFrame = new byte[expected];
+            primerSource = "black";
+        }
         try
         {
-            _videoPipe.Write(blackFrame, 0, blackFrame.Length);
+            _videoPipe.Write(primerFrame, 0, expected);
             _videoPipe.Flush();
-            Console.WriteLine($"[FFmpeg] Initial black frame sent ({blackFrame.Length} bytes)");
+            Console.WriteLine($"[FFmpeg] Initial primer frame sent ({expected} bytes, source={primerSource})");
         }
         catch (IOException ex)
         {
-            Console.Error.WriteLine($"[FFmpeg] Initial black frame error: {ex.Message}");
+            Console.Error.WriteLine($"[FFmpeg] Initial primer frame error: {ex.Message}");
         }
 
         Console.WriteLine("[FFmpeg] Waiting for audio pipe connection...");

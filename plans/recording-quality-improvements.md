@@ -4,7 +4,39 @@
 > 関連: [recording-av-sync-fix.md](recording-av-sync-fix.md)（旧方式の AV 同期 — 役割分担対象）
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 
-## ステータス: 進行中（Step 3.5 完了 / Step 1・2・3・4・5・6 未着手）
+## ステータス: 進行中（Step 1+2 完了（実機確認済み 2026-05-11）/ Step 3.5 完了 / Step 3・4・5・6 未着手）
+
+## 検証ログ（2026-05-11）
+
+### Step 1 単独試行 (`logs/recorder.log` 16:09:11)
+
+`Initial primer frame sent (..., source=real-frame)` は出ていたが先頭 9 秒は黒のまま、再生し直しでは前回画面が残った状態に。原因は 2 つ:
+
+1. **WGC 初回フレームが黒**: capture session 開始直後の最初の `frame_arrived` は DWM 合成前で未初期化バッファ（黒）が返ることがある
+2. **静止コンテンツで `frame_arrived` がほぼ来ない**: 最初の 5 秒で WGC frames=22（≒4 fps）→ 5〜10 秒で +259（≒52 fps）。broadcast.html が描画していない期間は WGC が発火しない
+
+### A+B (keepalive pump 33ms タイマー追加) 試行 (`logs/recorder.log` 16:24:11)
+
+**video frames=2 で停滞・28 秒後にやっと ffmpeg が Stream mapping** → デッドロック発生。pump が 33ms ごとに `WriteVideoFrame` を呼んで video pipe buffer 8MB（≒ 2 frames）を満杯にし、ffmpeg の audio stream init を待ってる間にパイプ書き込みがブロック → スレッドプール消費 → audio capture 遅延 → 全体停滞。
+
+### Step 1+2 中間版 試行 (`logs/recorder.log` 16:34:19)
+
+`-fps_mode cfr` + 500ms primer 遅延で先頭は黒ではなく実画面（primer）になったが、**最初の 5〜6 秒間が静止画**として残った。ユーザー観察「broadcast.html は普通に動いていた」を踏まえて再度ログを精査すると:
+
+- `wgc_frames=2194` (47.7 秒で 46 fps) — WGC frame_arrived は実際は高頻度発火
+- 一方で `video frames=20 at t=5.0s` (4 fps) — WriteVideoFrame は 5 秒で 20 回しか成功してない
+- ffmpeg は audio stream init 完了に 5 秒待っており、その間 video pipe は probe 用にしか読まない
+- → video pipe buffer 8MB（≒ 2 frames）が満杯になり、PocLoopback の同期 `_videoPipe.Write` が**ブロック**
+- → WGC frame_arrived の callback が連鎖ブロックして冒頭 frame が drop される
+
+「broadcast.html 静止」ではなく「ffmpeg audio probe 待ち × 同期 pipe 書き込み」が真の主因だった。
+
+### 最終対策
+
+- pump 撤回（pipe デッドロックを起こすため）
+- `_latestFrame` の毎フレーム更新と 500ms 待機後の primer 取得は維持（WGC 初回黒バッファ対策）
+- `-fps_mode cfr -r 30` で frame 補填（万一 WGC 発火が遅い瞬間があっても 30 fps grid 維持）
+- **`-analyzeduration 0 -probesize 32`** を audio input に付け、ffmpeg の 5 秒待機を撤去。これで encoder pipeline が即起動し、video pipe を 30 fps で連続消費 → PocLoopback の WriteVideoFrame もブロックされず冒頭から実画面が記録される（**今回の本命修正**）
 
 ## 背景
 
@@ -236,8 +268,7 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
 
 ## 完了条件
 
-- [ ] Step 1: A 案実装。60s 録画で先頭黒フレームが 1 秒以下に短縮
-- [ ] Step 2: B 案実装。静止コンテンツ 60s 録画でフリーズ/黒なし、frame_count ≒ 1800
+- [x] Step 1+2: 最新スナップショット primer ＋ 500ms 遅延 ＋ ffmpeg `-fps_mode cfr -r 30` ＋ ffmpeg audio input `-analyzeduration 0 -probesize 32`。**実機確認済み（2026-05-11）**: 録画動画の先頭から実画面が動き音声も飛びなく流れる。B 案 pump はデッドロックを起こしたため撤回
 - [ ] Step 3: エンコーダ設定改善。`+frag_keyframe` 除去 → preset/crf 調整 → 音声 128k。ファイルサイズと画質を記録
 - [x] Step 3.5: 配信領域クロップ。`ScreenCapture` に `CropRect` 追加 / `Program.cs` に `--crop` 系 CLI 追加 / `MainForm` に `--crop-broadcast` 追加。実機 60s 録画で chrome が映らず 1280×720 で出力されること・AV 同期回帰なしを確認済み
 - [ ] Step 4: （任意）HW エンコーダ対応

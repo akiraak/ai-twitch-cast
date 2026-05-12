@@ -202,6 +202,26 @@ catch (TimeoutException)
 }
 Console.WriteLine($"[Main] First frame size: {size.w}x{size.h}");
 
+// WGC capture session 開始直後の数フレームは DWM 合成前の「未初期化バッファ（黒）」が返ってくることがある。
+// 500ms 待ってから最新スナップショットを primer に使うことでこれを避ける
+// (plans/recording-quality-improvements.md Step 1+2: 最初の 9 秒黒フレームの原因対策)。
+// ScreenCapture の pump タイマーが OnFrame を 33ms ごとに焚いているので _latestFrame は連続更新されている
+const int PrimerSettleMs = 500;
+Console.WriteLine($"[Main] Settling WGC for {PrimerSettleMs}ms before capturing primer...");
+try { await Task.Delay(PrimerSettleMs, cts.Token); }
+catch (OperationCanceledException) { return 0; }
+
+byte[]? primer = null;
+if (screen.TryGetLatestFrame(out var primerBytes, out var fw, out var fh) && primerBytes != null)
+{
+    primer = primerBytes;
+    Console.WriteLine($"[Main] Captured latest-frame primer ({fw}x{fh}, {primerBytes.Length} bytes, frames={screen.FrameCount})");
+}
+else
+{
+    Console.WriteLine("[Main] Latest-frame primer unavailable, FFmpeg will fall back to black frame");
+}
+
 // 2) Loopback 開始（OnAudio はまだ未設定 → 廃棄される）→ Format 確定
 loopback.Start();
 var audioFormat = loopback.Format
@@ -209,7 +229,7 @@ var audioFormat = loopback.Format
 
 // 3) FFmpeg 起動
 ffmpeg = new FfmpegRunner(ffmpegPath, outputPath, size.w, size.h, fps, audioFormat);
-await ffmpeg.StartAsync(cts.Token);
+await ffmpeg.StartAsync(cts.Token, primer);
 
 // 4) コールバック差し替え → 録画パイプへ流し始める
 screen.OnFrame = (bgra, w, h) => ffmpeg.WriteVideoFrame(bgra, w, h);
@@ -242,7 +262,8 @@ Console.WriteLine($"[Main] === summary === " +
     $"video_frames={ffmpeg.VideoFrames} " +
     $"video_bytes={ffmpeg.VideoBytes} " +
     $"audio_bytes={ffmpeg.AudioBytes} " +
-    $"loopback_captured={loopback.BytesCaptured}");
+    $"loopback_captured={loopback.BytesCaptured} " +
+    $"wgc_frames={screen.FrameCount}");
 Console.WriteLine("[Main] 合格判定: VLC 目視 + ffprobe -show_packets でPTS差を確認");
 return 0;
 

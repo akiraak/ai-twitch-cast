@@ -224,7 +224,7 @@ ffmpeg \
 **結果**（`videos/broadcast_20260511_143725.mp4`）:
 - 字幕が時系列で正しく進行（6s/30s/55s 全て別 dialogue・別 md5）
 - AV sync: body bucket diff ±20ms、end offset -28ms
-- 起動 black frame: 9.3s（libx264 warmup の残課題）
+- 起動 black frame: 9.3s（**解消済み 2026-05-11**: `-analyzeduration 0 -probesize 32` + primer 500ms 遅延 + `-fps_mode cfr` で先頭から実画面が動く。詳細は [recording-quality-improvements.md](recording-quality-improvements.md) Step 1+2）
 
 **修正概要**:
 - `LoopbackAudioSource` の `Initialize` / `StartCapture` 分離で audio 先行 +2.87s を解消

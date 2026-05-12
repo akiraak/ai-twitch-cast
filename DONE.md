@@ -1,5 +1,32 @@
 # DONE
 
+## 録画品質改善 Step 1+2: 起動黒フレーム除去と冒頭静止画解消 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
+
+PocLoopback サブプロセス録画の冒頭約 9 秒の黒フレーム ([recording-screen-capture-alternative.md Step 4 残課題](plans/recording-screen-capture-alternative.md)) を解消。実機ログ 3 回分の検証を経て、真の原因は「ffmpeg の audio stream init 5 秒待機 × 同期 pipe.Write のフロー制御」と判明した。
+
+### 試行錯誤の経緯
+
+| ラウンド | 構成 | 結果 |
+|---------|------|------|
+| Step 1 (A案 first-frame primer) | 最初の実フレームを primer に | 先頭 9 秒黒のまま（primer 自体は real-frame で書かれていたが、WGC 初回フレームが DWM 合成前で実質黒バッファだった） |
+| Step 1+2 (A+B pump) | 33ms 周期で `_latestFrame` を再送 | **デッドロック発生**。pump がパイプを満杯にして ffmpeg を停滞 → 28 秒経過しても Stream mapping 完了せず |
+| Step 1+2 (再構成 = pump 撤回 + cfr) | primer 500ms 遅延 + `-fps_mode cfr -r 30` | 黒画面消滅、音声 OK、ただし**先頭 6 秒静止画**残存 |
+| Step 1+2 (確定 = +audio probe 短縮) | 上記 + `-analyzeduration 0 -probesize 32` | **問題なし**（実機確認済み 2026-05-11） |
+
+### 真の主因（最終確定）
+
+ログ `logs/recorder.log` 16:34:19 で `wgc_frames=2194` (47.7 秒で 46 fps) と WGC は正常発火していたが、`video frames=20 at t=5.0s` (4 fps) と PocLoopback の WriteVideoFrame が冒頭 5 秒で激減。ffmpeg が audio stream init を待っている間 video pipe は probe 用にしか読まず、pipe buffer 8 MB (≒ 2 frames) が満杯になり、PocLoopback の同期 `_videoPipe.Write` が連鎖ブロックして WGC frame_arrived callback も止まる構造だった。
+
+### 最終構成
+
+- [x] **`PocLoopback/ScreenCapture.cs`**: `_latestFrame` を毎フレーム更新し `TryGetLatestFrame` で公開。pump タイマーは試行後撤回（デッドロックを起こすため）
+- [x] **`PocLoopback/FfmpegRunner.cs`**: `StartAsync(CancellationToken ct, byte[]? primer)` 拡張。primer サイズが `width*height*4` 一致なら PTS 0 に書き、不一致/null は黒フレーム fallback。ログに `source=real-frame|black`
+- [x] **`PocLoopback/FfmpegRunner.cs`**: ffmpeg 引数に **`-fps_mode cfr -r {fps}`** 追加。入力 frame 不足時に duplicate で 30 fps 維持
+- [x] **`PocLoopback/FfmpegRunner.cs`**: audio input に **`-analyzeduration 0 -probesize 32`** 追加（本命修正）。format/sample rate/channels は audioArgs で明示しているので自動推定不要。デフォルト 5 秒待機を 0 にし encoder pipeline を即起動 → video pipe を 30 fps 連続消費 → PocLoopback の同期 Write もブロックされず WGC 発火そのまま書ける
+- [x] **`PocLoopback/Program.cs`**: `firstFrame.Task` 完了後に `Task.Delay(500ms)` → `TryGetLatestFrame` で primer 取得。WebView2 描画完了後の絵を確実に拾う（WGC 初回フレームの黒バッファを回避）
+- [x] **`PocLoopback/Program.cs`**: 終了 summary に `wgc_frames` を追加
+- [x] **実機確認**: 60s 録画で先頭から実画面が動き、音声も飛びなく流れる（2026-05-11）
+
 ## 録画品質改善 Step 3.5: 配信領域だけクロップして録画 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
 
 WinNativeApp ウィンドウ全体ではなく、broadcast canvas の 1280×720 だけを録画するように PocLoopback サブプロセスを拡張。タイトルバー / 右サイドバー / 下部ステータスバーが録画 mp4 に映らなくなり、`debug-ss/` の後処理（`ffmpeg crop=1280:720:1:38` 2 パス）が不要になる。

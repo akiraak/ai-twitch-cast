@@ -31,6 +31,18 @@ public sealed class ScreenCapture : IDisposable
     private CropRect? _crop;
     private bool _cropOutOfRangeWarned;
 
+    // 最新の成功フレームのスナップショット（FfmpegRunner の primer に使う）。
+    // ExtractBgra のたびに最新版で上書きする。primer 用は呼び出し側で「数百ms 待ってから」取得することで
+    // WebView2 初期描画前の黒/未初期化バッファを避ける（plans/recording-quality-improvements.md Step 1）。
+    //
+    // NOTE: 当初は keepalive pump（33ms タイマーで OnFrame に再送）を入れていたが、ffmpeg の
+    // パイプ読み出しが遅い場合（特に audio stream init 完了前）に video pipe buffer 8MB を
+    // 詰まらせて全体をデッドロックさせる事象（recorder.log 16:24:11 で video frames=2 で停滞）が
+    // 起きたため撤回した。frame 補填は ffmpeg 側 -fps_mode cfr で duplicate させる。
+    private byte[]? _latestFrame;
+    private int _latestFrameW, _latestFrameH;
+    private volatile bool _stopping;
+
     public long FrameCount => Interlocked.Read(ref _frameCount);
 
     public void Start(IntPtr hwnd, CropRect? crop = null)
@@ -141,6 +153,15 @@ public sealed class ScreenCapture : IDisposable
                         }
                     }
                     width = cw; height = ch;
+
+                    // 最新スナップショット（lock 内で取る）を毎回更新。
+                    // _frameBuffer とは別配列なので、pump や primer 用に渡しても以降の OnFrame で
+                    // 破壊されない（再確保時に古い参照は呼び出し中の cb のローカルに残るだけで GC されない）
+                    if (_latestFrame == null || _latestFrame.Length != needed)
+                        _latestFrame = new byte[needed];
+                    Buffer.BlockCopy(_frameBuffer, 0, _latestFrame, 0, needed);
+                    _latestFrameW = cw;
+                    _latestFrameH = ch;
                 }
                 finally
                 {
@@ -173,8 +194,31 @@ public sealed class ScreenCapture : IDisposable
         _stagingW = w; _stagingH = h;
     }
 
+    // 最新の成功フレームの BGRA バイト列を返す。FfmpegRunner.StartAsync の primer に使う。
+    // 呼び出しのタイミングに応じて最新のスナップショットが返るので、WebView2 初期描画前の
+    // 黒バッファを避けたければ呼び出し側で 300〜500ms 程度待ってから呼ぶこと。
+    // _frameBuffer とは独立した配列なので、呼び出し中に以降の WGC frame で上書きされない
+    public bool TryGetLatestFrame(out byte[]? frame, out int width, out int height)
+    {
+        lock (_lock)
+        {
+            if (_latestFrame == null)
+            {
+                frame = null;
+                width = 0;
+                height = 0;
+                return false;
+            }
+            frame = _latestFrame;
+            width = _latestFrameW;
+            height = _latestFrameH;
+            return true;
+        }
+    }
+
     public void Stop()
     {
+        _stopping = true;
         _session?.Dispose(); _session = null;
         _framePool?.Dispose(); _framePool = null;
     }
