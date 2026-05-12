@@ -4,7 +4,16 @@
 > 関連: [recording-av-sync-fix.md](recording-av-sync-fix.md)（旧方式の AV 同期 — 役割分担対象）
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 
-## ステータス: 進行中（Step 1+2 完了（実機確認済み 2026-05-11）/ Step 3.5 完了 / Step 3・4・5・6 未着手）
+## ステータス: 進行中（Step 1+2 完了（実機確認済み 2026-05-11）/ Step 3.5 完了 / Step 3-1 完了（2026-05-11）/ Step 3-2 未着手 / Step 4 無期限保留 / Step 5・6 未着手）
+
+## 2026-05-11 再検討メモ
+
+Step 3.5 完了後の実測（`videos/broadcast_20260511_163419.mp4`）で再評価した結果、Step 3 を「最小版」に縮小する。
+
+- crop 前 1682×758 / 610kbps → crop 後 1280×720 / 600kbps と video bitrate はほぼ同じだが、ピクセル密度あたりの bitrate が上がっている → **Step 3.5 だけで実効画質はかなり改善済み**
+- 当初 Step 3 の 3 項目のうち、**音声 192k → 128k は落とす**: CLAUDE.md の 2-pass loudnorm 後処理で 192k AAC に再エンコードされるので、source を落としてもファイルサイズに効かずヘッドルームを失うだけ
+- **HW エンコーダ（Step 4）は無期限保留**: 録画と配信の同時実行ニーズが顕在化してから。NVENC は低 bitrate 域で libx264 medium に画質で劣りがち
+- **Step 3 は `+frag_keyframe` 除去 と `-preset medium -crf 20` のみ実施**
 
 ## 検証ログ（2026-05-11）
 
@@ -202,15 +211,21 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
   - 採用は (b) を基本とする（A 案で primer に保持する参照と同じ寿命管理になり一貫する）。pump 側は `_lock` 内で `(buf, w, h) = (_frameBuffer, _lastW, _lastH);` を取り、ロック外で `cb(buf, w, h)` を呼ぶ
 - 検証: broadcast.html を静止させた状態で 60s 録画 → 黒/フリーズが入らないこと、`ffprobe -count_frames` で frame_count が `60*30 = 1800` 付近になること
 
-### Step 3: エンコーダ設定改善
+### Step 3: エンコーダ設定改善（最小版）
 
-`FfmpegRunner.cs:89-94` のエンコーダ引数を以下の順で 1 段ずつ変更し、毎回 60s 録画で `ls -l` のファイルサイズと VLC 目視を記録：
+2026-05-11 再検討で「音声 128k」は落とした（loudnorm 後処理が 192k AAC で再エンコードするため、source を落としてもファイルサイズに効かない）。HW エンコーダは Step 4 に分離して無期限保留。
 
-1. `+frag_keyframe` 除去 → VLC で再生（ループ再生症状が出ないか）
-2. `-preset medium` + `-crf 20` → 1 と比較してファイルサイズと画質
-3. `-b:a 128k` → さらに比較
+`FfmpegRunner.cs` のエンコーダ引数を以下の順で 1 段ずつ変更し、毎回 60s 録画で `ls -l` のファイルサイズと VLC 目視を記録：
 
-`FfmpegRunner` のコンストラクタに `EncoderConfig`（preset / crf / audioBitrate）を渡せるようにしておくと A/B 試験しやすい（プラン段階では future-proof として軽く設計するだけ）。
+1. **`+frag_keyframe` 除去** — `-movflags +faststart+frag_keyframe` → `-movflags +faststart`
+   - 検証: VLC で再生してループ再生症状が出ないこと、`ffprobe -show_entries format=duration` が録画実時間と一致すること
+   - 本家 `WinNativeApp/Streaming/FfmpegProcess.cs:209-216` で同じ症状（VLC が moov.nb_frames を全長と誤読）が確認済み・既に除去済みなので、PocLoopback 側も追従するだけ
+
+2. **`-preset medium` + `-crf 20` 追加** — `-c:v libx264 -preset veryfast -pix_fmt yuv420p` → `-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p`
+   - 検証: ファイルサイズと VLC 目視。CPU 負荷確認（`Get-Process ffmpeg | Select CPU`）。録画ドロップが出たら preset を `fast` にフォールバック
+   - 配信と録画を同時に走らせない前提では CPU 余裕あり。録画は 2-pass loudnorm 後処理で再エンコードされるので source の頑健性が画質に直接効く
+
+`FfmpegRunner` のコンストラクタに `EncoderConfig`（preset / crf / audioBitrate）を渡せるようにしておくと将来の A/B 試験で楽（プラン段階では future-proof として軽く設計するだけ。今回 audioBitrate は触らないが引数は持たせておく）。
 
 ### Step 3.5: 配信領域クロップ（課題 3 / A 案）
 
@@ -234,7 +249,11 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
   - パイプ転送量が減っていること（`[Main] t=... bytes=...` ログで video bytes が 45% ほど減ることを確認）
   - **DPI awareness 実機確認**: WinNativeApp ウィンドウを 100% モニタと高 DPI（150% / 200%）モニタの両方に置いた状態で 60s 録画し、`ffprobe -show_entries stream=width,height` がいずれも 1280×720 を返すこと。ウィンドウサイズの物理ピクセル差で crop 矩形がずれていないことを確認（プロジェクト内に DPI manifest / `SetHighDpiMode` 設定が明示的に見当たらないため要実測）
 
-### Step 4（任意）: HW エンコーダ対応
+### Step 4（無期限保留）: HW エンコーダ対応
+
+2026-05-11 再検討: 録画と配信の同時実行ニーズが顕在化してから着手する。NVENC は低 bitrate 域で libx264 medium に画質で劣りがちで、Step 3 で libx264 medium に上げた段階では HW 化のメリットが薄い。
+
+
 
 - `FfmpegProcess.cs:1059-1137` の `ResolveEncoder` / `BuildEncoderArgs` のロジックを `PocLoopback/FfmpegRunner.cs` 用に簡約コピー（NVENC → AMF → QSV → libx264）
 - 録画は配信と違い `-tune ll` / `-rc cbr` ではなく **画質優先** の設定にする（NVENC なら `-preset p7 -rc vbr -cq 20` など）
@@ -269,9 +288,11 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
 ## 完了条件
 
 - [x] Step 1+2: 最新スナップショット primer ＋ 500ms 遅延 ＋ ffmpeg `-fps_mode cfr -r 30` ＋ ffmpeg audio input `-analyzeduration 0 -probesize 32`。**実機確認済み（2026-05-11）**: 録画動画の先頭から実画面が動き音声も飛びなく流れる。B 案 pump はデッドロックを起こしたため撤回
-- [ ] Step 3: エンコーダ設定改善。`+frag_keyframe` 除去 → preset/crf 調整 → 音声 128k。ファイルサイズと画質を記録
+- [ ] Step 3（最小版）: エンコーダ設定改善。ファイルサイズと画質を記録（音声 128k は loudnorm 後処理で意味がないため落とした）
+  - [x] Step 3-1: `+frag_keyframe` 除去（2026-05-11、VLC ループ症状なし・ffprobe duration 一致を実機確認）
+  - [ ] Step 3-2: `-preset medium` + `-crf 20` 追加
 - [x] Step 3.5: 配信領域クロップ。`ScreenCapture` に `CropRect` 追加 / `Program.cs` に `--crop` 系 CLI 追加 / `MainForm` に `--crop-broadcast` 追加。実機 60s 録画で chrome が映らず 1280×720 で出力されること・AV 同期回帰なしを確認済み
-- [ ] Step 4: （任意）HW エンコーダ対応
+- [ ] Step 4: 無期限保留（HW エンコーダ対応 — 録画と配信の同時実行ニーズが顕在化してから）
 - [ ] Step 5: AV 同期回帰なし（バケット内 diff ±20ms、end offset ±30ms 維持）
 - [ ] Step 6: DONE.md / TODO.md / 親プラン更新（Step 3.5 分は反映済み）
 

@@ -1,5 +1,17 @@
 # DONE
 
+## 録画品質改善 Step 3-1: `+frag_keyframe` 除去 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
+
+PocLoopback の `FfmpegRunner.cs` の出力 movflags から `+frag_keyframe` を除去（`-movflags +faststart+frag_keyframe` → `-movflags +faststart`）。本家 `WinNativeApp/Streaming/FfmpegProcess.cs:209-216` で実証済みの VLC ループ再生症状（moov.nb_frames=60 がフラグメント 1 個分だけ書かれ、VLC が録画全長と誤読する）を PocLoopback 側でも未然に回避。実機録画で VLC 再生・`ffprobe -show_entries format=duration` 一致を確認済み。
+
+- [x] **`FfmpegRunner.cs:113-119`**: `-movflags +faststart+frag_keyframe` → `-movflags +faststart`。本家と同じ理由をコメントで明示
+- [x] **ビルド確認**: `./poc-loopback.sh --build-only` 通過
+- [x] **実機検証**: VLC 再生でループ症状なし・ffprobe duration が録画実時間と一致
+
+### 影響範囲
+- `win-native-app/PocLoopback/FfmpegRunner.cs` のみ（1 行 + コメント）
+- クラッシュ耐性は失うが、正常停止フロー（stdin "stop" → trailer 書き込み → faststart relocation）で moov が正しく配置されるため、運用上の影響なし
+
 ## クライアント文字表示改善 Step 4 完了・打ち止め → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
 
 Step 1 で特定した滲み主因 D（中サイズ太字多用）と E（10〜12px の小サイズ要素）に対する手当てとして、`static/css/broadcast.css` で小サイズ要素を底上げし、lesson 系の中サイズ太字を 600→500 に下げた。font-04.png と font-03.png を比較し、右側 lesson-progress パネルの可読性向上と文字エッジの滲み軽減が確認できたため、Step 5（SSAA）・Step 6 へは進まず本プランを終了とする。

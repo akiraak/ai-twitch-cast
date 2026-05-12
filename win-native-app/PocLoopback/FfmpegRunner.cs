@@ -113,8 +113,13 @@ public sealed class FfmpegRunner : IDisposable
             "-c:v libx264 -preset veryfast -pix_fmt yuv420p",
             $"-g {_videoFps * 2}",
             "-c:a aac -b:a 192k -ar 48000",
-            // Output (frag_keyframe で途中終了でも最低限再生可能、faststart で moov 先頭)
-            "-movflags +faststart+frag_keyframe",
+            // Output: +faststart は moov 先頭配置（アップロード後のシーク最適化）。
+            // +frag_keyframe は付けない — fragmented MP4 になり、moov の nb_frames が
+            // フラグメント 1 個分（60）しか書かれず VLC 等が「先頭の 1 秒だけループ再生」
+            // する症状を起こす（WinNativeApp/Streaming/FfmpegProcess.cs:209-216 で実証済み）。
+            // クラッシュ耐性は失うが、StopAsync による正常停止で trailer 書き込み →
+            // faststart relocation が走り moov が正しく配置される
+            "-movflags +faststart",
             $"\"{_outputPath}\""
         );
 
