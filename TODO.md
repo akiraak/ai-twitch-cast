@@ -7,8 +7,9 @@
 - [ ] 管理画面から授業を再生した後にクライアントのLessonタブで開始されたことやデータ転送の進捗を確認したい
 
 ## その他
-- [>] クライアント画面の文字をもっと綺麗に表示できないか（Step 1 完了 / 滲み主因は font-smoothing 未指定 + text-shadow 過剰 + 中サイズ太字と特定） → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
-  - [ ] **Step 2**: broadcast.css にフォントレンダリングのベース追加（`-webkit-font-smoothing: antialiased` / `text-rendering: optimizeLegibility` / `font-feature-settings: "palt" 1`）
+- [ ] クライアントアプリ再起動しても前に受信していた授業を再生できるようにする
+- [ ] 管理画面から授業再生したあとに停止ボタンを削除。サーバからは送り付けるだけでクライアントの状態を確認する必要がないように
+- [>] クライアント画面の文字をもっと綺麗に表示できないか（Step 2 完了 / 次は Step 3） → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
   - [ ] **Step 3**: 強すぎる text-shadow / 紫グローを軽減（subtitle の `0 0 1vw rgba(124,77,255,...)` と lesson-title の `0 0 8px` を弱める）
   - [ ] **Step 4**: 小サイズ要素（todo-section 0.83vw / lp-title-count 0.85vw / lesson-progress-item 0.95vw / child-panel 0.8vw）を底上げ、中サイズの太字を 700→600 / 600→500 に下げて滲み軽減
   - [ ] **Step 5**: 高解像度レンダリング→ダウンサンプリング (SSAA) を検討（WebView2 を 2560×1440 でレンダリング → FFmpeg で `scale=1280:720:lanczos`。本命策・要負荷実測）

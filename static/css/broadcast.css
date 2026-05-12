@@ -3,6 +3,9 @@
     width: 100vw; height: 100vh;
     position: relative; overflow: hidden;
     font-family: "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "palt" 1;
     background: #000;
   }
 

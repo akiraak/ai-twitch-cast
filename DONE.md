@@ -1,5 +1,19 @@
 # DONE
 
+## クライアント文字表示改善 Step 2: broadcast.css にフォントレンダリングのベース指定を追加 → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
+
+Step 1 で特定した滲み主因 A（font-smoothing 未指定）に対する最初の手当てとして、`static/css/broadcast.css` の `body` セレクタに 3 行のフォントレンダリング指定を追加した。
+
+- [x] **`-webkit-font-smoothing: antialiased`**: ClearType（サブピクセル）→ グレースケールに切替え。ダーク背景＋日本語太字の滲み軽減を狙う
+- [x] **`text-rendering: optimizeLegibility`**: カーニング / リガチャ改善
+- [x] **`font-feature-settings: "palt" 1`**: 日本語プロポーショナル詰め
+- [x] **plan / TODO 更新**: 「Step 2 完了 / Step 3 待ち（スクショで効果確認後に判断）」に進めた
+
+### 影響範囲
+- `static/css/broadcast.css` の `body` ルールのみ（3 行追加）
+- broadcast.html は配信に乗るので、配信視聴者にも同じ変更が反映される
+- 効果はユーザーがスクショ（`debug-ss/`）で目視確認 → Step 3 へ進むかを判断
+
 ## クライアント文字表示改善 Step 1: 現状スクショ取得と滲み原因の特定 → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
 
 C# ネイティブ配信アプリの左側 (broadcast.html) のテキストが「綺麗じゃない」というユーザー指摘について、`debug-ss/font.png` のスクショ（lesson 中 + 字幕表示 + TODO 同時表示）を元に滲みポイントを特定した。
