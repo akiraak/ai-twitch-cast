@@ -4,7 +4,7 @@
 > 関連: [recording-av-sync-fix.md](recording-av-sync-fix.md)（旧方式の AV 同期 — 役割分担対象）
 > 関連: [client-video-recording.md](client-video-recording.md)（録画機能本体）
 
-## ステータス: 進行中（Step 1+2 完了（実機確認済み 2026-05-11）/ Step 3.5 完了 / Step 3-1 完了（2026-05-11）/ Step 3-2 未着手 / Step 4 無期限保留 / Step 5・6 未着手）
+## ステータス: 進行中（Step 1+2 完了（実機確認済み 2026-05-11）/ Step 3.5 完了 / Step 3-1 完了（2026-05-11）/ Step 3-2 `-preset fast -crf 20` で完了（2026-05-11、実機 33s 録画で出力 frame 完全性確認）/ Step 4 無期限保留 / Step 5・6 未着手）
 
 ## 2026-05-11 再検討メモ
 
@@ -13,7 +13,41 @@ Step 3.5 完了後の実測（`videos/broadcast_20260511_163419.mp4`）で再評
 - crop 前 1682×758 / 610kbps → crop 後 1280×720 / 600kbps と video bitrate はほぼ同じだが、ピクセル密度あたりの bitrate が上がっている → **Step 3.5 だけで実効画質はかなり改善済み**
 - 当初 Step 3 の 3 項目のうち、**音声 192k → 128k は落とす**: CLAUDE.md の 2-pass loudnorm 後処理で 192k AAC に再エンコードされるので、source を落としてもファイルサイズに効かずヘッドルームを失うだけ
 - **HW エンコーダ（Step 4）は無期限保留**: 録画と配信の同時実行ニーズが顕在化してから。NVENC は低 bitrate 域で libx264 medium に画質で劣りがち
-- **Step 3 は `+frag_keyframe` 除去 と `-preset medium -crf 20` のみ実施**
+- **Step 3 は `+frag_keyframe` 除去 と `-preset medium -crf 20` のみ実施**（→ 2026-05-11 19:40 実機確認で medium は drop 多発（後述）。`-preset fast -crf 20` に下げて再検証）
+
+### Step 3-2 実測（2026-05-11 19:40 〜 19:48）
+
+#### 当初の誤診断 → 訂正
+
+初回計測（`videos/broadcast_20260511_193945.mp4`, `-preset medium -crf 20`, 27.1s）で `frame=733 dup=10 drop=541 speed=0.927x` を見て「encoder が CPU 上限に張り付いて 40% drop」と判断し fast にフォールバックしたが、後で `ffprobe -count_frames` で出力 MP4 を再検証したところ **3 回とも出力フレーム完全性が保たれていた**:
+
+| 録画 | preset | duration | ffmpeg `drop=` | 出力 nb_read_frames | 期待 (duration×30) |
+|---|---|---:|---:|---:|---:|
+| `broadcast_20260511_165911.mp4`（Step 3-1 baseline） | veryfast | 31.4s | -（ログ無し） | 939 | 939 ✓ |
+| `broadcast_20260511_193945.mp4` | medium | 26.8s | 541 | 804 | 804 ✓ |
+| `broadcast_20260511_194727.mp4` | fast | 32.9s | 601 | 986 | 986 ✓ |
+
+#### `drop=` の正体
+
+ffmpeg progress の `drop=` は **`-fps_mode cfr -r 30` による CFR デシメーションで間引かれた frame** であって、encoder の取りこぼしではない。WGC は表示リフレッシュ依存で 48〜50 fps 程度発火するため、30 fps グリッドに合わせる際に (WGC fps − 30) / s が常に drop としてカウントされる:
+
+- medium: (50.0 − 30) × 27.1 = 542 ≈ drop=541 ✓
+- fast:   (48.3 − 30) × 33.1 = 606 ≈ drop=601 ✓
+
+→ medium も fast も出力は完全な 30fps CFR。`drop=` 値は CFR 動作の正常な副産物。
+
+#### 最終選択: `-preset fast -crf 20`
+
+medium の方が同 CRF で圧縮効率は良い（理論上ファイルサイズ小）が、
+
+- medium: speed=0.927x（リアルタイムにギリギリ）
+- fast:   speed=0.949x（やや余裕、安全側）
+
+を踏まえ、長時間録画や CPU 競合シナリオ（将来の録画＋配信同時実行）でのマージンを取って **fast** で確定。
+
+- 出力（fast）: 1280×720 / 30fps CFR / video 1219 kbps / audio 184 kbps / 5.80 MB（33s 録画）
+- Step 3-1 baseline (veryfast, 31s, 612 kbps) との比較で video bitrate は約 2 倍。同 CRF 20 で encoder がより多くのビットを割いた結果で、画質向上の意図通り
+- 録画は CLAUDE.md の 2-pass loudnorm 後処理で 192k AAC に再エンコードされるため、source の頑健性が最終画質に直接効く
 
 ## 検証ログ（2026-05-11）
 
@@ -221,9 +255,10 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
    - 検証: VLC で再生してループ再生症状が出ないこと、`ffprobe -show_entries format=duration` が録画実時間と一致すること
    - 本家 `WinNativeApp/Streaming/FfmpegProcess.cs:209-216` で同じ症状（VLC が moov.nb_frames を全長と誤読）が確認済み・既に除去済みなので、PocLoopback 側も追従するだけ
 
-2. **`-preset medium` + `-crf 20` 追加** — `-c:v libx264 -preset veryfast -pix_fmt yuv420p` → `-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p`
-   - 検証: ファイルサイズと VLC 目視。CPU 負荷確認（`Get-Process ffmpeg | Select CPU`）。録画ドロップが出たら preset を `fast` にフォールバック
-   - 配信と録画を同時に走らせない前提では CPU 余裕あり。録画は 2-pass loudnorm 後処理で再エンコードされるので source の頑健性が画質に直接効く
+2. **`-preset fast` + `-crf 20` 追加** — `-c:v libx264 -preset veryfast -pix_fmt yuv420p` → `-c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p`
+   - 当初 `-preset medium` を試したが speed=0.927x で 30fps に追いつかず drop=541/1334（約 40%）を観測（上記「Step 3-2 実測」）→ `fast` に下げる
+   - 検証: ファイルサイズと VLC 目視。CPU 負荷確認（`Get-Process ffmpeg | Select CPU`）。`recorder.log` の `drop=` カウンタがほぼ 0 で speed≧1.0x になっていること
+   - 録画は 2-pass loudnorm 後処理で再エンコードされるので source の頑健性が画質に直接効く
 
 `FfmpegRunner` のコンストラクタに `EncoderConfig`（preset / crf / audioBitrate）を渡せるようにしておくと将来の A/B 試験で楽（プラン段階では future-proof として軽く設計するだけ。今回 audioBitrate は触らないが引数は持たせておく）。
 
@@ -290,7 +325,7 @@ HW エンコーダは「画質/サイズ比は libx264 medium に劣るが速い
 - [x] Step 1+2: 最新スナップショット primer ＋ 500ms 遅延 ＋ ffmpeg `-fps_mode cfr -r 30` ＋ ffmpeg audio input `-analyzeduration 0 -probesize 32`。**実機確認済み（2026-05-11）**: 録画動画の先頭から実画面が動き音声も飛びなく流れる。B 案 pump はデッドロックを起こしたため撤回
 - [ ] Step 3（最小版）: エンコーダ設定改善。ファイルサイズと画質を記録（音声 128k は loudnorm 後処理で意味がないため落とした）
   - [x] Step 3-1: `+frag_keyframe` 除去（2026-05-11、VLC ループ症状なし・ffprobe duration 一致を実機確認）
-  - [ ] Step 3-2: `-preset medium` + `-crf 20` 追加
+  - [x] Step 3-2: `-preset fast` + `-crf 20` 追加（2026-05-11、`broadcast_20260511_194727.mp4` で 33s 録画 / 出力 nb_read_frames=986（期待 986） / 1280×720 30fps CFR / video 1219kbps / size 5.80MB / speed=0.949x。当初 medium で drop=541 を見て fallback したが後に `drop=` は CFR デシメーション正常動作と判明）
 - [x] Step 3.5: 配信領域クロップ。`ScreenCapture` に `CropRect` 追加 / `Program.cs` に `--crop` 系 CLI 追加 / `MainForm` に `--crop-broadcast` 追加。実機 60s 録画で chrome が映らず 1280×720 で出力されること・AV 同期回帰なしを確認済み
 - [ ] Step 4: 無期限保留（HW エンコーダ対応 — 録画と配信の同時実行ニーズが顕在化してから）
 - [ ] Step 5: AV 同期回帰なし（バケット内 diff ±20ms、end offset ±30ms 維持）

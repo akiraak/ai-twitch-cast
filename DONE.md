@@ -1,5 +1,23 @@
 # DONE
 
+## 録画品質改善 Step 3-2: `-preset fast -crf 20` 追加 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
+
+PocLoopback の libx264 エンコーダを `-preset veryfast`（既定 CRF 23 相当）から `-preset fast -crf 20` に変更し、録画画質を意図的に高品質側へ寄せた。録画は CLAUDE.md の 2-pass loudnorm 後処理で再エンコードされるため source の頑健性が最終画質に直接効く設計。
+
+- [x] **`FfmpegRunner.cs:113`**: `-c:v libx264 -preset veryfast -pix_fmt yuv420p` → `-c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p`
+- [x] **ビルド確認**: `./poc-loopback.sh --build-only` 通過
+- [x] **実機検証**: `broadcast_20260511_194727.mp4` で 33s 録画 → `ffprobe -count_frames` で出力 nb_read_frames=986（期待 986） / 1280×720 30fps CFR / video 1219kbps / size 5.80MB / encoder speed=0.949x
+
+### 経緯（誤診断と訂正）
+
+初回計測（`-preset medium -crf 20`、`broadcast_20260511_193945.mp4`）で ffmpeg progress に `drop=541 speed=0.927x` が出たため「encoder が CPU 上限で 40% フレーム喪失」と誤判定し fast にフォールバックした。が、`ffprobe -count_frames` で再検証したところ medium・fast・veryfast の 3 回とも **出力 frame 数は duration × 30fps と完全一致**。ffmpeg progress の `drop=` は `-fps_mode cfr -r 30` が WGC 48〜50 fps の入力を 30 fps グリッドへ間引いた数で、encoder の取りこぼしではなかった（(WGC fps − 30) × duration ≒ observed drop で完全に一致）。
+
+medium の方が同 CRF で圧縮効率は良いが speed=0.927x はリアルタイムぎりぎりだったため、長時間録画でのマージンを取って fast で確定（speed=0.949x）。
+
+### 影響範囲
+- `win-native-app/PocLoopback/FfmpegRunner.cs` のみ（1 行 + 経緯コメント）
+- 同 CRF 20 で encoder がビットを多めに割くため video bitrate は veryfast 比で約 2 倍（612 kbps → 1219 kbps）。意図通り
+
 ## 録画品質改善 Step 3-1: `+frag_keyframe` 除去 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
 
 PocLoopback の `FfmpegRunner.cs` の出力 movflags から `+frag_keyframe` を除去（`-movflags +faststart+frag_keyframe` → `-movflags +faststart`）。本家 `WinNativeApp/Streaming/FfmpegProcess.cs:209-216` で実証済みの VLC ループ再生症状（moov.nb_frames=60 がフラグメント 1 個分だけ書かれ、VLC が録画全長と誤読する）を PocLoopback 側でも未然に回避。実機録画で VLC 再生・`ffprobe -show_entries format=duration` 一致を確認済み。

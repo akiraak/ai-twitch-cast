@@ -12,7 +12,6 @@
 - [ ] 管理画面から授業再生したあとに停止ボタンを削除。サーバからは送り付けるだけでクライアントの状態を確認する必要がないように
 - [>] 録画の別アプローチ：画面キャプチャ＋WASAPI Loopback で AV 同期を OS 任せにする（Step 4 前半完了：subprocess 経路に着地） → [plans/recording-screen-capture-alternative.md](plans/recording-screen-capture-alternative.md)
   - [ ] 画質とファイルサイズの改善 → [plans/recording-quality-improvements.md](plans/recording-quality-improvements.md)
-    - [ ] Step 3-2: `-preset medium` + `-crf 20` 追加（CPU 負荷とドロップを確認）
     - [ ] Step 5: AV 同期回帰確認（バケット内 diff ±20ms、end offset ±30ms 維持）
     - [ ] Step 6: DONE.md / TODO.md / 親プラン / CLAUDE.md 更新
   - [ ] **Step 4-2/3/4**: 90秒・5分・30分長尺で AV ドリフトと CPU 負荷を計測（subprocess 経路で）

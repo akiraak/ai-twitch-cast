@@ -110,7 +110,13 @@ public sealed class FfmpegRunner : IDisposable
             // これがないと MP4 が「frame=2 まま停滞 → 28 秒後にやっと audio stream init」のような
             // デッドロックを起こす（recorder.log 16:24:11 で実証済み）
             $"-fps_mode cfr -r {_videoFps}",
-            "-c:v libx264 -preset veryfast -pix_fmt yuv420p",
+            // -preset fast -crf 20: 当初 preset medium を試したが speed=0.927x で 30fps に追いつかず
+            // 27.1s 録画中に 541 frame drop（入力 1334 frame の約 40%）が発生（recorder.log 19:39:46）。
+            // fast に下げて drop を解消しつつ veryfast 比で画質/サイズ比を改善する。
+            // CRF 20 は明示することで意図が読める（既定 23 相当より高画質寄り）。
+            // 録画は 2-pass loudnorm 後処理で再エンコードされるので source の頑健性が最終画質に直接効く
+            // (plans/recording-quality-improvements.md Step 3-2)
+            "-c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p",
             $"-g {_videoFps * 2}",
             "-c:a aac -b:a 192k -ar 48000",
             // Output: +faststart は moov 先頭配置（アップロード後のシーク最適化）。
