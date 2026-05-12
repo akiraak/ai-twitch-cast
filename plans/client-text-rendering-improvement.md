@@ -1,7 +1,7 @@
 # クライアント画面の文字表示改善
 
 ## ステータス
-Step 3 完了 / スクショで効果確認後に Step 4 判断
+完了（Step 4 まで実施。font-03 vs font-04 比較で十分綺麗になったと判断し、Step 5・6 は不採用で打ち止め）
 
 ## 背景
 
@@ -102,16 +102,18 @@ body {
 - `#subtitle-2 .speech`: ピンクグローを削除し、親の `.subtitle-panel .speech` と同一になったためブロック自体を削除（border-color のピンク指定は維持）
 - `#lesson-title-text`: `text-shadow: 0 0 8px rgba(124,77,255,0.5)` → `0 0 4px rgba(124,77,255,0.3)` に縮小（ぼかし半径半分・不透明度を下げる）
 
-### Step 4: 小さすぎる要素のサイズ底上げと太字の見直し
+### Step 4: 小さすぎる要素のサイズ底上げと太字の見直し ✅完了
 
-- `#todo-panel .todo-section` 0.83vw → **0.95vw**（10.6→12.2px）
-- `#lesson-progress-title .lp-title-count` 0.85vw → **0.95vw**
-- `.lesson-progress-item` 0.95vw → **1.05vw**（12.2→13.4px）
-- `.child-panel` 0.8vw → **0.95vw**
-- 中サイズの太字（13〜18px の `font-weight: bold/700`）を **600** に下げて滲み軽減
-  - 対象例: `#lesson-progress-title` (font-weight: 600 → 500 検討)、`.lesson-progress-item.current` (600 → 500 検討)
-  - `.subtitle .speech` の bold は字幕として強調が必要なので維持
-- パネル幅（vw 指定）のはみ出しがないか目視確認
+実施内容 (`static/css/broadcast.css`):
+- `#todo-panel .todo-section`: 0.83vw → **0.95vw**（10.6→12.2px）
+- `#lesson-progress-title .lp-title-count`: 0.85vw → **0.95vw**（10.9→12.2px）
+- `.lesson-progress-item`: 0.95vw → **1.05vw**（12.2→13.4px）
+- `.child-panel`: 0.8vw → **0.95vw**（10.2→12.2px）
+- `#lesson-progress-title`: font-weight 600 → **500**（中サイズ太字を軽減）
+- `.lesson-progress-item.current`: font-weight 600 → **500**（同上）
+- `.subtitle .speech` の bold は字幕として強調が必要なので維持
+
+todo 系（`.todo-title` / `.todo-item.in-progress`）の font-weight: bold はプランで明示的な検討対象に挙げていなかったため今回は据え置き。Step 6 のスクショ確認で滲みが残るようなら追加対応する。
 
 ### Step 5: 高解像度レンダリング → ダウンサンプリング（スーパーサンプリング, SSAA）
 

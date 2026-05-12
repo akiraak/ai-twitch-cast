@@ -1,5 +1,23 @@
 # DONE
 
+## クライアント文字表示改善 Step 4 完了・打ち止め → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
+
+Step 1 で特定した滲み主因 D（中サイズ太字多用）と E（10〜12px の小サイズ要素）に対する手当てとして、`static/css/broadcast.css` で小サイズ要素を底上げし、lesson 系の中サイズ太字を 600→500 に下げた。font-04.png と font-03.png を比較し、右側 lesson-progress パネルの可読性向上と文字エッジの滲み軽減が確認できたため、Step 5（SSAA）・Step 6 へは進まず本プランを終了とする。
+
+- [x] **`#todo-panel .todo-section`**: 0.83vw → 0.95vw（10.6→12.2px）
+- [x] **`#lesson-progress-title .lp-title-count`**: 0.85vw → 0.95vw（10.9→12.2px）
+- [x] **`.lesson-progress-item`**: 0.95vw → 1.05vw（12.2→13.4px）
+- [x] **`.child-panel`**: 0.8vw → 0.95vw（10.2→12.2px）
+- [x] **`#lesson-progress-title`**: font-weight 600 → 500
+- [x] **`.lesson-progress-item.current`**: font-weight 600 → 500
+- [x] **`.subtitle .speech` の bold は維持**: 字幕としての強調が必要なため据え置き
+- [x] **plan / TODO 更新**: 「Step 4 完了 / 打ち止め」に進め、TODO の本タスクを削除
+
+### 影響範囲
+- `static/css/broadcast.css` のみ（6 セレクタ）
+- 右パネル系（lesson-progress / child-panel / todo-section）の小サイズ要素の可読性向上、lesson 系紫文字の輪郭滲みの軽減
+- 配信に乗る変更だが Step 1〜3 と同じ範囲に留まり、レイアウトはみ出しは目視確認で無し
+
 ## クライアント文字表示改善 Step 3: 強すぎる text-shadow / 紫グローを軽減 → [plans/client-text-rendering-improvement.md](plans/client-text-rendering-improvement.md)
 
 Step 1 で滲み主因として特定した C (text-shadow 過剰) に対する手当てとして、`static/css/broadcast.css` の text-shadow を 3 箇所修正した。
